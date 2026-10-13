@@ -74,7 +74,8 @@ export class Hud {
   private miniBg: HTMLCanvasElement;
   private last = { party: '', den: '', cls: '', travel: '', bestiary: '', market: '' };
   private denTab: 'alphas' | 'bestiary' = 'alphas';
-  private beasts: { canvas: HTMLCanvasElement; s: number; seen: boolean }[] = [];
+  private beasts: Portrait[] = [];
+  private portraits: Portrait[] = []; // Alphas de la Tanière
   panel: Panel = null;
   onUpgrade = (_what: 'weapon' | 'armor') => {};
   onAlphaUp = (_species: number) => {};
@@ -526,42 +527,26 @@ export class Hud {
         }),
       );
     }
-    // Animation : sprites du jeu ; silhouette sombre pour les espèces pas encore croisées.
-    const t = performance.now() / 1000, dpr = Math.min(2, devicePixelRatio || 1);
-    for (const b of this.beasts) {
-      const w = b.canvas.clientWidth, h = b.canvas.clientHeight;
-      if (!w) continue;
-      if (b.canvas.width !== Math.round(w * dpr)) {
-        b.canvas.width = Math.round(w * dpr);
-        b.canvas.height = Math.round(h * dpr);
-      }
-      const ctx = b.canvas.getContext('2d')!;
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.clearRect(0, 0, b.canvas.width, b.canvas.height);
-      const sp = SPECIES[b.s], scale = Math.min(2.2, (h * dpr * 0.55) / (sp.r * 2));
-      ctx.setTransform(scale, 0, 0, scale, b.canvas.width / 2, b.canvas.height * 0.55);
-      drawUnit(ctx, { x: 0, y: 0, r: sp.r, species: b.s, alpha: false, wild: b.seen, face: 1, t: t + b.s, seed: b.s, flash: false });
-      if (!b.seen) {
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.globalCompositeOperation = 'source-in';
-        ctx.fillStyle = '#2A3A36';
-        ctx.fillRect(0, 0, b.canvas.width, b.canvas.height);
-        ctx.globalCompositeOperation = 'source-over';
-      }
-    }
+    paintPortraits(this.beasts);
   }
 
   private updateDen(me: PlayerState) {
     const key = JSON.stringify([me.mount?.id, me.awakening, me.essences, me.resting, me.seen, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
-    if (key === this.last.den) return;
-    this.last.den = key;
+    if (key !== this.last.den) {
+      this.last.den = key;
+      this.buildDen(me);
+    }
+    paintPortraits(this.portraits);
+  }
+
+  private buildDen(me: PlayerState) {
+    this.portraits = [];
 
     // Bonus de collection : chaque Alpha éveillé renforce les autres de 10 %.
     const equipped = me.army.filter((x) => x.alpha).length;
     const count = equipped + me.resting.length; // le bonus compte tous les Alphas possédés, équipés ou non
     $('collection').innerHTML = (count
-      ? `Bonus de collection : <b>+${Math.round((collectionMult(count) - 1) * 100)} %</b> PV et dégâts pour tes ${count} Alpha${count > 1 ? 's' : ''} · +10 % par Alpha éveillé`
+      ? `Bonus de collection : <b>+${Math.round((collectionMult(count) - 1) * 100)} %</b> PV et dégâts`
       : 'Bonus de collection : chaque Alpha éveillé donnera +10 % de PV et de dégâts à tous tes Alphas.')
       + `<br>Équipés : <b>${equipped}/${ALPHA_EQUIP_MAX}</b> · les autres se reposent ici et comptent quand même pour le bonus.`;
 
@@ -589,20 +574,27 @@ export class Hud {
         const have = me.essences[s];
         const el = document.createElement('div');
         el.className = `alpha-card${a ? '' : ' asleep'}`;
-        el.innerHTML = `<span class="badge"></span><div class="col"><span class="title"></span><span class="stats"></span>
+        el.innerHTML = `<canvas class="portrait"></canvas><div class="col"><span class="title"></span><div class="stat-rows"></div>
           <div class="ess"><div class="ess-bar"><i></i></div><span></span></div></div><div class="actions"><button class="buy"></button></div>`;
-        (el.querySelector('.badge') as HTMLElement).style.background = sp.color;
+        const canvas = el.querySelector('canvas')!;
+        canvas.setAttribute('role', 'img');
+        canvas.setAttribute('aria-label', `Alpha ${sp.name}`);
+        this.portraits.push({ canvas, s, seen: true, alpha: true, legend: !!a?.legend });
         el.querySelector('.title')!.textContent = a
           ? `${a.legend ? `${sp.name} légendaire` : `Alpha ${sp.name}`} · niv. ${lvl}${a.reviveIn ? ' (ressuscite…)' : ''}${rest ? ' · au repos' : ''}`
           : `Alpha ${sp.name} · endormi`;
         const now = stat(lvl), nxt = stat(lvl + 1);
-        const revive = `résurrection ${alphaReviveS(s)} s`;
-        el.querySelector('.stats')!.innerHTML = !a
-          ? `PV ${now.hp} · Dégâts ${now.dmg}`
-          : maxed
-            ? `PV ${now.hp} · Dégâts ${now.dmg}`
-            : `PV ${now.hp} → <span class="up">${nxt.hp}</span> · Dégâts ${now.dmg} → <span class="up">${nxt.dmg}</span>`
-        el.querySelector('.stats')!.innerHTML += ` · ${revive}`;
+        // Une ligne par statistique, avec la valeur au niveau suivant quand on peut renforcer.
+        const grow = (a1: number, b1: number) => (a && !maxed ? `${a1} → <span class="up">${b1}</span>` : String(a1));
+        const rows: [keyof typeof ICONS, string, string][] = [
+          ['hp', 'PV', grow(now.hp, nxt.hp)],
+          ['dmg', 'Dégâts', grow(now.dmg, nxt.dmg)],
+          ['revive', 'Résurrection', `${alphaReviveS(s)} s`],
+        ];
+        if (MOUNTS[sp.key]) rows.push(['mount', 'Monture', `vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}`]);
+        el.querySelector('.stat-rows')!.innerHTML = rows
+          .map(([icon, label, value]) => `<div class="stat-row ${icon}">${ICONS[icon]}<span>${label}</span><b>${value}</b></div>`)
+          .join('');
         (el.querySelector('.ess-bar i') as HTMLElement).style.width = `${maxed ? 100 : Math.min(100, (100 * have) / cost)}%`;
         el.querySelector('.ess span')!.textContent = maxed ? `${have} essences` : `${have}/${cost} ${unit} de ${sp.name}`;
         if (a?.legend) el.classList.add('legend');
@@ -652,8 +644,6 @@ export class Hud {
           ride.disabled = !!field.reviveIn;
           ride.textContent = on ? 'Descendre' : `Monter · vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}`;
           el.querySelector('.actions')!.append(ride);
-        } else if (MOUNTS[sp.key]) {
-          el.querySelector('.stats')!.innerHTML += ` · <span class="up">monture</span>`;
         }
         return el;
       }),
@@ -816,4 +806,42 @@ export class Hud {
     }
   }
 
+}
+
+type Portrait = { canvas: HTMLCanvasElement; s: number; seen: boolean; alpha?: boolean; legend?: boolean };
+
+/** Petites icônes des statistiques (couleur via currentColor). */
+const ICONS = {
+  hp: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 14.2S1.8 10.4 1.8 6a3.2 3.2 0 0 1 6.2-1.2A3.2 3.2 0 0 1 14.2 6c0 4.4-6.2 8.2-6.2 8.2z"/></svg>',
+  dmg: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M14 2 6.5 9.5M4 7.5l4.5 4.5M5.5 10.5 2 14"/></svg>',
+  revive: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M13.5 8.5A5.5 5.5 0 1 1 11.8 4M13 1.8V5H9.8"/></svg>',
+  mount: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 3.5 7.5 8 3 12.5M8.5 3.5 13 8l-4.5 4.5"/></svg>',
+};
+
+/** Sprites du jeu animés dans des canvas du HUD ; silhouette sombre pour une espèce pas encore croisée. */
+function paintPortraits(list: Portrait[]) {
+  const t = performance.now() / 1000, dpr = Math.min(2, devicePixelRatio || 1);
+  for (const b of list) {
+    const w = b.canvas.clientWidth, h = b.canvas.clientHeight;
+    if (!w) continue;
+    if (b.canvas.width !== Math.round(w * dpr)) {
+      b.canvas.width = Math.round(w * dpr);
+      b.canvas.height = Math.round(h * dpr);
+    }
+    const ctx = b.canvas.getContext('2d')!;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, b.canvas.width, b.canvas.height);
+    const r = b.alpha ? alphaStats(b.s, 0, 1, b.legend).r : SPECIES[b.s].r;
+    const scale = Math.min(2.2, (h * dpr * (b.alpha ? 0.72 : 0.55)) / (r * 2)); // l'aura d'Alpha déborde : on remplit plus le cadre
+    ctx.setTransform(scale, 0, 0, scale, b.canvas.width / 2, b.canvas.height * 0.55);
+    drawUnit(ctx, { x: 0, y: 0, r, species: b.s, alpha: !!b.alpha, legend: b.legend, wild: b.seen && !b.alpha, face: 1, t: t + b.s, seed: b.s, flash: false });
+    if (!b.seen) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'source-in';
+      ctx.fillStyle = '#2A3A36';
+      ctx.fillRect(0, 0, b.canvas.width, b.canvas.height);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
 }

@@ -204,16 +204,24 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .beast .tag { font-size: 12px; color: var(--alpha); }
 .beast.unknown b { color: var(--muted); }
 .alpha-card { background: var(--night); border: 2px solid var(--line); border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; gap: 16px; }
-.alpha-card .badge { width: 44px; height: 44px; border-radius: 50%; flex: none; border: 3px solid var(--alpha); }
+.alpha-card .portrait { width: 76px; height: 76px; flex: none; border-radius: 14px; border: 2px solid rgba(180, 140, 255, 0.45); background: radial-gradient(circle at 50% 60%, rgba(180, 140, 255, 0.16), transparent 70%); }
+.stat-rows { display: grid; gap: 2px; margin-top: 4px; }
+.stat-row { display: grid; grid-template-columns: 16px 1fr auto; align-items: center; gap: 8px; font-size: 14px; color: var(--text-2); max-width: 260px; }
+.stat-row svg { width: 15px; height: 15px; }
+.stat-row b { font-weight: 600; color: var(--text); text-align: right; }
+.stat-row.hp svg { color: #E8693F; }
+.stat-row.dmg svg { color: var(--amber); }
+.stat-row.revive svg { color: var(--alpha); }
+.stat-row.mount svg { color: #8FE3D6; }
 .alpha-card .col { flex: 1; min-width: 0; }
 .alpha-card .title { font: 700 18px var(--display); }
 .alpha-card .stats { font-size: 14px; color: var(--text-2); }
 .alpha-card .buy { height: 48px; padding: 0 16px; border: none; border-radius: 12px; background: var(--alpha); color: var(--amber-ink); font: 700 16px var(--display); white-space: nowrap; }
 .alpha-card .buy:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
-.alpha-card.asleep .badge { opacity: 0.45; border-style: dashed; }
+.alpha-card.asleep .portrait { opacity: 0.45; border-style: dashed; filter: grayscale(0.6); }
 .alpha-card.asleep .title { color: var(--text-2); }
 .alpha-card.waking { border-color: rgba(180, 140, 255, 0.6); }
-.alpha-card.waking .badge { animation: waking 1.6s ease-in-out infinite; }
+.alpha-card.waking .portrait { animation: waking 1.6s ease-in-out infinite; }
 .alpha-card.waking .ess-bar i { background: linear-gradient(90deg, var(--alpha), #E2D3FF); }
 @keyframes waking { 50% { box-shadow: 0 0 14px var(--alpha); opacity: 0.6; } }
 .ess { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 13px; color: var(--muted); }
@@ -222,7 +230,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .collection { margin: 0; padding: 10px 14px; border-radius: 10px; background: rgba(180, 140, 255, 0.12); color: var(--text-2); font-size: 14px; }
 .collection b { color: var(--alpha); }
 .alpha-card.legend { border-color: var(--amber); background: linear-gradient(90deg, rgba(240, 182, 74, 0.12), var(--night) 60%); }
-.alpha-card.legend .badge { border-color: var(--amber); box-shadow: 0 0 12px rgba(240, 182, 74, 0.7); }
+.alpha-card.legend .portrait { border-color: var(--amber); box-shadow: 0 0 12px rgba(240, 182, 74, 0.7); }
 .alpha-card.legend .title { color: var(--amber); }
 .alpha-card.resting { opacity: 0.8; border-style: dashed; }
 .alpha-card .equip { height: 34px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--line); background: transparent; color: var(--text-2); font: 600 13px var(--body); white-space: nowrap; }
