@@ -20,6 +20,7 @@ export type ClientMsg =
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, sinon index du camp
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
   | { t: 'hall' } // améliorer la Maison commune (pour tout le village)
+  | { t: 'deposit' } // vider son sac (bois, pierre) dans la réserve du village, à l'entrepôt
   | { t: 'unlock'; cave: number } // débloquer une grotte (pour tout le village)
   | { t: 'sell'; id: number } // Marché : vendre un monstre ordinaire de sa meute
   | { t: 'buy'; s: number } // Marché : acheter un monstre d'une espèce déjà croisée
@@ -42,7 +43,7 @@ export interface PlayerState {
   armor: number;
   cls: ClassId | null; // classe (null : pas encore choisie)
   gold: number;
-  wood: number;
+  wood: number; // dans son sac (à déposer à l'entrepôt)
   stone: number;
   essences: number[]; // par espèce
   saved: boolean; // progression sauvegardée sur un compte
@@ -115,6 +116,7 @@ export type GameEvent =
   | { e: 'camp'; site: number; by: number } // un camp vient d'être établi
   | { e: 'built'; b: BuildingId; by: number } // un bâtiment du village vient d'être construit
   | { e: 'hall'; lvl: number; by: number } // Maison commune améliorée
+  | { e: 'deposit'; by: number; wood: number; stone: number } // bois et pierre déposés à l'entrepôt
   | { e: 'beaten'; s: number; by: number } // un géant vaincu pour la première fois par le village
   | { e: 'res'; to: number; wood: number; stone: number; x: number; y: number } // bois ou pierre récoltés
   | { e: 'unlock'; cave: number; by: number } // une grotte vient d'être débloquée
@@ -134,6 +136,7 @@ export interface Snapshot {
   camps: number[]; // emplacements de camp établis par le village
   buildings: BuildingId[]; // bâtiments construits au village
   hall: number; // niveau de la Maison commune
+  stock: [number, number]; // réserve du village : [bois, pierre]
   beaten: number[]; // géants (espèce) déjà vaincus par le village : ils ouvrent les portes des zones
   unlocked: number[]; // grottes débloquées par le village
   hazards: HazardTuple[]; // attaques spéciales visibles

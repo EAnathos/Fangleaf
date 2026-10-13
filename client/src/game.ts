@@ -65,6 +65,7 @@ export class Game {
     this.hud.onChallenge = (cave) => net.send({ t: 'challenge', cave });
     this.hud.onChest = (id) => net.send({ t: 'chest', id });
     this.hud.onHall = () => net.send({ t: 'hall' });
+    this.hud.onDeposit = () => net.send({ t: 'deposit' });
     this.hud.onReset = () => net.send({ t: 'reset' });
     this.hud.onQuit = () => {
       net.close(); // le serveur sauvegarde la progression à la déconnexion
@@ -101,6 +102,7 @@ export class Game {
       const b = buildingNear(this.map, this.me.x, this.me.y, this.hud);
       if (this.hud.panel) this.hud.setPanel(null);
       else if (st && !st.dead && b?.panel) this.hud.setPanel(b.panel);
+      else if (st && !st.dead && b?.deposit) this.net.send({ t: 'deposit' });
       else if (st && !st.dead && b?.chest !== undefined) this.net.send({ t: 'chest', id: b.chest });
       else if (st && !st.dead && b?.cave) this.net.send({ t: 'cave', id: b.cave.id, enter: b.cave.enter });
     } else if (key === 'Escape') {
@@ -313,6 +315,12 @@ export class Game {
         this.hud.toast(e.by === this.myId ? `Maison commune au niveau ${e.lvl} : ${HALL[e.lvl - 1].unlock}` : `${name(e.by)} a amélioré la Maison commune (niv. ${e.lvl})`, 'good');
         break;
       }
+      case 'deposit': {
+        const what = [e.wood && `${e.wood} bois`, e.stone && `${e.stone} pierre`].filter(Boolean).join(' et ');
+        this.hud.toast(e.by === this.myId ? `Déposé à l'entrepôt : ${what}` : `${name(e.by)} a déposé ${what} à l'entrepôt`, 'good');
+        this.fx.burst(this.map.store.x, this.map.store.y - 20, '#D2A06A', 14, 120);
+        break;
+      }
       case 'beaten':
         this.hud.toast(`Première victoire du village sur ${SPECIES[e.s].name} !`, 'good');
         break;
@@ -510,6 +518,7 @@ export class Game {
     this.hud.unlocked = this.net.latest?.unlocked ?? [];
     this.hud.chests = this.net.latest?.chests ?? [];
     this.hud.hall = this.net.latest?.hall ?? 0;
+    this.hud.stock = this.net.latest?.stock ?? [0, 0];
     this.hud.beaten = this.net.latest?.beaten ?? [];
     this.watchGates();
     this.hud.sleepers = (view?.units ?? []).flatMap((u) => {
@@ -558,6 +567,7 @@ export class Game {
     // bâtiments : construits, ou leur chantier avec son prix
     for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall);
     this.world.drawHall(ctx, this.hud.hall, this.time);
+    this.world.drawStore(ctx, this.hud.stock);
     ctx.restore();
     // Portes des zones (dans le couloir, à l'écran) : palissade en travers, couchée une fois ouverte.
     const gates = this.map.gates.map((g, k) => k).filter((k) => {

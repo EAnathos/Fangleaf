@@ -34,6 +34,8 @@ export const buildingCost = (b: BuildingId): Cost => ({ gold: BUILDINGS[b].cost,
 // Maison commune : on l'améliore (or, bois, pierre) pour débloquer le reste du village et du monde.
 // HALL[n] : passage au niveau n + 1. La porte de la zone z + 1 demande aussi d'avoir vaincu les géants de la zone z.
 export const HALL_OFFSET = { x: 185, y: 150 };
+// Entrepôt : chacun y dépose le bois et la pierre de son sac ; constructions et Maison commune puisent dans cette réserve commune.
+export const STORE_OFFSET = { x: -120, y: 245 };
 export const HALL: (Cost & { unlock: string })[] = [
   { gold: 20, wood: 15, stone: 10, unlock: 'Porte du village : la suite de la Lisière (zone 1) · Marché' },
   { gold: 60, wood: 30, stone: 25, unlock: 'Tanière' },

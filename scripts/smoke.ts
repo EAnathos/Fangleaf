@@ -136,8 +136,15 @@ async function main() {
   if (me.gold >= 10 && !host.me()!.dead && host.me()!.wood >= 5) {
     // Retour par le camp puis le chemin dégagé jusqu'à la forge.
     // camp → chemin de terre → porte → devant la forge (la palissade et les bâtiments sont solides)
-    const route: [number, number][] = [[map.spawn.x + 60, map.spawn.y + 60], ...map.path.slice(4), [map.village.x, map.village.y + 60], [map.forge.x + 20, map.forge.y + 75]];
+    const route: [number, number][] = [[map.spawn.x + 60, map.spawn.y + 60], ...map.path.slice(4), [map.village.x, map.village.y + 60], [map.store.x, map.store.y + 50]];
     for (const [tx, ty] of route) for (let i = 0; i < 400 && !stepTo(tx, ty); i++) await sleep(50);
+    // Le bois du sac va dans la réserve du village : c'est elle qui paie les constructions.
+    [x, y] = [host.me()!.x, host.me()!.y];
+    for (let i = 0; i < 200 && !stepTo(map.store.x, map.store.y + 50); i++) await sleep(50);
+    host.send({ t: 'deposit' });
+    await sleep(200);
+    check((host.last?.stock[0] ?? 0) >= 5, `bois déposé à l'entrepôt (réserve : ${host.last?.stock[0]})`);
+    for (let i = 0; i < 400 && !stepTo(map.forge.x + 20, map.forge.y + 75); i++) await sleep(50);
     // Les monstres ont pu nous bousculer en chemin : on repart de la position du serveur pour les derniers pas.
     for (let k = 0; k < 3 && Math.hypot(host.me()!.x - map.forge.x, host.me()!.y - map.forge.y) > 120; k++) {
       [x, y] = [host.me()!.x, host.me()!.y];
@@ -147,7 +154,7 @@ async function main() {
     host.send({ t: 'build', b: 'forge' });
     await sleep(200);
     const at = host.me()!;
-    check(!!host.last?.buildings.includes('forge'), `forge construite pour le village (or ${at.gold}, bois ${at.wood}, à ${Math.round(Math.hypot(at.x - map.forge.x, at.y - map.forge.y))} px de la forge)`);
+    check(!!host.last?.buildings.includes('forge'), `forge construite pour le village (or ${at.gold}, réserve ${host.last?.stock.join('/')}, à ${Math.round(Math.hypot(at.x - map.forge.x, at.y - map.forge.y))} px de la forge)`);
     if (host.me()!.gold >= 20) {
       host.send({ t: 'upgrade', what: 'armor' });
       await sleep(200);

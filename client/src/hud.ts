@@ -24,6 +24,7 @@ export interface Spot {
   at?: number; // Pierre de passage : -1 village, sinon index du camp ; emplacement de camp : son index
   buy?: Purchase; // panneau d'achat : ce qui est à acheter
   reach?: number; // portée d'interaction (par défaut BUILDING_REACH)
+  deposit?: boolean; // entrepôt : déposer son sac
   chest?: number; // coffre d'un géant vaincu à ouvrir
 }
 /** Géant endormi dans sa grotte : on peut aller lui parler. */
@@ -49,14 +50,17 @@ export const purchaseOf = (map: WorldMap, buy: Purchase): { name: string; cost: 
   'b' in buy
     ? { name: BUILDINGS[buy.b].name, cost: buildingCost(buy.b), hall: BUILDINGS[buy.b].hall }
     : { name: `Grotte de ${SPECIES[map.caves[buy.cave].boss].name}`, cost: { gold: caveUnlockCost(map.caves[buy.cave].zone), wood: 0, stone: 0 }, hall: 0 };
-const haveText = (me: PlayerState) => `Tu as ${me.gold} or, ${me.wood} bois, ${me.stone} pierre`;
-const canPay = (me: PlayerState, c: Cost) => me.gold >= c.gold && me.wood >= c.wood && me.stone >= c.stone;
+/** Ce qu'on peut dépenser : son or, et le bois et la pierre de la réserve du village. */
+type Funds = { gold: number; wood: number; stone: number };
+const haveText = (f: Funds) => `Tu as ${f.gold} or · réserve du village : ${f.wood} bois, ${f.stone} pierre`;
+const canPay = (f: Funds, c: Cost) => f.gold >= c.gold && f.wood >= c.wood && f.stone >= c.stone;
 /** Point d'interaction (touche E) à portée : bâtiments (ou leur chantier), Pierres de passage, emplacements de camp, grottes. */
 export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView): Spot | undefined => {
   const building = (b: BuildingId, pos: { x: number; y: number }, open: Spot): Spot =>
     v.buildings.includes(b) ? open : { panel: 'buy', pos, buy: { b }, label: `E — Construire : ${BUILDINGS[b].name} · ${costText(buildingCost(b))}` };
   const spots: Spot[] = [
     { panel: 'hall', pos: map.hall, label: `E — Maison commune · niv. ${v.hall}` },
+    { deposit: true, pos: map.store, label: 'E — Entrepôt : déposer ton bois et ta pierre' },
     building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Forge' }),
     building('den', map.den, { panel: 'den', pos: map.den, label: 'E — Tanière' }),
     building('market', map.market, { panel: 'market', pos: map.market, label: 'E — Marché' }),
@@ -121,6 +125,8 @@ export class Hud {
   sleepers: Sleeper[] = []; // géants endormis à portée de vue
   chests: [number, number, number, number][] = []; // coffres des géants vaincus
   hall = 0; // niveau de la Maison commune
+  stock: [number, number] = [0, 0]; // réserve du village : bois, pierre
+  onDeposit = () => {};
   beaten: number[] = []; // géants vaincus par le village
   onHall = () => {};
   onChest = (_id: number) => {};
@@ -290,6 +296,8 @@ export class Hud {
     $('self-gold').textContent = `Or ${me.gold}`;
     $('self-wood').textContent = `Bois ${me.wood}`;
     $('self-stone').textContent = `Pierre ${me.stone}`;
+    $('stock-wood').textContent = `Bois ${this.stock[0]}`;
+    $('stock-stone').textContent = `Pierre ${this.stock[1]}`;
     $('self-army').textContent = `Meute ${me.army.filter((a) => !a.alpha).length}/${ARMY_CAP}`;
     $('ping').textContent = ping ? `${ping} ms` : '';
 
@@ -322,8 +330,8 @@ export class Hud {
     prompt.hidden = !b || !!this.panel;
     if (b) {
       prompt.textContent = b.label;
-      prompt.className = `btn prompt ${b.panel ?? (b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
-      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
+      prompt.className = `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
+      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
     }
     const building = this.panel !== null && this.panel !== 'map' && this.panel !== 'quit';
     if (building && b?.panel !== this.panel) this.setPanel(null);
@@ -435,8 +443,9 @@ export class Hud {
     const buy = this.buying;
     if (!buy) return;
     const { name, cost, hall } = purchaseOf(this.map, buy);
-    $('buy-have').textContent = haveText(me);
-    this.costChips('buy-cost', me, cost);
+    const funds = this.funds(me);
+    $('buy-have').textContent = haveText(funds);
+    this.costChips('buy-cost', funds, cost);
     $('buy-title').textContent = 'b' in buy ? `Construire : ${name}` : `Débloquer : ${name}`;
     if ('b' in buy) $('buy-desc').textContent = BUILDINGS[buy.b].desc;
     else {
@@ -444,12 +453,16 @@ export class Hud {
       $('buy-desc').textContent = `Ouvre la grotte pour tout le village : ${boss.name} y attend, et son âme rend légendaire ton Alpha ${base?.name ?? ''}.`;
     }
     const btn = $<HTMLButtonElement>('buy-go');
-    btn.disabled = this.hall < hall || !canPay(me, cost);
-    btn.textContent = this.hall < hall ? `Maison commune niv. ${hall} requise` : !canPay(me, cost) ? 'Il te manque des ressources' : `${'b' in buy ? 'Construire' : 'Débloquer'} pour le village`;
+    btn.disabled = this.hall < hall || !canPay(funds, cost);
+    btn.textContent = this.hall < hall ? `Maison commune niv. ${hall} requise` : !canPay(funds, cost) ? 'Il manque des ressources' : `${'b' in buy ? 'Construire' : 'Débloquer'} pour le village`;
+  }
+
+  private funds(me: PlayerState): Funds {
+    return { gold: me.gold, wood: this.stock[0], stone: this.stock[1] };
   }
 
   /** Pastilles de coût : en rouge ce qui manque encore. */
-  private costChips(id: string, me: PlayerState, c: Cost) {
+  private costChips(id: string, me: Funds, c: Cost) {
     $(id).replaceChildren(
       ...([['gold', 'or'], ['wood', 'bois'], ['stone', 'pierre']] as const).filter(([k]) => c[k] > 0).map(([k, label]) => {
         const el = document.createElement('span');
@@ -462,7 +475,8 @@ export class Hud {
 
   /** Maison commune : ses niveaux (ce que chacun débloque), le prochain à payer, et l'état des portes des zones. */
   private updateHall(me: PlayerState) {
-    $('hall-have').textContent = `Niveau ${this.hall}/${HALL_MAX} · ${haveText(me)}`;
+    const funds = this.funds(me);
+    $('hall-have').textContent = `Niveau ${this.hall}/${HALL_MAX} · ${haveText(funds)}`;
     const key = JSON.stringify([this.hall, this.beaten]);
     if (key !== this.last.hall) {
       this.last.hall = key;
@@ -497,10 +511,10 @@ export class Hud {
     }
     const maxed = this.hall >= HALL_MAX, cost = HALL[this.hall];
     $('hall-cost').hidden = maxed;
-    if (!maxed) this.costChips('hall-cost', me, cost);
+    if (!maxed) this.costChips('hall-cost', funds, cost);
     const btn = $<HTMLButtonElement>('hall-up');
-    btn.disabled = maxed || !canPay(me, cost);
-    btn.textContent = maxed ? 'Niveau maximum' : !canPay(me, cost) ? 'Il te manque des ressources' : `Passer au niveau ${this.hall + 1}`;
+    btn.disabled = maxed || !canPay(funds, cost);
+    btn.textContent = maxed ? 'Niveau maximum' : !canPay(funds, cost) ? 'Il manque des ressources' : `Passer au niveau ${this.hall + 1}`;
   }
 
   /** Marché : vendre les monstres ordinaires de sa meute, acheter ceux des espèces déjà croisées. */

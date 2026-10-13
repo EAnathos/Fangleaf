@@ -1,7 +1,7 @@
 // Terrain procédural par morceaux (chunks) mis en cache, village et camp de départ pré-rendus.
 // Tout découle de la WorldMap partagée : zones, lacs, chemin du camp au village.
 
-import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
+import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
 import { MAP_CELL, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 
@@ -351,6 +351,58 @@ export class World {
     }
 
     return c;
+  }
+
+  /** Entrepôt (coordonnées du village) : caisses, rondins et tas de pierres, qui grossissent avec la réserve. */
+  drawStore(ctx: CanvasRenderingContext2D, stock: [number, number]) {
+    const x = STORE_OFFSET.x, y = STORE_OFFSET.y;
+    ctx.fillStyle = 'rgba(8,14,12,0.3)';
+    ctx.fillRect(x - 38, y + 8, 80, 12);
+    // auvent sur poteaux
+    ctx.fillStyle = '#5B3F2C';
+    ctx.fillRect(x - 38, y - 34, 5, 46);
+    ctx.fillRect(x + 33, y - 34, 5, 46);
+    ctx.fillStyle = '#7A5A3A';
+    ctx.fillRect(x - 44, y - 40, 88, 9);
+    // rondins empilés (plus ou moins selon le bois en réserve)
+    const logs = Math.min(6, Math.ceil(stock[0] / 40));
+    for (let i = 0; i < logs; i++) {
+      const lx = x - 30 + (i % 3) * 13 + (i >= 3 ? 6 : 0), ly = y + 4 - (i >= 3 ? 11 : 0);
+      ctx.fillStyle = '#6B4A33';
+      ctx.beginPath();
+      ctx.arc(lx, ly, 6, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#C9A27A';
+      ctx.beginPath();
+      ctx.arc(lx, ly, 3.2, 0, TAU);
+      ctx.fill();
+    }
+    // tas de pierres
+    const stones = Math.min(6, Math.ceil(stock[1] / 40));
+    for (let i = 0; i < stones; i++) {
+      ctx.fillStyle = i % 2 ? '#7C8681' : '#5E6763';
+      ctx.beginPath();
+      ctx.ellipse(x + 12 + (i % 3) * 8, y + 6 - Math.floor(i / 3) * 7, 6, 4.5, 0, 0, TAU);
+      ctx.fill();
+    }
+    // caisse
+    ctx.fillStyle = '#8B5A33';
+    ctx.fillRect(x - 8, y - 14, 16, 16);
+    ctx.strokeStyle = '#3A2819';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x - 8, y - 14, 16, 16);
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y - 14);
+    ctx.lineTo(x + 8, y + 2);
+    ctx.stroke();
+    ctx.font = '700 15px "Pixelify Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+    const label = `Entrepôt · ${stock[0]} bois · ${stock[1]} pierre`;
+    ctx.strokeText(label, x, y - 50);
+    ctx.fillStyle = '#D2A06A';
+    ctx.fillText(label, x, y - 50);
   }
 
   /**

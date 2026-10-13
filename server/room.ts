@@ -158,6 +158,8 @@ export interface VillageState {
   unlocked: number[];
   hall: number; // niveau de la Maison commune
   beaten: number[]; // géants (espèce) déjà vaincus au moins une fois
+  wood: number; // réserve commune (entrepôt)
+  stone: number;
 }
 
 const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * classOf(p.cls).hp);
@@ -186,6 +188,7 @@ export class Room {
   readonly unlocked: number[]; // grottes débloquées (index dans map.caves)
   hall: number; // niveau de la Maison commune
   readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
+  readonly stock = { wood: 0, stone: 0 }; // réserve commune de l'entrepôt
   onVillage?: (v: VillageState) => void; // sauvegarde, appelée quand le village change (camp, bâtiment, grotte)
   founder: string | null = null; // compte qui a fondé le village (seul à pouvoir le supprimer)
   deleted = false; // supprimé : plus aucune sauvegarde
@@ -201,6 +204,8 @@ export class Room {
     this.buildings = BUILDING_IDS.filter((b) => saved.buildings?.includes(b));
     this.hall = clamp(Math.floor(Number(saved.hall) || 0), 0, HALL_MAX);
     this.beaten = indexes(saved.beaten, SPECIES.length).filter((s) => isBoss(s));
+    this.stock.wood = Math.max(0, Math.floor(Number(saved.wood) || 0));
+    this.stock.stone = Math.max(0, Math.floor(Number(saved.stone) || 0));
     this.oreHp = this.map.ores.map((o) => oreHp(o.zone));
     this.oreBack = this.map.ores.map(() => 0);
     this.bushBack = this.map.bushes.map(() => 0);
@@ -346,14 +351,25 @@ export class Room {
     return this.buildings.includes(b) && this.near(p, this.posOf(b));
   }
 
-  /** Assez d'or, de bois et de pierre ? Alors on paie (vrai), sinon rien ne change (faux). */
+  /** L'or du dompteur, le bois et la pierre de la réserve du village : s'il y a assez de tout, on paie (vrai). */
   private pay(p: Player, c: Cost) {
-    if (p.gold < c.gold || p.wood < c.wood || p.stone < c.stone) return false;
+    if (p.gold < c.gold || this.stock.wood < c.wood || this.stock.stone < c.stone) return false;
     p.gold -= c.gold;
-    p.wood -= c.wood;
-    p.stone -= c.stone;
+    this.stock.wood -= c.wood;
+    this.stock.stone -= c.stone;
     p.dirty = true;
     return true;
+  }
+
+  /** À l'entrepôt : le bois et la pierre du sac passent dans la réserve du village. */
+  onDeposit(p: Player) {
+    if (!this.near(p, this.map.store) || (!p.wood && !p.stone)) return;
+    this.events.push({ e: 'deposit', by: p.id, wood: p.wood, stone: p.stone });
+    this.stock.wood += p.wood;
+    this.stock.stone += p.stone;
+    p.wood = p.stone = 0;
+    p.dirty = true;
+    this.saveVillage();
   }
 
   private posOf(b: BuildingId) {
@@ -361,7 +377,7 @@ export class Room {
   }
 
   private saveVillage() {
-    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, beaten: [...this.beaten] });
+    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, beaten: [...this.beaten], ...this.stock });
   }
 
   /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
@@ -1849,7 +1865,7 @@ export class Room {
           ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S))]
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
       }
-      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, caves, camps: this.camps, buildings: this.buildings, hall: this.hall, beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
+      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
     }
   }
 }
