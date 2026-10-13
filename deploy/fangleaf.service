@@ -11,9 +11,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=fangleaf
-WorkingDirectory=/opt/fangleaf
-EnvironmentFile=/opt/fangleaf/.env
+User=root
+WorkingDirectory=/root/eanathos/Fangleaf
+EnvironmentFile=/root/eanathos/Fangleaf/.env
 Environment=PORT=3001
 ExecStart=/usr/bin/npm start
 Restart=on-failure

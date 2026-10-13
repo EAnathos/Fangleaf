@@ -39,7 +39,7 @@ or, niveaux d'arme et d'armure, essences et **Alphas** (la meute ordinaire n'est
 ## Mise en production (VPS, fangleaf.anathos.me)
 
 1. DNS : un enregistrement A (et AAAA) `fangleaf.anathos.me` vers le VPS.
-2. Sur le VPS, dans `/opt/fangleaf` : clone, `.env` rempli, `npm ci`, `npm run db:migrate`, puis `npm run build`
+2. Sur le VPS, dans le dossier du clone (ici `/root/eanathos/Fangleaf`) : `.env` rempli, `npm ci`, `npm run db:migrate`, puis `npm run build`
    (les variables `VITE_*` sont figées au build : le `.env` doit être là avant).
 3. Serveur Node (port 3001) : `pm2 start ecosystem.config.cjs` ([ecosystem.config.cjs](ecosystem.config.cjs)), ou [deploy/fangleaf.service](deploy/fangleaf.service) avec systemd.
 4. nginx : [deploy/nginx/fangleaf.anathos.me.conf](deploy/nginx/fangleaf.anathos.me.conf) (HTTPS Let's Encrypt, relais du WebSocket `/ws`), étapes en tête du fichier.
