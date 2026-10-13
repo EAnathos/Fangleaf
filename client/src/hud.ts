@@ -2,7 +2,7 @@
 
 import {
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
-  BUILDINGS, type BuildingId, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
+  BUILDINGS, type BuildingId, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
 import type { PlayerState, UnitTuple } from '../../shared/protocol.ts';
@@ -76,6 +76,7 @@ export class Hud {
   private denTab: 'alphas' | 'bestiary' = 'alphas';
   private beasts: Portrait[] = [];
   private portraits: Portrait[] = []; // Alphas de la Tanière
+  private wares: Portrait[] = []; // monstres du Marché
   panel: Panel = null;
   onUpgrade = (_what: 'weapon' | 'armor') => {};
   onAlphaUp = (_species: number) => {};
@@ -390,13 +391,23 @@ export class Hud {
     $('market-gold').textContent = String(me.gold);
     const pack = me.army.filter((a) => !a.alpha);
     const key = JSON.stringify([me.gold, me.seen, pack.map((a) => a.id)]);
-    if (key === this.last.market) return;
-    this.last.market = key;
+    if (key !== this.last.market) {
+      this.last.market = key;
+      this.buildMarket(me, pack);
+    }
+    paintPortraits(this.wares);
+  }
+
+  private buildMarket(me: PlayerState, pack: PlayerState['army']) {
+    this.wares = [];
     const row = (s: number, sub: string, btn: HTMLButtonElement) => {
       const el = document.createElement('div');
       el.className = 'stone-row';
-      el.innerHTML = '<span class="badge"></span><div class="col"><b></b><span class="small muted"></span></div>';
-      (el.querySelector('.badge') as HTMLElement).style.background = SPECIES[s].color;
+      el.innerHTML = '<canvas class="ware"></canvas><div class="col"><b></b><span class="small muted"></span></div>';
+      const canvas = el.querySelector('canvas')!;
+      canvas.setAttribute('role', 'img');
+      canvas.setAttribute('aria-label', SPECIES[s].name);
+      this.wares.push({ canvas, s, seen: true, tame: true }); // apprivoisé : sans l'anneau ni le regard des sauvages
       el.querySelector('b')!.textContent = SPECIES[s].name;
       el.querySelector('span.small')!.textContent = sub;
       el.append(btn);
@@ -428,7 +439,8 @@ export class Hud {
           btn.dataset.buy = String(s);
           btn.disabled = full || me.gold < price;
           btn.textContent = full ? 'Meute pleine' : me.gold < price ? `Il te faut ${price} or` : `Acheter · ${price} or`;
-          return row(s, `Zone ${SPECIES[s].zone} · ${SPECIES[s].hp} PV sauvage, moitié une fois apprivoisé`, btn);
+          const sp = SPECIES[s], tamed = (n: number) => Math.max(1, Math.round(n * TAMED_MULT)); // mêmes stats que dans la meute
+          return row(s, `Zone ${sp.zone} · ${tamed(sp.hp)} PV · ${tamed(sp.dmg)} dégâts`, btn);
         })
         : [Object.assign(document.createElement('p'), { className: 'small muted', textContent: 'Aucune espèce croisée pour l\'instant.' })]),
     );
@@ -808,7 +820,7 @@ export class Hud {
 
 }
 
-type Portrait = { canvas: HTMLCanvasElement; s: number; seen: boolean; alpha?: boolean; legend?: boolean };
+type Portrait = { canvas: HTMLCanvasElement; s: number; seen: boolean; alpha?: boolean; legend?: boolean; tame?: boolean };
 
 /** Petites icônes des statistiques (couleur via currentColor). */
 const ICONS = {
@@ -835,7 +847,7 @@ function paintPortraits(list: Portrait[]) {
     const r = b.alpha ? alphaStats(b.s, 0, 1, b.legend).r : SPECIES[b.s].r;
     const scale = Math.min(2.2, (h * dpr * (b.alpha ? 0.72 : 0.55)) / (r * 2)); // l'aura d'Alpha déborde : on remplit plus le cadre
     ctx.setTransform(scale, 0, 0, scale, b.canvas.width / 2, b.canvas.height * 0.55);
-    drawUnit(ctx, { x: 0, y: 0, r, species: b.s, alpha: !!b.alpha, legend: b.legend, wild: b.seen && !b.alpha, face: 1, t: t + b.s, seed: b.s, flash: false });
+    drawUnit(ctx, { x: 0, y: 0, r, species: b.s, alpha: !!b.alpha, legend: b.legend, wild: b.seen && !b.alpha && !b.tame, face: 1, t: t + b.s, seed: b.s, flash: false });
     if (!b.seen) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'source-in';

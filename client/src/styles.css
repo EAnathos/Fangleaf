@@ -275,6 +275,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .modal.market h2 { color: var(--ally); }
 .market-head { margin: 4px 0 0; font-size: 15px; color: var(--text-2); }
 .modal.market .stone-row .col { flex: 1; min-width: 0; }
-.modal.market .badge { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+.modal.market .ware { width: 56px; height: 48px; flex: none; }
 .modal.market .cta:disabled { opacity: 0.55; cursor: not-allowed; }
 .lg-stone { background: var(--stone); border-radius: 2px 2px 0 0 !important; }
