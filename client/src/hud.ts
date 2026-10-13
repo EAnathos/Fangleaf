@@ -1,0 +1,677 @@
+// HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
+
+import {
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
+  CAMP_COST, campName, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
+  armorReduction, weaponCost, weaponDmg,
+} from '../../shared/config.ts';
+import type { PlayerState, UnitTuple } from '../../shared/protocol.ts';
+import type { WorldMap } from '../../shared/worldmap.ts';
+import { armorColor, drawUnit } from './sprites.ts';
+import { SPECIES_DESC } from './speciesInfo.ts';
+import { FOREST_GROUND, ZONE_GROUND } from './world.ts';
+import type { Fog } from './fog.ts';
+
+export type Panel = 'forge' | 'den' | 'map' | 'quit' | 'travel' | 'camp' | null;
+/** Bâtiment à portée d'interaction, s'il y en a un. */
+export interface Spot {
+  pos: { x: number; y: number };
+  label: string;
+  panel?: 'forge' | 'den' | 'travel' | 'camp'; // ouvre un panneau
+  cave?: { id: number; enter: boolean }; // entre dans une grotte / en sort
+  at?: number; // Pierre de passage : -1 village, sinon index du camp ; emplacement de camp : son index
+}
+const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+/**
+ * Point d'interaction (touche E) à portée : forge, tanière, Pierres de passage, emplacements de camp, grottes.
+ * caves : retour des mini-boss (s) ; camps : emplacements établis par le village.
+ */
+export const buildingNear = (map: WorldMap, x: number, y: number, caves: number[] = [], camps: number[] = []): Spot | undefined =>
+  [
+    { panel: 'forge' as const, pos: map.forge, label: 'E — Forge' },
+    { panel: 'den' as const, pos: map.den, label: 'E — Tanière des Alphas' },
+    { panel: 'travel' as const, pos: map.stones[0], label: 'E — Pierre de passage', at: -1 },
+    ...map.sites.map((site, i) =>
+      camps.includes(i)
+        ? { panel: 'travel' as const, pos: map.stones[i + 1], label: 'E — Pierre de passage', at: i }
+        : { panel: 'camp' as const, pos: site, label: `E — Établir le camp · ${CAMP_COST} or`, at: i },
+    ),
+    ...map.caves.flatMap((c) => [
+      {
+        cave: { id: c.id, enter: true }, pos: c.entrance,
+        label: caves[c.id] ? `E — Entrer (${SPECIES[c.boss].name} revient dans ${clock(caves[c.id])})` : `E — Entrer · ${SPECIES[c.boss].name} t'attend`,
+      },
+      { cave: { id: c.id, enter: false }, pos: c.exit, label: 'E — Sortir de la grotte' },
+    ]),
+  ].find((b) => Math.hypot(x - b.pos.x, y - b.pos.y) < BUILDING_REACH);
+
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const pct = (n: number) => `${Math.round(n * 100)} %`;
+/** 30 → « 30 s », 90 → « 1 min 30 », 120 → « 2 min ». */
+const duration = (sec: number) => (sec < 60 ? `${sec} s` : `${Math.floor(sec / 60)} min${sec % 60 ? ` ${String(sec % 60).padStart(2, '0')}` : ''}`);
+
+export class Hud {
+  private mini = $<HTMLCanvasElement>('minimap').getContext('2d')!;
+  private miniBg: HTMLCanvasElement;
+  private last = { party: '', den: '', cls: '', travel: '', bestiary: '' };
+  private denTab: 'alphas' | 'bestiary' = 'alphas';
+  private beasts: { canvas: HTMLCanvasElement; s: number; seen: boolean }[] = [];
+  panel: Panel = null;
+  onUpgrade = (_what: 'weapon' | 'armor') => {};
+  onAlphaUp = (_species: number) => {};
+  onAlphaEquip = (_species: number, _equip: boolean) => {};
+  onAlphaCreate = (_species: number) => {};
+  onMount = (_id: number) => {};
+  onCave = (_id: number, _enter: boolean) => {};
+  onLegend = (_id: number) => {};
+  onQuit = () => {};
+  onReset = () => {};
+  onClass = (_cls: ClassId) => {};
+  onTravel = (_to: number) => {};
+  onEstablish = (_site: number) => {};
+  caves: number[] = []; // retour des mini-boss (s), mis à jour à chaque snapshot
+  camps: number[] = []; // camps établis par le village, mis à jour à chaque snapshot
+  private spotAt = 0; // Pierre ou emplacement devant lequel on se tient (panneaux voyage et camp)
+  private bigBg?: HTMLCanvasElement;
+  private mountId = 0;
+
+  /** founder : fondateur du village (peut le supprimer) ; sinon on n'efface que sa propre progression. */
+  constructor(code: string, private map: WorldMap, private fog: Fog, founder: boolean) {
+    this.miniBg = this.renderMapBackground(180);
+    $('hud').hidden = false;
+    $('code-label').textContent = code;
+    $('invite').onclick = async () => {
+      const url = `${location.origin}${location.pathname}?v=${code}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        this.toast('Lien d\'invitation copié — envoie-le à tes amis !', 'good');
+      } catch {
+        prompt('Copie ce lien et envoie-le à tes amis :', url);
+      }
+    };
+    $('open-map').onclick = () => this.setPanel('map');
+    $('minimap').addEventListener('click', () => this.setPanel('map'));
+    $('quit-confirm').onclick = () => this.onQuit();
+    // Repartir de zéro, avec une confirmation dans le même panneau.
+    $('reset-ask').textContent = founder ? 'Supprimer le village' : 'Effacer ma progression ici';
+    $('reset-go').textContent = founder ? 'Oui, supprimer le village' : 'Oui, tout effacer';
+    $('reset-text').innerHTML = founder
+      ? `Supprimer définitivement le village <b>${code}</b> ? La carte, les camps et la progression de <b>tous ses membres</b> (or, équipement, essences, Alphas) seront effacés. C'est irréversible.`
+      : `Effacer définitivement <b>ta</b> progression dans le village <b>${code}</b> (or, équipement, essences, Alphas) ? Seul son fondateur peut supprimer le village. C'est irréversible.`;
+    const confirmStep = (on: boolean) => {
+      $('quit-main').hidden = on;
+      $('reset-confirm').hidden = !on;
+      $<HTMLButtonElement>(on ? 'reset-cancel' : 'quit-confirm').focus();
+    };
+    $('reset-ask').onclick = () => confirmStep(true);
+    $('reset-cancel').onclick = () => confirmStep(false);
+    $('reset-go').onclick = () => {
+      $<HTMLButtonElement>('reset-go').disabled = true;
+      this.onReset();
+    };
+    for (const id of ['forge', 'den', 'bigmap', 'quit', 'travel', 'camp'] as const) {
+      const el = $(id);
+      el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
+      el.addEventListener('click', (e) => {
+        if (e.target === el) this.setPanel(null);
+      });
+    }
+    $('stones').addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-to]');
+      if (btn && !btn.disabled) this.onTravel(Number(btn.dataset.to));
+    });
+    $('camp-buy').onclick = () => this.onEstablish(this.spotAt);
+    // Tanière : onglets Alphas / Bestiaire.
+    for (const tab of ['alphas', 'bestiary'] as const) {
+      $(`den-tab-${tab}`).onclick = () => {
+        this.denTab = tab;
+        $('den-tab-alphas').setAttribute('aria-selected', String(tab === 'alphas'));
+        $('den-tab-bestiary').setAttribute('aria-selected', String(tab === 'bestiary'));
+        $('den-alphas').hidden = tab !== 'alphas';
+        $('den-bestiary').hidden = tab !== 'bestiary';
+        this.last.den = '';
+        this.last.bestiary = '';
+      };
+    }
+    $('weapon-buy').onclick = () => this.onUpgrade('weapon');
+    $('armor-buy').onclick = () => this.onUpgrade('armor');
+    $('alphas').addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button.buy');
+      if (btn?.dataset.up) this.onAlphaUp(Number(btn.dataset.up));
+      else if (btn?.dataset.create) this.onAlphaCreate(Number(btn.dataset.create));
+      const eq = (e.target as HTMLElement).closest<HTMLButtonElement>('button.equip');
+      if (eq?.dataset.s) this.onAlphaEquip(Number(eq.dataset.s), eq.dataset.equip === '1');
+      const ride = (e.target as HTMLElement).closest<HTMLButtonElement>('button.ride');
+      if (ride?.dataset.id) this.onMount(Number(ride.dataset.id));
+      const leg = (e.target as HTMLElement).closest<HTMLButtonElement>('button.legend-btn');
+      if (leg?.dataset.legend) this.onLegend(Number(leg.dataset.legend));
+    });
+  }
+
+  /** Grande annonce au centre de l'écran quand on entre dans un lieu (camp, village, zone). */
+  banner(title: string, subtitle: string, danger = false) {
+    const el = $('area-banner');
+    el.querySelector('b')!.textContent = title;
+    el.querySelector('span')!.textContent = subtitle;
+    el.classList.toggle('danger', danger);
+    el.hidden = false;
+    el.style.animation = 'none';
+    void el.offsetWidth; // relance l'animation
+    el.style.animation = '';
+  }
+
+  setPanel(panel: Panel) {
+    this.panel = panel;
+    $('forge').hidden = panel !== 'forge';
+    $('den').hidden = panel !== 'den';
+    $('bigmap').hidden = panel !== 'map';
+    $('quit').hidden = panel !== 'quit';
+    $('quit-main').hidden = false; // le menu rouvre toujours sur ses choix, jamais sur la confirmation
+    $('reset-confirm').hidden = true;
+    $('travel').hidden = panel !== 'travel';
+    $('camp').hidden = panel !== 'camp';
+    this.last.den = '';
+    this.last.travel = '';
+    this.last.cls = '';
+    if (panel) $(panel === 'map' ? 'bigmap' : panel).querySelector<HTMLButtonElement>('.close')!.focus();
+  }
+
+  toast(text: string, kind: '' | 'alpha' | 'good' = '') {
+    const el = document.createElement('div');
+    el.className = `toast ${kind}`;
+    el.textContent = text;
+    $('toasts').append(el);
+    setTimeout(() => el.remove(), 3400);
+    while ($('toasts').children.length > 4) $('toasts').firstElementChild!.remove();
+  }
+
+  update(me: PlayerState, players: PlayerState[], units: UnitTuple[], myPos: { x: number; y: number }, ping: number) {
+    // Soi.
+    $('self-name').textContent = me.name;
+    $('self-name').style.color = me.color;
+    const hpRatio = me.hp / me.maxHp;
+    const fill = $('self-hp');
+    fill.style.width = `${Math.max(0, hpRatio) * 100}%`;
+    fill.classList.toggle('low', hpRatio < 0.3);
+    $('self-hptext').textContent = `PV ${me.hp}/${me.maxHp}`;
+    $('self-gold').textContent = `Or ${me.gold}`;
+    $('self-army').textContent = `Meute ${me.army.filter((a) => !a.alpha).length}/${ARMY_CAP}`;
+    $('ping').textContent = ping ? `${ping} ms` : '';
+
+    // Groupe.
+    const others = players.filter((p) => p.id !== me.id);
+    const partyKey = JSON.stringify(others.map((p) => [p.name, p.hp, p.maxHp, p.army.length, p.dead, this.map.inVillage(p.x, p.y)]));
+    if (partyKey !== this.last.party) {
+      this.last.party = partyKey;
+      const party = $('party');
+      party.hidden = others.length === 0;
+      party.replaceChildren(
+        ...others.map((p) => {
+          const wrap = document.createElement('div');
+          wrap.className = 'col';
+          const status = p.dead ? 'À terre' : this.map.inVillage(p.x, p.y) ? 'Au village' : `Meute ${p.army.length}`;
+          wrap.innerHTML = `<div class="row"><b></b><span class="muted"></span></div><div class="bar thin"><div class="fill"></div></div>`;
+          const b = wrap.querySelector('b')!;
+          b.textContent = p.name;
+          b.style.color = p.color;
+          wrap.querySelector('.muted')!.textContent = status;
+          (wrap.querySelector('.fill') as HTMLElement).style.width = `${(p.hp / p.maxHp) * 100}%`;
+          return wrap;
+        }),
+      );
+    }
+
+    // Bâtiments.
+    const b = me.dead ? undefined : buildingNear(this.map, myPos.x, myPos.y, this.caves, this.camps);
+    const prompt = $('build-prompt');
+    prompt.hidden = !b || !!this.panel;
+    if (b) {
+      prompt.textContent = b.label;
+      prompt.className = `btn prompt ${b.panel ?? (b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
+      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.cave && this.onCave(b.cave.id, b.cave.enter));
+    }
+    const building = this.panel === 'forge' || this.panel === 'den' || this.panel === 'travel' || this.panel === 'camp';
+    if (building && b?.panel !== this.panel) this.setPanel(null);
+    if (b?.at !== undefined && b.at !== this.spotAt) {
+      this.spotAt = b.at;
+      this.last.travel = '';
+    }
+    if (this.panel === 'travel') this.updateTravel();
+    if (this.panel === 'camp') this.updateCamp(me);
+    if (this.panel === 'forge') this.updateForge(me);
+    if (this.panel === 'den' && this.denTab === 'alphas') this.updateDen(me);
+    if (this.panel === 'den' && this.denTab === 'bestiary') this.updateBestiary(me);
+
+    // Mort.
+    $('death').hidden = !me.dead;
+    $('death-timer').textContent = String(me.respawnIn);
+    if (me.dead) {
+      const c = this.map.respawnSite(me.x, me.y, this.camps);
+      $('death-where').textContent = c < 0 ? 'Retour au village' : `Retour au ${campName(c)}`;
+    }
+
+    // Monture.
+    this.mountId = me.mount?.id ?? 0;
+    $('mount-row').hidden = !me.mount;
+    if (me.mount) {
+      $('mount-name').textContent = `Sur l'Alpha ${SPECIES[me.mount.species].name}`;
+      $('mount-hp').style.width = `${me.mount.hp}%`;
+    }
+
+    this.drawMinimap(me, players, units, myPos);
+    if (this.panel === 'map') this.drawBigMap(me, players, myPos);
+  }
+
+  /** Pierre de passage : le village et chaque emplacement de camp, joignables s'ils sont établis. */
+  private updateTravel() {
+    const key = `${this.spotAt}|${this.camps.join(',')}`;
+    if (key === this.last.travel) return;
+    this.last.travel = key;
+    const rows = [{ to: -1, name: 'Village', sub: 'Feu de camp · Forge · Tanière des Alphas', open: true }].concat(
+      this.map.sites.map((_, i) => ({
+        to: i, name: campName(i), open: this.camps.includes(i),
+        sub: this.camps.includes(i) ? 'Feu de camp · réapparition' : `Au bout de la zone ${4 * (i + 1)} · pas encore établi`,
+      })),
+    );
+    $('stones').replaceChildren(
+      ...rows.map((r) => {
+        const here = r.to === this.spotAt;
+        const row = document.createElement('div');
+        row.className = `stone-row${r.open ? '' : ' locked'}`;
+        row.innerHTML = `<div class="col"><b></b><span class="small muted"></span></div><button class="cta"></button>`;
+        row.querySelector('b')!.textContent = r.name;
+        row.querySelector('span')!.textContent = r.sub;
+        const btn = row.querySelector('button')!;
+        btn.dataset.to = String(r.to);
+        btn.disabled = here || !r.open;
+        btn.textContent = here ? 'Tu es ici' : r.open ? 'Voyager' : 'Fermé';
+        return row;
+      }),
+    );
+  }
+
+  private updateCamp(me: PlayerState) {
+    $('camp-gold').textContent = String(me.gold);
+    $('camp-title').textContent = `Emplacement · ${campName(this.spotAt)}`;
+    const btn = $<HTMLButtonElement>('camp-buy');
+    btn.disabled = me.gold < CAMP_COST;
+    btn.textContent = me.gold < CAMP_COST ? `Il te faut ${CAMP_COST} or` : `Établir le camp · ${CAMP_COST} or`;
+  }
+
+  private updateForge(me: PlayerState) {
+    $('forge-gold').textContent = String(me.gold);
+    // Classe : la première est gratuite, changer ensuite coûte un peu d'or.
+    const cost = me.cls === null ? 0 : CLASS_CHANGE_COST;
+    $('class-hint').textContent = me.cls === null
+      ? 'Choisis ta classe : le premier choix est gratuit.'
+      : `Classe : ${CLASSES[me.cls].name}. Changer coûte ${CLASS_CHANGE_COST} or.`;
+    const classKey = `${me.cls}|${me.gold >= cost}`;
+    if (classKey !== this.last.cls) {
+      this.last.cls = classKey;
+      $('classes').replaceChildren(
+        ...CLASS_IDS.map((id) => {
+          const c = CLASSES[id], on = me.cls === id;
+          const el = document.createElement('button');
+          el.className = `class-card${on ? ' on' : ''}`;
+          el.disabled = on || me.gold < cost;
+          el.innerHTML = '<b></b><span></span><span class="tag"></span>';
+          el.querySelector('b')!.textContent = c.name;
+          el.querySelector('span')!.textContent = c.desc;
+          el.querySelector('.tag')!.textContent = on ? 'Classe actuelle' : cost ? `Choisir · ${cost} or` : 'Choisir · gratuit';
+          el.onclick = () => this.onClass(id);
+          return el;
+        }),
+      );
+    }
+    const weaponNames = classOf(me.cls).weapons;
+    const next = (a: string, b: string, maxed: boolean) => (maxed ? a : `${a} → <span class="up">${b}</span>`);
+    const buy = (id: string, maxed: boolean, cost: number) => {
+      const btn = $<HTMLButtonElement>(id);
+      btn.disabled = maxed || me.gold < cost;
+      btn.textContent = maxed ? 'Niveau maximum' : me.gold < cost ? `Il manque ${cost - me.gold} or` : `Améliorer · ${cost} or`;
+    };
+
+    const w = me.weapon, wMax = w >= WEAPON_MAX;
+    const k = classOf(me.cls).dmg;
+    $('weapon-name').textContent = `${weaponNames[w]} · niv. ${w}`;
+    $('weapon-dmg').innerHTML = next(String(Math.round(weaponDmg(w) * k)), String(Math.round(weaponDmg(w + 1) * k)), wMax);
+    $('weapon-next').textContent = wMax ? '—' : weaponNames[w + 1];
+    // Icône d'arme selon la classe (épée, arc ou bâton), teintée selon le niveau.
+    const icon = $('weapon-icon');
+    for (const g of icon.querySelectorAll<SVGGElement>('g[data-cls]')) g.toggleAttribute('hidden', g.dataset.cls !== (me.cls ?? 'warrior'));
+    const tier = armorColor(w);
+    icon.querySelectorAll('.tier').forEach((el) => el.setAttribute('fill', me.cls === 'mage' && w < 3 ? '#D9C6FF' : tier));
+    icon.querySelectorAll('.tier-stroke').forEach((el) => el.setAttribute('stroke', tier));
+    buy('weapon-buy', wMax, weaponCost(w));
+
+    const a = me.armor, aMax = a >= ARMOR_MAX;
+    $('armor-name').textContent = `${ARMOR_NAMES[a]} · niv. ${a}`;
+    const hpK = classOf(me.cls).hp; // PV selon la classe (guerrier +25 %, archer −10 %, mage −15 %)
+    $('armor-hp').innerHTML = next(String(Math.round(armorMaxHp(a) * hpK)), String(Math.round(armorMaxHp(a + 1) * hpK)), aMax);
+    $('armor-red').innerHTML = next(pct(armorReduction(a)), pct(armorReduction(a + 1)), aMax);
+    $('armor-shape').setAttribute('fill', armorColor(a));
+    buy('armor-buy', aMax, armorCost(a));
+  }
+
+  /** Bestiaire de la Tanière : les espèces déjà croisées, les autres en silhouette (les géants n'y figurent pas). */
+  private updateBestiary(me: PlayerState) {
+    const all = SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss);
+    const seen = new Set(me.seen);
+    const key = all.filter((s) => seen.has(s)).join(',');
+    if (key !== this.last.bestiary) {
+      this.last.bestiary = key;
+      const n = all.filter((s) => seen.has(s)).length;
+      $('bestiary-count').innerHTML = `<b>${n}/${all.length}</b> espèces croisées · les autres t'attendent plus loin sur le chemin.`;
+      this.beasts = [];
+      const zones = [...new Set(all.map((s) => SPECIES[s].zone))];
+      $('bestiary').replaceChildren(
+        ...zones.flatMap((z) => {
+          const title = document.createElement('h3');
+          title.className = 'bestiary-zone';
+          title.textContent = `Zone ${z} · ${ZONE_NAMES[z - 1]}`;
+          const row = document.createElement('div');
+          row.className = 'bestiary-row';
+          for (const s of all.filter((i) => SPECIES[i].zone === z)) {
+            const sp = SPECIES[s], known = seen.has(s);
+            const el = document.createElement('div');
+            el.className = `beast${known ? '' : ' unknown'}`;
+            el.innerHTML = '<canvas></canvas><b></b><span class="tag"></span><span class="stats"></span><span class="desc"></span>';
+            el.querySelector('b')!.textContent = known ? sp.name : '???';
+            const traits = [sp.ranged ? 'Tireur' : 'Mêlée', sp.swim ? 'aquatique' : '', MOUNTS[sp.key] ? 'monture en Alpha' : ''].filter(Boolean).join(' · ');
+            el.querySelector('.tag')!.textContent = known ? traits : '';
+            el.querySelector('.stats')!.textContent = known ? `${sp.hp} PV · ${sp.dmg} dégâts` : '';
+            el.querySelector('.desc')!.textContent = known ? SPECIES_DESC[sp.key] ?? '' : 'Pas encore croisé.';
+            const canvas = el.querySelector('canvas')!;
+            canvas.setAttribute('role', 'img');
+            canvas.setAttribute('aria-label', known ? sp.name : 'Espèce inconnue');
+            this.beasts.push({ canvas, s, seen: known });
+            row.append(el);
+          }
+          return [title, row];
+        }),
+      );
+    }
+    // Animation : sprites du jeu ; silhouette sombre pour les espèces pas encore croisées.
+    const t = performance.now() / 1000, dpr = Math.min(2, devicePixelRatio || 1);
+    for (const b of this.beasts) {
+      const w = b.canvas.clientWidth, h = b.canvas.clientHeight;
+      if (!w) continue;
+      if (b.canvas.width !== Math.round(w * dpr)) {
+        b.canvas.width = Math.round(w * dpr);
+        b.canvas.height = Math.round(h * dpr);
+      }
+      const ctx = b.canvas.getContext('2d')!;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.clearRect(0, 0, b.canvas.width, b.canvas.height);
+      const sp = SPECIES[b.s], scale = Math.min(2.2, (h * dpr * 0.55) / (sp.r * 2));
+      ctx.setTransform(scale, 0, 0, scale, b.canvas.width / 2, b.canvas.height * 0.55);
+      drawUnit(ctx, { x: 0, y: 0, r: sp.r, species: b.s, alpha: false, wild: b.seen, face: 1, t: t + b.s, seed: b.s, flash: false });
+      if (!b.seen) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalCompositeOperation = 'source-in';
+        ctx.fillStyle = '#2A3A36';
+        ctx.fillRect(0, 0, b.canvas.width, b.canvas.height);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    }
+  }
+
+  private updateDen(me: PlayerState) {
+    const key = JSON.stringify([me.mount?.id, me.awakening, me.essences, me.resting, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
+    if (key === this.last.den) return;
+    this.last.den = key;
+
+    // Bonus de collection : chaque Alpha éveillé renforce les autres de 10 %.
+    const equipped = me.army.filter((x) => x.alpha).length;
+    const count = equipped + me.resting.length; // le bonus compte tous les Alphas possédés, équipés ou non
+    $('collection').innerHTML = (count
+      ? `Bonus de collection : <b>+${Math.round((collectionMult(count) - 1) * 100)} %</b> PV et dégâts pour tes ${count} Alpha${count > 1 ? 's' : ''} · +10 % par Alpha éveillé`
+      : 'Bonus de collection : chaque Alpha éveillé donnera +10 % de PV et de dégâts à tous tes Alphas.')
+      + `<br>Équipés : <b>${equipped}/${ALPHA_EQUIP_MAX}</b> · les autres se reposent ici et comptent quand même pour le bonus.`;
+
+    // Une carte par espèce : éveiller son Alpha, puis le renforcer.
+    $('alphas').replaceChildren(
+      ...SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss).map((s) => {
+        const sp = SPECIES[s];
+        // Alpha possédé : équipé (sur le terrain) ou rangé à la Tanière.
+        const field = me.army.find((x) => x.alpha && x.species === s);
+        const rest = me.resting.find((x) => x.species === s);
+        const a = field ?? (rest ? { id: 0, level: rest.level, legend: rest.legend, reviveIn: 0 } : undefined);
+        const lvl = a?.level ?? 0;
+        // stats affichées avec le bonus de collection (en comptant cet Alpha s'il n'est pas encore là)
+        const stat = (l: number) => alphaStats(s, l, a ? count : count + 1, a?.legend);
+        const maxed = !!a && lvl >= ALPHA_LVL_MAX;
+        const cost = a ? alphaUpCost(lvl) : ALPHA_CREATE_COST;
+        const unit = 'essences';
+        const have = me.essences[s];
+        const el = document.createElement('div');
+        el.className = `alpha-card${a ? '' : ' asleep'}`;
+        el.innerHTML = `<span class="badge"></span><div class="col"><span class="title"></span><span class="stats"></span>
+          <div class="ess"><div class="ess-bar"><i></i></div><span></span></div></div><div class="actions"><button class="buy"></button></div>`;
+        (el.querySelector('.badge') as HTMLElement).style.background = sp.color;
+        el.querySelector('.title')!.textContent = a
+          ? `${a.legend ? `${sp.name} légendaire` : `Alpha ${sp.name}`} · niv. ${lvl}${a.reviveIn ? ' (ressuscite…)' : ''}${rest ? ' · au repos' : ''}`
+          : `Alpha ${sp.name} · endormi`;
+        const now = stat(lvl), nxt = stat(lvl + 1);
+        const revive = `résurrection ${alphaReviveS(s)} s`;
+        el.querySelector('.stats')!.innerHTML = !a
+          ? `PV ${now.hp} · Dégâts ${now.dmg}`
+          : maxed
+            ? `PV ${now.hp} · Dégâts ${now.dmg}`
+            : `PV ${now.hp} → <span class="up">${nxt.hp}</span> · Dégâts ${now.dmg} → <span class="up">${nxt.dmg}</span>`
+        el.querySelector('.stats')!.innerHTML += ` · ${revive}`;
+        (el.querySelector('.ess-bar i') as HTMLElement).style.width = `${maxed ? 100 : Math.min(100, (100 * have) / cost)}%`;
+        el.querySelector('.ess span')!.textContent = maxed ? `${have} essences` : `${have}/${cost} ${unit} de ${sp.name}`;
+        if (a?.legend) el.classList.add('legend');
+        const waking = me.awakening.find((w) => w.species === s);
+        if (waking) {
+          // Éveil en cours : compte à rebours à la place de la jauge d'essences.
+          el.className = 'alpha-card waking';
+          el.querySelector('.title')!.textContent = `Alpha ${sp.name} · éveil en cours`;
+          (el.querySelector('.ess-bar i') as HTMLElement).style.width = `${(100 * (waking.total - waking.left)) / waking.total}%`;
+          const mm = Math.floor(waking.left / 60), ss = String(waking.left % 60).padStart(2, '0');
+          el.querySelector('.ess span')!.textContent = `S'éveille dans ${mm}:${ss}`;
+        }
+        const btn = el.querySelector<HTMLButtonElement>('.buy')!;
+        if (a) btn.dataset.up = String(s);
+        else btn.dataset.create = String(s);
+        if (rest) el.classList.add('resting');
+        btn.disabled = maxed || have < cost || !!waking;
+        btn.textContent = maxed ? 'Niveau maximum' : a ? 'Renforcer' : waking ? 'Éveil…' : `Éveiller · ${duration(alphaAwakenS(s))}`;
+        // Évolution légendaire : une âme du boss géant de l'espèce.
+        const boss = bossOf(s);
+        if (a && !a.legend && boss >= 0) {
+          const souls = me.essences[boss] ?? 0;
+          const leg = document.createElement('button');
+          leg.className = 'legend-btn';
+          leg.dataset.legend = String(s);
+          leg.disabled = souls < LEGEND_SOULS;
+          leg.textContent = souls >= LEGEND_SOULS ? `Rendre légendaire · ${LEGEND_SOULS} âme${LEGEND_SOULS > 1 ? 's' : ''}` : `Légendaire : âme de ${SPECIES[boss].name} (${souls}/${LEGEND_SOULS})`;
+          leg.title = `PV et dégâts ×${String(LEGEND_MULT.hp).replace('.', ',')}, aura dorée. Bats ${SPECIES[boss].name} dans sa grotte pour obtenir son âme.`;
+          el.querySelector('.actions')!.append(leg);
+        }
+        // Équiper (5 au maximum sur le terrain) ou ranger à la Tanière.
+        if (a) {
+          const eq = document.createElement('button');
+          eq.className = 'equip';
+          eq.dataset.s = String(s);
+          eq.dataset.equip = rest ? '1' : '0';
+          eq.disabled = !!rest && equipped >= ALPHA_EQUIP_MAX;
+          eq.textContent = rest ? (equipped >= ALPHA_EQUIP_MAX ? `Équipés : ${ALPHA_EQUIP_MAX}/${ALPHA_EQUIP_MAX}` : 'Équiper') : 'Ranger';
+          el.querySelector('.actions')!.append(eq);
+        }
+        // Monture : seuls certains Alphas équipés se chevauchent.
+        if (field && MOUNTS[sp.key]) {
+          const ride = document.createElement('button');
+          const on = this.mountId === field.id;
+          ride.className = `ride${on ? ' on' : ''}`;
+          ride.dataset.id = String(field.id);
+          ride.disabled = !!field.reviveIn;
+          ride.textContent = on ? 'Descendre' : `Monter · vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}`;
+          el.querySelector('.actions')!.append(ride);
+        } else if (MOUNTS[sp.key]) {
+          el.querySelector('.stats')!.innerHTML += ` · <span class="up">monture</span>`;
+        }
+        return el;
+      }),
+    );
+  }
+
+  /** Fond de la minicarte (zones + lacs), calculé une seule fois à partir de la carte. */
+  private renderMapBackground(S: number) {
+    const c = document.createElement('canvas');
+    c.width = c.height = S;
+    const ctx = c.getContext('2d')!;
+    const img = ctx.createImageData(S, S);
+    const k = (WORLD_HALF * 2) / S;
+    for (let j = 0; j < S; j++) {
+      for (let i = 0; i < S; i++) {
+        const x = -WORLD_HALF + (i + 0.5) * k, y = -WORLD_HALF + (j + 0.5) * k;
+        const col = this.map.isForest(x, y) ? FOREST_GROUND : this.map.isWater(x, y) ? [46, 101, 116] : ZONE_GROUND[this.map.inVillage(x, y) ? 0 : this.map.zoneAt(x, y)];
+        const o = (j * S + i) * 4;
+        img.data[o] = col[0] * 0.8;
+        img.data[o + 1] = col[1] * 0.8;
+        img.data[o + 2] = col[2] * 0.8;
+        img.data[o + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return c;
+  }
+
+  /** Grande carte (touche M) : terrain, brouillard, camp, village et dompteurs. */
+  private drawBigMap(me: PlayerState, players: PlayerState[], myPos: { x: number; y: number }) {
+    const canvas = $<HTMLCanvasElement>('bigmap-canvas');
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    const S = Math.round(Math.min(canvas.clientWidth, canvas.clientHeight || canvas.clientWidth) * dpr);
+    if (!S) return;
+    if (canvas.width !== S) canvas.width = canvas.height = S;
+    this.bigBg ??= this.renderMapBackground(640);
+    const ctx = canvas.getContext('2d')!;
+    const k = S / (WORLD_HALF * 2), m = (v: number) => (v + WORLD_HALF) * k;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(this.bigBg, 0, 0, S, S);
+    this.fog.draw(ctx, 0, 0, S, S, 0.94);
+    const { spawn, village } = this.map;
+    ctx.strokeStyle = '#EEE7D7';
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.arc(m(spawn.x), m(spawn.y), 6 * dpr, 0, Math.PI * 2);
+    ctx.stroke();
+    this.drawCaves(ctx, m, 8 * dpr);
+    this.drawCamps(ctx, m, 7 * dpr);
+    this.star(ctx, m(village.x), m(village.y), 11 * dpr, dpr);
+    for (const p of players) {
+      const x = p.id === me.id ? myPos.x : p.x, y = p.id === me.id ? myPos.y : p.y;
+      ctx.fillStyle = p.dead ? '#A9B3A6' : p.color;
+      ctx.strokeStyle = '#10181A';
+      ctx.lineWidth = 2.5 * dpr;
+      ctx.beginPath();
+      ctx.arc(m(x), m(y), (p.id === me.id ? 7 : 6) * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = `600 ${12 * dpr}px Outfit, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 3 * dpr;
+      ctx.strokeText(p.name, m(x), m(y) - 11 * dpr);
+      ctx.fillStyle = '#EEE7D7';
+      ctx.fillText(p.name, m(x), m(y) - 11 * dpr);
+    }
+    $('explored').textContent = `${Math.round(this.fog.progress * 100)} % de la carte explorée`;
+  }
+
+  /** Grottes déjà repérées (hors brouillard) : arche sombre, point rouge si le mini-boss est là. */
+  private drawCaves(ctx: CanvasRenderingContext2D, m: (v: number) => number, size: number) {
+    for (const c of this.map.caves) {
+      if (!this.fog.isExplored(c.entrance.x, c.entrance.y)) continue;
+      const x = m(c.entrance.x), y = m(c.entrance.y);
+      ctx.fillStyle = '#2A2E2D';
+      ctx.strokeStyle = '#C9CFC2';
+      ctx.lineWidth = size * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(x - size, y + size * 0.7);
+      ctx.lineTo(x - size, y - size * 0.2);
+      ctx.arc(x, y - size * 0.2, size, Math.PI, 0);
+      ctx.lineTo(x + size, y + size * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      if (!this.caves[c.id]) {
+        ctx.fillStyle = '#E8693F';
+        ctx.beginPath();
+        ctx.arc(x, y, size * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  /** Emplacements de camp repérés : cercle (plein et doré une fois établi), Pierres de passage reliées. */
+  private drawCamps(ctx: CanvasRenderingContext2D, m: (v: number) => number, size: number) {
+    this.map.sites.forEach((c, i) => {
+      if (!this.fog.isExplored(c.x, c.y)) return;
+      const on = this.camps.includes(i);
+      ctx.fillStyle = on ? '#F0B64A' : 'rgba(0,0,0,0)';
+      ctx.strokeStyle = on ? '#10181A' : '#EEE7D7';
+      ctx.lineWidth = size * 0.35;
+      ctx.beginPath();
+      ctx.arc(m(c.x), m(c.y), size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    this.map.stones.forEach((st, k) => {
+      if (k > 0 && !this.camps.includes(k - 1)) return;
+      ctx.fillStyle = '#8FE3D6';
+      ctx.fillRect(m(st.x) + size * 0.9, m(st.y) - size * 1.4, size * 0.7, size * 1.2);
+    });
+  }
+
+  private star(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, lw: number) {
+    ctx.fillStyle = '#F0B64A';
+    ctx.strokeStyle = '#10181A';
+    ctx.lineWidth = 1.5 * lw;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.4 : r;
+      ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  private drawMinimap(me: PlayerState, players: PlayerState[], units: UnitTuple[], myPos: { x: number; y: number }) {
+    const ctx = this.mini;
+    const S = 180, k = S / (WORLD_HALF * 2);
+    const m = (v: number) => (v + WORLD_HALF) * k;
+    ctx.drawImage(this.miniBg, 0, 0);
+    this.fog.draw(ctx, 0, 0, S, S, 0.92);
+
+    // Camp de départ et village (étoile dorée).
+    const { spawn, village } = this.map;
+    ctx.strokeStyle = '#EEE7D7';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(m(spawn.x), m(spawn.y), 3, 0, Math.PI * 2);
+    ctx.stroke();
+    this.drawCaves(ctx, m, 4);
+    this.drawCamps(ctx, m, 3.5);
+    this.star(ctx, m(village.x), m(village.y), 6.5, 1);
+
+    for (const u of units) {
+      ctx.fillStyle = u[6] ? '#5CC8B8' : '#E8693F';
+      ctx.fillRect(m(u[3]) - 1, m(u[4]) - 1, 2, 2);
+    }
+    for (const p of players) {
+      const x = p.id === me.id ? myPos.x : p.x, y = p.id === me.id ? myPos.y : p.y;
+      ctx.fillStyle = p.dead ? '#A9B3A6' : p.color;
+      ctx.strokeStyle = '#10181A';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(m(x), m(y), p.id === me.id ? 4.5 : 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+}

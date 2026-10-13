@@ -1,0 +1,31 @@
+{
+  "name": "fangleaf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n server,client -c green,cyan \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "PORT=3001 tsx watch server/index.ts",
+    "dev:client": "vite --port 5173 --strictPort",
+    "build": "vite build",
+    "start": "NODE_ENV=production tsx server/index.ts",
+    "typecheck": "tsc --noEmit",
+    "smoke": "tsx scripts/smoke.ts",
+    "test:rules": "tsx scripts/rules.ts",
+    "db:migrate": "tsx scripts/migrate.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
+    "tsx": "^4.23.15",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/pg": "^8.23.1",
+    "@types/ws": "^8.18.2",
+    "concurrently": "^10.0.6",
+    "pg": "^8.23.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
+}

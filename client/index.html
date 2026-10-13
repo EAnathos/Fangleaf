@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Fangleaf</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='18' r='12' fill='%235CC8B8'/%3E%3Ccircle cx='12' cy='16' r='2.5' fill='%2310181A'/%3E%3Ccircle cx='20' cy='16' r='2.5' fill='%2310181A'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <canvas id="game" aria-label="Carte du jeu"></canvas>
+
+  <!-- ───── Lobby ───── -->
+  <main id="lobby">
+    <canvas id="lobby-scene" aria-hidden="true"></canvas>
+    <div class="lobby-inner">
+    <section class="lobby-hero">
+      <h1>Fangleaf</h1>
+      <p class="tagline">Chasse, apprivoise, mène ta meute.</p>
+    </section>
+    <form id="lobby-form" class="panel lobby-card">
+      <p id="invite-badge" class="invite-badge" hidden><span id="invite-label">Invitation au village</span> <b id="invite-code"></b></p>
+      <h2 id="card-title" class="card-title">Rejoins la meute</h2>
+      <div id="account" class="account">
+        <button type="button" id="google" class="google-btn" hidden>
+          <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+          Se connecter avec Google
+        </button>
+        <div id="signed-in" class="signed-in" hidden>
+          <span>Connecté : <b id="account-name"></b></span>
+          <button type="button" id="logout" class="link-btn">Se déconnecter</button>
+        </div>
+        <p id="guest-note" class="hint">Chargement…</p>
+      </div>
+      <div id="play" class="play" hidden>
+      <label class="field">Nom du dompteur
+        <input id="name" maxlength="16" autocomplete="nickname" required>
+      </label>
+      <div id="village-tabs" class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-create" aria-selected="true">Créer un village</button>
+        <button type="button" role="tab" id="tab-join" aria-selected="false">Rejoindre</button>
+      </div>
+      <label class="field" id="code-field" hidden>Code du village
+        <input id="code" class="code-input" maxlength="6" autocomplete="off" spellcheck="false" placeholder="MOSS42">
+      </label>
+      <p id="create-hint" class="hint">Tu fondes un village à 3 places. Invite tes amis avec le bouton « Inviter » une fois en jeu.</p>
+      <button id="go" class="cta" type="submit">Fonder le village</button>
+      </div>
+      <p id="lobby-error" class="error" role="alert"></p>
+    </form>
+    </div>
+  </main>
+
+  <!-- ───── HUD ───── -->
+  <div id="hud" hidden>
+    <section class="hud-tl">
+      <div class="panel self">
+        <span id="self-name" class="pname"></span>
+        <div class="bar"><div id="self-hp" class="fill"></div></div>
+        <div class="row stats"><span id="self-hptext"></span><span id="self-gold" class="gold"></span><span id="self-army"></span></div>
+        <div id="mount-row" class="mount-row" hidden>
+          <div class="row between small"><span id="mount-name"></span><span class="muted">F : descendre</span></div>
+          <div class="bar thin"><div id="mount-hp" class="fill mount"></div></div>
+        </div>
+      </div>
+      <div id="party" class="panel party" hidden></div>
+    </section>
+
+    <section class="hud-tr">
+      <canvas id="minimap" width="180" height="180" aria-label="Minicarte"></canvas>
+      <div class="row tr-buttons">
+        <button id="open-map" class="btn">Carte · M</button>
+        <button id="invite" class="btn">Inviter · <span id="code-label"></span></button>
+      </div>
+      <span id="ping" class="muted small"></span>
+    </section>
+
+    <button id="build-prompt" class="btn prompt" hidden></button>
+    <div id="toasts" aria-live="polite"></div>
+    <div id="area-banner" class="area-banner" aria-live="polite" hidden><b></b><span></span></div>
+
+    <div id="death" class="overlay" hidden>
+      <div class="death-card">
+        <h2>Tu es tombé…</h2>
+        <p><span id="death-where">Retour au village</span> dans <span id="death-timer">5</span> s. Tes Alphas t'attendent.</p>
+      </div>
+    </div>
+
+    <div id="forge" class="overlay dim" hidden>
+      <div class="panel modal" role="dialog" aria-modal="true" aria-labelledby="forge-title">
+        <div class="row between">
+          <div class="col">
+            <h2 id="forge-title">Forge</h2>
+            <span class="muted">Or disponible : <b id="forge-gold" class="gold"></b></span>
+          </div>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div class="col">
+          <span class="small muted" id="class-hint"></span>
+          <div id="classes" class="classes"></div>
+        </div>
+        <div class="forge-cols">
+          <div class="card">
+            <div class="row"><svg id="weapon-icon" width="52" height="52" viewBox="0 0 56 56" aria-hidden="true">
+              <g data-cls="warrior"><path class="tier" d="M40 6 L50 6 L50 16 L22 44 L12 34 Z" fill="#DCE2E8" stroke="#EEE7D7" stroke-width="2"/><path d="M10 32 L24 46" stroke="#8B6A47" stroke-width="5" stroke-linecap="round"/><path d="M6 50 L14 42" stroke="#5B3F2C" stroke-width="6" stroke-linecap="round"/></g>
+              <g data-cls="archer" hidden><path class="tier-stroke" d="M14 6 Q50 28 14 50" fill="none" stroke="#8B6A47" stroke-width="5" stroke-linecap="round"/><path d="M14 6 L14 50" stroke="#EEE7D7" stroke-width="1.5"/><path d="M8 28 L44 28" stroke="#C9CFC2" stroke-width="2.5" stroke-linecap="round"/><path d="M44 28 L36 23 L36 33 Z" fill="#EEE7D7"/><path d="M8 28 L4 24 M8 28 L4 32" stroke="#E8693F" stroke-width="2" stroke-linecap="round"/></g>
+              <g data-cls="mage" hidden><path d="M12 50 L38 16" stroke="#5B3F2C" stroke-width="5" stroke-linecap="round"/><circle cx="41" cy="12" r="11" fill="rgba(180,140,255,0.3)"/><circle class="tier" cx="41" cy="12" r="6.5" fill="#D9C6FF" stroke="#EEE7D7" stroke-width="2"/></g>
+            </svg>
+              <div class="col"><span class="small muted">Arme</span><span id="weapon-name" class="big"></span></div></div>
+            <div class="line"><span class="muted">Dégâts</span><span id="weapon-dmg"></span></div>
+            <div class="line"><span class="muted">Prochain</span><span id="weapon-next"></span></div>
+            <button id="weapon-buy" class="cta"></button>
+          </div>
+          <div class="card">
+            <div class="row"><svg width="52" height="52" viewBox="0 0 72 72" aria-hidden="true"><path id="armor-shape" d="M14 14 L36 8 L58 14 L56 44 Q50 60 36 66 Q22 60 16 44 Z" fill="#8C9AA6" stroke="#EEE7D7" stroke-width="3"/><path d="M36 14 L36 60" stroke="#5A5F66" stroke-width="3"/></svg>
+              <div class="col"><span class="small muted">Armure</span><span id="armor-name" class="big"></span></div></div>
+            <div class="line"><span class="muted">PV max</span><span id="armor-hp"></span></div>
+            <div class="line"><span class="muted">Réduction</span><span id="armor-red"></span></div>
+            <button id="armor-buy" class="cta"></button>
+          </div>
+        </div>
+        <p class="small muted">Arme et armure progressent séparément. Hors du village, aucune régénération : rentre au feu de camp pour te soigner.</p>
+      </div>
+    </div>
+
+    <div id="quit" class="overlay dim" hidden>
+      <div class="panel modal quit" role="dialog" aria-modal="true" aria-labelledby="quit-title">
+        <div class="row between">
+          <h2 id="quit-title">Menu</h2>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div id="quit-main" class="col quit-main">
+          <button id="quit-confirm" class="cta">Retour au lobby</button>
+          <button id="reset-ask" class="danger-btn"></button>
+        </div>
+        <div id="reset-confirm" class="col quit-main" hidden>
+          <p id="reset-text" class="reset-text"></p>
+          <div class="row quit-actions">
+            <button id="reset-cancel" class="btn">Annuler</button>
+            <button id="reset-go" class="danger-btn solid"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="travel" class="overlay dim" hidden>
+      <div class="panel modal travel" role="dialog" aria-modal="true" aria-labelledby="travel-title">
+        <div class="row between">
+          <h2 id="travel-title">Pierre de passage</h2>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div id="stones" class="stones"></div>
+        <p class="small muted">Ta meute et tes Alphas voyagent avec toi.</p>
+      </div>
+    </div>
+
+    <div id="camp" class="overlay dim" hidden>
+      <div class="panel modal camp" role="dialog" aria-modal="true" aria-labelledby="camp-title">
+        <div class="row between">
+          <div class="col">
+            <h2 id="camp-title">Emplacement de camp</h2>
+            <span class="muted">Or disponible : <b id="camp-gold" class="gold"></b></span>
+          </div>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <ul class="camp-perks">
+          <li><b>Feu de camp</b> : tu te soignes, les monstres restent à l'écart.</li>
+          <li><b>Réapparition</b> : si tu tombes plus loin, tu reviens ici.</li>
+          <li><b>Pierre de passage</b> : voyage instantané avec le village.</li>
+        </ul>
+        <p class="small muted">Le camp appartient à tout le village : un seul d'entre vous le paie.</p>
+        <button id="camp-buy" class="cta"></button>
+      </div>
+    </div>
+
+    <div id="bigmap" class="overlay dim" hidden>
+      <div class="panel bigmap" role="dialog" aria-modal="true" aria-labelledby="bigmap-title">
+        <div class="row between">
+          <div class="col">
+            <h2 id="bigmap-title">Carte</h2>
+            <span id="explored" class="muted small"></span>
+          </div>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <canvas id="bigmap-canvas" aria-label="Carte du monde"></canvas>
+        <div class="legend small muted">
+          <span><i class="lg-star"></i>Village</span><span><i class="lg-camp"></i>Camps</span><span><i class="lg-stone"></i>Pierre de passage</span><span><i class="lg-you"></i>Toi</span><span><i class="lg-ally"></i>Groupe</span><span><i class="lg-water"></i>Lac</span><span><i class="lg-cave"></i>Grotte (point rouge : mini-boss présent)</span>
+          <span class="grow"></span><span>M ou Échap pour fermer</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="den" class="overlay dim" hidden>
+      <div class="panel modal den" role="dialog" aria-modal="true" aria-labelledby="den-title">
+        <div class="row between">
+          <h2 id="den-title">Tanière des Alphas</h2>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" id="den-tab-alphas" aria-selected="true" aria-controls="den-alphas">Alphas</button>
+          <button type="button" role="tab" id="den-tab-bestiary" aria-selected="false" aria-controls="den-bestiary">Bestiaire</button>
+        </div>
+        <div id="den-alphas" class="col den-page" role="tabpanel">
+          <p id="collection" class="collection"></p>
+          <div id="alphas" class="alphas"></div>
+          <p class="small muted">Les Alphas ne comptent pas dans la limite de meute, ressuscitent après leur mort (plus ils sont forts, plus c'est long) et restent avec toi si tu tombes. Ils sont sauvegardés pour ce village.</p>
+        </div>
+        <div id="den-bestiary" class="col den-page" role="tabpanel" hidden>
+          <p id="bestiary-count" class="collection"></p>
+          <div id="bestiary" class="bestiary"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
