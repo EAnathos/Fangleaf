@@ -48,6 +48,14 @@ or, niveaux d'arme et d'armure, essences et **Alphas** (la meute ordinaire n'est
 
 Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2 reload ecosystem.config.cjs` (ou `sudo systemctl restart fangleaf`). À l'arrêt, le serveur sauvegarde les progressions en cours.
 
+### CI / CD (GitHub Actions)
+
+- [ci.yml](.github/workflows/ci.yml) : à chaque push et PR, typecheck, règles, test de fumée et build.
+- [cd.yml](.github/workflows/cd.yml) : quand la CI passe sur `main`, se connecte en SSH au VPS, avance le clone sur le commit testé
+  et lance [deploy/deploy.sh](deploy/deploy.sh) (`npm ci`, migrations, build, `pm2 startOrReload`, vérification du port).
+  Aussi lançable à la main depuis l'onglet *Actions*.
+- Secrets du dépôt à créer : `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (clé privée dédiée au déploiement), `VPS_PORT` (facultatif).
+
 ## Commandes
 
 | Commande | Rôle |

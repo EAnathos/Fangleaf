@@ -1,0 +1,39 @@
+# Contrôles qualité : à chaque push et pull request.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Typecheck, règles, fumée, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # même version majeure que le VPS
+          cache: npm
+
+      - run: npm ci
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Règles de simulation
+        run: npm run test:rules
+
+      - name: Test de fumée (serveur + clients WebSocket)
+        run: npm run smoke
+
+      - name: Build du client
+        run: npm run build
