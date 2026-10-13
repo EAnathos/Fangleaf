@@ -532,6 +532,37 @@ const noop = () => {};
 }
 
 {
+  // Renforts d'un géant : ils disparaissent dès que plus aucun dompteur debout n'est dans la grotte.
+  const r = room();
+  const c = r.map.caves[0];
+  const boss = r.units.get(r.caveBoss[c.id]);
+  const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
+  const inside = () => [...r.units.values()].filter((u: { summoner: number }) => u.summoner === boss.id).length;
+  const settle = () => {
+    r.tick = 0; // le nettoyage passe tous les 5 ticks
+    r.clearEmptyCaves();
+  };
+  [p.x, p.y] = [c.inside.x, c.inside.y + 80];
+  [q.x, q.y] = [c.inside.x + 40, c.inside.y + 80];
+  r.summonMinions(boss, 3, 99);
+  settle();
+  check(inside() === 3, 'renforts présents tant que des dompteurs sont dans la grotte');
+  [p.x, p.y] = [c.entrance.x, c.entrance.y + 70]; // sorti
+  settle();
+  check(inside() === 3, 'un coéquipier encore dans la grotte : les renforts restent');
+  r.killPlayer(q);
+  settle();
+  check(inside() === 0, 'le dernier dompteur meurt : les renforts disparaissent');
+  [p.x, p.y] = [c.inside.x, c.inside.y + 80];
+  r.summonMinions(boss, 2, 99);
+  [p.x, p.y] = [c.exit.x, c.exit.y];
+  r.onCave(p, c.id, false);
+  settle();
+  check(!r.map.caveAt(p.x, p.y) && inside() === 0, 'sortie volontaire : les renforts disparaissent');
+  check(r.units.has(boss.id), 'le géant, lui, reste dans sa grotte');
+}
+
+{
   // Un archer qui recule en tirant se fait rattraper par les géants.
   const r = room();
   for (const c of r.map.caves) {

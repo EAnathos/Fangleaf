@@ -576,6 +576,7 @@ export class Room {
 
     this.updateRevives();
     this.updateRespawns();
+    this.clearEmptyCaves();
     this.updateAwakenings();
     for (const p of this.players.values()) {
       if (p.villageFound || p.dead || !this.map.inVillage(p.x, p.y)) continue;
@@ -917,6 +918,19 @@ export class Room {
 
   private hazard(boss: Unit, h: Partial<Hazard> & Pick<Hazard, 'kind' | 'x' | 'y' | 'r' | 'at' | 'dmg'>) {
     this.hazards.push({ x2: h.x, y2: h.y, start: this.time, until: h.at, fired: false, nextTick: 0, boss, ...h });
+  }
+
+  /** Plus aucun dompteur debout dans la grotte (sorti, mort ou parti) : les renforts du boss disparaissent. */
+  private clearEmptyCaves() {
+    if (this.tick % 5 !== 0) return;
+    const occupied = new Set<number>();
+    for (const p of this.players.values()) {
+      const c = p.dead ? undefined : this.map.caveAt(p.x, p.y);
+      if (c) occupied.add(c.id);
+    }
+    const bosses = new Set(this.caveBoss.filter((id, cave) => id && !occupied.has(cave)));
+    if (!bosses.size) return;
+    for (const m of [...this.units.values()]) if (m.summoner && !m.owner && bosses.has(m.summoner)) this.units.delete(m.id);
   }
 
   private summonMinions(u: Unit, n: number, max: number) {
