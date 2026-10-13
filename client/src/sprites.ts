@@ -196,6 +196,79 @@ function golem(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   eyes(ctx, r * 0.05, -r * 0.15, r * 0.32, r * 0.13, u.alpha ? '#B48CFF' : '#5CC8B8', u.wild);
 }
 
+/**
+ * Armure portée sur le corps. Tunique : lin ceinturé d'une cordelette (le mage porte une robe à capuche) ;
+ * Cuir : brun, bandoulière cousue (Cuir clouté : rivets) ; au-delà, le liseré métal de armorColor.
+ */
+function armorLook(ctx: Ctx, x: number, cy: number, r: number, armor: number, cls: string | null) {
+  const ring = (color: string, w: number) => {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.arc(x, cy, r, 0, TAU);
+    ctx.stroke();
+  };
+  if (armor === 0 && cls === 'mage') {
+    // robe violette : pan du bas, capuche rabattue sur le haut du crâne
+    ctx.fillStyle = '#4E3F7A';
+    ctx.beginPath();
+    ctx.arc(x, cy, r, 0.12 * Math.PI, 0.88 * Math.PI);
+    ctx.closePath();
+    ctx.fill();
+    ring('#7D68B8', 3);
+    ctx.strokeStyle = '#5E4C94';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(x, cy, r - 1.5, 1.12 * Math.PI, 1.88 * Math.PI);
+    ctx.stroke();
+    ctx.fillStyle = '#F0B64A'; // fermoir
+    ctx.beginPath();
+    ctx.arc(x, cy + r * 0.3, 2.2, 0, TAU);
+    ctx.fill();
+    return;
+  }
+  if (armor === 0) {
+    ring('#D8C7A0', 3);
+    ctx.strokeStyle = '#8B6A47'; // cordelette nouée à la taille
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.92, cy + r * 0.38);
+    ctx.quadraticCurveTo(x, cy + r * 0.52, x + r * 0.92, cy + r * 0.38);
+    ctx.moveTo(x + r * 0.25, cy + r * 0.47);
+    ctx.lineTo(x + r * 0.15, cy + r * 0.85);
+    ctx.stroke();
+    return;
+  }
+  if (armor <= 2) {
+    ring('#6E4526', 4);
+    // bandoulière de cuir, couture claire
+    ctx.strokeStyle = '#7A4E2D';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.68, cy - r * 0.72);
+    ctx.lineTo(x + r * 0.72, cy + r * 0.68);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(232,210,170,0.7)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (armor === 2) {
+      ctx.fillStyle = '#C9CFC2'; // rivets
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU + 0.2;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(a) * r, cy + Math.sin(a) * r, 1.6, 0, TAU);
+        ctx.fill();
+      }
+    }
+    return;
+  }
+  ring(armorColor(armor), 3 + Math.min(3, armor * 0.3));
+}
+
 export function armorColor(lvl: number) {
   if (lvl >= 9) return '#F0B64A';
   if (lvl >= 6) return '#DCE2E8';
@@ -276,11 +349,7 @@ export function drawPlayer(
   ctx.beginPath();
   ctx.arc(x, cy, r, 0.15 * Math.PI, 0.85 * Math.PI);
   ctx.fill();
-  ctx.strokeStyle = armorColor(armor);
-  ctx.lineWidth = 3 + Math.min(3, armor * 0.3);
-  ctx.beginPath();
-  ctx.arc(x, cy, r, 0, TAU);
-  ctx.stroke();
+  armorLook(ctx, x, cy, r, armor, cls);
   // yeux dans la direction du regard
   ctx.fillStyle = '#10181A';
   const ex = x + fx * 5, ey = cy + fy * 4 - 2;

@@ -115,7 +115,12 @@
             <button id="weapon-buy" class="cta"></button>
           </div>
           <div class="card">
-            <div class="row"><svg width="52" height="52" viewBox="0 0 72 72" aria-hidden="true"><path id="armor-shape" d="M14 14 L36 8 L58 14 L56 44 Q50 60 36 66 Q22 60 16 44 Z" fill="#8C9AA6" stroke="#EEE7D7" stroke-width="3"/><path d="M36 14 L36 60" stroke="#5A5F66" stroke-width="3"/></svg>
+            <div class="row"><svg id="armor-icon" width="52" height="52" viewBox="0 0 72 72" aria-hidden="true">
+              <g data-look="tunic"><path d="M22 10 L30 13 Q36 17 42 13 L50 10 L62 22 L54 30 L53 62 L19 62 L18 30 L10 22 Z" fill="#D8C7A0" stroke="#EEE7D7" stroke-width="2.5" stroke-linejoin="round"/><path d="M19 44 Q36 49 53 44" fill="none" stroke="#8B6A47" stroke-width="3" stroke-linecap="round"/><path d="M40 47 L38 56" stroke="#8B6A47" stroke-width="2.5" stroke-linecap="round"/></g>
+              <g data-look="robe" hidden><path d="M36 5 Q51 5 52 22 L59 64 L13 64 L20 22 Q21 5 36 5 Z" fill="#4E3F7A" stroke="#7D68B8" stroke-width="2.5" stroke-linejoin="round"/><ellipse cx="36" cy="20" rx="9" ry="10" fill="#241C3A"/><path d="M36 30 L36 64" stroke="#3B2F5E" stroke-width="2"/><circle cx="36" cy="34" r="3.2" fill="#F0B64A"/><path d="M22 52 l2 -4 l2 4 l-4 -2.5 h4 Z M46 46 l2 -4 l2 4 l-4 -2.5 h4 Z" fill="#B48CFF"/></g>
+              <g data-look="leather" hidden><path d="M20 10 L29 10 Q36 21 43 10 L52 10 L59 24 L55 62 L17 62 L13 24 Z" fill="#7A4E2D" stroke="#C9A27A" stroke-width="2.5" stroke-linejoin="round"/><path d="M22 14 L50 58" stroke="#5B3820" stroke-width="7"/><path d="M22 14 L50 58" stroke="#E8D2AA" stroke-width="1.2" stroke-dasharray="3 3"/><g class="studs" fill="#C9CFC2"><circle cx="24" cy="30" r="2.2"/><circle cx="48" cy="30" r="2.2"/><circle cx="23" cy="46" r="2.2"/><circle cx="49" cy="46" r="2.2"/><circle cx="36" cy="58" r="2.2"/></g></g>
+              <g data-look="metal" hidden><path id="armor-shape" d="M14 14 L36 8 L58 14 L56 44 Q50 60 36 66 Q22 60 16 44 Z" fill="#8C9AA6" stroke="#EEE7D7" stroke-width="3"/><path d="M36 14 L36 60" stroke="#5A5F66" stroke-width="3"/></g>
+            </svg>
               <div class="col"><span class="small muted">Armure</span><span id="armor-name" class="big"></span></div></div>
             <div class="line"><span class="muted">PV max</span><span id="armor-hp"></span></div>
             <div class="line"><span class="muted">Réduction</span><span id="armor-red"></span></div>

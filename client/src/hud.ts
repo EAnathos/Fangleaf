@@ -497,6 +497,10 @@ export class Hud {
     const hpK = classOf(me.cls).hp; // PV selon la classe (guerrier +25 %, archer −10 %, mage −15 %)
     $('armor-hp').innerHTML = next(String(Math.round(armorMaxHp(a) * hpK)), String(Math.round(armorMaxHp(a + 1) * hpK)), aMax);
     $('armor-red').innerHTML = next(pct(armorReduction(a)), pct(armorReduction(a + 1)), aMax);
+    // Icône d'armure : tunique (robe à capuche pour le mage), cuir (clouté au niveau 2), puis métal.
+    const look = a === 0 ? (me.cls === 'mage' ? 'robe' : 'tunic') : a <= 2 ? 'leather' : 'metal';
+    for (const g of $('armor-icon').querySelectorAll<SVGGElement>('g[data-look]')) g.toggleAttribute('hidden', g.dataset.look !== look);
+    $('armor-icon').querySelector('.studs')!.toggleAttribute('hidden', a !== 2);
     $('armor-shape').setAttribute('fill', armorColor(a));
     buy('armor-buy', aMax, armorCost(a));
   }
