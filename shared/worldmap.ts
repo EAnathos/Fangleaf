@@ -183,20 +183,25 @@ export class WorldMap {
     for (const boss of bosses) {
       const z = SPECIES[boss].zone;
       const lo = (z - 1) * ZONE_LEN + (z === 1 ? 2300 : 700), hi = z * ZONE_LEN - 700;
-      for (let tries = 0; tries < 800; tries++) {
-        const s = lo + rand() * (hi - lo);
-        const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
-        const off = (rand() < 0.5 ? -1 : 1) * (300 + rand() * Math.max(0, this.halfWidth(s) - 520));
-        const x = sx + n.x * off, y = sy + n.y * off;
-        if (this.zoneAt(x, y) !== z || !free(x, y, 120) || !free(x, y + 70, 40)) continue;
-        if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 1000 ** 2)) continue;
-        if (this.sites.some((c) => dist2(x, y, c.x, c.y) < 700 ** 2)) continue; // pas au pied d'un camp
-        if (!this.findPath(sx, sy, x, y + 70, 20000)) continue;
-        const id = this.caves.length;
-        // intérieurs alignés hors du monde, assez espacés pour qu'aucun ne soit visible (ni ses monstres envoyés) depuis un autre
-        const inside = { x: WORLD_HALF + 1400 + id * CAVE_GAP, y: 0 };
-        this.caves.push({ id, zone: z, boss, entrance: { x, y }, inside, exit: { x: inside.x, y: inside.y + CAVE_RY - 90 } });
-        break;
+      // Écart entre grottes assoupli si la zone est trop encombrée (lacs, camp) : jamais de géant manquant.
+      // Le premier passage est inchangé : les cartes qui y arrivent restent identiques.
+      for (const gap of [1000, 750, 500, 350]) {
+        if (this.caves.some((c) => c.boss === boss)) break;
+        for (let tries = 0; tries < 800; tries++) {
+          const s = lo + rand() * (hi - lo);
+          const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
+          const off = (rand() < 0.5 ? -1 : 1) * (300 + rand() * Math.max(0, this.halfWidth(s) - 520));
+          const x = sx + n.x * off, y = sy + n.y * off;
+          if (this.zoneAt(x, y) !== z || !free(x, y, 120) || !free(x, y + 70, 40)) continue;
+          if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < gap ** 2)) continue;
+          if (this.sites.some((c) => dist2(x, y, c.x, c.y) < 700 ** 2)) continue; // pas au pied d'un camp
+          if (!this.findPath(sx, sy, x, y + 70, 20000)) continue;
+          const id = this.caves.length;
+          // intérieurs alignés hors du monde, assez espacés pour qu'aucun ne soit visible (ni ses monstres envoyés) depuis un autre
+          const inside = { x: WORLD_HALF + 1400 + id * CAVE_GAP, y: 0 };
+          this.caves.push({ id, zone: z, boss, entrance: { x, y }, inside, exit: { x: inside.x, y: inside.y + CAVE_RY - 90 } });
+          break;
+        }
       }
     }
 

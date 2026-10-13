@@ -73,7 +73,18 @@ async function main() {
   let x = host.me()!.x, y = host.me()!.y;
   check(Math.hypot(x - map.spawn.x, y - map.spawn.y) < 150 && !map.inVillage(x, y), 'arrivée au camp de départ, loin du village');
   // Pas de 10 px vers une cible, en glissant le long de l'eau comme le client.
-  const stepTo = (tx: number, ty: number, stop = 0) => {
+  // Loin de la cible, on suit le chemin de la carte : en ligne droite, le bot resterait coincé contre un arbre.
+  let route: { x: number; y: number }[] = [], routeGoal = { x: NaN, y: NaN };
+  const stepTo = (gx: number, gy: number, stop = 0) => {
+    let tx = gx, ty = gy;
+    if (Math.hypot(gx - x, gy - y) > 120) {
+      if (Math.hypot(gx - routeGoal.x, gy - routeGoal.y) > 80 || !route.length) {
+        route = map.findPath(x, y, gx, gy, 60000) ?? [];
+        routeGoal = { x: gx, y: gy };
+      }
+      while (route.length > 1 && Math.hypot(route[0].x - x, route[0].y - y) < 24) route.shift();
+      if (route.length > 1) [tx, ty, stop] = [route[0].x, route[0].y, 0];
+    }
     const d = Math.hypot(tx - x, ty - y);
     if (d <= stop + 1) return true;
     const s = Math.min(d - stop, 10), nx = x + ((tx - x) / d) * s, ny = y + ((ty - y) / d) * s;

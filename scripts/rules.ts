@@ -1,8 +1,21 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { ALPHA_CREATE_COST, ARMY_CAP, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
+
+// Hasard reproductible : même graine à chaque exécution, donc même résultat en local et en CI.
+// TEST_SEED=… npm run test:rules pour en essayer une autre.
+const TEST_SEED = Number(process.env.TEST_SEED ?? 1);
+let rng = TEST_SEED >>> 0;
+Math.random = () => {
+  // mulberry32
+  rng = (rng + 0x6d2b79f5) >>> 0;
+  let t = rng;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
 
 let failed = false;
 const check = (ok: boolean, label: string) => {
@@ -255,11 +268,15 @@ const noop = () => {};
   const inZone = all.filter((u) => r.map.zoneAt(u.x, u.y) === SPECIES[u.s].zone).length / all.length;
   check(inZone > 0.9, `monstres dans leur zone (${Math.round(inZone * 100)} %, ${all.length} au total)`);
   // Répartis le long de leur tronçon : jamais entassés au début ni au bout du couloir.
-  const ends = [r.map.spineAt(0), r.map.spineAt(r.map.length)];
+  // Moyenne sur 6 cartes : les meutes tombent au hasard (≈ 16 % ± 7 % près du bout sur une seule carte).
+  const rooms = [r, ...Array.from({ length: 5 }, () => room())];
   for (const z of [1, 5]) {
-    const zs = all.filter((u) => SPECIES[u.s].zone === z);
-    const piled = Math.max(...ends.map((e) => zs.filter((u) => Math.hypot(u.x - e.x, u.y - e.y) < 900).length)) / zs.length;
-    check(piled < 0.25, `zone ${z} : pas d'entassement aux extrémités du couloir (${Math.round(piled * 100)} % près d'un bout)`);
+    const piled = rooms.map((rm) => {
+      const zs = ([...rm.units.values()] as { s: number; x: number; y: number }[]).filter((u) => SPECIES[u.s].zone === z);
+      const ends = [rm.map.spineAt(0), rm.map.spineAt(rm.map.length)];
+      return Math.max(...ends.map((e: { x: number; y: number }) => zs.filter((u) => Math.hypot(u.x - e.x, u.y - e.y) < 900).length)) / zs.length;
+    }).reduce((x, y) => x + y) / rooms.length;
+    check(piled < 0.25, `zone ${z} : pas d'entassement aux extrémités du couloir (${Math.round(piled * 100)} % près d'un bout, moyenne sur ${rooms.length} cartes)`);
   }
   const p = r.addPlayer('a', noop);
   check(Math.hypot(p.x - r.map.spawn.x, p.y - r.map.spawn.y) < 120 && !r.map.inVillage(p.x, p.y), 'arrivée au camp de départ, pas au village');
@@ -808,7 +825,12 @@ const noop = () => {};
     const r = room();
     r.units.clear();
     const p = r.addPlayer('a', noop);
-    const spot = r.map.freeNear(r.map.spineAt(12000).x, r.map.spineAt(12000).y);
+    // un endroit dégagé du couloir : rien entre le tireur et le dompteur (un arbre arrêterait le tir)
+    // (le tir part un peu au-dessus du tireur : on vérifie une bande, pas une ligne)
+    const clear = (x0: number, y0: number) =>
+      Array.from({ length: 23 }, (_, i) => i / 22).every((f) => [0, -12, -24].every((dy) => !r.map.blocked(x0 - 220 * f, y0 + dy)));
+    let spot = r.map.freeNear(r.map.spineAt(12000).x, r.map.spineAt(12000).y);
+    for (let s = 12000; s < 16000 && !clear(spot.x, spot.y); s += 150) spot = r.map.freeNear(r.map.spineAt(s).x, r.map.spineAt(s).y);
     p.x = spot.x;
     p.y = spot.y;
     p.hp = 1e6; // on mesure les dégâts sans mourir
@@ -859,7 +881,8 @@ const noop = () => {};
     run(r, 5);
     check(snakes.length > 0 && snakes.every((u: { x: number; y: number }) => r.map.isWater(u.x, u.y)), `Serpents des brumes : ${snakes.length} dans les lacs, aucun n'en sort`);
     const crabs = [...r.units.values()].filter((u: { s: number }) => u.s === S('crab'));
-    check(crabs.length > 0 && crabs.every((u: { x: number; y: number }) => r.map.zoneAt(u.x, u.y) === 5), `Crabes et Crapauds en zone 5 (${crabs.length} crabes)`);
+    // le point d'apparition (l'errance peut mordre de quelques pas sur la zone voisine)
+    check(crabs.length > 0 && crabs.every((u: { homeX: number; homeY: number }) => r.map.zoneAt(u.homeX, u.homeY) === 5), `Crabes et Crapauds en zone 5 (${crabs.length} crabes)`);
   }
   {
     // un Guetteur apprivoisé tire pour sa meute
@@ -888,9 +911,15 @@ const noop = () => {};
     const at = r.map.freeNear(p.x - 250, p.y);
     const b = r.createUnit(S(key), false, at.x, at.y);
     b.moveCd = b.moveCd.map((_: number, i: number) => (i === 0 ? 0 : 99)); // la première attaque spéciale, tout de suite
+    // comptés au lancement : un tir qui part dans un arbre disparaît dès le premier tick
+    const shots: { kind: number }[] = [];
+    const launch = r.launch.bind(r);
+    r.launch = (u: { id: number }, k: string, ...rest: unknown[]) => {
+      if (u.id === b.id) shots.push({ kind: SHOT_KINDS.indexOf(k as never) });
+      return launch(u, k, ...rest);
+    };
     r.step();
-    const shots = r.shots.filter((x: { by: { id: number } }) => x.by.id === b.id);
-    check(shots.length === n && shots.every((x: { kind: number }) => x.kind === kind), `${SPECIES[S(key)].name} : ${n} projectiles d'un coup (${['salve de traits', 'pluie de mortiers', 'salve de jets'][kind]})`);
+    check(shots.length === n && shots.every((x) => x.kind === kind), `${SPECIES[S(key)].name} : ${n} projectiles d'un coup (${['salve de traits', 'pluie de mortiers', 'salve de jets'][kind]})`);
   }
 }
 
@@ -969,5 +998,5 @@ const noop = () => {};
   check(ok, `progression des monstres : ${main.map((s) => `${s.hp}/${s.dmg}`).join(' → ')}`);
 }
 
-console.log(failed ? '\nÉCHEC' : '\nOK');
+console.log(failed ? `\nÉCHEC (TEST_SEED=${TEST_SEED})` : '\nOK');
 process.exit(failed ? 1 : 0);

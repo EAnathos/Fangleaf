@@ -807,7 +807,8 @@ export class Room {
       const n = sp.pack[0] + Math.floor(Math.random() * (sp.pack[1] - sp.pack[0] + 1));
       for (let i = 0; i < n; i++) {
         const x = cx + (Math.random() - 0.5) * 120, y = cy + (Math.random() - 0.5) * 120;
-        if (sp.swim ? map.isWater(x, y) : !map.blocked(x, y)) this.createUnit(s, false, x, y);
+        // chaque membre reste dans la zone de son espèce (une meute en lisière ne déborde pas)
+        if (sp.swim ? map.isWater(x, y) : !map.blocked(x, y) && map.zoneAt(x, y) === sp.zone) this.createUnit(s, false, x, y);
       }
       return true;
     }
