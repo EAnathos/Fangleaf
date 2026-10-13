@@ -36,6 +36,18 @@ or, niveaux d'arme et d'armure, essences et **Alphas** (la meute ordinaire n'est
    La clé `service_role` reste côté serveur : c'est lui seul qui écrit les profils.
 7. Relance `npm run dev` : le bouton « Se connecter avec Google » apparaît dans le lobby.
 
+## Mise en production (VPS, fangleaf.anathos.me)
+
+1. DNS : un enregistrement A (et AAAA) `fangleaf.anathos.me` vers le VPS.
+2. Sur le VPS, dans `/opt/fangleaf` : clone, `.env` rempli, `npm ci`, `npm run db:migrate`, puis `npm run build`
+   (les variables `VITE_*` sont figées au build : le `.env` doit être là avant).
+3. Serveur Node : [deploy/fangleaf.service](deploy/fangleaf.service) (systemd, port 3001).
+4. nginx : [deploy/nginx/fangleaf.anathos.me.conf](deploy/nginx/fangleaf.anathos.me.conf) (HTTPS Let's Encrypt, relais du WebSocket `/ws`), étapes en tête du fichier.
+5. Supabase › *Authentication › URL Configuration* : ajoute `https://fangleaf.anathos.me/**` aux *Redirect URLs*
+   (et mets-la en *Site URL* une fois en prod).
+
+Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && sudo systemctl restart fangleaf`.
+
 ## Commandes
 
 | Commande | Rôle |
