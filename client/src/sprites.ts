@@ -44,7 +44,6 @@ export interface UnitLook {
   flash: boolean;
   key?: string; // apparence à utiliser (par défaut celle de l'espèce)
   legend?: boolean; // Alpha légendaire : aura et couronne dorées
-  noRing?: boolean; // pas de cercle pointillé autour de l'Alpha (aperçus du HUD)
   color?: string;
   charge?: number; // tireur : avancement de la charge du tir (0 à 1)
   inWater?: boolean; // serpent : nage (seuls la tête et les anneaux dépassent)
@@ -70,17 +69,6 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
     ctx.beginPath();
     ctx.arc(x, u.y, r * 2.1, 0, TAU);
     ctx.fill();
-  }
-  if (u.alpha && !u.noRing) {
-    ctx.save();
-    ctx.strokeStyle = u.legend ? '#F0B64A' : '#B48CFF';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([6, 7]);
-    ctx.lineDashOffset = -u.t * 20;
-    ctx.beginPath();
-    ctx.arc(x, u.y, r * 1.45, 0, TAU);
-    ctx.stroke();
-    ctx.restore();
   }
   if (u.wild) {
     // Ennemi : anneau braise au sol, reconnaissable même au milieu de la mêlée.

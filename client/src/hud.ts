@@ -835,7 +835,7 @@ function paintPortraits(list: Portrait[]) {
     const r = b.alpha ? alphaStats(b.s, 0, 1, b.legend).r : SPECIES[b.s].r;
     const scale = Math.min(2.2, (h * dpr * (b.alpha ? 0.72 : 0.55)) / (r * 2)); // l'aura d'Alpha déborde : on remplit plus le cadre
     ctx.setTransform(scale, 0, 0, scale, b.canvas.width / 2, b.canvas.height * 0.55);
-    drawUnit(ctx, { x: 0, y: 0, r, species: b.s, alpha: !!b.alpha, legend: b.legend, noRing: true, wild: b.seen && !b.alpha, face: 1, t: t + b.s, seed: b.s, flash: false });
+    drawUnit(ctx, { x: 0, y: 0, r, species: b.s, alpha: !!b.alpha, legend: b.legend, wild: b.seen && !b.alpha, face: 1, t: t + b.s, seed: b.s, flash: false });
     if (!b.seen) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'source-in';
