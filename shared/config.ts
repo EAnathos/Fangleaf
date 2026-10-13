@@ -72,6 +72,11 @@ export const CLASS_CHANGE_COST = 50; // la première classe est gratuite
 export const classOf = (cls: ClassId | null) => CLASSES[cls ?? 'warrior'];
 export const PLAYER_ATK_CD = 0.55;
 export const PLAYER_RESPAWN_S = 5;
+/** Avec un autre dompteur dans le village, on reste à terre ce temps-là : il peut venir nous relever. */
+export const REVIVE_WINDOW_S = 10;
+export const REVIVE_HOLD_S = 5; // R maintenu près du corps
+export const REVIVE_R = 80;
+export const REVIVE_HP = 0.5; // relevé avec la moitié de ses PV
 export const PLAYER_COLORS = ['#5CC8B8', '#E6A15C', '#D886C9'];
 
 export const ARMY_CAP = 12; // meute ordinaire (les Alphas ne comptent pas)

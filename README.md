@@ -56,6 +56,7 @@ or, niveaux d'arme et d'armure, essences et **Alphas** (la meute ordinaire n'est
 - **E** près d'un bâtiment construit : Forge (classe, arme, armure), Tanière (Alphas des espèces déjà rencontrées, bestiaire), Marché (vendre les monstres de sa meute, acheter ceux des espèces déjà croisées) · **Échap** : fermer
 - **Clic sur la minicarte** (ou **M**) : grande carte, avec le brouillard des zones pas encore explorées · **Échap** ou **M** pour la fermer
 - **F** : monter sur son Alpha Loup, Sanglier ou Ours (ou en descendre)
+- **R maintenu** (ou le bouton, au doigt) près d'un coéquipier à terre : le relever sur place avec la moitié de ses PV, après 5 s. Avec un autre dompteur dans le village, on reste à terre 10 s avant de repartir au camp ; seul, 5 s. Un Alpha tombé ne ressuscite qu'une fois son dompteur debout
 - **Filons d'or** : reste à côté, ton personnage les pioche tout seul quand aucun monstre n'est à portée
 - **Le monde est un long chemin** : du camp de départ (au bord de la carte) au village, puis une piste à travers 5 zones de plus en plus dangereuses ; la dernière, les Lacs brumeux, s'atteint depuis le Camp avancé
 - **Tireurs** (Guetteur runique, Crapaud-mortier, Serpent des brumes) : ils s'immobilisent pour charger leur tir — écarte-toi de la trajectoire, ou sors du cercle annoncé au sol

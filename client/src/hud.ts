@@ -2,7 +2,7 @@
 
 import {
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
-  BUILDINGS, type BuildingId, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_COST, campName, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
+  BUILDINGS, type BuildingId, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
 import type { PlayerState, UnitTuple } from '../../shared/protocol.ts';
@@ -80,6 +80,8 @@ export class Hud {
   onAlphaUp = (_species: number) => {};
   onAlphaEquip = (_species: number, _equip: boolean) => {};
   onAlphaCreate = (_species: number) => {};
+  onHelp = (_on: boolean) => {};
+  private helpHeld = false; // bouton « relever » maintenu au doigt
   onMount = (_id: number) => {};
   onCave = (_id: number, _enter: boolean) => {};
   onLegend = (_id: number) => {};
@@ -107,6 +109,13 @@ export class Hud {
     this.miniBg = this.renderMapBackground(180);
     $('hud').hidden = false;
     $('code-label').textContent = code;
+    const revive = $('revive-prompt');
+    revive.onpointerdown = (e) => {
+      revive.setPointerCapture(e.pointerId);
+      this.helpHeld = true;
+      this.onHelp(true);
+    };
+    revive.onpointerup = revive.onpointercancel = () => this.releaseHelp();
     $('invite').onclick = async () => {
       const url = `${location.origin}${location.pathname}?v=${code}`;
       try {
@@ -287,10 +296,21 @@ export class Hud {
     // Mort.
     $('death').hidden = !me.dead;
     $('death-timer').textContent = String(me.respawnIn);
+    const help = $('death-help');
+    help.hidden = !me.dead || others.length === 0;
     if (me.dead) {
       const c = this.map.respawnSite(me.x, me.y, this.camps);
       $('death-where').textContent = c < 0 ? 'Retour au village' : `Retour au ${campName(c)}`;
+      const by = others.find((p) => p.id === me.reviveBy);
+      help.textContent = by ? `${by.name} te relève… ${me.revive} %` : 'Un coéquipier peut te relever : R maintenu 5 s près de toi.';
     }
+
+    // Relever un coéquipier à terre (R maintenu, ou bouton maintenu au doigt).
+    const downed = me.dead ? undefined : others.find((p) => p.dead && p.respawnIn > 0 && Math.hypot(p.x - myPos.x, p.y - myPos.y) < REVIVE_R);
+    const revive = $('revive-prompt');
+    revive.hidden = !downed;
+    if (downed) revive.textContent = downed.reviveBy === me.id ? `Tu relèves ${downed.name}… ${downed.revive} %` : `Maintiens R : relever ${downed.name}`;
+    else if (this.helpHeld) this.releaseHelp();
 
     // Monture.
     this.mountId = me.mount?.id ?? 0;
@@ -302,6 +322,12 @@ export class Hud {
 
     this.drawMinimap(me, players, units, myPos);
     if (this.panel === 'map') this.drawBigMap(me, players, myPos);
+  }
+
+  private releaseHelp() {
+    if (!this.helpHeld) return;
+    this.helpHeld = false;
+    this.onHelp(false);
   }
 
   /** Pierre de passage : le village et chaque emplacement de camp, joignables s'ils sont établis. */

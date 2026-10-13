@@ -20,6 +20,7 @@ export type ClientMsg =
   | { t: 'unlock'; cave: number } // débloquer une grotte (pour tout le village)
   | { t: 'sell'; id: number } // Marché : vendre un monstre ordinaire de sa meute
   | { t: 'buy'; s: number } // Marché : acheter un monstre d'une espèce déjà croisée
+  | { t: 'help'; on: boolean } // R maintenu (on) ou relâché : relever un dompteur à terre
   | { t: 'reset' } // fondateur : supprimer le village ; autre membre : effacer sa progression ici
   | { t: 'cheat' } // dev uniquement : +300 or, +30 essences
   | { t: 'ping'; ts: number };
@@ -47,6 +48,8 @@ export interface PlayerState {
   seen: number[]; // espèces déjà croisées (bestiaire de la Tanière ; sans les géants)
   dead: boolean;
   respawnIn: number; // secondes, 0 si vivant
+  revive: number; // à terre : avancement de la réanimation par un coéquipier (0..100)
+  reviveBy: number; // id du coéquipier qui le relève (0 = personne)
   army: ArmySlot[];
 }
 
@@ -92,6 +95,7 @@ export type GameEvent =
   | { e: 'awaken'; id: number; by: number; s: number } // Alpha éveillé à la tanière
   | { e: 'revive'; id: number }
   | { e: 'pdie'; id: number }
+  | { e: 'previve'; id: number; by: number } // dompteur relevé sur place par un coéquipier
   | { e: 'upgrade'; id: number; what: 'weapon' | 'armor'; lvl: number }
   | { e: 'alphaUp'; id: number; by: number; s: number; lvl: number }
   | { e: 'mount'; by: number; id: number; on: boolean }

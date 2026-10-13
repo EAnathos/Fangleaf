@@ -168,6 +168,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'buy') room.onBuy(player, +msg.s);
     else if (msg.t === 'legend') room.onLegend(player, +msg.s);
     else if (msg.t === 'class') room.onClass(player, msg.cls);
+    else if (msg.t === 'help') room.onHelp(player, !!msg.on);
     else if (msg.t === 'reset') {
       reset(room, player).catch((e) => {
         console.error(e);

@@ -146,6 +146,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 .prompt { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); border-color: var(--amber); color: var(--amber); font: 700 16px var(--display); }
 .prompt.den { border-color: var(--alpha); color: var(--alpha); }
+.prompt.revive { top: 66%; border-color: #7FCB5B; color: #7FCB5B; touch-action: none; user-select: none; }
 .prompt.danger { border-color: var(--enemy); color: #FF9B78; }
 
 .area-banner { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; pointer-events: none; animation: banner 3.2s ease-out forwards; }

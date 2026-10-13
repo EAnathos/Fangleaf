@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, ARC_FLIGHT_S, BUILDINGS, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, ARC_FLIGHT_S, BUILDINGS, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp } from '../../shared/math.ts';
 import type { GameEvent, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
 import { UNIT_FLAG_ALPHA, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -37,6 +37,7 @@ export class Game {
   private area = '';
   private shake = 0;
   private areaTimer = 0;
+  private helping = false; // R maintenu (ou bouton tactile) : relever un coéquipier
 
   constructor(private canvas: HTMLCanvasElement, private net: Net, private myId: number, code: string, seed: number, villageFound = false, founder = false) {
     this.ctx = canvas.getContext('2d')!;
@@ -63,9 +64,10 @@ export class Game {
     this.hud.onAlphaUp = (s) => net.send({ t: 'alphaUp', s });
     this.hud.onAlphaEquip = (s, equip) => net.send({ t: 'alphaEquip', s, equip });
     this.hud.onAlphaCreate = (s) => net.send({ t: 'alphaCreate', s });
+    this.hud.onHelp = (on) => this.setHelp(on);
     this.hud.toast('ZQSD / flèches ou glisser pour bouger · attaque auto · E près d\'un bâtiment');
     if (!villageFound) this.hud.toast('Suis le chemin de terre jusqu\'au village (étoile dorée : clique sur la minicarte).');
-    initInput(canvas, (code, key) => this.onKey(code, key));
+    initInput(canvas, (code, key) => this.onKey(code, key), (_code, key) => (key === 'r' || key === '') && this.setHelp(false));
     addEventListener('resize', () => this.resize());
     this.resize();
     net.onMessage = (m) => this.onMessage(m);
@@ -96,7 +98,15 @@ export class Game {
     }
     else if (key === 'm') this.hud.setPanel(this.hud.panel === 'map' ? null : 'map');
     else if (key === 'f') this.toggleMount();
+    else if (key === 'r') this.setHelp(true);
     else if (code === 'F9' && import.meta.env.DEV) this.net.send({ t: 'cheat' });
+  }
+
+  /** R maintenu près d'un coéquipier à terre : le serveur compte les secondes. */
+  private setHelp(on: boolean) {
+    if (on === this.helping) return;
+    this.helping = on;
+    this.net.send({ t: 'help', on });
   }
 
   /** F : descendre, ou monter sur l'Alpha chevauchable le plus proche (de préférence le dernier utilisé). */
@@ -290,8 +300,16 @@ export class Game {
         break;
       }
       case 'pdie':
-        if (e.id !== this.myId) this.hud.toast(`${name(e.id)} est tombé !`);
+        if (e.id !== this.myId) this.hud.toast(`${name(e.id)} est tombé ! Maintiens R près de lui pour le relever.`);
         break;
+      case 'previve': {
+        if (e.id === this.myId) this.hud.toast(`${name(e.by)} t'a relevé !`, 'good');
+        else if (e.by === this.myId) this.hud.toast(`Tu as relevé ${name(e.id)} !`, 'good');
+        else this.hud.toast(`${name(e.by)} a relevé ${name(e.id)}`);
+        const p = this.posOf(e.id, players);
+        if (p) this.fx.ring(p.x, p.y, '#7FCB5B', 10, 70, 0.8);
+        break;
+      }
       case 'upgrade':
         if (e.id === this.myId) {
           this.hud.toast(`${e.what === 'weapon' ? 'Arme' : 'Armure'} améliorée — niveau ${e.lvl}`, 'good');
@@ -504,9 +522,33 @@ export class Game {
       });
     }
     for (const p of players) {
-      if (p.dead) continue;
       const isMe = p.id === this.myId;
       const x = isMe ? this.me.x : p.x, y = isMe ? this.me.y : p.y;
+      if (p.dead) {
+        // À terre : silhouette pâle, et l'anneau de réanimation quand un coéquipier peut venir le relever.
+        list.push({
+          y,
+          draw: () => {
+            ctx.save();
+            ctx.globalAlpha = 0.4;
+            drawPlayer(ctx, x, y, p.color, 1, 0, p.armor, p.name, this.time, false, false, isMe, false, p.cls);
+            ctx.restore();
+            if (players.length < 2) return;
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = 'rgba(238,231,215,0.25)';
+            ctx.beginPath();
+            ctx.arc(x, y - 6, 28, 0, Math.PI * 2);
+            ctx.stroke();
+            if (p.revive) {
+              ctx.strokeStyle = '#7FCB5B';
+              ctx.beginPath();
+              ctx.arc(x, y - 6, 28, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * p.revive) / 100);
+              ctx.stroke();
+            }
+          },
+        });
+        continue;
+      }
       list.push({
         y,
         draw: () => {

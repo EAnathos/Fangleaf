@@ -4,7 +4,7 @@ import {
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
-  PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
+  PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
   armorMaxHp, armorReduction, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
@@ -116,6 +116,9 @@ export interface Player {
   dirty: boolean; // progression à sauvegarder
   dead: boolean;
   respawnAt: number;
+  helping: boolean; // R maintenu : relève le coéquipier à terre le plus proche
+  reviveBy: number; // à terre : id du coéquipier qui le relève (0 = personne)
+  reviveT: number; // à terre : secondes de réanimation déjà passées
   atkCd: number;
   lastPosMs: number;
   army: number[];
@@ -205,7 +208,7 @@ export class Room {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
       hp: armorMaxHp(0), weapon: 0, armor: 0, gold: 0, essences: SPECIES.map(() => 0),
-      userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, atkCd: 0,
+      userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
     };
     const prof = account?.profile;
@@ -571,6 +574,7 @@ export class Room {
     this.tick++;
     this.time += DT;
 
+    this.updateRevives();
     this.updateRespawns();
     this.updateAwakenings();
     for (const p of this.players.values()) {
@@ -619,15 +623,49 @@ export class Room {
     }
   }
 
+  /** R maintenu, relâché (ou l'onglet perd le focus). */
+  onHelp(p: Player, on: boolean) {
+    p.helping = on;
+  }
+
+  /** Un coéquipier debout, R maintenu près du corps pendant REVIVE_HOLD_S : relevé sur place. */
+  private updateRevives() {
+    for (const d of this.players.values()) {
+      if (!d.dead) continue;
+      const ok = (h: Player | undefined): h is Player => !!h && h !== d && !h.dead && h.helping && dist2(h.x, h.y, d.x, d.y) <= REVIVE_R ** 2;
+      let h = this.players.get(d.reviveBy);
+      if (!ok(h)) {
+        h = [...this.players.values()].find(ok);
+        d.reviveT = 0; // relâché, éloigné ou changement de sauveteur : on recommence
+      }
+      d.reviveBy = h?.id ?? 0;
+      if (!h) continue;
+      d.reviveT += DT;
+      if (d.reviveT >= REVIVE_HOLD_S) this.revivePlayer(d, h);
+    }
+  }
+
+  private revivePlayer(d: Player, by: Player) {
+    d.dead = false;
+    d.hp = Math.max(1, Math.round(maxHpOf(d) * REVIVE_HP));
+    d.reviveBy = 0;
+    d.reviveT = 0;
+    d.lastPosMs = Date.now();
+    d.send({ t: 'teleport', x: d.x, y: d.y });
+    this.events.push({ e: 'previve', id: d.id, by: by.id });
+  }
+
   private updateRespawns() {
     for (const p of this.players.values()) {
-      if (!p.dead || this.time < p.respawnAt) continue;
+      // Une réanimation en cours retient le retour au camp.
+      if (!p.dead || p.reviveBy || this.time < p.respawnAt) continue;
       // Réapparition au dernier camp établi avant le lieu de la mort, sinon au village.
       const home = this.respawnPoint(p.x, p.y);
       const a = Math.random() * Math.PI * 2;
       const at = this.map.freeNear(home.x + Math.cos(a) * 50, home.y + Math.sin(a) * 50 + 40);
       p.dead = false;
       p.hp = maxHpOf(p);
+      p.lastPosMs = Date.now();
       p.x = at.x;
       p.y = at.y;
       p.send({ t: 'teleport', x: p.x, y: p.y });
@@ -639,7 +677,7 @@ export class Room {
     for (const u of this.units.values()) {
       if (!u.reviveAt || this.time < u.reviveAt) continue;
       const owner = this.players.get(u.owner);
-      if (!owner) continue;
+      if (!owner || owner.dead) continue; // il attend que son dompteur soit debout (pas de retour près du boss)
       u.reviveAt = 0;
       u.hp = u.maxHp;
       u.target = 0;
@@ -1373,7 +1411,11 @@ export class Room {
     if (p.mount) this.dismount(p);
     p.dead = true;
     p.hp = 0;
-    p.respawnAt = this.time + PLAYER_RESPAWN_S;
+    // Un autre dompteur est là : il a le temps de venir nous relever.
+    p.respawnAt = this.time + (this.players.size > 1 ? Math.max(PLAYER_RESPAWN_S, REVIVE_WINDOW_S) : PLAYER_RESPAWN_S);
+    p.reviveBy = 0;
+    p.reviveT = 0;
+    p.helping = false;
     this.events.push({ e: 'pdie', id: p.id });
     // La meute se disperse : seuls les Alphas restent fidèles.
     let n = 0;
@@ -1580,7 +1622,8 @@ export class Room {
       id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: p.fx, fy: p.fy,
       hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, cls: p.cls, gold: p.gold,
       essences: p.essences, saved: !!p.userId, dead: p.dead,
-      respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0, army: this.armyOf(p),
+      respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
+      revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),
       mount: this.mountState(p),
       slowed: p.slowUntil > this.time,
       resting: p.resting.map((r) => ({ species: r.s, level: r.lvl, legend: r.legend })),

@@ -10,15 +10,21 @@ const STICK_MAX = 60;
  * Déplacement : codes physiques (ZQSD en AZERTY = WASD en QWERTY).
  * Raccourcis (E, F, M…) : la lettre réellement tapée, sinon M ne marche pas en AZERTY (touche « ; » en QWERTY).
  */
-export function initInput(canvas: HTMLCanvasElement, onAction: (code: string, key: string) => void) {
+export function initInput(canvas: HTMLCanvasElement, onAction: (code: string, key: string) => void, onRelease: (code: string, key: string) => void = () => {}) {
   addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return;
     keys.add(e.code);
     if (!e.repeat) onAction(e.code, e.key.length === 1 ? e.key.toLowerCase() : e.key);
     if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   });
-  addEventListener('keyup', (e) => keys.delete(e.code));
-  addEventListener('blur', () => keys.clear());
+  addEventListener('keyup', (e) => {
+    keys.delete(e.code);
+    onRelease(e.code, e.key.length === 1 ? e.key.toLowerCase() : e.key);
+  });
+  addEventListener('blur', () => {
+    keys.clear();
+    onRelease('', ''); // touche relâchée hors de la fenêtre : on la considère lâchée
+  });
 
   canvas.addEventListener('pointerdown', (e) => {
     stick.active = true;

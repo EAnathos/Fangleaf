@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { ALPHA_CREATE_COST, ARMY_CAP, BOSS_RESPAWN_S, BUILDING_IDS, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { ALPHA_CREATE_COST, ARMY_CAP, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
 
@@ -877,6 +877,58 @@ const noop = () => {};
   check(p.seen.has(toad) && !p.seen.has(king) && prof.seen.includes(toad), 'bestiaire : espèce croisée enregistrée, géant exclu');
   const back = r.addPlayer('b', noop, { userId: 'v', profile: { ...prof, seen: [], essences: SPECIES.map((_, i) => (i === 3 ? 2 : 0)) } });
   check(back.seen.has(3), 'bestiaire : les espèces déjà chassées (essences) y figurent pour une ancienne sauvegarde');
+}
+
+{
+  // Alpha tombé pendant que son dompteur est à terre : il attend que le dompteur soit debout.
+  const r = room();
+  const p = r.addPlayer('a', noop);
+  const wolf = r.spawnAlpha(p, 1, 0, false);
+  const foe = r.createUnit(1, false, p.x + 30, p.y);
+  r.killUnit(wolf, foe);
+  r.killPlayer(p);
+  check(p.respawnAt - r.time === PLAYER_RESPAWN_S, 'seul au village : retour au camp après le délai normal');
+  r.time = Math.max(wolf.reviveAt, p.respawnAt) - 0.01;
+  r.updateRespawns();
+  check(wolf.reviveAt > 0, 'dompteur à terre : l\'Alpha ne ressuscite pas près du corps');
+  r.time += 1;
+  r.updateRespawns();
+  check(!p.dead && !wolf.reviveAt && Math.hypot(wolf.x - p.x, wolf.y - p.y) < 200, 'dompteur debout : l\'Alpha revient à ses côtés');
+}
+
+{
+  // Relever un coéquipier : R maintenu 5 s près du corps, dans les 10 s.
+  const r = room();
+  const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
+  q.x = p.x + 40;
+  q.y = p.y;
+  const body = { x: p.x, y: p.y };
+  r.killPlayer(p);
+  check(p.respawnAt - r.time === REVIVE_WINDOW_S, `un coéquipier connecté : ${REVIVE_WINDOW_S} s pour être relevé`);
+  r.onHelp(q, true);
+  for (let i = 0; i < Math.round((REVIVE_HOLD_S / 2) / DT); i++) r.updateRevives();
+  r.onHelp(q, false);
+  r.updateRevives();
+  check(p.dead && p.reviveT === 0, 'R relâché : la réanimation repart de zéro');
+  r.onHelp(q, true);
+  q.x = p.x + REVIVE_R + 50;
+  for (let i = 0; i < Math.round(REVIVE_HOLD_S / DT) + 2; i++) r.updateRevives();
+  check(p.dead, 'trop loin du corps : pas de réanimation');
+  q.x = p.x + 40;
+  for (let i = 0; i < Math.round(REVIVE_HOLD_S / DT) + 2; i++) r.updateRevives();
+  check(!p.dead && p.x === body.x && p.y === body.y, 'relevé sur place après 5 s');
+  check(p.hp > 0 && p.hp < armorMaxHp(p.armor), `relevé avec une partie de ses PV (${p.hp}/${armorMaxHp(p.armor)})`);
+  // Réanimation en cours au moment où la fenêtre se ferme : on attend qu'elle aboutisse.
+  r.killPlayer(p);
+  r.time = p.respawnAt - 1;
+  for (let i = 0; i < Math.round(3 / DT); i++) {
+    r.time += DT;
+    r.updateRevives();
+    r.updateRespawns();
+  }
+  check(p.dead && p.reviveT > 0, 'réanimation en cours : le retour au camp attend');
+  for (let i = 0; i < Math.round(REVIVE_HOLD_S / DT); i++) r.updateRevives();
+  check(!p.dead && p.x === body.x, 'puis le dompteur est relevé sur place');
 }
 
 {
