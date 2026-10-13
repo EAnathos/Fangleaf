@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
 
@@ -25,7 +25,7 @@ const check = (ok: boolean, label: string) => {
 // Village de test : tous les bâtiments construits et toutes les grottes débloquées (sauf mention contraire).
 const ALL_CAVES = Array.from({ length: 64 }, (_, i) => i);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const room = (): any => new Room('TEST', undefined, { buildings: [...BUILDING_IDS], unlocked: ALL_CAVES });
+const room = (): any => new Room('TEST', undefined, { buildings: [...BUILDING_IDS], unlocked: ALL_CAVES, hall: HALL_MAX });
 const noop = () => {};
 
 {
@@ -724,7 +724,7 @@ const noop = () => {};
 }
 
 {
-  // Bâtiments du village : achetés avec de l'or, une fois pour tous ; sans eux, rien à faire devant le chantier.
+  // Bâtiments du village : achetés avec de l'or, du bois et de la pierre, une fois pour tous ; sans eux, rien à faire devant le chantier.
   const r: any = new Room('TEST');
   let saved: { buildings: string[]; unlocked: number[] } = { buildings: [], unlocked: [] };
   r.onVillage = (v: typeof saved) => (saved = v);
@@ -740,12 +740,17 @@ const noop = () => {};
   check(!r.buildings.includes('forge'), 'il faut être devant l\'emplacement pour construire');
   [p.x, p.y] = [r.map.forge.x, r.map.forge.y + 60];
   p.gold = 9;
+  p.wood = 100;
   r.onBuild(p, 'forge');
-  check(!r.buildings.includes('forge') && p.gold === 9, 'pas assez d\'or : rien de construit');
+  check(!r.buildings.includes('forge') && p.gold === 9 && p.wood === 100, 'pas assez d\'or : rien de construit');
   p.gold = 500;
+  p.wood = 4;
+  r.onBuild(p, 'forge');
+  check(!r.buildings.includes('forge') && p.gold === 500, 'pas assez de bois : rien de construit');
+  p.wood = 5;
   r.onBuild(p, 'forge');
   r.onBuild(p, 'forge');
-  check(r.buildings.join() === 'forge' && p.gold === 490 && saved.buildings.join() === 'forge', 'forge construite une seule fois, 10 or, sauvegardée pour le village');
+  check(r.buildings.join() === 'forge' && p.gold === 490 && p.wood === 0 && saved.buildings.join() === 'forge', 'forge construite une seule fois, 10 or et 5 bois, sauvegardée pour le village');
   [q.x, q.y] = [p.x, p.y];
   q.gold = 100;
   r.onUpgrade(q, 'weapon');
@@ -756,9 +761,14 @@ const noop = () => {};
   r.onTravel(p, 0);
   check(r.map.inVillage(p.x, p.y), 'Pierre du village pas construite : pas de voyage');
   p.gold = 200;
+  p.wood = 10;
+  p.stone = 40;
+  r.onBuild(p, 'stone');
+  check(!r.buildings.includes('stone') && p.gold === 200, `Maison commune trop basse : pas de Pierre (niveau ${BUILDINGS.stone.hall} requis)`);
+  r.hall = BUILDINGS.stone.hall;
   r.onBuild(p, 'stone');
   r.onTravel(p, 0);
-  check(p.gold === 0 && !r.map.inVillage(p.x, p.y), 'Pierre du village construite (200 or) : voyage vers le camp');
+  check(p.gold === 0 && p.wood === 0 && p.stone === 0 && !r.map.inVillage(p.x, p.y), 'Pierre du village construite (200 or, 10 bois, 40 pierre) : voyage vers le camp');
   // Grottes : débloquées contre 150 × niveau de la zone.
   const c = r.map.caves.find((cv: { zone: number }) => cv.zone === 2);
   [p.x, p.y] = [c.entrance.x, c.entrance.y + 20];
@@ -1082,6 +1092,78 @@ const noop = () => {};
   const d0 = Math.hypot(hare.x - p.x, hare.y - p.y);
   for (let i = 0; i < 20; i++) r.step(), (p.atkCd = 999);
   check(Math.hypot(hare.x - p.x, hare.y - p.y) > d0 + 60, 'frappé, il s\'enfuit');
+}
+
+{
+  // Récolte : bois mort → bois, rocher → pierre, filon → or et un peu de pierre ; sauvegardés sur le compte.
+  const r = room();
+  r.units.clear();
+  const p = r.addPlayer('a', noop);
+  for (const res of ['wood', 'stone', 'gold'] as const) {
+    const o = r.map.ores.find((x: { res: string }) => x.res === res);
+    [p.x, p.y] = [o.x + 30, o.y];
+    const [w0, s0, g0] = [p.wood, p.stone, p.gold];
+    for (let i = 0; i < 20 * 20 && r.oreHp[o.id] > 0; i++) r.step();
+    const got = { wood: p.wood - w0, stone: p.stone - s0, gold: p.gold - g0 };
+    const want = res === 'wood' ? { wood: resYield(o.zone), stone: 0, gold: 0 } : res === 'stone' ? { wood: 0, stone: resYield(o.zone), gold: 0 } : { wood: 0, stone: oreStone(o.zone), gold: got.gold };
+    check(JSON.stringify(got) === JSON.stringify(want) && (res !== 'gold' || got.gold > 0), `${res} (zone ${o.zone}) : +${got.wood} bois, +${got.stone} pierre, +${got.gold} or`);
+  }
+  const prof = r.profileOf(p);
+  const r2: any = room();
+  const p2 = r2.addPlayer('a', noop, { userId: 'u', profile: prof });
+  check(p2.wood === p.wood && p2.stone === p.stone, 'bois et pierre sauvegardés sur le compte');
+}
+
+{
+  // Maison commune : chaque niveau coûte or, bois et pierre ; elle ouvre les portes avec les géants vaincus.
+  const r: any = new Room('TEST');
+  let saved: { hall: number; beaten: number[] } = { hall: 0, beaten: [] };
+  r.onVillage = (v: typeof saved) => (saved = v);
+  const p = r.addPlayer('a', noop);
+  const { map } = r;
+  // Porte du village (0) : fermée tant que la Maison commune est au niveau 0.
+  const before = map.spineAt(map.gates[0] - 60), after = map.spineAt(map.gates[0] + 60);
+  const walk = (from: { x: number; y: number }, to: { x: number; y: number }, gate = 0) => {
+    [p.x, p.y] = [from.x, from.y];
+    for (let i = 0; i < 40; i++) {
+      p.lastPosMs = Date.now() - 50;
+      r.onPos(p, p.x + (to.x - from.x) / 20, p.y + (to.y - from.y) / 20, 1, 0);
+    }
+    return map.arcAt(p.x, p.y) > map.gates[gate];
+  };
+  check(!walk(before, after), 'Maison commune niv. 0 : la porte du village ne se franchit pas');
+  [p.x, p.y] = [map.hall.x, map.hall.y + 60];
+  Object.assign(p, { gold: HALL[0].gold, wood: HALL[0].wood, stone: HALL[0].stone - 1 });
+  r.onHall(p);
+  check(r.hall === 0, 'pas assez de pierre : pas d\'amélioration');
+  p.stone++;
+  r.onHall(p);
+  check(r.hall === 1 && p.gold === 0 && p.wood === 0 && p.stone === 0 && saved.hall === 1, `niveau 1 pour ${HALL[0].gold} or, ${HALL[0].wood} bois, ${HALL[0].stone} pierre, sauvegardé`);
+  check(walk(before, after), 'niveau 1 : la porte du village s\'ouvre');
+  // Porte de la zone 2 : Maison commune niv. 3 et tous les géants de la zone 1.
+  const b1 = map.spineAt(map.gates[1] - 60), a1 = map.spineAt(map.gates[1] + 60);
+  r.hall = gateHall(1);
+  check(!walk(b1, a1, 1), 'géants de la zone 1 pas encore vaincus : porte de la zone 2 fermée');
+  const [g1, g2] = zoneBosses(1);
+  for (const g of [g1, g2]) {
+    const u = r.createUnit(g, false, p.x, p.y);
+    r.killUnit(u, p);
+  }
+  check(saved.beaten.includes(g1) && saved.beaten.includes(g2), 'géants vaincus retenus pour le village');
+  r.hall = gateHall(1) - 1;
+  check(!walk(b1, a1, 1), `géants vaincus mais Maison commune niv. ${gateHall(1) - 1} : toujours fermée`);
+  r.hall = gateHall(1);
+  check(walk(b1, a1, 1), `géants vaincus et Maison commune niv. ${gateHall(1)} : porte de la zone 2 ouverte`);
+  // On peut toujours revenir en arrière, même par une porte fermée.
+  r.hall = 0;
+  [p.x, p.y] = [a1.x, a1.y];
+  for (let i = 0; i < 40; i++) {
+    p.lastPosMs = Date.now() - 50;
+    r.onPos(p, p.x + (b1.x - a1.x) / 20, p.y + (b1.y - a1.y) / 20, 1, 0);
+  }
+  check(map.arcAt(p.x, p.y) < map.gates[1], 'revenir en arrière par une porte fermée : toujours possible');
+  const again: any = new Room('TEST2', r.seed, { hall: 99, beaten: [g1, g1, 0, 999] });
+  check(again.hall === HALL_MAX && again.beaten.join() === String(g1), 'Maison commune et géants rechargés (bornés, doublons et non-géants ignorés)');
 }
 
 {

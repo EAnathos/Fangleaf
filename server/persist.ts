@@ -10,6 +10,8 @@ import type { BuildingId } from '../shared/config.ts';
 export interface Profile {
   name: string;
   gold: number;
+  wood: number;
+  stone: number;
   weapon: number;
   armor: number;
   essences: number[];
@@ -44,21 +46,26 @@ export async function verifyToken(token: string): Promise<{ userId: string; name
   return { userId: data.user.id, name };
 }
 
-/** Biens communs d'un village : camps établis, bâtiments construits, grottes débloquées. */
+/** Biens communs d'un village : camps établis, bâtiments construits, grottes débloquées, Maison commune, géants vaincus. */
 export interface VillageSave {
   camps: number[];
   buildings: BuildingId[];
   unlocked: number[];
+  hall: number;
+  beaten: number[];
 }
 
 /** Graine et biens communs d'un village enregistré, ou null s'il n'existe pas. */
 export async function findVillage(code: string): Promise<({ seed: number; founder: string | null } & VillageSave) | null> {
   if (!db) return null;
-  const { data, error } = await db.from('villages').select('seed, camps, buildings, caves, created_by').eq('code', code).maybeSingle();
+  const { data, error } = await db.from('villages').select('seed, camps, buildings, caves, hall, beaten, created_by').eq('code', code).maybeSingle();
   if (error) throw new Error(`Lecture du village impossible : ${error.message}`);
   const list = (v: unknown) => (Array.isArray(v) ? v : []);
   return data
-    ? { seed: Number(data.seed), camps: list(data.camps).map(Number), buildings: list(data.buildings), unlocked: list(data.caves).map(Number), founder: data.created_by ?? null }
+    ? {
+      seed: Number(data.seed), camps: list(data.camps).map(Number), buildings: list(data.buildings), unlocked: list(data.caves).map(Number),
+      hall: Number(data.hall ?? 0), beaten: list(data.beaten).map(Number), founder: data.created_by ?? null,
+    }
     : null;
 }
 
@@ -79,7 +86,7 @@ export async function deleteProgress(userId: string, code: string) {
 /** Biens communs du village (partagés par tous ses membres). */
 export async function saveVillage(code: string, v: VillageSave) {
   if (!db) return;
-  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked }).eq('code', code);
+  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked, hall: v.hall, beaten: v.beaten }).eq('code', code);
   if (error) console.error('Sauvegarde du village impossible :', error.message);
 }
 
@@ -93,7 +100,7 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   if (!db) return null;
   const { data, error } = await db
     .from('progress')
-    .select('name, gold, weapon, armor, essences, alphas, village_found, class, pack, seen')
+    .select('name, gold, wood, stone, weapon, armor, essences, alphas, village_found, class, pack, seen')
     .eq('user_id', userId)
     .eq('village_code', code)
     .maybeSingle();

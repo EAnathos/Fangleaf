@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, ARC_FLIGHT_S, BUILDINGS, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp } from '../../shared/math.ts';
 import type { GameEvent, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
 import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -28,7 +28,9 @@ export class Game {
   private charges = new Map<number, number>(); // tireur → début de la charge de son tir
   private chestOpen = new Map<number, number>(); // coffre → moment où on l'a ouvert (animation du couvercle)
   private chestSeen = new Map<number, number>(); // coffre → première apparition (il tombe en rebondissant)
-  private fades = new Map<object, number>(); // arbre → opacité de son feuillage (1 : opaque)
+  private fades = new Map<object, number>();
+  private gatesOpen: boolean[] | null = null; // état des portes au dernier snapshot (null : pas encore connu)
+  private gateToast = -99; // dernier rappel « porte fermée » // arbre → opacité de son feuillage (1 : opaque)
   private tools = new Map<number, { kind: Tool['kind']; at: number; tx: number; ty: number }>(); // dompteur → dernier coup d'outil (récolte)
   private shotsAt = 0; // réception du dernier snapshot (les projectiles droits sont extrapolés depuis)
   private faces = new Map<number, { x: number; face: number }>();
@@ -62,6 +64,7 @@ export class Game {
     this.hud.onBuy = (s) => net.send({ t: 'buy', s });
     this.hud.onChallenge = (cave) => net.send({ t: 'challenge', cave });
     this.hud.onChest = (id) => net.send({ t: 'chest', id });
+    this.hud.onHall = () => net.send({ t: 'hall' });
     this.hud.onReset = () => net.send({ t: 'reset' });
     this.hud.onQuit = () => {
       net.close(); // le serveur sauvegarde la progression à la déconnexion
@@ -164,6 +167,33 @@ export class Game {
       const names = SPECIES.filter((s) => s.zone === z).map((s) => s.name).join(' · ');
       if (!first) this.hud.banner(ZONE_NAMES[z - 1], `Zone ${z} · ${names}`, z >= 3);
     }
+  }
+
+  private gateOpen(k: number) {
+    return gateOpen(k, this.hud.hall, this.hud.beaten);
+  }
+
+  /** Ce qui manque pour ouvrir la porte k. */
+  private gateWhy(k: number) {
+    const need: string[] = [];
+    if (this.hud.hall < gateHall(k)) need.push(`Maison commune niv. ${gateHall(k)}`);
+    const left = k === 0 ? [] : zoneBosses(k).filter((b) => !this.hud.beaten.includes(b));
+    if (left.length) need.push(`vaincre ${left.map((b) => SPECIES[b].name).join(', ')}`);
+    return need.join(' · ');
+  }
+
+  /** Une porte vient de s'ouvrir (amélioration ou géant vaincu, par n'importe qui) : on l'annonce. */
+  private watchGates() {
+    const open = this.map.gates.map((_, k) => this.gateOpen(k));
+    if (this.gatesOpen && this.net.latest) {
+      open.forEach((o, k) => {
+        if (!o || this.gatesOpen![k]) return;
+        this.hud.toast(k === 0 ? 'La porte du village est ouverte : la Lisière vous attend !' : `La porte des ${ZONE_NAMES[k]} (zone ${k + 1}) est ouverte !`, 'good');
+        const c = this.map.spineAt(this.map.gates[k]);
+        this.fx.ring(c.x, c.y, '#7FCB5B', 20, 260, 1.2);
+      });
+    }
+    if (this.net.latest) this.gatesOpen = open;
   }
 
   private self(): PlayerState | undefined {
@@ -271,6 +301,21 @@ export class Game {
           this.hud.toast(`Coffre ouvert : +${e.gold} or !`, 'good');
         }
         break;
+      case 'res':
+        if (e.to !== this.myId) break;
+        if (e.wood) this.fx.text(e.x, e.y - 12, `+${e.wood} bois`, '#D2A06A', 14, 1.1);
+        if (e.stone) this.fx.text(e.x, e.y - (e.wood ? 30 : 12), `+${e.stone} pierre`, '#B9C2BC', 14, 1.1);
+        break;
+      case 'hall': {
+        const h = this.map.hall;
+        this.fx.ring(h.x, h.y, '#F0B64A', 20, 160, 1.2);
+        this.fx.burst(h.x, h.y - 30, '#F0B64A', 30, 180);
+        this.hud.toast(e.by === this.myId ? `Maison commune au niveau ${e.lvl} : ${HALL[e.lvl - 1].unlock}` : `${name(e.by)} a amélioré la Maison commune (niv. ${e.lvl})`, 'good');
+        break;
+      }
+      case 'beaten':
+        this.hud.toast(`Première victoire du village sur ${SPECIES[e.s].name} !`, 'good');
+        break;
       case 'eat': {
         const b = this.map.bushes[e.bush];
         if (b) this.fx.burst(b.x, b.y - 10, '#C8323C', 8, 80);
@@ -312,8 +357,8 @@ export class Game {
       case 'mine': {
         const o = this.map.ores[e.id];
         if (!o) break;
-        this.fx.burst(o.x, o.y - 8, '#F0B64A', e.done ? 22 : 5, e.done ? 150 : 70);
-        this.tools.set(e.by, { kind: 'pick', at: this.time, tx: o.x, ty: o.y });
+        this.fx.burst(o.x, o.y - 8, o.res === 'wood' ? '#B88A5A' : o.res === 'stone' ? '#9AA39E' : '#F0B64A', e.done ? 22 : 5, e.done ? 150 : 70);
+        this.tools.set(e.by, { kind: o.res === 'wood' ? 'axe' : 'pick', at: this.time, tx: o.x, ty: o.y });
         break;
       }
       case 'boss': {
@@ -427,11 +472,24 @@ export class Game {
       const speed = PLAYER_SPEED * (st?.mount ? mountSpeedOf(st.mount.species) : 1) * (st?.slowed ? WEB_SLOW : 1);
       // (bords du monde et intérieurs de grotte : gérés par blocked())
       const nx = this.me.x + dx * speed * dt, ny = this.me.y + dy * speed * dt;
-      if (!this.map.blocked(nx, ny)) {
+      // Même règle que le serveur pour les portes fermées : on ne les franchit pas en avançant.
+      let shut = -1;
+      const ok = (x: number, y: number) => {
+        if (this.map.blocked(x, y)) return false;
+        const g = this.map.gateCrossed(this.me.x, this.me.y, x, y);
+        if (g < 0 || this.gateOpen(g)) return true;
+        shut = g;
+        return false;
+      };
+      if (ok(nx, ny)) {
         this.me.x = nx;
         this.me.y = ny;
-      } else if (!this.map.blocked(nx, this.me.y)) this.me.x = nx;
-      else if (!this.map.blocked(this.me.x, ny)) this.me.y = ny;
+      } else if (ok(nx, this.me.y)) this.me.x = nx;
+      else if (ok(this.me.x, ny)) this.me.y = ny;
+      if (shut >= 0 && this.time - this.gateToast > 4) {
+        this.gateToast = this.time;
+        this.hud.toast(`${shut === 0 ? 'Porte du village' : `Porte des ${ZONE_NAMES[shut]}`} fermée · ${this.gateWhy(shut)}`);
+      }
       const l = Math.hypot(dx, dy);
       this.me.fx = dx / l;
       this.me.fy = dy / l;
@@ -451,6 +509,9 @@ export class Game {
     this.hud.buildings = this.net.latest?.buildings ?? [];
     this.hud.unlocked = this.net.latest?.unlocked ?? [];
     this.hud.chests = this.net.latest?.chests ?? [];
+    this.hud.hall = this.net.latest?.hall ?? 0;
+    this.hud.beaten = this.net.latest?.beaten ?? [];
+    this.watchGates();
     this.hud.sleepers = (view?.units ?? []).flatMap((u) => {
       const cave = u[2] & UNIT_FLAG_DORMANT ? this.map.caveAt(u[3], u[4]) : undefined;
       return cave ? [{ cave: cave.id, x: u[3], y: u[4], r: SPECIES[u[1]].r }] : [];
@@ -495,8 +556,14 @@ export class Game {
     ctx.translate(village.x, village.y);
     this.world.drawCampfire(ctx, this.time);
     // bâtiments : construits, ou leur chantier avec son prix
-    for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b));
+    for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall);
+    this.world.drawHall(ctx, this.hud.hall, this.time);
     ctx.restore();
+    // Portes des zones (dans le couloir, à l'écran) : palissade en travers, couchée une fois ouverte.
+    const gates = this.map.gates.map((g, k) => k).filter((k) => {
+      const c = this.map.spineAt(this.map.gates[k]);
+      return !here && inView(c.x, c.y, 1100);
+    });
     const camps = this.net.latest?.camps ?? [];
     this.map.sites.forEach((c, i) => inView(c.x, c.y, 260) && this.world.drawSite(ctx, i, camps.includes(i), this.time));
 
@@ -516,7 +583,8 @@ export class Game {
     this.map.stones.forEach((st, k) => {
       // celle du village se construit ; celles des camps s'éveillent avec leur camp
       const active = k === 0 ? this.hud.buildings.includes('stone') : camps.includes(k - 1);
-      const label = k === 0 && !active ? `${BUILDINGS.stone.name} · ${BUILDINGS.stone.cost} or` : undefined;
+      const need = BUILDINGS.stone.hall;
+      const label = k === 0 && !active ? `${BUILDINGS.stone.name} · ${this.hud.hall < need ? `Maison commune niv. ${need}` : costText(buildingCost('stone'))}` : undefined;
       if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
     // Arbres de la carte : triés avec les créatures, feuillage transparent quand on passe dessous.
@@ -543,11 +611,12 @@ export class Game {
       const lid = opened ? (at === undefined ? 1 : Math.min(1, (this.time - at) / 0.45)) : 0;
       list.push({ y, draw: () => drawChest(ctx, x, y, lid, this.time, drop) });
     }
+    for (const k of gates) list.push(...this.world.gateParts(ctx, k, this.gateOpen(k)).filter((p) => p.y > camY - hh - 80 && p.y < camY + hh + 80));
     const oreState = new Map(this.net.latest?.ores ?? []);
     for (const o of this.map.ores) {
       if (!inView(o.x, o.y, 60)) continue;
       const hp = oreState.get(o.id) ?? 100;
-      list.push({ y: o.y, draw: () => drawOre(ctx, o.x, o.y, o.zone, hp, this.time, o.id) });
+      list.push({ y: o.y, draw: () => drawOre(ctx, o.x, o.y, o.zone, hp, this.time, o.id, o.res) });
     }
     const colorOf = new Map(players.map((p) => [p.id, p.color]));
 
@@ -657,6 +726,10 @@ export class Game {
     }
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.draw();
+    for (const k of gates) {
+      const open = this.gateOpen(k);
+      this.world.drawGateLabel(ctx, k, open, k === 0 ? 'Porte du village' : `Porte · ${ZONE_NAMES[k]}`, open ? '' : this.gateWhy(k));
+    }
     for (const [, kind, x, y, a, b, c] of shots) {
       if (kind === 1) drawShot(ctx, kind, x, y, a, b, Math.min(100, c + (late * 100) / ARC_FLIGHT_S), this.time);
       else drawShot(ctx, kind, x + a * late, y + b * late, a, b, 0, this.time);

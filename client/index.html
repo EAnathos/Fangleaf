@@ -60,6 +60,7 @@
         <span id="self-name" class="pname"></span>
         <div class="bar"><div id="self-hp" class="fill"></div></div>
         <div class="row stats"><span id="self-hptext"></span><span id="self-gold" class="gold"></span><span id="self-army"></span></div>
+        <div class="row stats"><span id="self-wood" class="wood"></span><span id="self-stone" class="rock"></span></div>
         <div id="mount-row" class="mount-row" hidden>
           <div class="row between small"><span id="mount-name"></span><span class="muted">F : descendre</span></div>
           <div class="bar thin"><div id="mount-hp" class="fill mount"></div></div>
@@ -187,13 +188,32 @@
         <div class="row between">
           <div class="col">
             <h2 id="buy-title">Construire</h2>
-            <span class="muted">Or disponible : <b id="buy-gold" class="gold"></b></span>
+            <span class="muted" id="buy-have"></span>
           </div>
           <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
         </div>
         <p id="buy-desc"></p>
+        <div id="buy-cost" class="cost-list"></div>
         <p class="small muted">Pour tout le village : un seul d'entre vous le paie.</p>
         <button id="buy-go" class="cta"></button>
+      </div>
+    </div>
+
+    <div id="hall" class="overlay dim" hidden>
+      <div class="panel modal hall" role="dialog" aria-modal="true" aria-labelledby="hall-title">
+        <div class="row between">
+          <div class="col">
+            <h2 id="hall-title">Maison commune</h2>
+            <span class="muted" id="hall-have"></span>
+          </div>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div id="hall-levels" class="hall-levels"></div>
+        <div id="hall-cost" class="cost-list"></div>
+        <button id="hall-up" class="cta"></button>
+        <h3 class="market-head">Portes des zones</h3>
+        <div id="hall-gates" class="stones"></div>
+        <p class="small muted">Pour tout le village : un seul d'entre vous paie chaque niveau. Bois et pierre se récoltent sur le bois mort, les rochers et les filons (reste à côté).</p>
       </div>
     </div>
 

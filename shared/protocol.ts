@@ -19,6 +19,7 @@ export type ClientMsg =
   | { t: 'establish'; site: number } // établir le camp de cet emplacement (pour tout le village)
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, sinon index du camp
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
+  | { t: 'hall' } // améliorer la Maison commune (pour tout le village)
   | { t: 'unlock'; cave: number } // débloquer une grotte (pour tout le village)
   | { t: 'sell'; id: number } // Marché : vendre un monstre ordinaire de sa meute
   | { t: 'buy'; s: number } // Marché : acheter un monstre d'une espèce déjà croisée
@@ -41,6 +42,8 @@ export interface PlayerState {
   armor: number;
   cls: ClassId | null; // classe (null : pas encore choisie)
   gold: number;
+  wood: number;
+  stone: number;
   essences: number[]; // par espèce
   saved: boolean; // progression sauvegardée sur un compte
   mount: { id: number; species: number; hp: number; legend: boolean } | null; // monture chevauchée (pv en %)
@@ -111,6 +114,9 @@ export type GameEvent =
   | { e: 'charge'; id: number } // un tireur charge son tir (il est immobile pendant windup)
   | { e: 'camp'; site: number; by: number } // un camp vient d'être établi
   | { e: 'built'; b: BuildingId; by: number } // un bâtiment du village vient d'être construit
+  | { e: 'hall'; lvl: number; by: number } // Maison commune améliorée
+  | { e: 'beaten'; s: number; by: number } // un géant vaincu pour la première fois par le village
+  | { e: 'res'; to: number; wood: number; stone: number; x: number; y: number } // bois ou pierre récoltés
   | { e: 'unlock'; cave: number; by: number } // une grotte vient d'être débloquée
   | { e: 'trade'; to: number; s: number; gold: number; sold: boolean } // Marché : monstre vendu ou acheté
   | { e: 'travel'; id: number; x: number; y: number; tx: number; ty: number } // voyage par Pierre de passage
@@ -127,6 +133,8 @@ export interface Snapshot {
   caves: number[]; // par grotte : secondes avant le retour du mini-boss (0 = présent)
   camps: number[]; // emplacements de camp établis par le village
   buildings: BuildingId[]; // bâtiments construits au village
+  hall: number; // niveau de la Maison commune
+  beaten: number[]; // géants (espèce) déjà vaincus par le village : ils ouvrent les portes des zones
   unlocked: number[]; // grottes débloquées par le village
   hazards: HazardTuple[]; // attaques spéciales visibles
   shots: ShotTuple[]; // projectiles des tireurs (esquivables)

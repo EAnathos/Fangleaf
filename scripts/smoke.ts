@@ -104,12 +104,12 @@ async function main() {
     if (!me || me.dead || me.gold >= 25) break;
     let best: [number, number] | undefined, bd = Infinity;
     for (const u of host.last!.units) {
-      if (u[6] !== 0 || u[1] !== 0) continue;
+      if (u[6] !== 0 || u[1] !== 0 || map.arcAt(u[3], u[4]) > map.gates[0] - 40) continue; // la porte du village est fermée (Maison commune niv. 0)
       const d = Math.hypot(u[3] - x, u[4] - y);
       if (d < bd) [bd, best] = [d, [u[3], u[4]]];
     }
     if (best) stepTo(best[0], best[1], 50);
-    else stepTo(map.spineAt(2600).x, map.spineAt(2600).y); // rien en vue : on avance dans le couloir
+    else stepTo(map.spineAt(map.gates[0] - 150).x, map.spineAt(map.gates[0] - 150).y); // rien en vue : on avance jusqu'à la porte du village
     await sleep(50);
   }
   console.log(`  (chasse : ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
@@ -121,20 +121,40 @@ async function main() {
   check(!host.last!.units.some((u) => u[6] === 0 && u[2] & 1), 'aucun Alpha sauvage sur la carte');
   check(host.msgs.some((m) => m.t === 's' && m.ev.some((e) => e.e === 'hit')), 'des coups ont été échangés');
 
-  // Forge : retour au village, construction (10 or) puis amélioration si assez d'or.
-  if (me.gold >= 30 && !me.dead) {
+  // Forge : du bois, retour au village, construction (10 or, 5 bois) puis amélioration si assez d'or.
+  if (me.gold >= 10 && !me.dead) {
+    // D'abord du bois : le bois mort le plus proche entre le camp et le village (la forge en demande 5).
+    const wood = map.ores.filter((o) => o.res === 'wood' && map.arcAt(o.x, o.y) < 1550).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
+    // (les monstres qui passent sont combattus d'abord : on se recale sur le serveur et on retente)
+    for (let k = 0; k < 4 && host.me()!.wood < 5 && !host.me()!.dead; k++) {
+      [x, y] = [host.me()!.x, host.me()!.y];
+      for (let i = 0; i < 300 && !stepTo(wood.x, wood.y, 45); i++) await sleep(50);
+      for (let i = 0; i < 200 && host.me()!.wood < 5; i++) await sleep(50);
+    }
+    console.log(`  (bois récolté : ${host.me()!.wood})`);
+  }
+  if (me.gold >= 10 && !host.me()!.dead && host.me()!.wood >= 5) {
     // Retour par le camp puis le chemin dégagé jusqu'à la forge.
     // camp → chemin de terre → porte → devant la forge (la palissade et les bâtiments sont solides)
     const route: [number, number][] = [[map.spawn.x + 60, map.spawn.y + 60], ...map.path.slice(4), [map.village.x, map.village.y + 60], [map.forge.x + 20, map.forge.y + 75]];
     for (const [tx, ty] of route) for (let i = 0; i < 400 && !stepTo(tx, ty); i++) await sleep(50);
+    // Les monstres ont pu nous bousculer en chemin : on repart de la position du serveur pour les derniers pas.
+    for (let k = 0; k < 3 && Math.hypot(host.me()!.x - map.forge.x, host.me()!.y - map.forge.y) > 120; k++) {
+      [x, y] = [host.me()!.x, host.me()!.y];
+      for (let i = 0; i < 200 && !stepTo(map.forge.x + 20, map.forge.y + 75); i++) await sleep(50);
+      await sleep(200);
+    }
     host.send({ t: 'build', b: 'forge' });
     await sleep(200);
-    check(!!host.last?.buildings.includes('forge'), `forge construite pour le village (or ${host.me()!.gold})`);
-    host.send({ t: 'upgrade', what: 'armor' });
-    await sleep(200);
-    check(host.me()!.armor === 1, `armure améliorée (niv. ${host.me()!.armor}, or ${host.me()!.gold})`);
+    const at = host.me()!;
+    check(!!host.last?.buildings.includes('forge'), `forge construite pour le village (or ${at.gold}, bois ${at.wood}, à ${Math.round(Math.hypot(at.x - map.forge.x, at.y - map.forge.y))} px de la forge)`);
+    if (host.me()!.gold >= 20) {
+      host.send({ t: 'upgrade', what: 'armor' });
+      await sleep(200);
+      check(host.me()!.armor === 1, `armure améliorée (niv. ${host.me()!.armor}, or ${host.me()!.gold})`);
+    } else console.log('  (pas assez d\'or : amélioration d\'armure ignorée)');
   } else {
-    console.log('  (pas assez d\'or ou mort : test de forge ignoré)');
+    console.log('  (pas assez d\'or ou de bois, ou mort : test de forge ignoré)');
   }
 
   // Anti-téléportation.

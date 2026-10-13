@@ -165,6 +165,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'establish') room.onEstablish(player, +msg.site);
     else if (msg.t === 'travel') room.onTravel(player, +msg.to);
     else if (msg.t === 'build') room.onBuild(player, msg.b);
+    else if (msg.t === 'hall') room.onHall(player);
     else if (msg.t === 'unlock') room.onUnlock(player, +msg.cave);
     else if (msg.t === 'sell') room.onSell(player, +msg.id);
     else if (msg.t === 'buy') room.onBuy(player, +msg.s);

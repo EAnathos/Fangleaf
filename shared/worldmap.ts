@@ -12,7 +12,7 @@
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = forêt hors du couloir).
 
-import { CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, MARKET_OFFSET, PATH_LEN, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES } from './config.ts';
+import { CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, PATH_LEN, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -25,6 +25,7 @@ const LAKES_FROM = 4 * ZONE_LEN; // début de la zone des lacs
 const STAMP_R = 1300; // au-delà, forêt profonde : on ne calcule plus la distance au couloir
 const LANE = 230; // voie centrale jamais inondée
 const CAVE_GAP = 4000; // > VIEW_R + 2 × CAVE_RX + la demi-largeur de l'écran
+const VILLAGE_ARC = 1550; // abscisse du village le long du couloir
 
 export interface Pt {
   x: number;
@@ -45,6 +46,7 @@ export interface Ore {
   x: number;
   y: number;
   zone: number;
+  res: Resource; // filon d'or, rocher (pierre) ou bois mort
 }
 
 export interface Bush {
@@ -120,6 +122,8 @@ export class WorldMap {
   readonly forge: Pt;
   readonly den: Pt;
   readonly market: Pt;
+  readonly hall: Pt; // Maison commune
+  readonly gates: number[] = []; // portes : abscisse le long du couloir ([0] sortie du village, puis début de chaque zone)
   readonly tents: Pt[] = []; // tentes du camp de départ (décalage depuis son feu), à l'opposé du chemin
   readonly sites: Pt[] = []; // emplacements de camp (un au bout de chaque série de 4 zones)
   private siteArcs: number[] = []; // abscisse de chaque emplacement le long du couloir
@@ -145,13 +149,15 @@ export class WorldMap {
     this.stampCorridor();
 
     this.spawn = this.spineAt(450);
-    const village = (this.village = this.spineAt(1550));
+    const village = (this.village = this.spineAt(VILLAGE_ARC));
     this.gate = this.gateToward(this.spawn);
     const away = Math.atan2(this.spawn.y - this.gate.y, this.spawn.x - this.gate.x);
     for (const k of [-1, 1]) this.tents.push({ x: Math.cos(away + k * 1.1) * 100, y: Math.sin(away + k * 1.1) * 100 - 20 });
     this.forge = { x: village.x + FORGE_OFFSET.x, y: village.y + FORGE_OFFSET.y };
     this.den = { x: village.x + DEN_OFFSET.x, y: village.y + DEN_OFFSET.y };
     this.market = { x: village.x + MARKET_OFFSET.x, y: village.y + MARKET_OFFSET.y };
+    this.hall = { x: village.x + HALL_OFFSET.x, y: village.y + HALL_OFFSET.y };
+    for (const s of [VILLAGE_ARC + VILLAGE_R + 200, ...Array.from({ length: ZONES - 1 }, (_, k) => (k + 1) * ZONE_LEN)]) if (s < this.length - 300) this.gates.push(s);
     this.stones.push({ x: village.x + VILLAGE_STONE_OFFSET.x, y: village.y + VILLAGE_STONE_OFFSET.y });
     for (let s = 4 * ZONE_LEN; s <= this.length + 1; s += 4 * ZONE_LEN) {
       const at = Math.min(s, this.length) - 650, site = this.spineAt(at), from = this.spineAt(at - 300);
@@ -224,12 +230,13 @@ export class WorldMap {
       if (this.ores.some((o) => dist2(x, y, o.x, o.y) < 480 ** 2)) continue;
       if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 250 ** 2)) continue;
       if (this.pathDist(x, y) < 60) continue;
-      this.ores.push({ id: this.ores.length, x, y, zone: this.zoneAt(x, y) });
+      this.ores.push({ id: this.ores.length, x, y, zone: this.zoneAt(x, y), res: 'gold' });
     }
 
     this.buildDecor();
     this.buildSolids();
     this.buildBushes();
+    this.buildHarvest();
     // Eau profonde (pas une berge) par zone : là où peuvent apparaître les créatures aquatiques.
     for (let z = 0; z <= ZONES; z++) this.deepWater.push([]);
     for (let j = 2; j < N - 2; j += 2) {
@@ -450,6 +457,44 @@ export class WorldMap {
     }
   }
 
+  /**
+   * Bois mort et rochers à casser, à la suite des filons (hasard à part : le reste de la carte ne change pas).
+   * Quelques-uns entre le camp de départ et le village, pour construire avant même de passer la porte.
+   */
+  private buildHarvest() {
+    const rand = rng(this.seed ^ 0x5707e);
+    const free = (x: number, y: number) => {
+      for (let a = 0; a < 8; a++) if (this.blocked(x + Math.cos(a) * 36, y + Math.sin(a) * 36)) return false;
+      return !this.blocked(x, y);
+    };
+    for (const res of ['wood', 'stone'] as const) {
+      let early = 0, total = 0;
+      for (let tries = 0; tries < 8000 && total < 70; tries++) {
+        // les 4 premiers entre le camp et le village, les autres tout le long du couloir
+        const first = early < 4 && tries < 2000;
+        const s = first ? 650 + rand() * (VILLAGE_ARC - VILLAGE_R - 750) : 650 + rand() * (this.length - 900);
+        const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
+        const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 90);
+        const x = sx + n.x * off, y = sy + n.y * off;
+        if (!free(x, y) || this.inVillage(x, y, 150) || dist2(x, y, this.spawn.x, this.spawn.y) < 260 ** 2) continue;
+        if (this.sites.some((c) => dist2(x, y, c.x, c.y) < 350 ** 2) || this.pathDist(x, y) < 50) continue;
+        if (this.ores.some((o) => dist2(x, y, o.x, o.y) < (first ? 160 : 300) ** 2) || this.bushes.some((b) => dist2(x, y, b.x, b.y) < 70 ** 2)) continue;
+        if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 250 ** 2)) continue;
+        this.ores.push({ id: this.ores.length, x, y, zone: this.zoneAt(x, y), res });
+        this.solidDisc(x, y, 18 + this.zoneAt(x, y) * 2);
+        total++;
+        if (s < VILLAGE_ARC) early++;
+      }
+    }
+  }
+
+  /** Porte (index) que franchit en avançant le déplacement de a vers b, ou -1. */
+  gateCrossed(ax: number, ay: number, bx: number, by: number) {
+    if (this.caveAt(ax, ay) || this.caveAt(bx, by)) return -1;
+    const sa = this.arcAt(ax, ay), sb = this.arcAt(bx, by);
+    return sb > sa ? this.gates.findIndex((g) => sa <= g && sb > g) : -1;
+  }
+
   /** Taille d'un arbre ou d'un rocher (même hasard que le dessin). */
   decorSize(d: Decor) {
     return d.kind === 0 ? 26 + hash2(d.x | 0, d.y | 0, this.seed) * 16 : 12 + hash2(d.x | 0, d.y | 0, this.seed + 1) * 14;
@@ -504,7 +549,7 @@ export class WorldMap {
       if (!nearGate) this.solidDisc(v.x + Math.cos(a) * VILLAGE_R, v.y + Math.sin(a) * VILLAGE_R, 13);
     }
     // bâtiments (construits ou non, leur emplacement est clos) : hutte, marché, forge (et son enclume), tanière, feu de camp
-    for (const [hx, hy] of [[MARKET_OFFSET.x, MARKET_OFFSET.y], [185, 150]]) this.solidRect(v.x + hx - 52, v.y + hy - 6, v.x + hx + 52, v.y + hy + 40);
+    for (const [hx, hy] of [[MARKET_OFFSET.x, MARKET_OFFSET.y], [HALL_OFFSET.x, HALL_OFFSET.y]]) this.solidRect(v.x + hx - 52, v.y + hy - 6, v.x + hx + 52, v.y + hy + 40);
     this.solidRect(v.x + FORGE_OFFSET.x - 74, v.y + FORGE_OFFSET.y - 30, v.x + FORGE_OFFSET.x + 2, v.y + FORGE_OFFSET.y + 38);
     this.solidRect(v.x + FORGE_OFFSET.x + 10, v.y + FORGE_OFFSET.y + 12, v.x + FORGE_OFFSET.x + 54, v.y + FORGE_OFFSET.y + 38);
     for (const k of [-1, 0, 1]) this.solidDisc(v.x + DEN_OFFSET.x + k * 46, v.y + DEN_OFFSET.y - 6, 38);

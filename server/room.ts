@@ -5,7 +5,7 @@ import {
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
-  SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
+  SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
   armorMaxHp, armorReduction, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
@@ -112,6 +112,8 @@ export interface Player {
   weapon: number;
   armor: number;
   gold: number;
+  wood: number;
+  stone: number;
   essences: number[];
   userId: string | null; // compte Supabase, null = invité (tests uniquement)
   dirty: boolean; // progression à sauvegarder
@@ -154,6 +156,8 @@ export interface VillageState {
   camps: number[];
   buildings: BuildingId[];
   unlocked: number[];
+  hall: number; // niveau de la Maison commune
+  beaten: number[]; // géants (espèce) déjà vaincus au moins une fois
 }
 
 const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * classOf(p.cls).hp);
@@ -180,6 +184,8 @@ export class Room {
   readonly camps: number[]; // emplacements de camp établis (index dans map.sites)
   readonly buildings: BuildingId[]; // bâtiments construits au village
   readonly unlocked: number[]; // grottes débloquées (index dans map.caves)
+  hall: number; // niveau de la Maison commune
+  readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
   onVillage?: (v: VillageState) => void; // sauvegarde, appelée quand le village change (camp, bâtiment, grotte)
   founder: string | null = null; // compte qui a fondé le village (seul à pouvoir le supprimer)
   deleted = false; // supprimé : plus aucune sauvegarde
@@ -193,6 +199,8 @@ export class Room {
     this.camps = indexes(saved.camps, this.map.sites.length);
     this.unlocked = indexes(saved.unlocked, this.map.caves.length);
     this.buildings = BUILDING_IDS.filter((b) => saved.buildings?.includes(b));
+    this.hall = clamp(Math.floor(Number(saved.hall) || 0), 0, HALL_MAX);
+    this.beaten = indexes(saved.beaten, SPECIES.length).filter((s) => isBoss(s));
     this.oreHp = this.map.ores.map((o) => oreHp(o.zone));
     this.oreBack = this.map.ores.map(() => 0);
     this.bushBack = this.map.bushes.map(() => 0);
@@ -221,13 +229,15 @@ export class Room {
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, gold: 0, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, gold: 0, wood: 0, stone: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
     };
     const prof = account?.profile;
     if (prof) {
       p.gold = prof.gold;
+      p.wood = Math.max(0, Math.floor(prof.wood ?? 0));
+      p.stone = Math.max(0, Math.floor(prof.stone ?? 0));
       p.weapon = clamp(prof.weapon, 0, WEAPON_MAX);
       p.armor = clamp(prof.armor, 0, ARMOR_MAX);
       p.cls = CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as ClassId) : null;
@@ -294,13 +304,18 @@ export class Room {
       dx = (dx / d) * allowed;
       dy = (dy / d) * allowed;
     }
-    // Pas de traversée de l'eau : on glisse le long de la berge si possible.
+    // Pas de traversée de l'eau : on glisse le long de la berge si possible. Une porte fermée ne se franchit pas.
     const nx = p.x + dx, ny = p.y + dy; // les bords du monde et les grottes sont gérés par blocked()
-    if (!this.map.blocked(nx, ny)) {
+    const ok = (x: number, y: number) => {
+      if (this.map.blocked(x, y)) return false;
+      const g = this.map.gateCrossed(p.x, p.y, x, y);
+      return g < 0 || this.gateIsOpen(g);
+    };
+    if (ok(nx, ny)) {
       p.x = nx;
       p.y = ny;
-    } else if (!this.map.blocked(nx, p.y)) p.x = nx;
-    else if (!this.map.blocked(p.x, ny)) p.y = ny;
+    } else if (ok(nx, p.y)) p.x = nx;
+    else if (ok(p.x, ny)) p.y = ny;
     const fl = Math.hypot(fx, fy);
     if (fl > 0.01 && Number.isFinite(fl)) {
       p.fx = fx / fl;
@@ -319,7 +334,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, weapon: p.weapon, armor: p.armor, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen] };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, weapon: p.weapon, armor: p.armor, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen] };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -331,24 +346,44 @@ export class Room {
     return this.buildings.includes(b) && this.near(p, this.posOf(b));
   }
 
+  /** Assez d'or, de bois et de pierre ? Alors on paie (vrai), sinon rien ne change (faux). */
+  private pay(p: Player, c: Cost) {
+    if (p.gold < c.gold || p.wood < c.wood || p.stone < c.stone) return false;
+    p.gold -= c.gold;
+    p.wood -= c.wood;
+    p.stone -= c.stone;
+    p.dirty = true;
+    return true;
+  }
+
   private posOf(b: BuildingId) {
     return b === 'stone' ? this.map.stones[0] : this.map[b];
   }
 
   private saveVillage() {
-    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked] });
+    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, beaten: [...this.beaten] });
   }
 
-  /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous. */
+  /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
   onBuild(p: Player, b: BuildingId) {
     if (!BUILDING_IDS.includes(b) || this.buildings.includes(b) || !this.near(p, this.posOf(b))) return;
-    const cost = BUILDINGS[b].cost;
-    if (p.gold < cost) return;
-    p.gold -= cost;
-    p.dirty = true;
+    if (this.hall < BUILDINGS[b].hall || !this.pay(p, buildingCost(b))) return;
     this.buildings.push(b);
     this.saveVillage();
     this.events.push({ e: 'built', b, by: p.id });
+  }
+
+  /** Améliorer la Maison commune, devant elle : un niveau de plus pour tout le village (or, bois, pierre). */
+  onHall(p: Player) {
+    if (this.hall >= HALL_MAX || !this.near(p, this.map.hall) || !this.pay(p, HALL[this.hall])) return;
+    this.hall++;
+    this.saveVillage();
+    this.events.push({ e: 'hall', lvl: this.hall, by: p.id });
+  }
+
+  /** Porte k ouverte pour le village (Maison commune assez haute, géants de la zone vaincus). */
+  private gateIsOpen(k: number) {
+    return gateOpen(k, this.hall, this.beaten);
   }
 
   /** Débloquer une grotte pour tout le village, devant son entrée : 150 or × niveau de sa zone. */
@@ -581,6 +616,8 @@ export class Room {
     for (const s of p.awakening.keys()) p.awakening.set(s, 0); // éveils instantanés
     p.essences = p.essences.map((n) => n + 30);
     p.gold += 300;
+    p.wood += 100;
+    p.stone += 100;
     this.events.push({ e: 'info', text: `${p.name} triche (mode dev)` });
   }
 
@@ -899,7 +936,7 @@ export class Room {
     } else this.damage(t, dmg, p);
   }
 
-  /** Aucun monstre à portée : le dompteur pioche le filon d'or le plus proche. */
+  /** Aucun monstre à portée : le dompteur récolte le filon, le rocher ou le bois mort le plus proche. */
   private mine(p: Player) {
     const reach = PLAYER_R + PLAYER_RANGE + ORE_R;
     let best = -1, bd = reach * reach;
@@ -916,10 +953,17 @@ export class Room {
     this.events.push({ e: 'mine', by: p.id, id: best, done });
     if (!done) return;
     this.oreBack[best] = this.time + ORE_RESPAWN_S;
-    const gold = oreGold(o.zone);
-    p.gold += gold;
     p.dirty = true;
-    this.events.push({ e: 'gold', to: p.id, n: gold, x: o.x, y: o.y - 10 });
+    if (o.res === 'gold') {
+      const gold = oreGold(o.zone);
+      p.gold += gold;
+      this.events.push({ e: 'gold', to: p.id, n: gold, x: o.x, y: o.y - 10 });
+    }
+    // un filon donne aussi un peu de pierre ; rochers et bois mort donnent leur matière
+    const wood = o.res === 'wood' ? resYield(o.zone) : 0, stone = o.res === 'stone' ? resYield(o.zone) : o.res === 'gold' ? oreStone(o.zone) : 0;
+    p.wood += wood;
+    p.stone += stone;
+    this.events.push({ e: 'res', to: p.id, wood, stone, x: o.x, y: o.y - (o.res === 'gold' ? 30 : 10) });
   }
 
   // ───────────────────────── Attaques spéciales des mini-boss ─────────────────────────
@@ -1630,6 +1674,12 @@ export class Room {
         this.events.push({ e: 'die', x: m.x, y: m.y, s: m.s, alpha: false });
       }
       // Il ne s'apprivoise pas et revient après un délai.
+      if (!this.beaten.includes(u.s)) {
+        // première victoire du village sur ce géant : elle compte pour ouvrir la porte de la zone suivante
+        this.beaten.push(u.s);
+        this.saveVillage();
+        this.events.push({ e: 'beaten', s: u.s, by: creditId });
+      }
       const cave = this.caveBoss.indexOf(u.id);
       if (cave >= 0) {
         const at = this.map.freeNear(u.x, u.y);
@@ -1752,7 +1802,7 @@ export class Room {
   private broadcast() {
     const players: PlayerState[] = [...this.players.values()].map((p) => ({
       id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: p.fx, fy: p.fy,
-      hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, cls: p.cls, gold: p.gold,
+      hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone,
       essences: p.essences, saved: !!p.userId, dead: p.dead,
       respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
       revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),
@@ -1799,7 +1849,7 @@ export class Room {
           ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S))]
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
       }
-      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, caves, camps: this.camps, buildings: this.buildings, unlocked: this.unlocked, hazards, shots, ev: this.events });
+      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, caves, camps: this.camps, buildings: this.buildings, hall: this.hall, beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
     }
   }
 }

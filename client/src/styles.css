@@ -297,3 +297,28 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .danger-cta { background: var(--enemy); }
 .danger-cta:hover:not(:disabled) { background: #FF8A65; }
 .talk-actions .btn { height: 56px; }
+
+/* Bois et pierre (HUD, coûts). */
+.wood { color: #D2A06A; }
+.rock { color: #B9C2BC; }
+.cost-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.cost-list span { padding: 6px 12px; border-radius: 10px; background: var(--night); border: 2px solid var(--line); font-weight: 600; }
+.cost-list span.miss { border-color: var(--enemy); color: #FF9B78; }
+.cost-list span.ok { border-color: rgba(127, 203, 91, 0.6); }
+
+/* Maison commune. */
+.modal.hall { width: min(560px, calc(100vw - 32px)); border-color: var(--amber); }
+.modal.hall h2 { color: var(--amber); }
+.hall-levels { display: grid; gap: 6px; }
+.hall-level { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center; padding: 8px 12px; border-radius: 10px; background: var(--night); border: 2px solid var(--line); font-size: 14px; color: var(--text-2); }
+.hall-level b { font: 700 15px var(--display); color: var(--text); }
+.hall-level .tag { font-size: 12px; color: var(--muted); }
+.hall-level.done { border-color: rgba(127, 203, 91, 0.45); }
+.hall-level.done .tag { color: var(--hp); }
+.hall-level.next { border-color: var(--amber); }
+.hall-level.next .tag { color: var(--amber); }
+.hall-level.locked { opacity: 0.6; }
+.stone-row .tag.open { color: var(--hp); font-weight: 700; }
+.stone-row .tag.shut { color: #FF9B78; font-weight: 700; }
+.prompt.hall { border-color: var(--amber); color: var(--amber); }
+.modal.hall > * { flex-shrink: 0; }

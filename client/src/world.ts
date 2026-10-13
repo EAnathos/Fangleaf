@@ -1,7 +1,7 @@
 // Terrain procédural par morceaux (chunks) mis en cache, village et camp de départ pré-rendus.
 // Tout découle de la WorldMap partagée : zones, lacs, chemin du camp au village.
 
-import { BUILDINGS, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, MARKET_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
+import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
 import { MAP_CELL, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 
@@ -350,44 +350,192 @@ export class World {
       ctx.fill();
     }
 
-    // Huttes.
-    const hut = (x: number, y: number, roof: string) => {
-      ctx.fillStyle = 'rgba(8,14,12,0.35)';
-      ctx.fillRect(x - 50, y + 8, 110, 46);
-      ctx.fillStyle = '#5B3F2C';
-      ctx.fillRect(x - 52, y - 10, 104, 56);
-      ctx.fillStyle = '#3A2819';
-      ctx.fillRect(x - 10, y + 18, 20, 28);
-      ctx.fillStyle = roof;
-      ctx.beginPath();
-      ctx.moveTo(x - 64, y - 4);
-      ctx.lineTo(x, y - 56);
-      ctx.lineTo(x + 64, y - 4);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(16,24,26,0.25)';
-      ctx.lineWidth = 2;
-      for (let i = 1; i < 4; i++) {
-        ctx.beginPath();
-        ctx.moveTo(x - 64 + i * 16, y - 4 - i * 13);
-        ctx.lineTo(x + 64 - i * 16, y - 4 - i * 13);
-        ctx.stroke();
-      }
-    };
-    hut(185, 150, '#8A4B32');
-
     return c;
   }
 
+  /**
+   * Maison commune (coordonnées du village) : en ruine au niveau 0, puis de plus en plus belle.
+   * Un fanion par niveau sur le toit, une cheminée qui fume à partir du niveau 3.
+   */
+  drawHall(ctx: CanvasRenderingContext2D, lvl: number, t: number) {
+    const x = HALL_OFFSET.x, y = HALL_OFFSET.y;
+    ctx.fillStyle = 'rgba(8,14,12,0.35)';
+    ctx.fillRect(x - 50, y + 8, 110, 46);
+    ctx.fillStyle = lvl >= 4 ? '#6B4A33' : '#5B3F2C';
+    ctx.fillRect(x - 52, y - 10, 104, 56);
+    if (lvl >= 2) {
+      // colombages
+      ctx.strokeStyle = '#3A2819';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x - 50, y - 8, 100, 52);
+      ctx.beginPath();
+      ctx.moveTo(x - 50, y + 12);
+      ctx.lineTo(x + 50, y + 12);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#3A2819';
+    ctx.fillRect(x - 10, y + 18, 20, 28);
+    if (lvl >= 1) {
+      // fenêtres éclairées
+      ctx.fillStyle = '#F0B64A';
+      ctx.fillRect(x - 38, y + 18, 14, 12);
+      ctx.fillRect(x + 24, y + 18, 14, 12);
+    }
+    if (lvl >= 3) {
+      // cheminée et sa fumée
+      ctx.fillStyle = '#5E6763';
+      ctx.fillRect(x + 26, y - 50, 12, 30);
+      for (let i = 0; i < 3; i++) {
+        const k = (t * 0.35 + i / 3) % 1;
+        ctx.fillStyle = `rgba(200,205,200,${0.4 * (1 - k)})`;
+        ctx.beginPath();
+        ctx.arc(x + 32 + k * 14, y - 56 - k * 40, 5 + k * 8, 0, TAU);
+        ctx.fill();
+      }
+    }
+    const roof = ['#6B5A44', '#8A4B32', '#9C5236', '#A85A3A', '#3F6E8A', '#4F7FA0', '#B8863A'][Math.min(lvl, 6)];
+    ctx.fillStyle = roof;
+    ctx.beginPath();
+    ctx.moveTo(x - 64, y - 4);
+    ctx.lineTo(x, y - 56);
+    ctx.lineTo(x + 64, y - 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(16,24,26,0.25)';
+    ctx.lineWidth = 2;
+    for (let i = 1; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(x - 64 + i * 16, y - 4 - i * 13);
+      ctx.lineTo(x + 64 - i * 16, y - 4 - i * 13);
+      ctx.stroke();
+    }
+    if (lvl === 0) {
+      // toit éventré et planches en attente : il faut la remettre en état
+      ctx.fillStyle = '#2A1F17';
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y - 40);
+      ctx.lineTo(x + 26, y - 22);
+      ctx.lineTo(x + 8, y - 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#7A5A3A';
+      ctx.fillRect(x - 70, y + 40, 40, 6);
+      ctx.fillRect(x - 66, y + 47, 40, 6);
+    }
+    // un fanion par niveau le long du toit
+    for (let i = 0; i < lvl; i++) {
+      const fx = x - 48 + i * 19, fy = y - 8 - (1 - Math.abs(i * 19 - 48) / 64) * 46;
+      const wave = Math.sin(t * 3 + i) * 2;
+      ctx.fillStyle = '#5B3F2C';
+      ctx.fillRect(fx - 1, fy - 18, 2, 18);
+      ctx.fillStyle = i % 2 ? '#5CC8B8' : '#F0B64A';
+      ctx.beginPath();
+      ctx.moveTo(fx + 1, fy - 18);
+      ctx.lineTo(fx + 12, fy - 14 + wave);
+      ctx.lineTo(fx + 1, fy - 10);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.font = '700 15px "Pixelify Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+    const label = lvl ? `Maison commune · niv. ${lvl}` : 'Maison commune · en ruine';
+    ctx.strokeText(label, x, y - 74);
+    ctx.fillStyle = '#F0B64A';
+    ctx.fillText(label, x, y - 74);
+  }
+
+  /**
+   * Porte k : une palissade en travers du couloir, en pièces à trier en profondeur avec les créatures.
+   * Fermée, pieux dressés et portail clos ; ouverte, les pieux sont couchés et le portail grand ouvert.
+   */
+  gateParts(ctx: CanvasRenderingContext2D, k: number, open: boolean): { y: number; draw: () => void }[] {
+    const { map } = this;
+    const s = map.gates[k], c = map.spineAt(s), n = map.normalAt(s), half = map.halfWidth(s) + 180;
+    const tx = n.y, ty = -n.x; // le long du couloir
+    const parts: { y: number; draw: () => void }[] = [];
+    for (let o = -half; o <= half; o += 22) {
+      if (Math.abs(o) < 46) continue; // le portail, au milieu
+      const px = c.x + n.x * o, py = c.y + n.y * o;
+      if (map.isWater(px, py) || map.isForest(px, py)) continue;
+      const h = 30 + hash2(Math.round(o), k, this.seed) * 10;
+      parts.push({ y: py, draw: () => {
+        if (open) {
+          // pieu couché au sol
+          ctx.strokeStyle = '#6B4A33';
+          ctx.lineWidth = 7;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(px - tx * 4, py - ty * 4);
+          ctx.lineTo(px + tx * (h - 6), py + ty * (h - 6) + 4);
+          ctx.stroke();
+          return;
+        }
+        ctx.fillStyle = 'rgba(8,14,12,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(px + 3, py + 4, 9, 4, 0, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = '#6B4A33';
+        ctx.fillRect(px - 5, py - h, 10, h);
+        ctx.fillStyle = '#8A6A45';
+        ctx.beginPath();
+        ctx.moveTo(px - 5, py - h);
+        ctx.lineTo(px, py - h - 8);
+        ctx.lineTo(px + 5, py - h);
+        ctx.closePath();
+        ctx.fill();
+      } });
+    }
+    // portail : deux battants, fermés ou rabattus
+    for (const side of [-1, 1]) {
+      const hx = c.x + n.x * side * 46, hy = c.y + n.y * side * 46;
+      parts.push({ y: Math.max(hy, c.y), draw: () => {
+        ctx.fillStyle = '#4A3424';
+        ctx.fillRect(hx - 6, hy - 52, 12, 56);
+        const ex = open ? hx + tx * 40 : c.x, ey = open ? hy + ty * 40 : c.y;
+        ctx.fillStyle = '#7A5A3A';
+        ctx.beginPath();
+        ctx.moveTo(hx, hy - 44);
+        ctx.lineTo(ex, ey - 44);
+        ctx.lineTo(ex, ey - 4);
+        ctx.lineTo(hx, hy - 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#3A2819';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } });
+    }
+    return parts;
+  }
+
+  /** Panneau d'une porte, au-dessus de tout : son nom, et ce qui manque pour l'ouvrir. */
+  drawGateLabel(ctx: CanvasRenderingContext2D, k: number, open: boolean, label: string, sub: string) {
+    const c = this.map.spineAt(this.map.gates[k]);
+    ctx.font = '700 15px "Pixelify Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+    ctx.strokeText(label, c.x, c.y - 74);
+    ctx.fillStyle = open ? '#7FCB5B' : '#FF9B78';
+    ctx.fillText(label, c.x, c.y - 74);
+    if (!sub) return;
+    ctx.font = '600 13px Outfit, sans-serif';
+    ctx.strokeText(sub, c.x, c.y - 56);
+    ctx.fillStyle = '#EEE7D7';
+    ctx.fillText(sub, c.x, c.y - 56);
+  }
+
   /** Bâtiment construit, ou son chantier (piquets, corde et prix) : dessiné en coordonnées du village (ctx centré dessus). */
-  drawBuilding(ctx: CanvasRenderingContext2D, b: Exclude<BuildingId, 'stone'>, built: boolean) {
-    if (!built) return this.drawPlot(ctx, b);
+  drawBuilding(ctx: CanvasRenderingContext2D, b: Exclude<BuildingId, 'stone'>, built: boolean, hall: number) {
+    if (!built) return this.drawPlot(ctx, b, hall);
     if (b === 'forge') this.drawForge(ctx);
     else if (b === 'den') this.drawDen(ctx);
     else this.drawMarket(ctx);
   }
 
-  private drawPlot(ctx: CanvasRenderingContext2D, b: Exclude<BuildingId, 'stone'>) {
+  private drawPlot(ctx: CanvasRenderingContext2D, b: Exclude<BuildingId, 'stone'>, hall: number) {
     const { x0, y0, x1, y1 } = PLOTS[b];
     ctx.fillStyle = 'rgba(110,97,66,0.55)'; // terre retournée
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
@@ -409,13 +557,14 @@ export class World {
     ctx.beginPath();
     ctx.ellipse(x1 - 26, y1 - 16, 10, 7, 0, 0, TAU);
     ctx.fill();
-    const label = `${BUILDINGS[b].name} · ${BUILDINGS[b].cost} or`;
+    const need = BUILDINGS[b].hall;
+    const label = `${BUILDINGS[b].name} · ${hall < need ? `Maison commune niv. ${need}` : costText(buildingCost(b))}`;
     ctx.font = '700 15px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(16,24,26,0.85)';
     ctx.strokeText(label, (x0 + x1) / 2, y0 - 22);
-    ctx.fillStyle = '#C9CFC2';
+    ctx.fillStyle = hall < need ? '#A9B3A6' : '#C9CFC2';
     ctx.fillText(label, (x0 + x1) / 2, y0 - 22);
   }
 

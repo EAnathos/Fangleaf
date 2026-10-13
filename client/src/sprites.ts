@@ -1,6 +1,6 @@
 // Sprites procéduraux (Canvas 2D) : aucune image à charger.
 
-import { SPECIES } from '../../shared/config.ts';
+import { SPECIES, type Resource } from '../../shared/config.ts';
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -1089,8 +1089,9 @@ export function drawBush(ctx: Ctx, x: number, y: number, fruit: boolean, seed: n
 
 // ───────────────────────── Filons d'or ─────────────────────────
 
-/** Filon d'or : rocher veiné d'or qui scintille ; épuisé, il ne reste que des éclats. */
-export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: number, t: number, seed: number) {
+/** Filon d'or : rocher veiné d'or qui scintille ; épuisé, il ne reste que des éclats. Bois mort et rochers : voir plus bas. */
+export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: number, t: number, seed: number, res: Resource = 'gold') {
+  if (res === 'wood') return drawDeadwood(ctx, x, y, zone, hpPct, t, seed);
   const r = 18 + zone * 3;
   shadow(ctx, x, y, r);
   if (hpPct <= 0) {
@@ -1124,6 +1125,27 @@ export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: num
   ctx.lineTo(-r * 0.1, -r * 0.2);
   ctx.closePath();
   ctx.fill();
+  if (res === 'stone') {
+    // rocher à casser : fissures et éclats clairs, pas d'or
+    ctx.strokeStyle = 'rgba(16,24,26,0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.5, r * 0.3);
+    ctx.lineTo(-r * 0.1, 0);
+    ctx.lineTo(-r * 0.2, -r * 0.3);
+    ctx.moveTo(-r * 0.1, 0);
+    ctx.lineTo(r * 0.45, r * 0.1);
+    ctx.stroke();
+    ctx.fillStyle = '#A9B0AB';
+    for (const [nx, ny, nr] of [[0.35, -0.25, 0.12], [-0.45, -0.05, 0.1], [0.15, 0.3, 0.09]] as const) {
+      ctx.beginPath();
+      ctx.arc(nx * r, ny * r, nr * r, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+    if (hpPct < 100) hpBar(ctx, x, y - r - 10, 28, hpPct, '#B9C2BC');
+    return;
+  }
   // veines et pépites d'or
   ctx.strokeStyle = '#C9922F';
   ctx.lineWidth = 2;
@@ -1221,6 +1243,56 @@ export function drawChest(ctx: Ctx, x: number, y: number, lid: number, t: number
     ctx.fillRect(-1, -h, 2, 4);
   }
   ctx.restore();
+}
+
+/** Bois mort : tronc couché et sa souche ; épuisé, il ne reste que des copeaux. */
+function drawDeadwood(ctx: Ctx, x: number, y: number, zone: number, hpPct: number, t: number, seed: number) {
+  const r = 18 + zone * 3;
+  ctx.fillStyle = 'rgba(8,14,12,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x + 3, y + 6, r * 1.3, r * 0.4, 0, 0, TAU);
+  ctx.fill();
+  if (hpPct <= 0) {
+    ctx.fillStyle = '#B88A5A';
+    for (const [dx, dy] of [[-8, 2], [5, 5], [12, -1], [-2, -3]]) ctx.fillRect(x + dx, y + dy, 5, 2);
+    return;
+  }
+  const shake = hpPct < 100 ? Math.sin(t * 40 + seed) * 0.6 : 0;
+  ctx.save();
+  ctx.translate(x + shake, y);
+  ctx.rotate(((seed % 7) - 3) * 0.05);
+  // tronc couché
+  ctx.fillStyle = '#6B4A33';
+  ctx.beginPath();
+  ctx.roundRect(-r * 1.2, -r * 0.45, r * 2.1, r * 0.7, r * 0.3);
+  ctx.fill();
+  ink(ctx, r);
+  ctx.strokeStyle = 'rgba(16,24,26,0.35)';
+  ctx.lineWidth = 1.5;
+  for (const k of [-0.7, -0.2, 0.3]) {
+    ctx.beginPath();
+    ctx.moveTo(k * r, -r * 0.4);
+    ctx.lineTo((k + 0.25) * r, r * 0.2);
+    ctx.stroke();
+  }
+  // bout coupé : cernes du bois
+  ctx.fillStyle = '#C9A27A';
+  ctx.beginPath();
+  ctx.ellipse(r * 0.9, -r * 0.1, r * 0.22, r * 0.35, 0, 0, TAU);
+  ctx.fill();
+  ink(ctx, r * 0.6);
+  ctx.strokeStyle = '#8B6A47';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(r * 0.9, -r * 0.1, r * 0.1, r * 0.17, 0, 0, TAU);
+  ctx.stroke();
+  // mousse
+  ctx.fillStyle = '#5E8F55';
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.5, -r * 0.42, r * 0.35, r * 0.12, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  if (hpPct < 100) hpBar(ctx, x, y - r - 6, 28, hpPct, '#D2A06A');
 }
 
 // ───────────────────────── Attaques spéciales au sol ─────────────────────────

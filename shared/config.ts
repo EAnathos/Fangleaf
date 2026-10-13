@@ -14,13 +14,46 @@ export const DEN_OFFSET = { x: 170, y: -150 };
 export const MARKET_OFFSET = { x: -180, y: -160 };
 export const BUILDING_REACH = 110;
 // Bâtiments du village : construits par n'importe quel membre contre de l'or, une fois pour tout le village.
+// Il faut aussi du bois et de la pierre (récoltés sur la carte), et parfois une Maison commune assez développée.
 export type BuildingId = 'forge' | 'den' | 'market' | 'stone';
-export const BUILDINGS: Record<BuildingId, { name: string; cost: number; desc: string }> = {
-  forge: { name: 'Forge', cost: 10, desc: 'Choisis ta classe, améliore ton arme et ton armure.' },
-  den: { name: 'Tanière', cost: 20, desc: 'Éveille, renforce et range tes Alphas. Bestiaire des espèces croisées.' },
-  market: { name: 'Marché', cost: 50, desc: 'Vends les monstres de ta meute, achète des monstres des espèces déjà croisées.' },
-  stone: { name: 'Pierre de passage', cost: 200, desc: 'Voyage instantané entre le village et les camps établis.' },
+export interface Cost {
+  gold: number;
+  wood: number;
+  stone: number;
+}
+export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: number; stone: number; hall: number; desc: string }> = {
+  forge: { name: 'Forge', cost: 10, wood: 5, stone: 0, hall: 0, desc: 'Choisis ta classe, améliore ton arme et ton armure.' },
+  den: { name: 'Tanière', cost: 20, wood: 20, stone: 15, hall: 2, desc: 'Éveille, renforce et range tes Alphas. Bestiaire des espèces croisées.' },
+  market: { name: 'Marché', cost: 50, wood: 25, stone: 10, hall: 1, desc: 'Vends les monstres de ta meute, achète des monstres des espèces déjà croisées.' },
+  stone: { name: 'Pierre de passage', cost: 200, wood: 10, stone: 40, hall: 3, desc: 'Voyage instantané entre le village et les camps établis.' },
 };
+/** « 20 or · 15 bois · 10 pierre » (les montants nuls sont omis). */
+export const costText = (c: Cost) => [c.gold && `${c.gold} or`, c.wood && `${c.wood} bois`, c.stone && `${c.stone} pierre`].filter(Boolean).join(' · ');
+export const buildingCost = (b: BuildingId): Cost => ({ gold: BUILDINGS[b].cost, wood: BUILDINGS[b].wood, stone: BUILDINGS[b].stone });
+
+// Maison commune : on l'améliore (or, bois, pierre) pour débloquer le reste du village et du monde.
+// HALL[n] : passage au niveau n + 1. La porte de la zone z + 1 demande aussi d'avoir vaincu les géants de la zone z.
+export const HALL_OFFSET = { x: 185, y: 150 };
+export const HALL: (Cost & { unlock: string })[] = [
+  { gold: 20, wood: 15, stone: 10, unlock: 'Porte du village : la suite de la Lisière (zone 1) · Marché' },
+  { gold: 60, wood: 30, stone: 25, unlock: 'Tanière' },
+  { gold: 200, wood: 60, stone: 50, unlock: 'Porte des Bois profonds (zone 2) · Pierre de passage' },
+  { gold: 500, wood: 120, stone: 100, unlock: 'Porte des Landes (zone 3)' },
+  { gold: 1200, wood: 200, stone: 180, unlock: 'Porte des Ruines moussues (zone 4)' },
+  { gold: 2500, wood: 300, stone: 300, unlock: 'Porte des Lacs brumeux (zone 5)' },
+];
+export const HALL_MAX = HALL.length;
+/** Géants d'une zone (index d'espèce) : il faut tous les vaincre pour ouvrir la porte de la zone suivante. */
+export const zoneBosses = (z: number) => SPECIES.map((sp, i) => (sp.boss && sp.zone === z ? i : -1)).filter((i) => i >= 0);
+/** Niveau de Maison commune pour ouvrir la porte k (0 : sortie du village vers la zone 1 ; k ≥ 1 : vers la zone k + 1). */
+export const gateHall = (k: number) => (k === 0 ? 1 : k + 2);
+/** Porte k ouverte : Maison commune au niveau requis et, après la première, géants de la zone k tous vaincus. */
+export const gateOpen = (k: number, hall: number, beaten: number[]) => hall >= gateHall(k) && (k === 0 || zoneBosses(k).every((b) => beaten.includes(b)));
+
+// Récolte : filons d'or (or et un peu de pierre), rochers (pierre) et bois mort (bois).
+export type Resource = 'gold' | 'wood' | 'stone';
+export const resYield = (zone: number) => 4 + 2 * zone; // bois ou pierre d'un tas épuisé
+export const oreStone = (zone: number) => 1 + zone; // pierre en plus de l'or d'un filon
 export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[];
 // Marché : prix d'un monstre ordinaire (apprivoisé) selon l'or qu'il rapporte à la chasse.
 export const monsterBuyPrice = (species: number) => SPECIES[species].gold * 12;
