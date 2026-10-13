@@ -1,7 +1,7 @@
 // Terrain procédural par morceaux (chunks) mis en cache, village et camp de départ pré-rendus.
 // Tout découle de la WorldMap partagée : zones, lacs, chemin du camp au village.
 
-import { CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, SPECIES, VILLAGE_R, campName } from '../../shared/config.ts';
+import { BUILDINGS, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, MARKET_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
 import { MAP_CELL, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 
@@ -17,6 +17,13 @@ const PATH = [110, 97, 66];
 // Style commun à tous les chemins de terre : liseré sombre, terre, trace claire au centre. [r, g, b, alpha, largeur]
 const PATH_PASSES: [number, number, number, number, number][] = [[60, 50, 32, 0.35, 50], [110, 97, 66, 1, 40], [140, 124, 88, 0.35, 14]];
 const rgba = (p: number[], a = p[3]) => `rgba(${p[0]},${p[1]},${p[2]},${a})`;
+
+// Emprise au sol de chaque bâtiment (décalage depuis le centre du village), pour dessiner son chantier.
+const PLOTS: Record<Exclude<BuildingId, 'stone'>, { x0: number; y0: number; x1: number; y1: number }> = {
+  forge: { x0: FORGE_OFFSET.x - 80, y0: FORGE_OFFSET.y - 40, x1: FORGE_OFFSET.x + 62, y1: FORGE_OFFSET.y + 44 },
+  den: { x0: DEN_OFFSET.x - 84, y0: DEN_OFFSET.y - 50, x1: DEN_OFFSET.x + 84, y1: DEN_OFFSET.y + 34 },
+  market: { x0: MARKET_OFFSET.x - 58, y0: MARKET_OFFSET.y - 12, x1: MARKET_OFFSET.x + 58, y1: MARKET_OFFSET.y + 46 },
+};
 
 const rgb = (c: number[], k: number) => `rgb(${(c[0] * k) | 0},${(c[1] * k) | 0},${(c[2] * k) | 0})`;
 
@@ -350,10 +357,53 @@ export class World {
         ctx.stroke();
       }
     };
-    hut(-180, -160, '#8A4B32');
     hut(185, 150, '#8A4B32');
 
-    // Tanière des Alphas : butte de pierre, entrée sombre, bannière violette.
+    return c;
+  }
+
+  /** Bâtiment construit, ou son chantier (piquets, corde et prix) : dessiné en coordonnées du village (ctx centré dessus). */
+  drawBuilding(ctx: CanvasRenderingContext2D, b: Exclude<BuildingId, 'stone'>, built: boolean) {
+    if (!built) return this.drawPlot(ctx, b);
+    if (b === 'forge') this.drawForge(ctx);
+    else if (b === 'den') this.drawDen(ctx);
+    else this.drawMarket(ctx);
+  }
+
+  private drawPlot(ctx: CanvasRenderingContext2D, b: Exclude<BuildingId, 'stone'>) {
+    const { x0, y0, x1, y1 } = PLOTS[b];
+    ctx.fillStyle = 'rgba(110,97,66,0.55)'; // terre retournée
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    // corde tendue entre les piquets
+    ctx.strokeStyle = '#C9B48A';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+    for (const [px, py] of [[x0, y0], [x1, y0], [x0, y1], [x1, y1], [(x0 + x1) / 2, y0], [(x0 + x1) / 2, y1]]) {
+      ctx.fillStyle = '#5B3F2C';
+      ctx.fillRect(px - 2, py - 14, 4, 18);
+      ctx.fillStyle = '#E8DCC0';
+      ctx.fillRect(px - 2, py - 14, 4, 4);
+    }
+    // quelques planches et pierres en attente
+    ctx.fillStyle = '#7A5A3A';
+    ctx.fillRect(x0 + 14, y1 - 22, 46, 7);
+    ctx.fillRect(x0 + 18, y1 - 14, 46, 7);
+    ctx.fillStyle = '#6E726C';
+    ctx.beginPath();
+    ctx.ellipse(x1 - 26, y1 - 16, 10, 7, 0, 0, TAU);
+    ctx.fill();
+    const label = `${BUILDINGS[b].name} · ${BUILDINGS[b].cost} or`;
+    ctx.font = '700 15px "Pixelify Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+    ctx.strokeText(label, (x0 + x1) / 2, y0 - 22);
+    ctx.fillStyle = '#C9CFC2';
+    ctx.fillText(label, (x0 + x1) / 2, y0 - 22);
+  }
+
+  /** Tanière : butte de pierre, entrée sombre, bannière violette. */
+  private drawDen(ctx: CanvasRenderingContext2D) {
     const dx = DEN_OFFSET.x, dy = DEN_OFFSET.y;
     ctx.fillStyle = 'rgba(8,14,12,0.3)';
     ctx.beginPath();
@@ -394,8 +444,9 @@ export class World {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#B48CFF';
     ctx.fillText('Tanière', dx, dy - 64);
+  }
 
-    // Forge.
+  private drawForge(ctx: CanvasRenderingContext2D) {
     const fx = FORGE_OFFSET.x, fy = FORGE_OFFSET.y;
     ctx.fillStyle = 'rgba(8,14,12,0.25)';
     ctx.fillRect(fx - 66, fy + 40, 76, 10);
@@ -422,8 +473,58 @@ export class World {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#F0B64A';
     ctx.fillText('Forge', fx - 36, fy - 50);
+  }
 
-    return c;
+  /** Marché : étal sous un auvent rayé, caisses et cage d'un monstre à vendre. */
+  private drawMarket(ctx: CanvasRenderingContext2D) {
+    const mx = MARKET_OFFSET.x, my = MARKET_OFFSET.y;
+    ctx.fillStyle = 'rgba(8,14,12,0.3)';
+    ctx.fillRect(mx - 52, my + 34, 112, 14);
+    // poteaux et comptoir
+    ctx.fillStyle = '#5B3F2C';
+    ctx.fillRect(mx - 52, my - 40, 6, 80);
+    ctx.fillRect(mx + 46, my - 40, 6, 80);
+    ctx.fillStyle = '#7A5A3A';
+    ctx.fillRect(mx - 54, my + 8, 108, 30);
+    ctx.fillStyle = '#9C7A52';
+    ctx.fillRect(mx - 54, my + 8, 108, 6);
+    // auvent rayé
+    for (let k = 0; k < 6; k++) {
+      ctx.fillStyle = k % 2 ? '#EEE7D7' : '#5CC8B8';
+      ctx.beginPath();
+      ctx.moveTo(mx - 62 + k * 21, my - 34);
+      ctx.lineTo(mx - 41 + k * 21, my - 34);
+      ctx.lineTo(mx - 41 + k * 21, my - 18);
+      ctx.quadraticCurveTo(mx - 51.5 + k * 21, my - 10, mx - 62 + k * 21, my - 18);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = '#3F8F84';
+    ctx.fillRect(mx - 62, my - 40, 126, 7);
+    // marchandises : un panier d'essences et une petite cage
+    ctx.fillStyle = '#B48CFF';
+    for (const [ox, oy] of [[-34, 2], [-26, -1], [-18, 3]]) {
+      ctx.beginPath();
+      ctx.arc(mx + ox, my + oy, 4, 0, TAU);
+      ctx.fill();
+    }
+    ctx.strokeStyle = '#3A2819';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(mx + 8, my - 12, 30, 22);
+    for (let k = 1; k < 4; k++) {
+      ctx.beginPath();
+      ctx.moveTo(mx + 8 + k * 7.5, my - 12);
+      ctx.lineTo(mx + 8 + k * 7.5, my + 10);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#7FCB5B';
+    ctx.beginPath();
+    ctx.ellipse(mx + 23, my + 4, 8, 6, 0, 0, TAU);
+    ctx.fill();
+    ctx.font = '700 16px "Pixelify Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#5CC8B8';
+    ctx.fillText('Marché', mx, my - 50);
   }
 
   /** Camp de départ : clairière, tentes, cercle de pierres et panneau qui indique le village. */
@@ -726,7 +827,7 @@ export class World {
   }
 
   /** Pierre de passage : un menhir gravé, dont la rune luit quand elle est reliée. */
-  drawStone(ctx: CanvasRenderingContext2D, x: number, y: number, active: boolean, t: number) {
+  drawStone(ctx: CanvasRenderingContext2D, x: number, y: number, active: boolean, t: number, label?: string) {
     ctx.fillStyle = 'rgba(8,14,12,0.35)';
     ctx.beginPath();
     ctx.ellipse(x + 4, y + 6, 24, 8, 0, 0, TAU);
@@ -770,6 +871,14 @@ export class World {
     ctx.moveTo(x - 6, y - 14);
     ctx.lineTo(x + 6, y - 14);
     ctx.stroke();
+    if (!label) return;
+    ctx.font = '700 15px "Pixelify Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+    ctx.strokeText(label, x, y - 78);
+    ctx.fillStyle = '#C9CFC2';
+    ctx.fillText(label, x, y - 78);
   }
 
   drawCampfire(ctx: CanvasRenderingContext2D, t: number) {

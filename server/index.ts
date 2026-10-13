@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { TICK_HZ } from '../shared/config.ts';
 import type { ClientMsg, ServerMsg } from '../shared/protocol.ts';
-import { createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, loadProgress, persistenceEnabled, saveCamps, saveProgress, verifyToken, type Profile } from './persist.ts';
+import { createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
 import { makeCode, Room, type Player } from './room.ts';
 
 try {
@@ -108,7 +108,7 @@ wss.on('connection', (ws: WebSocket) => {
       else {
         const saved = await findVillage(code);
         if (saved === null) return send({ t: 'error', msg: `Aucun village avec le code ${code || '…'}.` });
-        r = rooms.get(code) ?? Object.assign(new Room(code, saved.seed, saved.camps), { founder: saved.founder }); // un autre joueur a pu le rouvrir pendant l'attente
+        r = rooms.get(code) ?? Object.assign(new Room(code, saved.seed, saved), { founder: saved.founder }); // un autre joueur a pu le rouvrir pendant l'attente
       }
       if (r.full) return send({ t: 'error', msg: 'Ce village est complet (3 dompteurs max).' });
     }
@@ -118,7 +118,7 @@ wss.on('connection', (ws: WebSocket) => {
     if (ws.readyState !== ws.OPEN) return;
     if (user && activeUsers.has(user.userId)) return send({ t: 'error', msg: 'Ce compte est déjà en jeu.' });
     rooms.set(r.code, r);
-    r.onCamps ??= (camps) => void saveCamps(r.code, camps);
+    r.onVillage ??= (v) => void saveVillage(r.code, v);
     room = r;
     if (user) {
       activeUsers.add(user.userId);
@@ -162,6 +162,10 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'cave') room.onCave(player, +msg.id, !!msg.enter);
     else if (msg.t === 'establish') room.onEstablish(player, +msg.site);
     else if (msg.t === 'travel') room.onTravel(player, +msg.to);
+    else if (msg.t === 'build') room.onBuild(player, msg.b);
+    else if (msg.t === 'unlock') room.onUnlock(player, +msg.cave);
+    else if (msg.t === 'sell') room.onSell(player, +msg.id);
+    else if (msg.t === 'buy') room.onBuy(player, +msg.s);
     else if (msg.t === 'legend') room.onLegend(player, +msg.s);
     else if (msg.t === 'class') room.onClass(player, msg.cls);
     else if (msg.t === 'reset') {

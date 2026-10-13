@@ -1,6 +1,6 @@
 // Messages échangés sur le WebSocket (JSON).
 
-import type { ClassId } from './config.ts';
+import type { BuildingId, ClassId } from './config.ts';
 
 export type ClientMsg =
   | { t: 'create'; name: string; token?: string } // token : session Supabase (optionnel)
@@ -16,6 +16,10 @@ export type ClientMsg =
   | { t: 'cave'; id: number; enter: boolean } // entrer dans une grotte / en sortir
   | { t: 'establish'; site: number } // établir le camp de cet emplacement (pour tout le village)
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, sinon index du camp
+  | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
+  | { t: 'unlock'; cave: number } // débloquer une grotte (pour tout le village)
+  | { t: 'sell'; id: number } // Marché : vendre un monstre ordinaire de sa meute
+  | { t: 'buy'; s: number } // Marché : acheter un monstre d'une espèce déjà croisée
   | { t: 'reset' } // fondateur : supprimer le village ; autre membre : effacer sa progression ici
   | { t: 'cheat' } // dev uniquement : +300 or, +30 essences
   | { t: 'ping'; ts: number };
@@ -96,6 +100,9 @@ export type GameEvent =
   | { e: 'seen'; to: number; s: number } // nouvelle espèce croisée : elle entre au bestiaire
   | { e: 'charge'; id: number } // un tireur charge son tir (il est immobile pendant windup)
   | { e: 'camp'; site: number; by: number } // un camp vient d'être établi
+  | { e: 'built'; b: BuildingId; by: number } // un bâtiment du village vient d'être construit
+  | { e: 'unlock'; cave: number; by: number } // une grotte vient d'être débloquée
+  | { e: 'trade'; to: number; s: number; gold: number; sold: boolean } // Marché : monstre vendu ou acheté
   | { e: 'travel'; id: number; x: number; y: number; tx: number; ty: number } // voyage par Pierre de passage
   | { e: 'info'; text: string };
 
@@ -107,6 +114,8 @@ export interface Snapshot {
   ores: [number, number][]; // filons proches : [id, pv %] (0 = épuisé)
   caves: number[]; // par grotte : secondes avant le retour du mini-boss (0 = présent)
   camps: number[]; // emplacements de camp établis par le village
+  buildings: BuildingId[]; // bâtiments construits au village
+  unlocked: number[]; // grottes débloquées par le village
   hazards: HazardTuple[]; // attaques spéciales visibles
   shots: ShotTuple[]; // projectiles des tireurs (esquivables)
   ev: GameEvent[];

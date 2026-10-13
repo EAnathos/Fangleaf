@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, ARC_FLIGHT_S, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, ARC_FLIGHT_S, BUILDINGS, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp } from '../../shared/math.ts';
 import type { GameEvent, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
 import { UNIT_FLAG_ALPHA, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -50,6 +50,10 @@ export class Game {
     this.hud.onClass = (cls) => net.send({ t: 'class', cls });
     this.hud.onTravel = (to) => net.send({ t: 'travel', to });
     this.hud.onEstablish = (site) => net.send({ t: 'establish', site });
+    this.hud.onBuild = (b) => net.send({ t: 'build', b });
+    this.hud.onUnlock = (cave) => net.send({ t: 'unlock', cave });
+    this.hud.onSell = (id) => net.send({ t: 'sell', id });
+    this.hud.onBuy = (s) => net.send({ t: 'buy', s });
     this.hud.onReset = () => net.send({ t: 'reset' });
     this.hud.onQuit = () => {
       net.close(); // le serveur sauvegarde la progression à la déconnexion
@@ -60,7 +64,7 @@ export class Game {
     this.hud.onAlphaEquip = (s, equip) => net.send({ t: 'alphaEquip', s, equip });
     this.hud.onAlphaCreate = (s) => net.send({ t: 'alphaCreate', s });
     this.hud.toast('ZQSD / flèches ou glisser pour bouger · attaque auto · E près d\'un bâtiment');
-    if (!villageFound) this.hud.toast('Suis le chemin de terre jusqu\'au village (étoile dorée sur la carte · M).');
+    if (!villageFound) this.hud.toast('Suis le chemin de terre jusqu\'au village (étoile dorée : clique sur la minicarte).');
     initInput(canvas, (code, key) => this.onKey(code, key));
     addEventListener('resize', () => this.resize());
     this.resize();
@@ -82,12 +86,12 @@ export class Game {
   private onKey(code: string, key: string) {
     if (key === 'e') {
       const st = this.self();
-      const b = buildingNear(this.map, this.me.x, this.me.y, this.hud.caves, this.hud.camps);
+      const b = buildingNear(this.map, this.me.x, this.me.y, this.hud);
       if (this.hud.panel) this.hud.setPanel(null);
       else if (st && !st.dead && b?.panel) this.hud.setPanel(b.panel);
       else if (st && !st.dead && b?.cave) this.net.send({ t: 'cave', id: b.cave.id, enter: b.cave.enter });
     } else if (key === 'Escape') {
-      // Échap ferme d'abord ce qui est ouvert (carte, forge, tanière, confirmation) ; sinon, propose de revenir au lobby.
+      // Échap ferme d'abord ce qui est ouvert (carte, forge, Tanière, confirmation) ; sinon, propose de revenir au lobby.
       this.hud.setPanel(this.hud.panel ? null : 'quit');
     }
     else if (key === 'm') this.hud.setPanel(this.hud.panel === 'map' ? null : 'map');
@@ -128,7 +132,7 @@ export class Game {
     const first = this.area === '';
     this.area = area;
     if (area === 'camp') this.hud.banner('Camp de départ', first ? 'Le village t\'attend au bout du chemin' : 'De retour au camp');
-    else if (area === 'village') this.hud.banner('Village', 'Feu de camp · Forge · Tanière des Alphas · Pierre de passage');
+    else if (area === 'village') this.hud.banner('Village', 'Feu de camp · Forge · Tanière · Marché · Pierre de passage');
     else if (area.startsWith('site')) {
       if (area.endsWith('+')) this.hud.banner(campName(site), 'Feu de camp · réapparition · Pierre de passage');
       else this.hud.banner('Emplacement de camp', 'Établis-le pour tout le village (E) : soins, réapparition, voyage');
@@ -325,6 +329,24 @@ export class Game {
         this.area = ''; // relance l'annonce du lieu
         break;
       }
+      case 'built': {
+        const pos = e.b === 'stone' ? this.map.stones[0] : this.map[e.b];
+        this.fx.ring(pos.x, pos.y, '#F0B64A', 20, 140, 1.2);
+        this.fx.burst(pos.x, pos.y, '#F0B64A', 30, 180);
+        this.hud.toast(e.by === this.myId ? `Nouveau bâtiment pour tout le village : ${BUILDINGS[e.b].name} !` : `${name(e.by)} a construit : ${BUILDINGS[e.b].name}`, 'good');
+        if (e.by === this.myId) this.hud.setPanel(null);
+        break;
+      }
+      case 'unlock': {
+        const c = this.map.caves[e.cave];
+        this.fx.ring(c.entrance.x, c.entrance.y, '#F0B64A', 10, 120, 1.2);
+        this.hud.toast(e.by === this.myId ? `Grotte de ${SPECIES[c.boss].name} débloquée !` : `${name(e.by)} a débloqué la grotte de ${SPECIES[c.boss].name}`, 'good');
+        if (e.by === this.myId) this.hud.setPanel(null);
+        break;
+      }
+      case 'trade':
+        if (e.to === this.myId) this.hud.toast(e.sold ? `${SPECIES[e.s].name} vendu · +${e.gold} or` : `${SPECIES[e.s].name} acheté · −${e.gold} or`, 'good');
+        break;
       case 'travel':
         for (const [x, y] of [[e.x, e.y], [e.tx, e.ty]]) {
           this.fx.ring(x, y, '#8FE3D6', 10, 90, 0.8);
@@ -372,6 +394,8 @@ export class Game {
     const view = this.net.sample(dt);
     this.hud.caves = this.net.latest?.caves ?? [];
     this.hud.camps = this.net.latest?.camps ?? [];
+    this.hud.buildings = this.net.latest?.buildings ?? [];
+    this.hud.unlocked = this.net.latest?.unlocked ?? [];
     // Le brouillard se lève autour de chaque dompteur du village.
     if (!dead) this.fog.reveal(this.me.x, this.me.y, this.myId);
     for (const p of view?.players ?? []) if (p.id !== this.myId && !p.dead) this.fog.reveal(p.x, p.y, p.id);
@@ -411,6 +435,8 @@ export class Game {
     ctx.save();
     ctx.translate(village.x, village.y);
     this.world.drawCampfire(ctx, this.time);
+    // bâtiments : construits, ou leur chantier avec son prix
+    for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b));
     ctx.restore();
     const camps = this.net.latest?.camps ?? [];
     this.map.sites.forEach((c, i) => inView(c.x, c.y, 260) && this.world.drawSite(ctx, i, camps.includes(i), this.time));
@@ -429,7 +455,10 @@ export class Game {
       list.push({ y: c.entrance.y + 20, draw: () => this.world.drawCaveEntrance(ctx, c, this.time, !this.hud.caves[c.id]) });
     }
     this.map.stones.forEach((st, k) => {
-      if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, k === 0 || camps.includes(k - 1), this.time) });
+      // celle du village se construit ; celles des camps s'éveillent avec leur camp
+      const active = k === 0 ? this.hud.buildings.includes('stone') : camps.includes(k - 1);
+      const label = k === 0 && !active ? `${BUILDINGS.stone.name} · ${BUILDINGS.stone.cost} or` : undefined;
+      if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
     const oreState = new Map(this.net.latest?.ores ?? []);
     for (const o of this.map.ores) {

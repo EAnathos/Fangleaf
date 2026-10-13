@@ -113,7 +113,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .party b { font-weight: 600; }
 
 .hud-tr { position: absolute; right: 16px; top: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
-#minimap { cursor: pointer; }
+#minimap { cursor: pointer; pointer-events: auto; } /* cliquer dessus ouvre la grande carte */
 .tr-buttons { gap: 8px; }
 .mount-row { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid var(--line); }
 .fill.mount { background: var(--alpha); }
@@ -135,11 +135,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
 .legend i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: middle; border-radius: 50%; }
 .lg-star { background: var(--amber); clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); border-radius: 0 !important; }
-.lg-camp { border: 2px solid var(--text); }
 .lg-you { background: var(--ally); }
 .lg-ally { background: #E6A15C; }
 .lg-cave { background: #2A2E2D; border: 2px solid var(--text-2); border-radius: 6px 6px 0 0 !important; }
-.lg-water { background: #2E6574; border-radius: 3px !important; }
 .alpha-card .actions { display: flex; flex-direction: column; gap: 6px; }
 .alpha-card .ride { height: 36px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--alpha); background: transparent; color: var(--alpha); font: 700 14px var(--display); white-space: nowrap; }
 .alpha-card .ride:disabled { border-color: var(--line); color: var(--muted); cursor: not-allowed; }
@@ -262,4 +260,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .camp-perks b { color: var(--text); }
 .modal.camp .cta:disabled, .stone-row .cta:disabled { opacity: 0.55; cursor: not-allowed; }
 .prompt.travel, .prompt.camp { border-color: var(--stone); color: var(--stone); }
+.prompt.market { border-color: var(--ally); color: var(--ally); }
+.prompt.buy { border-color: var(--text-2); color: var(--text); }
+.modal.market { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; border-color: var(--ally); }
+.modal.market h2 { color: var(--ally); }
+.market-head { margin: 4px 0 0; font-size: 15px; color: var(--text-2); }
+.modal.market .stone-row .col { flex: 1; min-width: 0; }
+.modal.market .badge { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+.modal.market .cta:disabled { opacity: 0.55; cursor: not-allowed; }
 .lg-stone { background: var(--stone); border-radius: 2px 2px 0 0 !important; }

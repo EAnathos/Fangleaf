@@ -110,12 +110,15 @@ async function main() {
   check(!host.last!.units.some((u) => u[6] === 0 && u[2] & 1), 'aucun Alpha sauvage sur la carte');
   check(host.msgs.some((m) => m.t === 's' && m.ev.some((e) => e.e === 'hit')), 'des coups ont été échangés');
 
-  // Forge : retour au village, amélioration si assez d'or.
-  if (me.gold >= 20 && !me.dead) {
+  // Forge : retour au village, construction (10 or) puis amélioration si assez d'or.
+  if (me.gold >= 30 && !me.dead) {
     // Retour par le camp puis le chemin dégagé jusqu'à la forge.
     // camp → chemin de terre → porte → devant la forge (la palissade et les bâtiments sont solides)
     const route: [number, number][] = [[map.spawn.x + 60, map.spawn.y + 60], ...map.path.slice(4), [map.village.x, map.village.y + 60], [map.forge.x + 20, map.forge.y + 75]];
     for (const [tx, ty] of route) for (let i = 0; i < 400 && !stepTo(tx, ty); i++) await sleep(50);
+    host.send({ t: 'build', b: 'forge' });
+    await sleep(200);
+    check(!!host.last?.buildings.includes('forge'), `forge construite pour le village (or ${host.me()!.gold})`);
     host.send({ t: 'upgrade', what: 'armor' });
     await sleep(200);
     check(host.me()!.armor === 1, `armure améliorée (niv. ${host.me()!.armor}, or ${host.me()!.gold})`);

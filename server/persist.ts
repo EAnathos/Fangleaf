@@ -5,6 +5,7 @@
 // Le serveur est le seul à écrire (clé service_role) : le client ne peut pas modifier sa progression.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { BuildingId } from '../shared/config.ts';
 
 export interface Profile {
   name: string;
@@ -43,12 +44,22 @@ export async function verifyToken(token: string): Promise<{ userId: string; name
   return { userId: data.user.id, name };
 }
 
-/** Graine et camps établis d'un village enregistré, ou null s'il n'existe pas. */
-export async function findVillage(code: string): Promise<{ seed: number; camps: number[]; founder: string | null } | null> {
+/** Biens communs d'un village : camps établis, bâtiments construits, grottes débloquées. */
+export interface VillageSave {
+  camps: number[];
+  buildings: BuildingId[];
+  unlocked: number[];
+}
+
+/** Graine et biens communs d'un village enregistré, ou null s'il n'existe pas. */
+export async function findVillage(code: string): Promise<({ seed: number; founder: string | null } & VillageSave) | null> {
   if (!db) return null;
-  const { data, error } = await db.from('villages').select('seed, camps, created_by').eq('code', code).maybeSingle();
+  const { data, error } = await db.from('villages').select('seed, camps, buildings, caves, created_by').eq('code', code).maybeSingle();
   if (error) throw new Error(`Lecture du village impossible : ${error.message}`);
-  return data ? { seed: Number(data.seed), camps: Array.isArray(data.camps) ? data.camps.map(Number) : [], founder: data.created_by ?? null } : null;
+  const list = (v: unknown) => (Array.isArray(v) ? v : []);
+  return data
+    ? { seed: Number(data.seed), camps: list(data.camps).map(Number), buildings: list(data.buildings), unlocked: list(data.caves).map(Number), founder: data.created_by ?? null }
+    : null;
 }
 
 /** Supprime un village : la progression de tous ses membres part avec (on delete cascade). */
@@ -65,11 +76,11 @@ export async function deleteProgress(userId: string, code: string) {
   if (error) throw new Error(`Effacement de la progression impossible : ${error.message}`);
 }
 
-/** Camps établis par le village (partagés par tous ses membres). */
-export async function saveCamps(code: string, camps: number[]) {
+/** Biens communs du village (partagés par tous ses membres). */
+export async function saveVillage(code: string, v: VillageSave) {
   if (!db) return;
-  const { error } = await db.from('villages').update({ camps }).eq('code', code);
-  if (error) console.error('Sauvegarde des camps impossible :', error.message);
+  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked }).eq('code', code);
+  if (error) console.error('Sauvegarde du village impossible :', error.message);
 }
 
 export async function createVillage(code: string, seed: number, userId: string | null) {

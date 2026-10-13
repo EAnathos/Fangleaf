@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { ALPHA_CREATE_COST, ARMY_CAP, BOSS_RESPAWN_S, CAMP_COST, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { ALPHA_CREATE_COST, ARMY_CAP, BOSS_RESPAWN_S, BUILDING_IDS, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
 
@@ -9,8 +9,10 @@ const check = (ok: boolean, label: string) => {
   console.log(`${ok ? '✔' : '✘'} ${label}`);
   if (!ok) failed = true;
 };
+// Village de test : tous les bâtiments construits et toutes les grottes débloquées (sauf mention contraire).
+const ALL_CAVES = Array.from({ length: 64 }, (_, i) => i);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const room = (): any => new Room('TEST');
+const room = (): any => new Room('TEST', undefined, { buildings: [...BUILDING_IDS], unlocked: ALL_CAVES });
 const noop = () => {};
 
 {
@@ -614,7 +616,7 @@ const noop = () => {};
   // Camps : établis contre de l'or pour tout le village ; soins, réapparition, Pierre de passage.
   const r = room();
   let saved: number[] = [];
-  r.onCamps = (c: number[]) => (saved = c);
+  r.onVillage = (v: { camps: number[] }) => (saved = v.camps);
   const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
   const site = r.map.sites[0], far = r.map.stones[1];
   p.x = site.x + 40;
@@ -665,8 +667,107 @@ const noop = () => {};
   r.updateRespawns();
   check(r.map.inVillage(q.x, q.y), 'mort avant le camp : réapparition au village');
   // un village rouvert retrouve ses camps
-  const again: any = new Room('TEST2', r.seed, [0, 0, 7, -1]);
+  const again: any = new Room('TEST2', r.seed, { camps: [0, 0, 7, -1], buildings: ['forge', 'forge', 'nope' as never], unlocked: [1, 1, 999] });
   check(again.camps.join() === '0', 'camps rechargés (doublons et index invalides ignorés)');
+  check(again.buildings.join() === 'forge' && again.unlocked.join() === '1', 'bâtiments et grottes rechargés (doublons et valeurs invalides ignorés)');
+}
+
+{
+  // Bâtiments du village : achetés avec de l'or, une fois pour tous ; sans eux, rien à faire devant le chantier.
+  const r: any = new Room('TEST');
+  let saved: { buildings: string[]; unlocked: number[] } = { buildings: [], unlocked: [] };
+  r.onVillage = (v: typeof saved) => (saved = v);
+  const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
+  check(r.buildings.length === 0 && r.unlocked.length === 0, 'nouveau village : aucun bâtiment, grottes fermées');
+  check(BUILDINGS.forge.cost === 10 && BUILDINGS.den.cost === 20 && BUILDINGS.market.cost === 50 && BUILDINGS.stone.cost === 200, 'prix : Forge 10, Tanière 20, Marché 50, Pierre de passage 200');
+  [p.x, p.y] = [r.map.forge.x, r.map.forge.y + 60];
+  p.gold = 500;
+  r.onUpgrade(p, 'weapon');
+  check(p.weapon === 0 && p.gold === 500, 'forge pas construite : pas d\'amélioration');
+  [p.x, p.y] = [r.map.village.x, r.map.village.y];
+  r.onBuild(p, 'forge');
+  check(!r.buildings.includes('forge'), 'il faut être devant l\'emplacement pour construire');
+  [p.x, p.y] = [r.map.forge.x, r.map.forge.y + 60];
+  p.gold = 9;
+  r.onBuild(p, 'forge');
+  check(!r.buildings.includes('forge') && p.gold === 9, 'pas assez d\'or : rien de construit');
+  p.gold = 500;
+  r.onBuild(p, 'forge');
+  r.onBuild(p, 'forge');
+  check(r.buildings.join() === 'forge' && p.gold === 490 && saved.buildings.join() === 'forge', 'forge construite une seule fois, 10 or, sauvegardée pour le village');
+  [q.x, q.y] = [p.x, p.y];
+  q.gold = 100;
+  r.onUpgrade(q, 'weapon');
+  check(q.weapon === 1, 'un autre membre profite de la forge');
+  // Pierre du village : pas de voyage tant qu'elle n'est pas construite.
+  r.camps.push(0);
+  [p.x, p.y] = [r.map.stones[0].x, r.map.stones[0].y + 40];
+  r.onTravel(p, 0);
+  check(r.map.inVillage(p.x, p.y), 'Pierre du village pas construite : pas de voyage');
+  p.gold = 200;
+  r.onBuild(p, 'stone');
+  r.onTravel(p, 0);
+  check(p.gold === 0 && !r.map.inVillage(p.x, p.y), 'Pierre du village construite (200 or) : voyage vers le camp');
+  // Grottes : débloquées contre 150 × niveau de la zone.
+  const c = r.map.caves.find((cv: { zone: number }) => cv.zone === 2);
+  [p.x, p.y] = [c.entrance.x, c.entrance.y + 20];
+  r.onCave(p, c.id, true);
+  check(!r.map.caveAt(p.x, p.y), 'grotte fermée : on n\'entre pas');
+  p.gold = caveUnlockCost(2) - 1;
+  r.onUnlock(p, c.id);
+  check(!r.unlocked.includes(c.id), 'pas assez d\'or : grotte toujours fermée');
+  p.gold = caveUnlockCost(2);
+  r.onUnlock(p, c.id);
+  r.onCave(p, c.id, true);
+  check(caveUnlockCost(2) === 300 && p.gold === 0 && saved.unlocked.join() === String(c.id) && r.map.caveAt(p.x, p.y)?.id === c.id, 'grotte de zone 2 débloquée pour 300 or, on y entre');
+}
+
+{
+  // Marché : vendre un monstre de sa meute, acheter une espèce déjà croisée.
+  const r: any = new Room('TEST', undefined, { buildings: ['market'] });
+  const p = r.addPlayer('a', noop);
+  [p.x, p.y] = [r.map.market.x, r.map.market.y + 60];
+  const u = r.createUnit(1, false, p.x, p.y);
+  r.makeTamed(u, p);
+  const a = r.createUnit(2, true, p.x, p.y);
+  a.owner = p.id;
+  p.army.push(a.id);
+  r.onSell(p, a.id);
+  check(p.army.includes(a.id) && p.gold === 0, 'un Alpha ne se vend pas');
+  r.onSell(p, u.id);
+  check(!p.army.includes(u.id) && !r.units.has(u.id) && p.gold === monsterSellPrice(1), `Loup vendu : +${monsterSellPrice(1)} or`);
+  p.gold = 1000;
+  r.onBuy(p, 3);
+  check(r.armySize(p) === 0 && p.gold === 1000, 'espèce jamais croisée : pas d\'achat');
+  p.seen.add(3);
+  r.onBuy(p, 3);
+  const bought = p.army.map((id: number) => r.units.get(id)).find((x: { s: number; alpha: boolean }) => x.s === 3 && !x.alpha);
+  check(!!bought && bought.owner === p.id && p.gold === 1000 - monsterBuyPrice(3), `Golem acheté : −${monsterBuyPrice(3)} or, il rejoint la meute`);
+  p.seen.add(0);
+  for (let i = 0; i < ARMY_CAP + 3; i++) r.onBuy(p, 0);
+  check(r.armySize(p) === ARMY_CAP, 'meute pleine : plus d\'achat');
+  [p.x, p.y] = [r.map.village.x, r.map.village.y];
+  const gold = p.gold, sold = p.army.find((id: number) => !r.units.get(id).alpha);
+  r.onSell(p, sold);
+  check(p.gold === gold, 'loin du marché : pas de vente');
+}
+
+{
+  // Bond du Gluant Géant : il atterrit dans la zone annoncée, même si la cible s'en est écartée.
+  const r = room();
+  r.units.clear();
+  const p = r.addPlayer('a', noop);
+  const king = SPECIES.findIndex((sp) => sp.key === 'slime_queen');
+  const c = r.map.caves.find((cv: { boss: number }) => cv.boss === king);
+  const b = r.units.get(r.spawnBoss(c.id));
+  [p.x, p.y] = [c.inside.x - 200, c.inside.y + 40];
+  p.hp = 1e6;
+  r.castMove(b, { kind: 'leap', cd: 6 }, p);
+  const h = r.hazards[0];
+  const [zx, zy] = [h.x, h.y];
+  [p.x, p.y] = [c.inside.x + 220, c.inside.y + 40]; // le dompteur sort de la zone rouge
+  for (let i = 0; i < 25; i++) r.updateHazards(), (r.time += 0.05);
+  check(Math.hypot(b.x - zx, b.y - zy) < 1 && Math.hypot(b.x - p.x, b.y - p.y) > 300, 'Gluant Géant : il saute dans la zone rouge, pas sur le dompteur qui l\'a quittée');
 }
 
 {

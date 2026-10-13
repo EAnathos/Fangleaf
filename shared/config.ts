@@ -11,9 +11,24 @@ export const VIEW_R = 1250; // rayon d'intérêt : unités envoyées à chaque j
 // Bâtiments : positions relatives au centre du village.
 export const FORGE_OFFSET = { x: -150, y: 90 };
 export const DEN_OFFSET = { x: 170, y: -150 };
+export const MARKET_OFFSET = { x: -180, y: -160 };
 export const BUILDING_REACH = 110;
+// Bâtiments du village : construits par n'importe quel membre contre de l'or, une fois pour tout le village.
+export type BuildingId = 'forge' | 'den' | 'market' | 'stone';
+export const BUILDINGS: Record<BuildingId, { name: string; cost: number; desc: string }> = {
+  forge: { name: 'Forge', cost: 10, desc: 'Choisis ta classe, améliore ton arme et ton armure.' },
+  den: { name: 'Tanière', cost: 20, desc: 'Éveille, renforce et range tes Alphas. Bestiaire des espèces croisées.' },
+  market: { name: 'Marché', cost: 50, desc: 'Vends les monstres de ta meute, achète des monstres des espèces déjà croisées.' },
+  stone: { name: 'Pierre de passage', cost: 200, desc: 'Voyage instantané entre le village et les camps établis.' },
+};
+export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[];
+// Marché : prix d'un monstre ordinaire (apprivoisé) selon l'or qu'il rapporte à la chasse.
+export const monsterBuyPrice = (species: number) => SPECIES[species].gold * 12;
+export const monsterSellPrice = (species: number) => SPECIES[species].gold * 4;
+// Grottes : fermées au départ, débloquées pour tout le village contre de l'or (150 × niveau de la zone).
+export const caveUnlockCost = (zone: number) => 150 * zone;
 // Camps : un emplacement au bout de la zone 4, établi par n'importe quel membre du village contre de l'or.
-export const CAMP_COST = 500;
+export const CAMP_COST = 2000;
 export const CAMP_R = 260; // feu qui soigne, monstres tenus à l'écart
 export const VILLAGE_STONE_OFFSET = { x: 95, y: 225 }; // Pierre de passage du village
 export const campName = (i: number) => (i === 0 ? 'Camp avancé' : `Camp avancé ${i + 1}`);

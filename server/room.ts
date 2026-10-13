@@ -5,7 +5,7 @@ import {
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
-  SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
+  SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
   armorMaxHp, armorReduction, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
@@ -135,6 +135,13 @@ const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const makeCode = () =>
   Array.from({ length: 6 }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join('');
 
+/** Ce que le village possède en commun (sauvegardé avec le village). */
+export interface VillageState {
+  camps: number[];
+  buildings: BuildingId[];
+  unlocked: number[];
+}
+
 const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * classOf(p.cls).hp);
 
 export class Room {
@@ -155,15 +162,21 @@ export class Room {
   private shots: Shot[] = [];
   readonly map: WorldMap;
   readonly camps: number[]; // emplacements de camp établis (index dans map.sites)
-  onCamps?: (camps: number[]) => void; // sauvegarde, appelée quand un camp est établi
+  readonly buildings: BuildingId[]; // bâtiments construits au village
+  readonly unlocked: number[]; // grottes débloquées (index dans map.caves)
+  onVillage?: (v: VillageState) => void; // sauvegarde, appelée quand le village change (camp, bâtiment, grotte)
   founder: string | null = null; // compte qui a fondé le village (seul à pouvoir le supprimer)
   deleted = false; // supprimé : plus aucune sauvegarde
 
   /** seed : graine d'un village enregistré (même carte qu'avant) ; absente pour un nouveau village. */
-  constructor(readonly code: string, seed?: number, camps: number[] = []) {
+  constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}) {
     this.seed = seed ?? Math.floor(Math.random() * 2 ** 31);
     this.map = new WorldMap(this.seed);
-    this.camps = camps.filter((c, i) => Number.isInteger(c) && c >= 0 && c < this.map.sites.length && camps.indexOf(c) === i);
+    const indexes = (list: unknown[] | undefined, n: number) =>
+      (list ?? []).map(Number).filter((c, i, all) => Number.isInteger(c) && c >= 0 && c < n && all.indexOf(c) === i);
+    this.camps = indexes(saved.camps, this.map.sites.length);
+    this.unlocked = indexes(saved.unlocked, this.map.caves.length);
+    this.buildings = BUILDING_IDS.filter((b) => saved.buildings?.includes(b));
     this.oreHp = this.map.ores.map((o) => oreHp(o.zone));
     this.oreBack = this.map.ores.map(() => 0);
     this.caveBoss = this.map.caves.map((c) => this.spawnBoss(c.id));
@@ -294,8 +307,71 @@ export class Room {
     return !p.dead && dist2(p.x, p.y, pos.x, pos.y) <= (BUILDING_REACH + 40) ** 2;
   }
 
+  /** Devant un bâtiment déjà construit. */
+  private at(p: Player, b: BuildingId) {
+    return this.buildings.includes(b) && this.near(p, this.posOf(b));
+  }
+
+  private posOf(b: BuildingId) {
+    return b === 'stone' ? this.map.stones[0] : this.map[b];
+  }
+
+  private saveVillage() {
+    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked] });
+  }
+
+  /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous. */
+  onBuild(p: Player, b: BuildingId) {
+    if (!BUILDING_IDS.includes(b) || this.buildings.includes(b) || !this.near(p, this.posOf(b))) return;
+    const cost = BUILDINGS[b].cost;
+    if (p.gold < cost) return;
+    p.gold -= cost;
+    p.dirty = true;
+    this.buildings.push(b);
+    this.saveVillage();
+    this.events.push({ e: 'built', b, by: p.id });
+  }
+
+  /** Débloquer une grotte pour tout le village, devant son entrée : 150 or × niveau de sa zone. */
+  onUnlock(p: Player, cave: number) {
+    const c = this.map.caves[cave];
+    if (!c || this.unlocked.includes(cave) || !this.near(p, c.entrance)) return;
+    const cost = caveUnlockCost(c.zone);
+    if (p.gold < cost) return;
+    p.gold -= cost;
+    p.dirty = true;
+    this.unlocked.push(cave);
+    this.saveVillage();
+    this.events.push({ e: 'unlock', cave, by: p.id });
+  }
+
+  /** Marché : vendre un monstre ordinaire de sa meute (les Alphas ne se vendent pas). */
+  onSell(p: Player, id: number) {
+    const u = this.units.get(id);
+    if (!this.at(p, 'market') || !u || u.alpha || u.owner !== p.id) return;
+    const gold = monsterSellPrice(u.s);
+    this.units.delete(u.id);
+    p.army = p.army.filter((x) => x !== u.id);
+    p.gold += gold;
+    p.dirty = true;
+    this.events.push({ e: 'trade', to: p.id, s: u.s, gold, sold: true });
+  }
+
+  /** Marché : acheter un monstre ordinaire d'une espèce déjà croisée (dans la limite de la meute). */
+  onBuy(p: Player, s: number) {
+    if (!this.at(p, 'market') || !(s in SPECIES) || isBoss(s) || !p.seen.has(s) || this.armySize(p) >= ARMY_CAP) return;
+    const gold = monsterBuyPrice(s);
+    if (p.gold < gold) return;
+    p.gold -= gold;
+    const u = this.createUnit(s as SpeciesId, false, p.x, p.y);
+    this.makeTamed(u, p);
+    this.placeNear(u, p);
+    p.dirty = true;
+    this.events.push({ e: 'trade', to: p.id, s, gold, sold: false });
+  }
+
   onUpgrade(p: Player, what: 'weapon' | 'armor') {
-    if (!this.near(p, this.map.forge)) return;
+    if (!this.at(p, 'forge')) return;
     if (what === 'weapon') {
       const cost = weaponCost(p.weapon);
       if (p.weapon >= WEAPON_MAX || p.gold < cost) return;
@@ -315,7 +391,7 @@ export class Room {
 
   /** Choisir sa classe à la forge : la première fois gratuitement, ensuite contre un peu d'or. */
   onClass(p: Player, cls: ClassId) {
-    if (!CLASS_IDS.includes(cls) || p.cls === cls || !this.near(p, this.map.forge)) return;
+    if (!CLASS_IDS.includes(cls) || p.cls === cls || !this.at(p, 'forge')) return;
     const cost = p.cls === null ? 0 : CLASS_CHANGE_COST;
     if (p.gold < cost) return;
     p.gold -= cost;
@@ -355,7 +431,7 @@ export class Room {
 
   /** Équiper un Alpha rangé (5 au maximum sur le terrain), ou ranger un Alpha équipé à la Tanière. */
   onAlphaEquip(p: Player, s: number, equip: boolean) {
-    if (!this.near(p, this.map.den)) return;
+    if (!this.at(p, 'den')) return;
     if (equip) {
       const i = p.resting.findIndex((r) => r.s === s);
       if (i < 0 || this.equippedCount(p) >= ALPHA_EQUIP_MAX) return;
@@ -374,7 +450,7 @@ export class Room {
   }
 
   onAlphaUp(p: Player, s: number) {
-    if (!this.near(p, this.map.den)) return;
+    if (!this.at(p, 'den')) return;
     const u = this.fieldAlpha(p, s), r = p.resting.find((x) => x.s === s);
     const lvl = u?.level ?? r?.lvl;
     if (lvl === undefined || lvl >= ALPHA_LVL_MAX) return;
@@ -390,7 +466,7 @@ export class Room {
   /** Éveille l'Alpha d'une espèce (un seul par espèce) avec les essences récoltées. */
   /** Âme du boss de l'espèce → l'Alpha devient légendaire (stats ×1,5, plus grand). */
   onLegend(p: Player, s: number) {
-    if (!this.near(p, this.map.den)) return;
+    if (!this.at(p, 'den')) return;
     const u = this.fieldAlpha(p, s), r = p.resting.find((x) => x.s === s);
     if ((!u && !r) || u?.legend || r?.legend) return;
     const boss = bossOf(s);
@@ -405,7 +481,7 @@ export class Room {
   }
 
   onAlphaCreate(p: Player, s: number) {
-    if (!(s in SPECIES) || isBoss(s) || !this.near(p, this.map.den) || p.essences[s] < ALPHA_CREATE_COST) return;
+    if (!(s in SPECIES) || isBoss(s) || !this.at(p, 'den') || p.essences[s] < ALPHA_CREATE_COST) return;
     if (p.awakening.has(s) || this.fieldAlpha(p, s) || p.resting.some((r) => r.s === s)) return;
     p.essences[s] -= ALPHA_CREATE_COST;
     p.awakening.set(s, Date.now() + alphaAwakenS(s) * 1000);
@@ -596,7 +672,7 @@ export class Room {
     p.gold -= CAMP_COST;
     p.dirty = true;
     this.camps.push(site);
-    this.onCamps?.([...this.camps]);
+    this.saveVillage();
     this.events.push({ e: 'camp', site, by: p.id });
     // les monstres qui traînent dans le camp sont chassés
     for (const u of this.units.values()) if (!u.owner && !isBoss(u.s) && this.campAt(u.x, u.y) >= 0) u.returning = true;
@@ -605,7 +681,7 @@ export class Room {
   /** Pierre active près de laquelle se trouve p : -1 village, index du camp, ou null. */
   private stoneNear(p: Player): number | null {
     const near = (st: { x: number; y: number }) => dist2(p.x, p.y, st.x, st.y) <= (BUILDING_REACH + 40) ** 2;
-    if (near(this.map.stones[0])) return -1;
+    if (this.buildings.includes('stone') && near(this.map.stones[0])) return -1;
     for (const c of this.camps) if (near(this.map.stones[c + 1])) return c;
     return null;
   }
@@ -614,7 +690,7 @@ export class Room {
   onTravel(p: Player, to: number) {
     if (p.dead) return;
     const from = this.stoneNear(p);
-    if (from === null || from === to || (to !== -1 && !this.camps.includes(to))) return;
+    if (from === null || from === to || (to === -1 ? !this.buildings.includes('stone') : !this.camps.includes(to))) return;
     const st = this.map.stones[to + 1];
     const at = this.map.freeNear(st.x - 10, st.y + 60);
     this.events.push({ e: 'travel', id: p.id, x: Math.round(p.x), y: Math.round(p.y), tx: Math.round(at.x), ty: Math.round(at.y) });
@@ -853,10 +929,11 @@ export class Room {
     switch (m.kind) {
       case 'leap': {
         // Bond : zone d'arrivée annoncée 1 s à l'avance, le boss y atterrit et écrase tout.
-        const at = this.time + 1;
+        // (point d'arrivée fixé au lancement : il atterrit dans la zone rouge, pas sur la cible qui s'en est écartée)
+        const at = this.time + 1, lx = t.x, ly = t.y;
         u.castUntil = at;
-        this.hazard(u, { kind: 0, x: t.x, y: t.y, r: 115, at, dmg: d * 1.8, onFire: () => {
-          if (!this.map.blocked(t.x, t.y) && this.units.has(u.id)) [u.x, u.y] = [t.x, t.y];
+        this.hazard(u, { kind: 0, x: lx, y: ly, r: 115, at, dmg: d * 1.8, onFire: () => {
+          if (!this.map.blocked(lx, ly) && this.units.has(u.id)) [u.x, u.y] = [lx, ly];
         } });
         break;
       }
@@ -969,6 +1046,7 @@ export class Room {
   onCave(p: Player, id: number, enter: boolean) {
     const c = this.map.caves[id];
     if (!c || p.dead) return;
+    if (enter && !this.unlocked.includes(id)) return; // grotte pas encore débloquée
     const from = enter ? c.entrance : c.exit;
     if (dist2(p.x, p.y, from.x, from.y) > (BUILDING_REACH + 40) ** 2) return;
     const to = enter ? { x: c.exit.x, y: c.exit.y - 50 } : { x: c.entrance.x, y: c.entrance.y + 70 };
@@ -1540,7 +1618,7 @@ export class Room {
           ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S))]
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
       }
-      viewer.send({ t: 's', tick: this.tick, players, units, ores, caves, camps: this.camps, hazards, shots, ev: this.events });
+      viewer.send({ t: 's', tick: this.tick, players, units, ores, caves, camps: this.camps, buildings: this.buildings, unlocked: this.unlocked, hazards, shots, ev: this.events });
     }
   }
 }

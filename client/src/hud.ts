@@ -2,7 +2,7 @@
 
 import {
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
-  CAMP_COST, campName, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
+  BUILDINGS, type BuildingId, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_COST, campName, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
 import type { PlayerState, UnitTuple } from '../../shared/protocol.ts';
@@ -12,38 +12,57 @@ import { SPECIES_DESC } from './speciesInfo.ts';
 import { FOREST_GROUND, ZONE_GROUND } from './world.ts';
 import type { Fog } from './fog.ts';
 
-export type Panel = 'forge' | 'den' | 'map' | 'quit' | 'travel' | 'camp' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | null;
+/** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
+export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
 export interface Spot {
   pos: { x: number; y: number };
   label: string;
-  panel?: 'forge' | 'den' | 'travel' | 'camp'; // ouvre un panneau
+  panel?: 'forge' | 'den' | 'market' | 'travel' | 'camp' | 'buy'; // ouvre un panneau
   cave?: { id: number; enter: boolean }; // entre dans une grotte / en sort
   at?: number; // Pierre de passage : -1 village, sinon index du camp ; emplacement de camp : son index
+  buy?: Purchase; // panneau d'achat : ce qui est à acheter
+}
+/** Ce que le village possède, d'après le dernier snapshot. */
+export interface VillageView {
+  caves: number[]; // retour des mini-boss (s)
+  camps: number[]; // emplacements de camp établis
+  buildings: BuildingId[]; // bâtiments construits
+  unlocked: number[]; // grottes débloquées
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-/**
- * Point d'interaction (touche E) à portée : forge, tanière, Pierres de passage, emplacements de camp, grottes.
- * caves : retour des mini-boss (s) ; camps : emplacements établis par le village.
- */
-export const buildingNear = (map: WorldMap, x: number, y: number, caves: number[] = [], camps: number[] = []): Spot | undefined =>
-  [
-    { panel: 'forge' as const, pos: map.forge, label: 'E — Forge' },
-    { panel: 'den' as const, pos: map.den, label: 'E — Tanière des Alphas' },
-    { panel: 'travel' as const, pos: map.stones[0], label: 'E — Pierre de passage', at: -1 },
-    ...map.sites.map((site, i) =>
-      camps.includes(i)
-        ? { panel: 'travel' as const, pos: map.stones[i + 1], label: 'E — Pierre de passage', at: i }
-        : { panel: 'camp' as const, pos: site, label: `E — Établir le camp · ${CAMP_COST} or`, at: i },
+/** Prix et nom d'un achat pour le village. */
+export const purchaseOf = (map: WorldMap, buy: Purchase) =>
+  'b' in buy
+    ? { name: BUILDINGS[buy.b].name, cost: BUILDINGS[buy.b].cost }
+    : { name: `Grotte de ${SPECIES[map.caves[buy.cave].boss].name}`, cost: caveUnlockCost(map.caves[buy.cave].zone) };
+/** Point d'interaction (touche E) à portée : bâtiments (ou leur chantier), Pierres de passage, emplacements de camp, grottes. */
+export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView): Spot | undefined => {
+  const building = (b: BuildingId, pos: { x: number; y: number }, open: Spot): Spot =>
+    v.buildings.includes(b) ? open : { panel: 'buy', pos, buy: { b }, label: `E — Construire : ${BUILDINGS[b].name} · ${BUILDINGS[b].cost} or` };
+  const spots: Spot[] = [
+    building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Forge' }),
+    building('den', map.den, { panel: 'den', pos: map.den, label: 'E — Tanière' }),
+    building('market', map.market, { panel: 'market', pos: map.market, label: 'E — Marché' }),
+    building('stone', map.stones[0], { panel: 'travel', pos: map.stones[0], label: 'E — Pierre de passage', at: -1 }),
+    ...map.sites.map((site, i): Spot =>
+      v.camps.includes(i)
+        ? { panel: 'travel', pos: map.stones[i + 1], label: 'E — Pierre de passage', at: i }
+        : { panel: 'camp', pos: site, label: `E — Établir le camp · ${CAMP_COST} or`, at: i },
     ),
-    ...map.caves.flatMap((c) => [
-      {
-        cave: { id: c.id, enter: true }, pos: c.entrance,
-        label: caves[c.id] ? `E — Entrer (${SPECIES[c.boss].name} revient dans ${clock(caves[c.id])})` : `E — Entrer · ${SPECIES[c.boss].name} t'attend`,
-      },
+    ...map.caves.flatMap((c): Spot[] => [
+      v.unlocked.includes(c.id)
+        ? {
+          cave: { id: c.id, enter: true }, pos: c.entrance,
+          label: v.caves[c.id] ? `E — Entrer (${SPECIES[c.boss].name} revient dans ${clock(v.caves[c.id])})` : `E — Entrer · ${SPECIES[c.boss].name} t'attend`,
+        }
+        : { panel: 'buy', pos: c.entrance, buy: { cave: c.id }, label: `E — Débloquer la grotte · ${caveUnlockCost(c.zone)} or` },
       { cave: { id: c.id, enter: false }, pos: c.exit, label: 'E — Sortir de la grotte' },
     ]),
-  ].find((b) => Math.hypot(x - b.pos.x, y - b.pos.y) < BUILDING_REACH);
+  ];
+  return spots.find((b) => Math.hypot(x - b.pos.x, y - b.pos.y) < BUILDING_REACH);
+};
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const pct = (n: number) => `${Math.round(n * 100)} %`;
@@ -53,7 +72,7 @@ const duration = (sec: number) => (sec < 60 ? `${sec} s` : `${Math.floor(sec / 6
 export class Hud {
   private mini = $<HTMLCanvasElement>('minimap').getContext('2d')!;
   private miniBg: HTMLCanvasElement;
-  private last = { party: '', den: '', cls: '', travel: '', bestiary: '' };
+  private last = { party: '', den: '', cls: '', travel: '', bestiary: '', market: '' };
   private denTab: 'alphas' | 'bestiary' = 'alphas';
   private beasts: { canvas: HTMLCanvasElement; s: number; seen: boolean }[] = [];
   panel: Panel = null;
@@ -69,8 +88,16 @@ export class Hud {
   onClass = (_cls: ClassId) => {};
   onTravel = (_to: number) => {};
   onEstablish = (_site: number) => {};
-  caves: number[] = []; // retour des mini-boss (s), mis à jour à chaque snapshot
-  camps: number[] = []; // camps établis par le village, mis à jour à chaque snapshot
+  onBuild = (_b: BuildingId) => {};
+  onUnlock = (_cave: number) => {};
+  onSell = (_id: number) => {};
+  onBuy = (_species: number) => {};
+  // Biens du village, mis à jour à chaque snapshot.
+  caves: number[] = []; // retour des mini-boss (s)
+  camps: number[] = []; // camps établis
+  buildings: BuildingId[] = []; // bâtiments construits
+  unlocked: number[] = []; // grottes débloquées
+  private buying: Purchase | null = null; // achat proposé par le panneau d'achat
   private spotAt = 0; // Pierre ou emplacement devant lequel on se tient (panneaux voyage et camp)
   private bigBg?: HTMLCanvasElement;
   private mountId = 0;
@@ -89,7 +116,6 @@ export class Hud {
         prompt('Copie ce lien et envoie-le à tes amis :', url);
       }
     };
-    $('open-map').onclick = () => this.setPanel('map');
     $('minimap').addEventListener('click', () => this.setPanel('map'));
     $('quit-confirm').onclick = () => this.onQuit();
     // Repartir de zéro, avec une confirmation dans le même panneau.
@@ -109,7 +135,7 @@ export class Hud {
       $<HTMLButtonElement>('reset-go').disabled = true;
       this.onReset();
     };
-    for (const id of ['forge', 'den', 'bigmap', 'quit', 'travel', 'camp'] as const) {
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -121,6 +147,16 @@ export class Hud {
       if (btn && !btn.disabled) this.onTravel(Number(btn.dataset.to));
     });
     $('camp-buy').onclick = () => this.onEstablish(this.spotAt);
+    $('buy-go').onclick = () => {
+      if (this.buying && 'b' in this.buying) this.onBuild(this.buying.b);
+      else if (this.buying) this.onUnlock(this.buying.cave);
+    };
+    $('market').addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-sell], button[data-buy]');
+      if (!btn || btn.disabled) return;
+      if (btn.dataset.sell) this.onSell(Number(btn.dataset.sell));
+      else this.onBuy(Number(btn.dataset.buy));
+    });
     // Tanière : onglets Alphas / Bestiaire.
     for (const tab of ['alphas', 'bestiary'] as const) {
       $(`den-tab-${tab}`).onclick = () => {
@@ -164,6 +200,8 @@ export class Hud {
     this.panel = panel;
     $('forge').hidden = panel !== 'forge';
     $('den').hidden = panel !== 'den';
+    $('market').hidden = panel !== 'market';
+    $('buy').hidden = panel !== 'buy';
     $('bigmap').hidden = panel !== 'map';
     $('quit').hidden = panel !== 'quit';
     $('quit-main').hidden = false; // le menu rouvre toujours sur ses choix, jamais sur la confirmation
@@ -173,6 +211,7 @@ export class Hud {
     this.last.den = '';
     this.last.travel = '';
     this.last.cls = '';
+    this.last.market = '';
     if (panel) $(panel === 'map' ? 'bigmap' : panel).querySelector<HTMLButtonElement>('.close')!.focus();
   }
 
@@ -222,7 +261,7 @@ export class Hud {
     }
 
     // Bâtiments.
-    const b = me.dead ? undefined : buildingNear(this.map, myPos.x, myPos.y, this.caves, this.camps);
+    const b = me.dead ? undefined : buildingNear(this.map, myPos.x, myPos.y, this);
     const prompt = $('build-prompt');
     prompt.hidden = !b || !!this.panel;
     if (b) {
@@ -230,14 +269,17 @@ export class Hud {
       prompt.className = `btn prompt ${b.panel ?? (b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
       prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.cave && this.onCave(b.cave.id, b.cave.enter));
     }
-    const building = this.panel === 'forge' || this.panel === 'den' || this.panel === 'travel' || this.panel === 'camp';
+    const building = this.panel !== null && this.panel !== 'map' && this.panel !== 'quit';
     if (building && b?.panel !== this.panel) this.setPanel(null);
+    if (b?.buy) this.buying = b.buy;
     if (b?.at !== undefined && b.at !== this.spotAt) {
       this.spotAt = b.at;
       this.last.travel = '';
     }
     if (this.panel === 'travel') this.updateTravel();
     if (this.panel === 'camp') this.updateCamp(me);
+    if (this.panel === 'buy') this.updateBuy(me);
+    if (this.panel === 'market') this.updateMarket(me);
     if (this.panel === 'forge') this.updateForge(me);
     if (this.panel === 'den' && this.denTab === 'alphas') this.updateDen(me);
     if (this.panel === 'den' && this.denTab === 'bestiary') this.updateBestiary(me);
@@ -264,10 +306,11 @@ export class Hud {
 
   /** Pierre de passage : le village et chaque emplacement de camp, joignables s'ils sont établis. */
   private updateTravel() {
-    const key = `${this.spotAt}|${this.camps.join(',')}`;
+    const key = `${this.spotAt}|${this.camps.join(',')}|${this.buildings.join(',')}`;
     if (key === this.last.travel) return;
     this.last.travel = key;
-    const rows = [{ to: -1, name: 'Village', sub: 'Feu de camp · Forge · Tanière des Alphas', open: true }].concat(
+    const village = this.buildings.includes('stone');
+    const rows = [{ to: -1, name: 'Village', sub: village ? 'Feu de camp · Forge · Tanière · Marché' : `Pierre du village pas encore construite (${BUILDINGS.stone.cost} or)`, open: village }].concat(
       this.map.sites.map((_, i) => ({
         to: i, name: campName(i), open: this.camps.includes(i),
         sub: this.camps.includes(i) ? 'Feu de camp · réapparition' : `Au bout de la zone ${4 * (i + 1)} · pas encore établi`,
@@ -296,6 +339,72 @@ export class Hud {
     const btn = $<HTMLButtonElement>('camp-buy');
     btn.disabled = me.gold < CAMP_COST;
     btn.textContent = me.gold < CAMP_COST ? `Il te faut ${CAMP_COST} or` : `Établir le camp · ${CAMP_COST} or`;
+  }
+
+  /** Panneau d'achat pour le village : un bâtiment à construire ou une grotte à débloquer. */
+  private updateBuy(me: PlayerState) {
+    const buy = this.buying;
+    if (!buy) return;
+    const { name, cost } = purchaseOf(this.map, buy);
+    $('buy-gold').textContent = String(me.gold);
+    $('buy-title').textContent = 'b' in buy ? `Construire : ${name}` : `Débloquer : ${name}`;
+    if ('b' in buy) $('buy-desc').textContent = BUILDINGS[buy.b].desc;
+    else {
+      const boss = SPECIES[this.map.caves[buy.cave].boss], base = SPECIES.find((s) => s.key === boss.base);
+      $('buy-desc').textContent = `Ouvre la grotte pour tout le village : ${boss.name} y attend, et son âme rend légendaire ton Alpha ${base?.name ?? ''}.`;
+    }
+    const btn = $<HTMLButtonElement>('buy-go');
+    btn.disabled = me.gold < cost;
+    btn.textContent = me.gold < cost ? `Il te faut ${cost} or` : `${'b' in buy ? 'Construire' : 'Débloquer'} · ${cost} or`;
+  }
+
+  /** Marché : vendre les monstres ordinaires de sa meute, acheter ceux des espèces déjà croisées. */
+  private updateMarket(me: PlayerState) {
+    $('market-gold').textContent = String(me.gold);
+    const pack = me.army.filter((a) => !a.alpha);
+    const key = JSON.stringify([me.gold, me.seen, pack.map((a) => a.id)]);
+    if (key === this.last.market) return;
+    this.last.market = key;
+    const row = (s: number, sub: string, btn: HTMLButtonElement) => {
+      const el = document.createElement('div');
+      el.className = 'stone-row';
+      el.innerHTML = '<span class="badge"></span><div class="col"><b></b><span class="small muted"></span></div>';
+      (el.querySelector('.badge') as HTMLElement).style.background = SPECIES[s].color;
+      el.querySelector('b')!.textContent = SPECIES[s].name;
+      el.querySelector('span.small')!.textContent = sub;
+      el.append(btn);
+      return el;
+    };
+    // Vendre : un rang par espèce de la meute (on vend un monstre à la fois).
+    const owned = [...new Set(pack.map((a) => a.species))];
+    $('market-sell').replaceChildren(
+      ...(owned.length
+        ? owned.map((s) => {
+          const mine = pack.filter((a) => a.species === s);
+          const btn = document.createElement('button');
+          btn.className = 'cta';
+          btn.dataset.sell = String(mine[0].id);
+          btn.textContent = `Vendre · +${monsterSellPrice(s)} or`;
+          return row(s, `${mine.length} dans ta meute`, btn);
+        })
+        : [Object.assign(document.createElement('p'), { className: 'small muted', textContent: 'Ta meute est vide : apprivoise des monstres pour les vendre ici.' })]),
+    );
+    // Acheter : espèces déjà croisées (bestiaire), dans la limite de la meute.
+    const full = pack.length >= ARMY_CAP;
+    const known = SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss && me.seen.includes(s));
+    $('market-buy').replaceChildren(
+      ...(known.length
+        ? known.map((s) => {
+          const price = monsterBuyPrice(s);
+          const btn = document.createElement('button');
+          btn.className = 'cta';
+          btn.dataset.buy = String(s);
+          btn.disabled = full || me.gold < price;
+          btn.textContent = full ? 'Meute pleine' : me.gold < price ? `Il te faut ${price} or` : `Acheter · ${price} or`;
+          return row(s, `Zone ${SPECIES[s].zone} · ${SPECIES[s].hp} PV sauvage, moitié une fois apprivoisé`, btn);
+        })
+        : [Object.assign(document.createElement('p'), { className: 'small muted', textContent: 'Aucune espèce croisée pour l\'instant.' })]),
+    );
   }
 
   private updateForge(me: PlayerState) {
@@ -418,7 +527,7 @@ export class Hud {
   }
 
   private updateDen(me: PlayerState) {
-    const key = JSON.stringify([me.mount?.id, me.awakening, me.essences, me.resting, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
+    const key = JSON.stringify([me.mount?.id, me.awakening, me.essences, me.resting, me.seen, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
     if (key === this.last.den) return;
     this.last.den = key;
 
@@ -430,9 +539,16 @@ export class Hud {
       : 'Bonus de collection : chaque Alpha éveillé donnera +10 % de PV et de dégâts à tous tes Alphas.')
       + `<br>Équipés : <b>${equipped}/${ALPHA_EQUIP_MAX}</b> · les autres se reposent ici et comptent quand même pour le bonus.`;
 
-    // Une carte par espèce : éveiller son Alpha, puis le renforcer.
+    // Une carte par espèce déjà rencontrée (ou dont on a déjà l'Alpha) : éveiller son Alpha, puis le renforcer.
+    const known = SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss && (
+      me.seen.includes(s) || me.army.some((x) => x.alpha && x.species === s) || me.resting.some((x) => x.species === s) || me.awakening.some((w) => w.species === s)
+    ));
+    if (!known.length) {
+      $('alphas').replaceChildren(Object.assign(document.createElement('p'), { className: 'small muted', textContent: 'Aucune espèce rencontrée pour l\'instant : pars à la chasse, chaque espèce croisée pourra éveiller son Alpha ici.' }));
+      return;
+    }
     $('alphas').replaceChildren(
-      ...SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss).map((s) => {
+      ...known.map((s) => {
         const sp = SPECIES[s];
         // Alpha possédé : équipé (sur le terrain) ou rangé à la Tanière.
         const field = me.army.find((x) => x.alpha && x.species === s);
@@ -620,7 +736,7 @@ export class Hud {
       ctx.stroke();
     });
     this.map.stones.forEach((st, k) => {
-      if (k > 0 && !this.camps.includes(k - 1)) return;
+      if (k === 0 ? !this.buildings.includes('stone') : !this.camps.includes(k - 1)) return;
       ctx.fillStyle = '#8FE3D6';
       ctx.fillRect(m(st.x) + size * 0.9, m(st.y) - size * 1.4, size * 0.7, size * 1.2);
     });

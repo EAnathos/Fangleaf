@@ -12,7 +12,7 @@
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = forêt hors du couloir).
 
-import { CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, PATH_LEN, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES } from './config.ts';
+import { CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, MARKET_OFFSET, PATH_LEN, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -112,6 +112,7 @@ export class WorldMap {
   trailGate!: Pt; // porte d'où part la piste vers le bout du couloir
   readonly forge: Pt;
   readonly den: Pt;
+  readonly market: Pt;
   readonly tents: Pt[] = []; // tentes du camp de départ (décalage depuis son feu), à l'opposé du chemin
   readonly sites: Pt[] = []; // emplacements de camp (un au bout de chaque série de 4 zones)
   private siteArcs: number[] = []; // abscisse de chaque emplacement le long du couloir
@@ -142,6 +143,7 @@ export class WorldMap {
     for (const k of [-1, 1]) this.tents.push({ x: Math.cos(away + k * 1.1) * 100, y: Math.sin(away + k * 1.1) * 100 - 20 });
     this.forge = { x: village.x + FORGE_OFFSET.x, y: village.y + FORGE_OFFSET.y };
     this.den = { x: village.x + DEN_OFFSET.x, y: village.y + DEN_OFFSET.y };
+    this.market = { x: village.x + MARKET_OFFSET.x, y: village.y + MARKET_OFFSET.y };
     this.stones.push({ x: village.x + VILLAGE_STONE_OFFSET.x, y: village.y + VILLAGE_STONE_OFFSET.y });
     for (let s = 4 * ZONE_LEN; s <= this.length + 1; s += 4 * ZONE_LEN) {
       const at = Math.min(s, this.length) - 650, site = this.spineAt(at), from = this.spineAt(at - 300);
@@ -468,8 +470,8 @@ export class WorldMap {
       const nearGate = [0, 1, 2, 3, 4].some((g) => Math.abs(a - (g * Math.PI) / 2) < 0.1);
       if (!nearGate) this.solidDisc(v.x + Math.cos(a) * VILLAGE_R, v.y + Math.sin(a) * VILLAGE_R, 13);
     }
-    // bâtiments : huttes, forge (et son enclume), tanière, feu de camp
-    for (const [hx, hy] of [[-180, -160], [185, 150]]) this.solidRect(v.x + hx - 52, v.y + hy - 6, v.x + hx + 52, v.y + hy + 40);
+    // bâtiments (construits ou non, leur emplacement est clos) : hutte, marché, forge (et son enclume), tanière, feu de camp
+    for (const [hx, hy] of [[MARKET_OFFSET.x, MARKET_OFFSET.y], [185, 150]]) this.solidRect(v.x + hx - 52, v.y + hy - 6, v.x + hx + 52, v.y + hy + 40);
     this.solidRect(v.x + FORGE_OFFSET.x - 74, v.y + FORGE_OFFSET.y - 30, v.x + FORGE_OFFSET.x + 2, v.y + FORGE_OFFSET.y + 38);
     this.solidRect(v.x + FORGE_OFFSET.x + 10, v.y + FORGE_OFFSET.y + 12, v.x + FORGE_OFFSET.x + 54, v.y + FORGE_OFFSET.y + 38);
     for (const k of [-1, 0, 1]) this.solidDisc(v.x + DEN_OFFSET.x + k * 46, v.y + DEN_OFFSET.y - 6, 38);

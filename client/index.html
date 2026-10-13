@@ -71,7 +71,6 @@
     <section class="hud-tr">
       <canvas id="minimap" width="180" height="180" aria-label="Minicarte"></canvas>
       <div class="row tr-buttons">
-        <button id="open-map" class="btn">Carte · M</button>
         <button id="invite" class="btn">Inviter · <span id="code-label"></span></button>
       </div>
       <span id="ping" class="muted small"></span>
@@ -175,6 +174,38 @@
       </div>
     </div>
 
+    <div id="buy" class="overlay dim" hidden>
+      <div class="panel modal camp" role="dialog" aria-modal="true" aria-labelledby="buy-title">
+        <div class="row between">
+          <div class="col">
+            <h2 id="buy-title">Construire</h2>
+            <span class="muted">Or disponible : <b id="buy-gold" class="gold"></b></span>
+          </div>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <p id="buy-desc"></p>
+        <p class="small muted">Pour tout le village : un seul d'entre vous le paie.</p>
+        <button id="buy-go" class="cta"></button>
+      </div>
+    </div>
+
+    <div id="market" class="overlay dim" hidden>
+      <div class="panel modal market" role="dialog" aria-modal="true" aria-labelledby="market-title">
+        <div class="row between">
+          <div class="col">
+            <h2 id="market-title">Marché</h2>
+            <span class="muted">Or disponible : <b id="market-gold" class="gold"></b></span>
+          </div>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <h3 class="market-head">Vendre un monstre de ta meute</h3>
+        <div id="market-sell" class="stones"></div>
+        <h3 class="market-head">Acheter un monstre</h3>
+        <div id="market-buy" class="stones"></div>
+        <p class="small muted">Seules les espèces déjà croisées sont à vendre. Les Alphas ne se vendent pas.</p>
+      </div>
+    </div>
+
     <div id="bigmap" class="overlay dim" hidden>
       <div class="panel bigmap" role="dialog" aria-modal="true" aria-labelledby="bigmap-title">
         <div class="row between">
@@ -186,7 +217,7 @@
         </div>
         <canvas id="bigmap-canvas" aria-label="Carte du monde"></canvas>
         <div class="legend small muted">
-          <span><i class="lg-star"></i>Village</span><span><i class="lg-camp"></i>Camps</span><span><i class="lg-stone"></i>Pierre de passage</span><span><i class="lg-you"></i>Toi</span><span><i class="lg-ally"></i>Groupe</span><span><i class="lg-water"></i>Lac</span><span><i class="lg-cave"></i>Grotte (point rouge : mini-boss présent)</span>
+          <span><i class="lg-star"></i>Village</span><span><i class="lg-stone"></i>Pierre de passage</span><span><i class="lg-you"></i>Toi</span><span><i class="lg-ally"></i>Groupe</span><span><i class="lg-cave"></i>Grotte (point rouge : mini-boss présent)</span>
           <span class="grow"></span><span>M ou Échap pour fermer</span>
         </div>
       </div>
@@ -195,7 +226,7 @@
     <div id="den" class="overlay dim" hidden>
       <div class="panel modal den" role="dialog" aria-modal="true" aria-labelledby="den-title">
         <div class="row between">
-          <h2 id="den-title">Tanière des Alphas</h2>
+          <h2 id="den-title">Tanière</h2>
           <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
         </div>
         <div class="tabs" role="tablist">

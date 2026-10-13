@@ -52,16 +52,17 @@ or, niveaux d'arme et d'armure, essences et **Alphas** (la meute ordinaire n'est
 
 - **ZQSD / WASD / flèches** ou **glisser** (souris / doigt) : se déplacer
 - Attaque automatique, la meute suit et combat seule
-- **E** près d'un bâtiment : forge (arme / armure) ou tanière des Alphas · **Échap** : fermer
-- **M** (ou clic sur la minicarte) : grande carte, avec le brouillard des zones pas encore explorées · **Échap** ou **M** pour la fermer
+- **Bâtiments du village** : ce ne sont au départ que des chantiers. **E** devant l'un d'eux pour le construire avec ton or, une fois pour tout le village : Forge (10 or), Tanière (20 or), Marché (50 or), Pierre de passage (200 or)
+- **E** près d'un bâtiment construit : Forge (classe, arme, armure), Tanière (Alphas des espèces déjà rencontrées, bestiaire), Marché (vendre les monstres de sa meute, acheter ceux des espèces déjà croisées) · **Échap** : fermer
+- **Clic sur la minicarte** (ou **M**) : grande carte, avec le brouillard des zones pas encore explorées · **Échap** ou **M** pour la fermer
 - **F** : monter sur son Alpha Loup, Sanglier ou Ours (ou en descendre)
 - **Filons d'or** : reste à côté, ton personnage les pioche tout seul quand aucun monstre n'est à portée
 - **Le monde est un long chemin** : du camp de départ (au bord de la carte) au village, puis une piste à travers 5 zones de plus en plus dangereuses ; la dernière, les Lacs brumeux, s'atteint depuis le Camp avancé
 - **Tireurs** (Guetteur runique, Crapaud-mortier, Serpent des brumes) : ils s'immobilisent pour charger leur tir — écarte-toi de la trajectoire, ou sors du cercle annoncé au sol
-- **E** sur l'emplacement de camp au bout de la zone 4 : l'établir pour tout le village (500 or) — feu qui soigne, réapparition sur place, Pierre de passage
-- **E** devant une Pierre de passage (village ou camp établi) : voyager d'un camp à l'autre avec ta meute
+- **E** sur l'emplacement de camp au bout de la zone 4 : l'établir pour tout le village (2000 or) — feu qui soigne, réapparition sur place, Pierre de passage
+- **E** devant une Pierre de passage (village, une fois construite, ou camp établi) : voyager d'un camp à l'autre avec ta meute
 - **Tanière › Bestiaire** : chaque espèce croisée s'y ajoute (sprite, stats, comment la combattre) ; les autres restent en silhouette
-- **E** devant une grotte : entrer affronter le géant de l'espèce (E à la sortie pour ressortir). Ses attaques spéciales s'annoncent par une zone au sol : sors-en avant l'impact. Son âme rend légendaire ton Alpha de cette espèce (Tanière).
+- **E** devant une grotte : la débloquer pour tout le village (150 or × niveau de sa zone), puis entrer affronter le géant de l'espèce (E à la sortie pour ressortir). Ses attaques spéciales s'annoncent par une zone au sol : sors-en avant l'impact. Son âme rend légendaire ton Alpha de cette espèce (Tanière).
 - **Échap** : menu — retour au lobby, ou supprimer le village pour repartir de zéro (fondateur ; les autres membres effacent seulement leur progression), avec confirmation
 - **F9** (dev uniquement) : +300 or et +30 essences de chaque espèce pour tester la forge et la Tanière
 
