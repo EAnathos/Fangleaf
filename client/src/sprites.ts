@@ -205,7 +205,7 @@ export function armorColor(lvl: number) {
 
 export function drawPlayer(
   ctx: Ctx, x: number, y: number, color: string, fx: number, fy: number, armor: number, name: string,
-  t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null,
+  t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null, tool: Tool | null = null,
 ) {
   const r = 16;
   const bob = moving ? Math.abs(Math.sin(t * (riding ? 16 : 12))) * 2 : 0;
@@ -218,12 +218,13 @@ export function drawPlayer(
     ctx.stroke();
   }
   const cy = y - bob;
-  // arme
-  const ang = Math.atan2(fy, fx);
+  // arme (ou outil de récolte, tourné vers le filon)
+  const ang = tool ? tool.ang : Math.atan2(fy, fx);
   ctx.save();
   ctx.translate(x, cy);
   ctx.rotate(ang);
-  if (cls === 'archer') {
+  if (tool) drawTool(ctx, r, tool);
+  else if (cls === 'archer') {
     // arc tendu
     ctx.strokeStyle = '#8B6A47';
     ctx.lineWidth = 3;
@@ -295,6 +296,52 @@ export function drawPlayer(
   ctx.strokeText(name, x, cy - r - 10);
   ctx.fillStyle = '#EEE7D7';
   ctx.fillText(name, x, cy - r - 10);
+}
+
+/** Outil en main pendant la récolte : pioche (filons, pierre) ou hache (bois), qui s'abat à chaque coup. */
+export interface Tool {
+  kind: 'pick' | 'axe';
+  ang: number; // direction de la cible
+  k: number; // temps depuis le dernier coup, de 0 (outil abattu) à 1 (relevé pour le suivant)
+}
+
+function drawTool(ctx: Ctx, r: number, tool: Tool) {
+  // abattu à l'impact, puis relevé peu à peu jusqu'au coup suivant
+  const swing = 0.5 - 1.6 * (1 - (1 - tool.k) ** 2);
+  ctx.rotate(swing);
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(12,18,16,0.8)';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.moveTo(r - 6, 0);
+  ctx.lineTo(r + 20, 0);
+  ctx.stroke();
+  ctx.strokeStyle = '#8B6A47';
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+  ctx.fillStyle = '#C9CFC2';
+  ctx.strokeStyle = 'rgba(12,18,16,0.8)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (tool.kind === 'pick') {
+    // fer de pioche : deux pointes recourbées
+    ctx.moveTo(r + 18, -2);
+    ctx.quadraticCurveTo(r + 24, -10, r + 16, -17);
+    ctx.lineTo(r + 21, -2);
+    ctx.lineTo(r + 21, 2);
+    ctx.lineTo(r + 16, 17);
+    ctx.quadraticCurveTo(r + 24, 10, r + 18, 2);
+    ctx.closePath();
+  } else {
+    // fer de hache : lame large d'un seul côté
+    ctx.moveTo(r + 14, -3);
+    ctx.lineTo(r + 23, -3);
+    ctx.quadraticCurveTo(r + 30, 4, r + 26, 13);
+    ctx.quadraticCurveTo(r + 18, 10, r + 14, 3);
+    ctx.closePath();
+  }
+  ctx.fill();
+  ctx.stroke();
 }
 
 export function hpBar(ctx: Ctx, x: number, y: number, w: number, pct: number, color: string) {

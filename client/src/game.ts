@@ -9,7 +9,7 @@ import { Fx } from './fx.ts';
 import { buildingNear, Hud } from './hud.ts';
 import { initInput, moveDir, stick } from './input.ts';
 import type { Net } from './net.ts';
-import { drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar } from './sprites.ts';
+import { drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool } from './sprites.ts';
 import { World } from './world.ts';
 import { WorldMap } from '../../shared/worldmap.ts';
 
@@ -25,6 +25,7 @@ export class Game {
   me = { x: 0, y: 0, fx: 1, fy: 0, moving: false };
   private flashes = new Map<number, number>();
   private charges = new Map<number, number>(); // tireur → début de la charge de son tir
+  private tools = new Map<number, { kind: Tool['kind']; at: number; tx: number; ty: number }>(); // dompteur → dernier coup d'outil (récolte)
   private shotsAt = 0; // réception du dernier snapshot (les projectiles droits sont extrapolés depuis)
   private faces = new Map<number, { x: number; face: number }>();
   private lastFrame = performance.now();
@@ -277,7 +278,7 @@ export class Game {
         const o = this.map.ores[e.id];
         if (!o) break;
         this.fx.burst(o.x, o.y - 8, '#F0B64A', e.done ? 22 : 5, e.done ? 150 : 70);
-        if (e.by === this.myId) this.fx.slash(this.me.x, this.me.y, Math.atan2(o.y - this.me.y, o.x - this.me.x));
+        this.tools.set(e.by, { kind: 'pick', at: this.time, tx: o.x, ty: o.y });
         break;
       }
       case 'boss': {
@@ -565,9 +566,13 @@ export class Game {
             lift = mr * 0.8;
             back = mr * 0.25 * (fx < -0.1 ? 1 : -1); // assis sur le dos, pas sur la tête
           }
+          // Récolte en cours (un coup il y a moins d'une seconde) : l'arme laisse place à l'outil.
+          const used = this.tools.get(p.id);
+          const k = used ? (this.time - used.at) / 0.55 : 2;
+          const tool = used && this.time - used.at < 0.9 && !p.mount ? { kind: used.kind, ang: Math.atan2(used.ty - y, used.tx - x), k: Math.min(1, k) } : null;
           drawPlayer(
             ctx, x + back, y - lift, p.color, fx, fy, p.armor, p.name, this.time,
-            isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls,
+            isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool,
           );
           if (p.slowed) drawWebbed(ctx, x, y - lift, this.time);
           if (!isMe && p.hp < p.maxHp) hpBar(ctx, x, y + 26, 34, (100 * p.hp) / p.maxHp, '#7FCB5B');
