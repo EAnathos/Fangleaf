@@ -19,8 +19,9 @@ npm run build
 pm2 startOrReload ecosystem.config.cjs --update-env
 pm2 save >/dev/null
 
+# le serveur met quelques secondes à écouter après le reload : on réessaie sans bruit
 for i in $(seq 1 15); do
-  if curl -fsS "http://127.0.0.1:$PORT/" | grep -q '<title>Fangleaf</title>'; then
+  if curl -fsS "http://127.0.0.1:$PORT/" 2>/dev/null | grep -q '<title>Fangleaf</title>'; then
     echo "✔ Fangleaf en ligne sur le port $PORT"
     exit 0
   fi
