@@ -202,4 +202,15 @@ setInterval(() => {
   for (const r of rooms.values()) for (const p of r.players.values()) if (p.dirty) void save(r, p);
 }, 15_000);
 
-http.listen(PORT, () => console.log(`Fangleaf sur http://localhost:${PORT} (ws: /ws)`));
+// Arrêt (pm2 restart, systemctl stop, Ctrl+C) : on sauvegarde tout le monde avant de quitter.
+let stopping = false;
+const shutdown = async () => {
+  if (stopping) return;
+  stopping = true;
+  await Promise.allSettled([...rooms.values()].flatMap((r) => [...r.players.values()].map((p) => save(r, p))));
+  process.exit(0);
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+http.listen(PORT, () =>console.log(`Fangleaf sur http://localhost:${PORT} (ws: /ws)`));
