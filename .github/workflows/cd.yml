@@ -53,7 +53,9 @@ jobs:
       - name: Le site répond
         run: |
           for i in $(seq 1 10); do
-            if curl -fsS https://fangleaf.anathos.me/ | grep -q '<title>Fangleaf</title>'; then echo "En ligne"; exit 0; fi
+            # page entière d'abord : un grep -q dans le tube couperait curl en pleine écriture (erreur 23)
+            page=$(curl -fsS https://fangleaf.anathos.me/ 2>/dev/null || true)
+            if grep -q '<title>Fangleaf</title>' <<<"$page"; then echo "En ligne"; exit 0; fi
             sleep 3
           done
           echo "fangleaf.anathos.me ne répond pas" >&2
