@@ -1,4 +1,4 @@
-# Fangleaf · service systemd du serveur Node (port 3010, derrière nginx).
+# Fangleaf · service systemd du serveur Node (port 4310, derrière nginx).
 # Adapte User et WorkingDirectory, puis :
 #   sudo cp deploy/fangleaf.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now fangleaf
@@ -14,7 +14,7 @@ Type=simple
 User=root
 WorkingDirectory=/root/eanathos/Fangleaf
 EnvironmentFile=/root/eanathos/Fangleaf/.env
-Environment=PORT=3010
+Environment=PORT=4310
 ExecStart=/usr/bin/npm start
 Restart=on-failure
 RestartSec=3

@@ -14,7 +14,7 @@ module.exports = {
       instances: 1,
       env: {
         NODE_ENV: 'production',
-        PORT: 3010, // 3000 à 3005 déjà pris sur le VPS
+        PORT: 4310, // 3000 à 3010 déjà pris sur le VPS (portfolio, Ant ID Training…)
       },
       autorestart: true,
       restart_delay: 3000,

@@ -41,7 +41,7 @@ or, niveaux d'arme et d'armure, essences et **Alphas** (la meute ordinaire n'est
 1. DNS : un enregistrement A (et AAAA) `fangleaf.anathos.me` vers le VPS.
 2. Sur le VPS, dans le dossier du clone (ici `/root/eanathos/Fangleaf`) : `.env` rempli, `npm ci`, `npm run db:migrate`, puis `npm run build`
    (les variables `VITE_*` sont figées au build : le `.env` doit être là avant).
-3. Serveur Node (port 3010) : `pm2 start ecosystem.config.cjs` ([ecosystem.config.cjs](ecosystem.config.cjs)), ou [deploy/fangleaf.service](deploy/fangleaf.service) avec systemd.
+3. Serveur Node (port 4310) : `pm2 start ecosystem.config.cjs` ([ecosystem.config.cjs](ecosystem.config.cjs)), ou [deploy/fangleaf.service](deploy/fangleaf.service) avec systemd.
 4. nginx : [deploy/nginx/fangleaf.anathos.me.conf](deploy/nginx/fangleaf.anathos.me.conf) (HTTPS Let's Encrypt, relais du WebSocket `/ws`), étapes en tête du fichier.
 5. Supabase › *Authentication › URL Configuration* : ajoute `https://fangleaf.anathos.me/**` aux *Redirect URLs*
    (et mets-la en *Site URL* une fois en prod).
