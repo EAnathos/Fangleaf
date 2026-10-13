@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
 
@@ -1103,7 +1103,10 @@ const noop = () => {};
     const o = r.map.ores.find((x: { res: string }) => x.res === res);
     [p.x, p.y] = [o.x + 30, o.y];
     const [w0, s0, g0] = [p.wood, p.stone, p.gold];
-    for (let i = 0; i < 20 * 20 && r.oreHp[o.id] > 0; i++) r.step();
+    for (let i = 0; i < 20 * 20 && r.oreHp[o.id] > 0; i++) {
+      for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id); // pas de monstre pour l'interrompre
+      r.step();
+    }
     const got = { wood: p.wood - w0, stone: p.stone - s0, gold: p.gold - g0 };
     const want = res === 'wood' ? { wood: resYield(o.zone), stone: 0, gold: 0 } : res === 'stone' ? { wood: 0, stone: resYield(o.zone), gold: 0 } : { wood: 0, stone: oreStone(o.zone), gold: got.gold };
     check(JSON.stringify(got) === JSON.stringify(want) && (res !== 'gold' || got.gold > 0), `${res} (zone ${o.zone}) : +${got.wood} bois, +${got.stone} pierre, +${got.gold} or`);
@@ -1175,6 +1178,59 @@ const noop = () => {};
   check(map.arcAt(p.x, p.y) < map.gates[1], 'revenir en arrière par une porte fermée : toujours possible');
   const again: any = new Room('TEST2', r.seed, { hall: 99, beaten: [g1, g1, 0, 999] });
   check(again.hall === HALL_MAX && again.beaten.join() === String(g1), 'Maison commune et géants rechargés (bornés, doublons et non-géants ignorés)');
+}
+
+{
+  // Baies : cueillies aux buissons ; fruit tendu, le gibier passif s'approche et chaque fruit peut l'apprivoiser.
+  const r = room();
+  for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
+  const snail = SPECIES.findIndex((sp) => sp.key === 'snail'), hare = SPECIES.findIndex((sp) => sp.key === 'hare');
+  check(SPECIES[snail].zone === 1 && !!SPECIES[snail].passive && SPECIES[hare].zone === 3 && SPECIES[hare].zone === SPECIES[2].zone, 'escargot passif en zone 1, lièvre dans la zone des sangliers et des ours');
+  const p = r.addPlayer('a', noop);
+  const bush = r.map.bushes[3];
+  [p.x, p.y] = [bush.x + 30, bush.y];
+  r.onPick(p);
+  check(p.fruits === BERRIES_PICKED && r.bushBack[bush.id] > r.time, `${BERRIES_PICKED} baies cueillies, le buisson est vide`);
+  r.onPick(p);
+  check(p.fruits === BERRIES_PICKED, 'buisson vide : rien de plus');
+  // Fruit tendu : l'escargot vient vers le dompteur.
+  p.fruits = 40;
+  const u = r.createUnit(snail, false, p.x + 250, p.y);
+  if (r.map.blocked(u.x, u.y)) [u.x, u.y] = [p.x, p.y + 250];
+  const d0 = Math.hypot(u.x - p.x, u.y - p.y);
+  r.onHold(p, true);
+  let fed = 0, tamedAt = -1;
+  for (let i = 0; i < 20 * 60 && tamedAt < 0; i++) {
+    const f0 = p.fruits;
+    for (const w of [...r.units.values()]) if (!w.owner && w !== u) r.units.delete(w.id); // seuls l'escargot et le dompteur
+    r.step();
+    if (p.fruits < f0) fed++;
+    if (u.owner === p.id) tamedAt = fed;
+  }
+  check(d0 > 150 && tamedAt > 0, `fruit tendu : l'escargot approche et s'apprivoise (${tamedAt} fruit${tamedAt > 1 ? 's' : ''})`);
+  check(p.army.includes(u.id), 'il rejoint la meute');
+  // Chances : bien meilleures pour le gibier que pour un monstre hostile.
+  check(fruitTameChance(snail) >= 5 * fruitTameChance(0), `chance par fruit : ${Math.round(fruitTameChance(snail) * 100)} % (gibier) contre ${Math.round(fruitTameChance(0) * 100)} % (hostile)`);
+  let wild = 0, n = 0;
+  p.fruits = 400;
+  p.army = [];
+  for (let i = 0; i < 300; i++) {
+    const w = r.createUnit(0, false, p.x + 20, p.y);
+    p.atkCd = 0;
+    r.grid.clear();
+    r.grid.insert(w);
+    r.feed(p);
+    if (w.owner) wild++;
+    n++;
+    r.units.delete(w.id);
+    p.army = [];
+  }
+  check(wild > 0 && wild / n < 0.12, `Gluant hostile nourri : ${wild} apprivoisés sur ${n} fruits`);
+  p.holding = true;
+  p.fruits = 0;
+  p.atkCd = 0;
+  r.feed(p);
+  check(!p.holding, 'plus de fruit : la main se vide');
 }
 
 {

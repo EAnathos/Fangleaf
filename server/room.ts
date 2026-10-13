@@ -1,7 +1,7 @@
 // Un village : jusqu'à 3 joueurs, la carte et sa simulation autoritaire.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, BUSH_REGROW_S, BUSH_SEEK_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
@@ -114,6 +114,8 @@ export interface Player {
   gold: number;
   wood: number;
   stone: number;
+  fruits: number; // baies cueillies
+  holding: boolean; // tend un fruit : il nourrit au lieu de frapper
   essences: number[];
   userId: string | null; // compte Supabase, null = invité (tests uniquement)
   dirty: boolean; // progression à sauvegarder
@@ -234,7 +236,7 @@ export class Room {
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, gold: 0, wood: 0, stone: 0, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
     };
@@ -243,6 +245,7 @@ export class Room {
       p.gold = prof.gold;
       p.wood = Math.max(0, Math.floor(prof.wood ?? 0));
       p.stone = Math.max(0, Math.floor(prof.stone ?? 0));
+      p.fruits = Math.max(0, Math.floor(prof.fruits ?? 0));
       p.weapon = clamp(prof.weapon, 0, WEAPON_MAX);
       p.armor = clamp(prof.armor, 0, ARMOR_MAX);
       p.cls = CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as ClassId) : null;
@@ -339,7 +342,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, weapon: p.weapon, armor: p.armor, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen] };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen] };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -935,6 +938,7 @@ export class Room {
     if (p.dead) return;
     p.atkCd -= DT;
     if (p.atkCd > 0) return;
+    if (p.holding) return this.feed(p); // fruit en main : on nourrit, on ne frappe pas
     const cls = classOf(p.cls);
     const reach = PLAYER_R + cls.range;
     const t = this.nearest(p.x, p.y, reach + 50, this.isWild) as Unit | undefined;
@@ -950,6 +954,47 @@ export class Room {
       });
       for (const e of hit) this.damage(e, dmg, p);
     } else this.damage(t, dmg, p);
+  }
+
+  /** Cueillir les baies du buisson garni le plus proche (devant lui). */
+  onPick(p: Player) {
+    if (p.dead) return;
+    const b = this.map.bushes.find((x) => this.bushBack[x.id] <= this.time && dist2(p.x, p.y, x.x, x.y) <= BUSH_PICK_R ** 2);
+    if (!b) return;
+    this.bushBack[b.id] = this.time + BUSH_REGROW_S;
+    p.fruits += BERRIES_PICKED;
+    p.dirty = true;
+    this.events.push({ e: 'pick', by: p.id, bush: b.id, n: BERRIES_PICKED });
+  }
+
+  /** Tendre un fruit (s'il en a) ou le ranger. */
+  onHold(p: Player, on: boolean) {
+    p.holding = on && p.fruits > 0;
+  }
+
+  /**
+   * Fruit tendu : il nourrit le monstre sauvage collé à lui, un fruit par seconde. Chaque fruit a une chance de
+   * l'apprivoiser (bonne pour le gibier passif, faible pour un monstre hostile ; jamais un géant ni ses renforts).
+   */
+  private feed(p: Player) {
+    if (p.fruits <= 0) {
+      p.holding = false;
+      return;
+    }
+    const t = this.nearest(p.x, p.y, PLAYER_R + 80, (e) => this.isWild(e) && !isBoss((e as Unit).s) && !(e as Unit).summoner) as Unit | undefined;
+    if (!t || dist2(p.x, p.y, t.x, t.y) > (PLAYER_R + t.r + 26) ** 2) return;
+    p.atkCd = FEED_CD;
+    if (this.armySize(p) >= ARMY_CAP) {
+      this.events.push({ e: 'full', to: p.id });
+      return;
+    }
+    p.fruits--;
+    p.dirty = true;
+    if (Math.random() < fruitTameChance(t.s)) {
+      this.makeTamed(t, p);
+      this.events.push({ e: 'tame', id: t.id, by: p.id, s: t.s });
+    } else this.events.push({ e: 'feed', by: p.id, id: t.id });
+    if (p.fruits <= 0) p.holding = false;
   }
 
   /** Aucun monstre à portée : le dompteur récolte le filon, le rocher ou le bois mort le plus proche. */
@@ -1486,6 +1531,12 @@ export class Room {
       return;
     }
     u.target = 0;
+    // Un dompteur tend un fruit pas loin : il s'approche, sans se presser.
+    for (const p of this.players.values()) {
+      if (p.dead || !p.holding || p.fruits <= 0 || dist2(p.x, p.y, u.x, u.y) > LURE_R ** 2) continue;
+      this.navTo(u, p.x, p.y, u.speed * 0.55, PLAYER_R + u.r + 12);
+      return;
+    }
     u.wanderT -= DT;
     if (u.wanderT <= 0) {
       // Le buisson garni le plus proche de son coin, s'il y en a un : il y va et mange.
@@ -1818,7 +1869,7 @@ export class Room {
   private broadcast() {
     const players: PlayerState[] = [...this.players.values()].map((p) => ({
       id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: p.fx, fy: p.fy,
-      hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone,
+      hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
       essences: p.essences, saved: !!p.userId, dead: p.dead,
       respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
       revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),

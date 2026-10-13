@@ -66,6 +66,8 @@ export class Game {
     this.hud.onChest = (id) => net.send({ t: 'chest', id });
     this.hud.onHall = () => net.send({ t: 'hall' });
     this.hud.onDeposit = () => net.send({ t: 'deposit' });
+    this.hud.onPick = () => net.send({ t: 'pick' });
+    this.hud.onHold = () => this.toggleHold();
     this.hud.onReset = () => net.send({ t: 'reset' });
     this.hud.onQuit = () => {
       net.close(); // le serveur sauvegarde la progression à la déconnexion
@@ -103,6 +105,7 @@ export class Game {
       if (this.hud.panel) this.hud.setPanel(null);
       else if (st && !st.dead && b?.panel) this.hud.setPanel(b.panel);
       else if (st && !st.dead && b?.deposit) this.net.send({ t: 'deposit' });
+      else if (st && !st.dead && b?.pick) this.net.send({ t: 'pick' });
       else if (st && !st.dead && b?.chest !== undefined) this.net.send({ t: 'chest', id: b.chest });
       else if (st && !st.dead && b?.cave) this.net.send({ t: 'cave', id: b.cave.id, enter: b.cave.enter });
     } else if (key === 'Escape') {
@@ -111,8 +114,18 @@ export class Game {
     }
     else if (key === 'm') this.hud.setPanel(this.hud.panel === 'map' ? null : 'map');
     else if (key === 'f') this.toggleMount();
+    else if (key === 't') this.toggleHold();
     else if (key === 'r') this.setHelp(true);
     else if (code === 'F9' && import.meta.env.DEV) this.net.send({ t: 'cheat' });
+  }
+
+  /** T : tendre un fruit (le gibier passif s'approche, chaque fruit peut l'apprivoiser) ou le ranger. */
+  private toggleHold() {
+    const st = this.self();
+    if (!st || st.dead) return;
+    if (!st.holding && !st.fruits) return this.hud.toast('Aucune baie : cueille-en aux buissons garnis (E).');
+    this.net.send({ t: 'hold', on: !st.holding });
+    if (!st.holding) this.hud.toast('Fruit en main : le gibier approche. Tu ne te bats plus tant que tu le tends (T pour le ranger).');
   }
 
   /** R maintenu près d'un coéquipier à terre : le serveur compte les secondes. */
@@ -313,6 +326,17 @@ export class Game {
         this.fx.ring(h.x, h.y, '#F0B64A', 20, 160, 1.2);
         this.fx.burst(h.x, h.y - 30, '#F0B64A', 30, 180);
         this.hud.toast(e.by === this.myId ? `Maison commune au niveau ${e.lvl} : ${HALL[e.lvl - 1].unlock}` : `${name(e.by)} a amélioré la Maison commune (niv. ${e.lvl})`, 'good');
+        break;
+      }
+      case 'pick': {
+        const b = this.map.bushes[e.bush];
+        if (b) this.fx.burst(b.x, b.y - 10, '#C8323C', 10, 90);
+        if (e.by === this.myId && b) this.fx.text(b.x, b.y - 30, `+${e.n} baies`, '#F3A3AA', 15, 1.1);
+        break;
+      }
+      case 'feed': {
+        const u = this.posOf(e.id, players);
+        if (u) this.fx.text(u.x, u.y - 26, 'miam…', '#F3A3AA', 13, 0.9);
         break;
       }
       case 'deposit': {
@@ -519,6 +543,7 @@ export class Game {
     this.hud.chests = this.net.latest?.chests ?? [];
     this.hud.hall = this.net.latest?.hall ?? 0;
     this.hud.stock = this.net.latest?.stock ?? [0, 0];
+    this.hud.bare = this.net.latest?.bare ?? [];
     this.hud.beaten = this.net.latest?.beaten ?? [];
     this.watchGates();
     this.hud.sleepers = (view?.units ?? []).flatMap((u) => {
@@ -724,7 +749,8 @@ export class Game {
           // Récolte en cours (un coup il y a moins d'une seconde) : l'arme laisse place à l'outil.
           const used = this.tools.get(p.id);
           const k = used ? (this.time - used.at) / 0.55 : 2;
-          const tool = used && this.time - used.at < 0.9 && !p.mount ? { kind: used.kind, ang: Math.atan2(used.ty - y, used.tx - x), k: Math.min(1, k) } : null;
+          const tool: Tool | null = p.holding ? { kind: 'fruit', ang: Math.atan2(fy, fx), k: 0 }
+            : used && this.time - used.at < 0.9 && !p.mount ? { kind: used.kind, ang: Math.atan2(used.ty - y, used.tx - x), k: Math.min(1, k) } : null;
           drawPlayer(
             ctx, x + back, y - lift, p.color, fx, fy, p.armor, p.name, this.time,
             isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool, p.weapon,

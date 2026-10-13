@@ -447,7 +447,7 @@ export class WorldMap {
   private buildBushes() {
     const rand = rng(this.seed ^ 0xb0551e5);
     for (let tries = 0; tries < 6000 && this.bushes.length < 110; tries++) {
-      const s = 600 + Math.pow(rand(), 1.6) * (this.length - 600); // plus nombreux près du départ
+      const s = 600 + Math.pow(rand(), 1.25) * (this.length - 600); // un peu plus nombreux près du départ
       const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
       const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 80);
       const x = sx + n.x * off, y = sy + n.y * off;

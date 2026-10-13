@@ -20,6 +20,8 @@ export type ClientMsg =
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, sinon index du camp
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
   | { t: 'hall' } // améliorer la Maison commune (pour tout le village)
+  | { t: 'pick' } // cueillir les baies du buisson garni le plus proche
+  | { t: 'hold'; on: boolean } // tendre un fruit (ou le ranger) : le gibier passif s'approche
   | { t: 'deposit' } // vider son sac (bois, pierre) dans la réserve du village, à l'entrepôt
   | { t: 'unlock'; cave: number } // débloquer une grotte (pour tout le village)
   | { t: 'sell'; id: number } // Marché : vendre un monstre ordinaire de sa meute
@@ -43,6 +45,8 @@ export interface PlayerState {
   armor: number;
   cls: ClassId | null; // classe (null : pas encore choisie)
   gold: number;
+  fruits: number; // baies dans son sac
+  holding: boolean; // tend un fruit (il ne se bat plus, il nourrit)
   wood: number; // dans son sac (à déposer à l'entrepôt)
   stone: number;
   essences: number[]; // par espèce
@@ -98,6 +102,8 @@ export type GameEvent =
   | { e: 'challenge'; cave: number; id: number; by: number } // un dompteur a provoqué le géant : le combat commence
   | { e: 'chest'; id: number; to: number; gold: number; x: number; y: number } // coffre ouvert : or tiré au hasard
   | { e: 'eat'; id: number; bush: number } // du gibier mange les fruits d'un buisson
+  | { e: 'pick'; by: number; bush: number; n: number } // baies cueillies
+  | { e: 'feed'; by: number; id: number } // un fruit donné, sans apprivoiser cette fois
   | { e: 'boom'; x: number; y: number; r: number; kind: string } // une attaque spéciale frappe
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire
   | { e: 'shot'; by: number; x: number; y: number; tx: number; ty: number; cls: ClassId } // flèche ou orbe

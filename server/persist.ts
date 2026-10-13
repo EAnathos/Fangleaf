@@ -12,6 +12,7 @@ export interface Profile {
   gold: number;
   wood: number;
   stone: number;
+  fruits: number; // baies dans le sac
   weapon: number;
   armor: number;
   essences: number[];
@@ -103,7 +104,7 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   if (!db) return null;
   const { data, error } = await db
     .from('progress')
-    .select('name, gold, wood, stone, weapon, armor, essences, alphas, village_found, class, pack, seen')
+    .select('name, gold, wood, stone, fruits, weapon, armor, essences, alphas, village_found, class, pack, seen')
     .eq('user_id', userId)
     .eq('village_code', code)
     .maybeSingle();

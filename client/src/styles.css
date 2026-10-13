@@ -322,3 +322,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .stone-row .tag.shut { color: #FF9B78; font-weight: 700; }
 .prompt.hall { border-color: var(--amber); color: var(--amber); }
 .modal.hall > * { flex-shrink: 0; }
+
+/* Baies : compteur et bouton « tendre un fruit » (touche T). */
+.berry { color: #E86A74; }
+.hold-btn { height: 34px; margin-top: 6px; font-size: 13px; border-color: #C8323C; color: #F3A3AA; }
+.hold-btn.on { background: rgba(200, 50, 60, 0.25); color: #FFD3D6; }
+.prompt.pick { border-color: #C8323C; color: #F3A3AA; }

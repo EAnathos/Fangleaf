@@ -2,7 +2,7 @@
 
 import {
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_TALK_R, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
-  BUILDINGS, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
+  BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
 import type { PlayerState, UnitTuple } from '../../shared/protocol.ts';
@@ -25,6 +25,7 @@ export interface Spot {
   buy?: Purchase; // panneau d'achat : ce qui est à acheter
   reach?: number; // portée d'interaction (par défaut BUILDING_REACH)
   deposit?: boolean; // entrepôt : déposer son sac
+  pick?: boolean; // buisson garni : cueillir ses baies
   chest?: number; // coffre d'un géant vaincu à ouvrir
 }
 /** Géant endormi dans sa grotte : on peut aller lui parler. */
@@ -43,6 +44,7 @@ export interface VillageView {
   sleepers: Sleeper[]; // géants endormis à portée de vue
   chests: [number, number, number, number][]; // coffres des géants : [id, x, y, déjà ouvert]
   hall: number; // niveau de la Maison commune
+  bare: number[]; // buissons dont les baies ont été mangées ou cueillies
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 /** Prix (or, bois, pierre), nom et niveau de Maison commune requis d'un achat pour le village. */
@@ -80,6 +82,8 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
       { cave: { id: c.id, enter: false }, pos: c.exit, label: 'E — Sortir de la grotte' },
     ]),
     ...v.chests.filter((c) => !c[3]).map((c): Spot => ({ chest: c[0], pos: { x: c[1], y: c[2] }, label: 'E — Ouvrir le coffre' })),
+    ...map.bushes.filter((b) => !v.bare.includes(b.id) && Math.hypot(x - b.x, y - b.y) < BUSH_PICK_R)
+      .map((b): Spot => ({ pick: true, pos: b, reach: BUSH_PICK_R, label: 'E — Cueillir des baies' })),
     ...v.sleepers.map((z): Spot => ({ panel: 'talk', pos: z, at: z.cave, reach: z.r + BOSS_TALK_R, label: `E — Parler à ${SPECIES[map.caves[z.cave].boss].name}` })),
   ];
   return spots.find((b) => Math.hypot(x - b.pos.x, y - b.pos.y) < (b.reach ?? BUILDING_REACH));
@@ -126,6 +130,9 @@ export class Hud {
   chests: [number, number, number, number][] = []; // coffres des géants vaincus
   hall = 0; // niveau de la Maison commune
   stock: [number, number] = [0, 0]; // réserve du village : bois, pierre
+  bare: number[] = []; // buissons sans baies
+  onPick = () => {};
+  onHold = () => {};
   onDeposit = () => {};
   beaten: number[] = []; // géants vaincus par le village
   onHall = () => {};
@@ -179,6 +186,7 @@ export class Hud {
     };
     $('talk-fight').onclick = () => this.onChallenge(this.spotAt);
     $('hall-up').onclick = () => this.onHall();
+    $('hold-btn').onclick = () => this.onHold();
     $('talk-later').onclick = () => this.setPanel(null);
     for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'hall'] as const) {
       const el = $(id);
@@ -296,6 +304,11 @@ export class Hud {
     $('self-gold').textContent = `Or ${me.gold}`;
     $('self-wood').textContent = `Bois ${me.wood}`;
     $('self-stone').textContent = `Pierre ${me.stone}`;
+    $('self-fruits').textContent = `Baies ${me.fruits}`;
+    const hold = $('hold-btn');
+    hold.hidden = !me.fruits && !me.holding;
+    hold.classList.toggle('on', me.holding);
+    hold.textContent = me.holding ? 'Ranger le fruit (T)' : 'Tendre un fruit (T) : apprivoiser';
     $('stock-wood').textContent = `Bois ${this.stock[0]}`;
     $('stock-stone').textContent = `Pierre ${this.stock[1]}`;
     $('self-army').textContent = `Meute ${me.army.filter((a) => !a.alpha).length}/${ARMY_CAP}`;
@@ -330,8 +343,8 @@ export class Hud {
     prompt.hidden = !b || !!this.panel;
     if (b) {
       prompt.textContent = b.label;
-      prompt.className = `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
-      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
+      prompt.className = `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
+      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
     }
     const building = this.panel !== null && this.panel !== 'map' && this.panel !== 'quit';
     if (building && b?.panel !== this.panel) this.setPanel(null);

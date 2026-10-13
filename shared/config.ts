@@ -305,8 +305,9 @@ export const SPECIES: Species[] = [
   { key: 'toad_king', name: 'Crapaud-Roi', color: '#5F8A3A', r: 60, hp: 11000, dmg: 100, speed: 190, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'toad', base: 'toad' },
   { key: 'mist_hydra', name: 'Hydre des brumes', color: '#3E8290', r: 57, hp: 9500, dmg: 95, speed: 205, atkCd: 1.2, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'serpent', base: 'serpent' },
   { key: 'titan_crab', name: 'Crabe Titan', color: '#B9532F', r: 63, hp: 14000, dmg: 110, speed: 185, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'crab', base: 'crab' },
-  // Gibier passif : il broute les buissons à fruits de la Lisière et s'enfuit quand on le frappe (pas de géant).
-  { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 30, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 1, population: 24, pack: [1, 3], passive: true },
+  // Gibier passif : il broute les buissons à fruits et s'enfuit quand on le frappe (pas de géant). S'apprivoise surtout aux baies.
+  { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 30, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 3, population: 20, pack: [1, 3], passive: true },
+  { key: 'snail', name: 'Escargot des mousses', color: '#C99A5B', r: 12, hp: 22, dmg: 1, speed: 32, atkCd: 1.4, gold: 2, zone: 1, population: 20, pack: [1, 2], passive: true },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);
@@ -324,6 +325,13 @@ export const SPAWN_SAFE_R = 420; // pas de monstre qui apparaît près du camp d
 export const BUSH_REGROW_S = 45;
 export const BUSH_SEEK_R = 520; // distance (depuis son point d'origine) à laquelle le gibier va chercher un buisson
 export const FLEE_S = 4; // le gibier frappé s'enfuit pendant ce temps
+// Apprivoiser aux baies : on cueille aux buissons, on tend un fruit (touche T) ; le gibier passif s'approche peu à peu,
+// et chaque fruit donné a une chance de l'apprivoiser (bien plus faible pour un monstre hostile).
+export const BERRIES_PICKED = 3; // baies cueillies sur un buisson garni
+export const BUSH_PICK_R = 80; // distance pour cueillir
+export const FEED_CD = 1; // s entre deux fruits donnés
+export const LURE_R = 340; // le gibier passif voit un fruit tendu de cette distance
+export const fruitTameChance = (species: number) => (SPECIES[species].passive ? 0.34 : 0.05);
 
 export const WILD_AGGRO_R = 220;
 export const WILD_REGEN_DELAY = 4; // s sans être frappé avant que le monstre sauvage récupère
