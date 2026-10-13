@@ -717,7 +717,7 @@ export class Game {
           const tool = used && this.time - used.at < 0.9 && !p.mount ? { kind: used.kind, ang: Math.atan2(used.ty - y, used.tx - x), k: Math.min(1, k) } : null;
           drawPlayer(
             ctx, x + back, y - lift, p.color, fx, fy, p.armor, p.name, this.time,
-            isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool,
+            isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool, p.weapon,
           );
           if (p.slowed) drawWebbed(ctx, x, y - lift, this.time);
           if (!isMe && p.hp < p.maxHp) hpBar(ctx, x, y + 26, 34, (100 * p.hp) / p.maxHp, '#7FCB5B');

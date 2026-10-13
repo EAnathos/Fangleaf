@@ -278,7 +278,7 @@ export function armorColor(lvl: number) {
 
 export function drawPlayer(
   ctx: Ctx, x: number, y: number, color: string, fx: number, fy: number, armor: number, name: string,
-  t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null, tool: Tool | null = null,
+  t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null, tool: Tool | null = null, weapon = 0,
 ) {
   const r = 16;
   const bob = moving ? Math.abs(Math.sin(t * (riding ? 16 : 12))) * 2 : 0;
@@ -327,18 +327,7 @@ export function drawPlayer(
     ctx.beginPath();
     ctx.arc(r + 16, -8, 4, 0, TAU);
     ctx.fill();
-  } else {
-    // épée
-    ctx.fillStyle = '#EEE7D7';
-    ctx.beginPath();
-    ctx.moveTo(r + 2, -4);
-    ctx.lineTo(r + 18, 0);
-    ctx.lineTo(r + 2, 4);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#5B3F2C';
-    ctx.fillRect(r - 3, -5, 6, 10);
-  }
+  } else drawSword(ctx, r, weapon);
   ctx.restore();
   // corps
   ctx.fillStyle = flash ? '#FFFFFF' : color;
@@ -365,6 +354,72 @@ export function drawPlayer(
   ctx.strokeText(name, x, cy - r - 10);
   ctx.fillStyle = '#EEE7D7';
   ctx.fillText(name, x, cy - r - 10);
+}
+
+/** Épée du guerrier : pommeau, poignée gainée, garde recourbée, lame à gouttière ; elle s'orne avec le niveau d'arme. */
+function drawSword(ctx: Ctx, r: number, lvl: number) {
+  const steel = lvl >= 9 ? '#F6D27A' : lvl >= 6 ? '#E6ECF2' : '#D4DAE0', edge = lvl >= 9 ? '#FFF1C4' : '#FFFFFF';
+  const x0 = r + 3; // pommeau, juste hors du corps
+  const L = 24 + Math.min(6, lvl * 0.6); // la lame s'allonge avec le niveau
+  ctx.lineJoin = 'round';
+  // lame : large à la garde, effilée en pointe
+  ctx.fillStyle = steel;
+  ctx.strokeStyle = 'rgba(12,18,16,0.85)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(x0 + 9, -3.2);
+  ctx.lineTo(x0 + 9 + L * 0.82, -2.4);
+  ctx.lineTo(x0 + 9 + L, 0);
+  ctx.lineTo(x0 + 9 + L * 0.82, 2.4);
+  ctx.lineTo(x0 + 9, 3.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // gouttière et fil lumineux
+  ctx.strokeStyle = 'rgba(90,100,110,0.7)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x0 + 11, 0);
+  ctx.lineTo(x0 + 9 + L * 0.7, 0);
+  ctx.stroke();
+  ctx.strokeStyle = edge;
+  ctx.beginPath();
+  ctx.moveTo(x0 + 10, -2.3);
+  ctx.lineTo(x0 + 9 + L * 0.8, -1.7);
+  ctx.stroke();
+  // garde recourbée
+  ctx.strokeStyle = 'rgba(12,18,16,0.85)';
+  ctx.lineWidth = 4.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x0 + 6, -8);
+  ctx.quadraticCurveTo(x0 + 10, 0, x0 + 6, 8);
+  ctx.stroke();
+  ctx.strokeStyle = lvl >= 3 ? '#F0B64A' : '#A2AEB9';
+  ctx.lineWidth = 2.6;
+  ctx.stroke();
+  // poignée gainée de cuir
+  ctx.fillStyle = '#5B3F2C';
+  ctx.fillRect(x0, -1.8, 6, 3.6);
+  ctx.strokeStyle = '#8B6A47';
+  ctx.lineWidth = 1;
+  for (const k of [1.5, 3.5]) {
+    ctx.beginPath();
+    ctx.moveTo(x0 + k, -1.8);
+    ctx.lineTo(x0 + k + 1.5, 1.8);
+    ctx.stroke();
+  }
+  // pommeau, avec une gemme à partir du niveau 6
+  ctx.fillStyle = lvl >= 3 ? '#F0B64A' : '#A2AEB9';
+  ctx.beginPath();
+  ctx.arc(x0 - 1, 0, 2.8, 0, TAU);
+  ctx.fill();
+  if (lvl >= 6) {
+    ctx.fillStyle = '#E8693F';
+    ctx.beginPath();
+    ctx.arc(x0 + 7.5, 0, 1.6, 0, TAU);
+    ctx.fill();
+  }
 }
 
 /** Outil en main pendant la récolte : pioche (filons, pierre) ou hache (bois), qui s'abat à chaque coup. */

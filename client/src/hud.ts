@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_MOVES, BOSS_TALK_R, MOVE_NAMES, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_TALK_R, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
@@ -424,7 +424,6 @@ export class Hud {
     if (this.talker[0]?.s !== c.boss) {
       $('talk-title').textContent = sp.name;
       $('talk-line').textContent = `« ${BOSS_LINES[sp.key]?.intro ?? '…'} »`;
-      $('talk-hint').textContent = `PV multipliés par le nombre de dompteurs en ligne. Attaques spéciales : ${(BOSS_MOVES[sp.key] ?? []).map((m) => MOVE_NAMES[m.kind]).join(', ')}.`;
       $('talk-portrait').setAttribute('aria-label', sp.name);
       this.talker = [{ canvas: $<HTMLCanvasElement>('talk-portrait'), s: c.boss, seen: true }];
     }
