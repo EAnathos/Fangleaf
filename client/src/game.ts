@@ -10,7 +10,7 @@ import { Fx } from './fx.ts';
 import { buildingNear, Hud } from './hud.ts';
 import { initInput, moveDir, stick } from './input.ts';
 import type { Net } from './net.ts';
-import { drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool } from './sprites.ts';
+import { drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool } from './sprites.ts';
 import { World } from './world.ts';
 import { WorldMap } from '../../shared/worldmap.ts';
 
@@ -26,6 +26,8 @@ export class Game {
   me = { x: 0, y: 0, fx: 1, fy: 0, moving: false };
   private flashes = new Map<number, number>();
   private charges = new Map<number, number>(); // tireur → début de la charge de son tir
+  private chestOpen = new Map<number, number>(); // coffre → moment où on l'a ouvert (animation du couvercle)
+  private chestSeen = new Map<number, number>(); // coffre → première apparition (il tombe en rebondissant)
   private fades = new Map<object, number>(); // arbre → opacité de son feuillage (1 : opaque)
   private tools = new Map<number, { kind: Tool['kind']; at: number; tx: number; ty: number }>(); // dompteur → dernier coup d'outil (récolte)
   private shotsAt = 0; // réception du dernier snapshot (les projectiles droits sont extrapolés depuis)
@@ -59,6 +61,7 @@ export class Game {
     this.hud.onSell = (id) => net.send({ t: 'sell', id });
     this.hud.onBuy = (s) => net.send({ t: 'buy', s });
     this.hud.onChallenge = (cave) => net.send({ t: 'challenge', cave });
+    this.hud.onChest = (id) => net.send({ t: 'chest', id });
     this.hud.onReset = () => net.send({ t: 'reset' });
     this.hud.onQuit = () => {
       net.close(); // le serveur sauvegarde la progression à la déconnexion
@@ -95,6 +98,7 @@ export class Game {
       const b = buildingNear(this.map, this.me.x, this.me.y, this.hud);
       if (this.hud.panel) this.hud.setPanel(null);
       else if (st && !st.dead && b?.panel) this.hud.setPanel(b.panel);
+      else if (st && !st.dead && b?.chest !== undefined) this.net.send({ t: 'chest', id: b.chest });
       else if (st && !st.dead && b?.cave) this.net.send({ t: 'cave', id: b.cave.id, enter: b.cave.enter });
     } else if (key === 'Escape') {
       // Échap ferme d'abord ce qui est ouvert (carte, forge, Tanière, confirmation) ; sinon, propose de revenir au lobby.
@@ -258,6 +262,15 @@ export class Game {
         if (e.by !== this.myId) this.hud.toast(`${name(e.by)} a réveillé ${boss.name} !`);
         break;
       }
+      case 'chest':
+        if (e.to === this.myId) {
+          this.chestOpen.set(e.id, this.time);
+          this.fx.burst(e.x, e.y - 30, '#F0B64A', 40, 220);
+          this.fx.ring(e.x, e.y - 10, '#F0B64A', 10, 110, 0.9);
+          this.fx.text(e.x, e.y - 70, `+${e.gold} or`, '#F0B64A', 26, 2);
+          this.hud.toast(`Coffre ouvert : +${e.gold} or !`, 'good');
+        }
+        break;
       case 'seen':
         if (e.to === this.myId) this.hud.toast(`Nouvelle espèce au bestiaire de la Tanière : ${SPECIES[e.s].name}`, 'alpha');
         break;
@@ -301,7 +314,7 @@ export class Game {
       case 'boss': {
         const c = this.map.caves[e.cave];
         const near = c && (this.map.caveAt(this.me.x, this.me.y)?.id === c.id || Math.hypot(this.me.x - c.entrance.x, this.me.y - c.entrance.y) < 1500);
-        if (e.down) this.hud.toast(`${SPECIES[e.s].name} est vaincu ! Retour dans 5 min.`, 'good');
+        if (e.down) this.hud.toast(`${SPECIES[e.s].name} est vaincu ! Ouvre son coffre (E) · retour du géant dans 5 min.`, 'good');
         else if (near) this.hud.toast(`${SPECIES[e.s].name} est de retour dans sa grotte…`);
         break;
       }
@@ -432,6 +445,7 @@ export class Game {
     this.hud.camps = this.net.latest?.camps ?? [];
     this.hud.buildings = this.net.latest?.buildings ?? [];
     this.hud.unlocked = this.net.latest?.unlocked ?? [];
+    this.hud.chests = this.net.latest?.chests ?? [];
     this.hud.sleepers = (view?.units ?? []).flatMap((u) => {
       const cave = u[2] & UNIT_FLAG_DORMANT ? this.map.caveAt(u[3], u[4]) : undefined;
       return cave ? [{ cave: cave.id, x: u[3], y: u[4], r: SPECIES[u[1]].r }] : [];
@@ -511,6 +525,14 @@ export class Game {
       if (next === 1) this.fades.delete(d);
       else this.fades.set(d, next);
       list.push({ y: d.y + s * 0.5, draw: () => this.world.tree(ctx, d.x, d.y, d.zone, next, false) });
+    }
+    for (const [id, x, y, opened] of this.net.latest?.chests ?? []) {
+      if (!inView(x, y, 80)) continue;
+      const seen = this.chestSeen.get(id) ?? this.chestSeen.set(id, this.time).get(id)!;
+      const k = Math.min(1, (this.time - seen) / 0.7), drop = k < 1 ? Math.abs(Math.cos(k * Math.PI * 1.5)) * (1 - k) * 140 : 0; // chute et rebonds
+      const at = this.chestOpen.get(id);
+      const lid = opened ? (at === undefined ? 1 : Math.min(1, (this.time - at) / 0.45)) : 0;
+      list.push({ y, draw: () => drawChest(ctx, x, y, lid, this.time, drop) });
     }
     const oreState = new Map(this.net.latest?.ores ?? []);
     for (const o of this.map.ores) {

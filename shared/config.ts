@@ -121,7 +121,9 @@ export const ALPHA_EQUIP_MAX = 5; // Alphas équipés (sur le terrain) en même 
 // Grottes : un mini-boss par grotte, qui réapparaît après un délai ; il peut lâcher son âme.
 export const BOSS_RESPAWN_S = 300;
 export const BOSS_TALK_R = 140; // distance (depuis le bord du géant) pour lui parler et lancer le combat
-export const BOSS_SOUL_DROP = 0.35; // chance, pour chaque dompteur présent, d'obtenir l'âme
+export const BOSS_SOUL_DROP = 0.35;
+// Coffre du géant vaincu : chaque dompteur l'ouvre une fois, pour un montant d'or tiré au hasard (× l'or du géant).
+export const CHEST_GOLD: [number, number] = [0.75, 2]; // chance, pour chaque dompteur présent, d'obtenir l'âme
 export const CAVE_RX = 560; // intérieur elliptique des grottes
 export const CAVE_RY = 400;
 

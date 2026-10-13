@@ -1068,6 +1068,74 @@ export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: num
   if (hpPct < 100) hpBar(ctx, x, y - r - 10, 28, hpPct, '#F0B64A');
 }
 
+// ───────────────────────── Coffre des géants ─────────────────────────
+
+/** Coffre en bois cerclé d'or. lid : 0 fermé → 1 grand ouvert (or qui luit dedans) ; drop : hauteur de chute. */
+export function drawChest(ctx: Ctx, x: number, y: number, lid: number, t: number, drop = 0) {
+  const sk = 1 - Math.min(0.5, drop / 160); // l'ombre rétrécit pendant la chute
+  ctx.fillStyle = 'rgba(8, 14, 12, 0.35)';
+  ctx.beginPath();
+  ctx.ellipse(x, y, 27 * sk, 8 * sk, 0, 0, TAU);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(x, y - drop);
+  const w = 46, h = 26;
+  if (lid < 1) {
+    // halo doré qui pulse tant qu'il est fermé : il attire l'œil
+    const pulse = 0.5 + Math.sin(t * 4) * 0.2;
+    const g = ctx.createRadialGradient(0, -14, 4, 0, -14, 60);
+    g.addColorStop(0, `rgba(240,182,74,${0.3 * pulse * (1 - lid)})`);
+    g.addColorStop(1, 'rgba(240,182,74,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, -14, 60, 0, TAU);
+    ctx.fill();
+  }
+  // caisse
+  ctx.fillStyle = '#7A4E2D';
+  ctx.beginPath();
+  ctx.roundRect(-w / 2, -h, w, h, 4);
+  ctx.fill();
+  ink(ctx, 22);
+  ctx.fillStyle = '#5B3820';
+  for (const k of [-0.25, 0.25]) ctx.fillRect(k * w - 1.5, -h, 3, h);
+  if (lid > 0) {
+    // trésor qui déborde
+    ctx.fillStyle = '#F0B64A';
+    ctx.beginPath();
+    ctx.ellipse(0, -h, w / 2 - 4, 7, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = '#FFE08A';
+    for (const [cx, cy] of [[-10, -h - 3], [4, -h - 5], [13, -h - 2]]) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3, 0, TAU);
+      ctx.fill();
+    }
+  }
+  // couvercle : il pivote vers l'arrière en s'ouvrant (vu de haut, il remonte et s'aplatit)
+  const lh = 16 * (1 - lid * 0.75), ly = -h - lid * 14;
+  ctx.fillStyle = '#8B5A33';
+  ctx.beginPath();
+  ctx.moveTo(-w / 2, ly);
+  ctx.lineTo(-w / 2, ly - lh * 0.55);
+  ctx.quadraticCurveTo(0, ly - lh * 1.25, w / 2, ly - lh * 0.55);
+  ctx.lineTo(w / 2, ly);
+  ctx.closePath();
+  ctx.fill();
+  ink(ctx, 22);
+  // cerclages et serrure dorés
+  ctx.fillStyle = '#F0B64A';
+  ctx.fillRect(-w / 2, -h, w, 3);
+  if (lid < 0.5) {
+    ctx.beginPath();
+    ctx.roundRect(-5, -h - 4, 10, 10, 2);
+    ctx.fill();
+    ctx.fillStyle = '#3A2819';
+    ctx.fillRect(-1, -h, 2, 4);
+  }
+  ctx.restore();
+}
+
 // ───────────────────────── Attaques spéciales au sol ─────────────────────────
 
 /** Zone d'attaque d'un mini-boss : annonce (bord + remplissage qui progresse), puis effet. */

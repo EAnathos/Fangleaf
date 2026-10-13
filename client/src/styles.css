@@ -270,6 +270,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .modal.camp .cta:disabled, .stone-row .cta:disabled { opacity: 0.55; cursor: not-allowed; }
 .prompt.travel, .prompt.camp { border-color: var(--stone); color: var(--stone); }
 .prompt.market { border-color: var(--ally); color: var(--ally); }
+.prompt.chest { border-color: var(--amber); color: var(--amber); background: rgba(240, 182, 74, 0.15); }
 .prompt.buy { border-color: var(--text-2); color: var(--text); }
 .modal.market { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; border-color: var(--ally); }
 .modal.market h2 { color: var(--ally); }

@@ -24,6 +24,7 @@ export interface Spot {
   at?: number; // Pierre de passage : -1 village, sinon index du camp ; emplacement de camp : son index
   buy?: Purchase; // panneau d'achat : ce qui est à acheter
   reach?: number; // portée d'interaction (par défaut BUILDING_REACH)
+  chest?: number; // coffre d'un géant vaincu à ouvrir
 }
 /** Géant endormi dans sa grotte : on peut aller lui parler. */
 export interface Sleeper {
@@ -39,6 +40,7 @@ export interface VillageView {
   buildings: BuildingId[]; // bâtiments construits
   unlocked: number[]; // grottes débloquées
   sleepers: Sleeper[]; // géants endormis à portée de vue
+  chests: [number, number, number, number][]; // coffres des géants : [id, x, y, déjà ouvert]
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 /** Prix et nom d'un achat pour le village. */
@@ -69,6 +71,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
         : { panel: 'buy', pos: c.entrance, buy: { cave: c.id }, label: `E — Débloquer la grotte · ${caveUnlockCost(c.zone)} or` },
       { cave: { id: c.id, enter: false }, pos: c.exit, label: 'E — Sortir de la grotte' },
     ]),
+    ...v.chests.filter((c) => !c[3]).map((c): Spot => ({ chest: c[0], pos: { x: c[1], y: c[2] }, label: 'E — Ouvrir le coffre' })),
     ...v.sleepers.map((z): Spot => ({ panel: 'talk', pos: z, at: z.cave, reach: z.r + BOSS_TALK_R, label: `E — Parler à ${SPECIES[map.caves[z.cave].boss].name}` })),
   ];
   return spots.find((b) => Math.hypot(x - b.pos.x, y - b.pos.y) < (b.reach ?? BUILDING_REACH));
@@ -112,6 +115,8 @@ export class Hud {
   buildings: BuildingId[] = []; // bâtiments construits
   unlocked: number[] = []; // grottes débloquées
   sleepers: Sleeper[] = []; // géants endormis à portée de vue
+  chests: [number, number, number, number][] = []; // coffres des géants vaincus
+  onChest = (_id: number) => {};
   onChallenge = (_cave: number) => {};
   private talker: Portrait[] = []; // portrait du géant à qui l'on parle
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
@@ -305,8 +310,8 @@ export class Hud {
     prompt.hidden = !b || !!this.panel;
     if (b) {
       prompt.textContent = b.label;
-      prompt.className = `btn prompt ${b.panel ?? (b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
-      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.cave && this.onCave(b.cave.id, b.cave.enter));
+      prompt.className = `btn prompt ${b.panel ?? (b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
+      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
     }
     const building = this.panel !== null && this.panel !== 'map' && this.panel !== 'quit';
     if (building && b?.panel !== this.panel) this.setPanel(null);

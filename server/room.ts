@@ -1,7 +1,7 @@
 // Un village : jusqu'à 3 joueurs, la carte et sa simulation autoritaire.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, CHEST_GOLD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
@@ -135,6 +135,16 @@ export interface Player {
 
 type Ent = Unit | Player;
 
+/** Coffre laissé par un géant vaincu : chaque dompteur l'ouvre une fois ; il disparaît au retour du géant. */
+interface Chest {
+  id: number;
+  cave: number;
+  s: number; // espèce du géant (son or fixe la mise)
+  x: number;
+  y: number;
+  opened: Set<number>; // dompteurs qui l'ont déjà ouvert
+}
+
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const makeCode = () =>
   Array.from({ length: 6 }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join('');
@@ -164,6 +174,7 @@ export class Room {
   private caveBack: number[] = []; // temps de simulation de son retour
   private hazards: Hazard[] = [];
   private shots: Shot[] = [];
+  private chests: Chest[] = [];
   readonly map: WorldMap;
   readonly camps: number[]; // emplacements de camp établis (index dans map.sites)
   readonly buildings: BuildingId[]; // bâtiments construits au village
@@ -771,6 +782,7 @@ export class Room {
     this.map.caves.forEach((c, i) => {
       if (this.caveBoss[i] || this.time < this.caveBack[i]) return;
       this.caveBoss[i] = this.spawnBoss(i);
+      this.chests = this.chests.filter((ch) => ch.cave !== i); // le géant revient : son coffre s'en va
       this.events.push({ e: 'boss', cave: i, s: c.boss, down: false });
     });
     for (let s = 0; s < SPECIES.length; s++) {
@@ -949,6 +961,18 @@ export class Room {
       dormant: true, hp: u.maxHp, x: u.homeX, y: u.homeY, target: 0, lastAttacker: 0, castUntil: 0, windup: 0,
       splitDone: 0, enraged: false, atkCdBase: sp.atkCd, speed: sp.speed, path: null,
     });
+  }
+
+  /** Ouvrir le coffre d'un géant vaincu, devant lui : une fois par dompteur, un montant d'or tiré au hasard. */
+  onChest(p: Player, id: number) {
+    const ch = this.chests.find((c) => c.id === id);
+    if (!ch || p.dead || ch.opened.has(p.id) || !this.near(p, ch)) return;
+    ch.opened.add(p.id);
+    const [lo, hi] = CHEST_GOLD;
+    const gold = Math.round(SPECIES[ch.s].gold * (lo + Math.random() * (hi - lo)));
+    p.gold += gold;
+    p.dirty = true;
+    this.events.push({ e: 'chest', id, to: p.id, gold, x: Math.round(ch.x), y: Math.round(ch.y) });
   }
 
   /** Parler au géant endormi de sa grotte, à côté de lui : il se réveille et le combat commence. */
@@ -1546,13 +1570,13 @@ export class Room {
     const boss = isBoss(u.s);
     for (const p of this.players.values()) {
       if (p.dead || dist2(p.x, p.y, u.x, u.y) > GOLD_SHARE_R ** 2) continue;
-      p.gold += gold;
+      if (!boss) p.gold += gold; // l'or d'un géant est dans son coffre
       if (Math.random() < (boss ? BOSS_SOUL_DROP : ESSENCE_DROP)) {
         p.essences[u.s] += 1; // pour un mini-boss, c'est son âme
         this.events.push({ e: boss ? 'soul' : 'essence', to: p.id, s: u.s, x: u.x, y: u.y });
       }
       p.dirty = true;
-      this.events.push({ e: 'gold', to: p.id, n: gold, x: u.x, y: u.y });
+      if (!boss) this.events.push({ e: 'gold', to: p.id, n: gold, x: u.x, y: u.y });
     }
     if (boss) {
       // Mini-boss vaincu : ses renforts et ses attaques en cours disparaissent avec lui.
@@ -1565,6 +1589,8 @@ export class Room {
       // Il ne s'apprivoise pas et revient après un délai.
       const cave = this.caveBoss.indexOf(u.id);
       if (cave >= 0) {
+        const at = this.map.freeNear(u.x, u.y);
+        this.chests.push({ id: this.nextId++, cave, s: u.s, x: at.x, y: at.y, opened: new Set() });
         this.caveBoss[cave] = 0;
         this.caveBack[cave] = this.time + BOSS_RESPAWN_S;
         this.events.push({ e: 'boss', cave, s: u.s, down: true });
@@ -1711,6 +1737,10 @@ export class Room {
         if (dist2(o.x, o.y, viewer.x, viewer.y) > vr2) continue;
         ores.push([o.id, Math.round((100 * Math.max(0, this.oreHp[o.id])) / oreHp(o.zone))]);
       }
+      const chests: [number, number, number, number][] = [];
+      for (const ch of this.chests) {
+        if (dist2(ch.x, ch.y, viewer.x, viewer.y) <= vr2) chests.push([ch.id, Math.round(ch.x), Math.round(ch.y), ch.opened.has(viewer.id) ? 1 : 0]);
+      }
       const hazards: HazardTuple[] = [];
       for (const h of this.hazards) {
         if (dist2(h.x, h.y, viewer.x, viewer.y) > vr2) continue;
@@ -1724,7 +1754,7 @@ export class Room {
           ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S))]
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
       }
-      viewer.send({ t: 's', tick: this.tick, players, units, ores, caves, camps: this.camps, buildings: this.buildings, unlocked: this.unlocked, hazards, shots, ev: this.events });
+      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, caves, camps: this.camps, buildings: this.buildings, unlocked: this.unlocked, hazards, shots, ev: this.events });
     }
   }
 }

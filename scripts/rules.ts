@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
 
@@ -1023,6 +1023,36 @@ const noop = () => {};
   r.tick = 0;
   r.clearEmptyCaves();
   check(boss.dormant && boss.hp === boss.maxHp && boss.x === boss.homeX, 'grotte vide : il se rendort, guéri, à sa place');
+}
+
+{
+  // Coffre du géant vaincu : chaque dompteur l'ouvre une fois, pour un montant d'or aléatoire.
+  const r = room();
+  const c = r.map.caves[0];
+  const boss = r.units.get(r.caveBoss[c.id]);
+  const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
+  [p.x, p.y] = [boss.x + boss.r + 20, boss.y];
+  [q.x, q.y] = [boss.x - boss.r - 20, boss.y];
+  const g0 = p.gold;
+  r.killUnit(boss, p);
+  const ch = r.chests[0];
+  check(r.chests.length === 1 && p.gold === g0, 'géant vaincu : un coffre, et pas d\'or direct');
+  [p.x, p.y] = [ch.x + 30, ch.y];
+  r.onChest(p, ch.id);
+  const gold = p.gold - g0, base = SPECIES[c.boss].gold;
+  check(gold >= Math.round(base * CHEST_GOLD[0]) && gold <= Math.round(base * CHEST_GOLD[1]), `coffre ouvert : +${gold} or (entre ${Math.round(base * CHEST_GOLD[0])} et ${Math.round(base * CHEST_GOLD[1])})`);
+  r.onChest(p, ch.id);
+  check(p.gold === g0 + gold, 'une seule fois par dompteur');
+  [q.x, q.y] = [ch.x + 400, ch.y];
+  r.onChest(q, ch.id);
+  check(q.gold === 0, 'trop loin du coffre : rien');
+  [q.x, q.y] = [ch.x, ch.y + 30];
+  r.onChest(q, ch.id);
+  check(q.gold > 0, 'chaque coéquipier a sa part');
+  r.time = r.caveBack[c.id] + 1;
+  r.tick = 0;
+  r.updateSpawns();
+  check(r.chests.length === 0 && r.caveBoss[c.id] > 0, 'le géant revient, le coffre disparaît');
 }
 
 {

@@ -15,6 +15,7 @@ export type ClientMsg =
   | { t: 'mount'; id: number } // 0 = descendre
   | { t: 'cave'; id: number; enter: boolean } // entrer dans une grotte / en sortir
   | { t: 'challenge'; cave: number } // parler au géant endormi de sa grotte : le combat commence
+  | { t: 'chest'; id: number } // ouvrir le coffre laissé par un géant vaincu (une fois par dompteur)
   | { t: 'establish'; site: number } // établir le camp de cet emplacement (pour tout le village)
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, sinon index du camp
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
@@ -91,6 +92,7 @@ export type GameEvent =
   | { e: 'boss'; cave: number; s: number; down: boolean } // mini-boss vaincu (down) ou de retour
   | { e: 'move'; id: number; kind: string } // un mini-boss lance une attaque spéciale
   | { e: 'challenge'; cave: number; id: number; by: number } // un dompteur a provoqué le géant : le combat commence
+  | { e: 'chest'; id: number; to: number; gold: number; x: number; y: number } // coffre ouvert : or tiré au hasard
   | { e: 'boom'; x: number; y: number; r: number; kind: string } // une attaque spéciale frappe
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire
   | { e: 'shot'; by: number; x: number; y: number; tx: number; ty: number; cls: ClassId } // flèche ou orbe
@@ -119,6 +121,7 @@ export interface Snapshot {
   players: PlayerState[];
   units: UnitTuple[];
   ores: [number, number][]; // filons proches : [id, pv %] (0 = épuisé)
+  chests: [number, number, number, number][]; // coffres des géants vaincus : [id, x, y, ouvert par ce dompteur (0/1)]
   caves: number[]; // par grotte : secondes avant le retour du mini-boss (0 = présent)
   camps: number[]; // emplacements de camp établis par le village
   buildings: BuildingId[]; // bâtiments construits au village
