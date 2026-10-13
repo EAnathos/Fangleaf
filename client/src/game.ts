@@ -10,7 +10,7 @@ import { Fx } from './fx.ts';
 import { buildingNear, Hud } from './hud.ts';
 import { initInput, moveDir, stick } from './input.ts';
 import type { Net } from './net.ts';
-import { drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool } from './sprites.ts';
+import { drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool } from './sprites.ts';
 import { World } from './world.ts';
 import { WorldMap } from '../../shared/worldmap.ts';
 
@@ -271,6 +271,11 @@ export class Game {
           this.hud.toast(`Coffre ouvert : +${e.gold} or !`, 'good');
         }
         break;
+      case 'eat': {
+        const b = this.map.bushes[e.bush];
+        if (b) this.fx.burst(b.x, b.y - 10, '#C8323C', 8, 80);
+        break;
+      }
       case 'seen':
         if (e.to === this.myId) this.hud.toast(`Nouvelle espèce au bestiaire de la Tanière : ${SPECIES[e.s].name}`, 'alpha');
         break;
@@ -525,6 +530,10 @@ export class Game {
       if (next === 1) this.fades.delete(d);
       else this.fades.set(d, next);
       list.push({ y: d.y + s * 0.5, draw: () => this.world.tree(ctx, d.x, d.y, d.zone, next, false) });
+    }
+    const bare = new Set(this.net.latest?.bare ?? []);
+    for (const b of this.map.bushes) {
+      if (inView(b.x, b.y, 60)) list.push({ y: b.y, draw: () => drawBush(ctx, b.x, b.y, !bare.has(b.id), b.id, b.zone) });
     }
     for (const [id, x, y, opened] of this.net.latest?.chests ?? []) {
       if (!inView(x, y, 80)) continue;

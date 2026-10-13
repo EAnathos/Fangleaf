@@ -71,8 +71,8 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
     ctx.fill();
   }
   if (u.wild) {
-    // Ennemi : anneau braise au sol, reconnaissable même au milieu de la mêlée.
-    ctx.strokeStyle = 'rgba(232,105,63,0.8)';
+    // Ennemi : anneau braise au sol, reconnaissable même au milieu de la mêlée (gibier passif : anneau paille).
+    ctx.strokeStyle = SPECIES[u.species]?.passive ? 'rgba(232,220,170,0.7)' : 'rgba(232,105,63,0.8)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.ellipse(x, u.y + r * 0.72, r * 0.95, r * 0.36, 0, 0, TAU);
@@ -994,11 +994,98 @@ export function drawShot(ctx: Ctx, kind: number, x: number, y: number, a: number
   }
 }
 
+/** Lièvre des ronces : gibier passif aux grandes oreilles, qui sautille (jamais l'air méchant). */
+function hare(ctx: Ctx, r: number, fill: string, u: UnitLook) {
+  const hop = Math.max(0, Math.sin(u.t * 8 + u.seed)) * r * 0.22;
+  ctx.translate(0, -hop);
+  const light = u.flash ? '#FFFFFF' : '#E9DCC4';
+  // pattes arrière
+  ctx.fillStyle = u.flash ? '#FFFFFF' : '#9C7E58';
+  ctx.beginPath();
+  ctx.ellipse(-0.45 * r, 0.62 * r, 0.42 * r, 0.16 * r, 0, 0, TAU);
+  ctx.fill();
+  // corps
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.ellipse(-0.15 * r, 0.1 * r, 0.85 * r, 0.62 * r, 0, 0, TAU);
+  ctx.fill();
+  ink(ctx, r);
+  // queue blanche
+  ctx.fillStyle = light;
+  ctx.beginPath();
+  ctx.arc(-0.98 * r, -0.05 * r, 0.2 * r, 0, TAU);
+  ctx.fill();
+  // tête
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.ellipse(0.62 * r, -0.2 * r, 0.42 * r, 0.36 * r, 0, 0, TAU);
+  ctx.fill();
+  ink(ctx, r);
+  // grandes oreilles, qui frémissent
+  const flick = Math.sin(u.t * 3 + u.seed) * 0.08;
+  for (const [ox, rot] of [[0.45, -0.35 + flick], [0.68, -0.12 - flick]] as const) {
+    ctx.save();
+    ctx.translate(ox * r, -0.45 * r);
+    ctx.rotate(rot);
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.ellipse(0, -0.48 * r, 0.14 * r, 0.5 * r, 0, 0, TAU);
+    ctx.fill();
+    ink(ctx, r * 0.6);
+    ctx.fillStyle = u.flash ? '#FFFFFF' : '#E8A9A0';
+    ctx.beginPath();
+    ctx.ellipse(0, -0.45 * r, 0.06 * r, 0.34 * r, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+  // museau et œil doux
+  ctx.fillStyle = light;
+  ctx.beginPath();
+  ctx.ellipse(0.92 * r, -0.08 * r, 0.16 * r, 0.12 * r, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#E8A9A0';
+  ctx.beginPath();
+  ctx.arc(1.02 * r, -0.12 * r, 0.06 * r, 0, TAU);
+  ctx.fill();
+  eyes(ctx, 0.7 * r, -0.28 * r, 0, 0.08 * r, '#10181A', false);
+}
+
 const DRAWERS: Record<string, (ctx: Ctx, r: number, fill: string, u: UnitLook) => void> = {
   slime, wolf, boar, golem,
   sporelin, spider, bear, wisp,
   watcher, toad, serpent, crab,
+  hare,
 };
+
+// ───────────────────────── Buissons à fruits ─────────────────────────
+
+/** Buisson rond ; garni, il porte des baies rouges (le gibier vient les manger, elles repoussent). */
+export function drawBush(ctx: Ctx, x: number, y: number, fruit: boolean, seed: number, zone: number) {
+  const dark = zone >= 4 ? '#24423E' : '#2D4A2A', mid = zone >= 4 ? '#33584F' : '#3C6236', light = zone >= 4 ? '#467468' : '#4F7C45';
+  ctx.fillStyle = 'rgba(8,14,12,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x + 3, y + 6, 26, 9, 0, 0, TAU);
+  ctx.fill();
+  for (const [dx, dy, rr, c] of [[-12, -6, 14, dark], [12, -6, 14, dark], [0, -12, 16, mid], [-6, -4, 11, mid], [8, -15, 8, light]] as const) {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(x + dx, y + dy, rr, 0, TAU);
+    ctx.fill();
+  }
+  if (!fruit) return;
+  for (let i = 0; i < 6; i++) {
+    const a = ((seed * 7 + i * 2.3) % TAU), d = 6 + ((seed + i * 5) % 9);
+    const bx = x + Math.cos(a) * d * 1.3, by = y - 10 + Math.sin(a) * d * 0.8;
+    ctx.fillStyle = '#C8323C';
+    ctx.beginPath();
+    ctx.arc(bx, by, 3.2, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,220,220,0.8)';
+    ctx.beginPath();
+    ctx.arc(bx - 1, by - 1, 1, 0, TAU);
+    ctx.fill();
+  }
+}
 
 // ───────────────────────── Filons d'or ─────────────────────────
 

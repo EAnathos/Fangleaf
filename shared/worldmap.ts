@@ -47,6 +47,13 @@ export interface Ore {
   zone: number;
 }
 
+export interface Bush {
+  id: number;
+  x: number;
+  y: number;
+  zone: number;
+}
+
 export interface Decor {
   kind: 0 | 1; // arbre, rocher
   x: number;
@@ -121,6 +128,7 @@ export class WorldMap {
   readonly caves: Cave[] = [];
   readonly ores: Ore[] = [];
   readonly decor: Decor[] = [];
+  readonly bushes: Bush[] = []; // buissons à fruits (décor franchissable : le gibier vient y manger)
   readonly path: [number, number][] = []; // chemin de terre du camp à la porte du village
   readonly trails: [number, number][][] = []; // piste du village au bout du couloir, coupée à la traversée des camps
   private buckets = new Map<number, number[]>(); // décor par case de 256 px
@@ -221,6 +229,7 @@ export class WorldMap {
 
     this.buildDecor();
     this.buildSolids();
+    this.buildBushes();
     // Eau profonde (pas une berge) par zone : là où peuvent apparaître les créatures aquatiques.
     for (let z = 0; z <= ZONES; z++) this.deepWater.push([]);
     for (let j = 2; j < N - 2; j += 2) {
@@ -419,6 +428,25 @@ export class WorldMap {
         b.push(this.decor.length);
         this.decor.push(d);
       }
+    }
+  }
+
+  /**
+   * Buissons à fruits, surtout dans les premières zones (hasard à part : les cartes existantes ne changent pas).
+   * Franchissables, hors de l'eau, des chemins, du village et des camps.
+   */
+  private buildBushes() {
+    const rand = rng(this.seed ^ 0xb0551e5);
+    for (let tries = 0; tries < 6000 && this.bushes.length < 110; tries++) {
+      const s = 600 + Math.pow(rand(), 1.6) * (this.length - 600); // plus nombreux près du départ
+      const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
+      const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 80);
+      const x = sx + n.x * off, y = sy + n.y * off;
+      if (this.blocked(x, y) || this.blocked(x + 20, y) || this.blocked(x - 20, y) || this.inVillage(x, y, 120)) continue;
+      if (dist2(x, y, this.spawn.x, this.spawn.y) < 260 ** 2 || this.sites.some((c) => dist2(x, y, c.x, c.y) < 320 ** 2)) continue;
+      if (this.pathDist(x, y) < 40 || this.bushes.some((b) => dist2(x, y, b.x, b.y) < 300 ** 2)) continue;
+      if (this.ores.some((o) => dist2(x, y, o.x, o.y) < 90 ** 2) || this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 220 ** 2)) continue;
+      this.bushes.push({ id: this.bushes.length, x, y, zone: this.zoneAt(x, y) });
     }
   }
 

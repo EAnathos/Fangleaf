@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
 
@@ -185,8 +185,8 @@ const noop = () => {};
   const seen = new Set([...r.units.values()].map((u: { s: number }) => u.s));
   check(SPECIES.every((_, i) => seen.has(i)), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement`);
   const zones = new Map<number, number>();
-  for (const sp of SPECIES) if (!sp.boss) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
-  check([1, 2, 3].every((z) => zones.get(z) === 2) && zones.get(4) === 3 && zones.get(5) === 3, 'deux espèces par zone, trois en zones 4 et 5');
+  for (const sp of SPECIES) if (!sp.boss && !sp.passive) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
+  check([1, 2, 3].every((z) => zones.get(z) === 2) && zones.get(4) === 3 && zones.get(5) === 3, 'deux espèces hostiles par zone, trois en zones 4 et 5');
 }
 
 {
@@ -314,7 +314,7 @@ const noop = () => {};
   const perZone = [1, 2, 3, 4, 5].map((z) => r.map.caves.filter((cv: { zone: number }) => cv.zone === z).length).join('');
   check(r.map.caves.length === 12 && perZone === '22233' && r.map.caves.every((cv: { boss: number; zone: number }) => SPECIES[cv.boss].boss && SPECIES[cv.boss].zone === cv.zone),
     `12 grottes (${perZone} par zone), un géant par espèce`);
-  check(SPECIES.filter((sp) => !sp.boss).every((sp) => SPECIES.some((b) => b.boss && b.base === sp.key)), 'chaque espèce a son géant (âme → Alpha légendaire)');
+  check(SPECIES.filter((sp) => !sp.boss && !sp.passive).every((sp) => SPECIES.some((b) => b.boss && b.base === sp.key)), 'chaque espèce hostile a son géant (âme → Alpha légendaire)');
   const f = r.createUnit(0, false, 0, 0);
   f.owner = p.id;
   p.army.push(f.id);
@@ -1053,6 +1053,35 @@ const noop = () => {};
   r.tick = 0;
   r.updateSpawns();
   check(r.chests.length === 0 && r.caveBoss[c.id] > 0, 'le géant revient, le coffre disparaît');
+}
+
+{
+  // Gibier passif : il n'attaque jamais, mange aux buissons à fruits et fuit qui le frappe.
+  const r = room();
+  const s = SPECIES.findIndex((sp) => sp.passive);
+  const bush = r.map.bushes[0];
+  check(r.map.bushes.length > 40, `${r.map.bushes.length} buissons à fruits sur la carte`);
+  for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id); // seuls le lièvre et le dompteur
+  const hare = r.createUnit(s, false, bush.x + 120, bush.y);
+  const p = r.addPlayer('a', noop);
+  [p.x, p.y] = [hare.x + 40, hare.y];
+  p.hp = 999;
+  p.atkCd = 999; // il ne frappe pas : on observe le lièvre
+  let ate = false;
+  for (let i = 0; i < 20 * 15 && !ate; i++) {
+    r.step();
+    p.atkCd = 999;
+    ate = r.bushBack[bush.id] > r.time;
+  }
+  check(p.hp === 999, `${SPECIES[s].name} : jamais d'attaque, même collé au dompteur`);
+  check(ate, 'il va manger les fruits du buisson voisin');
+  r.time += BUSH_REGROW_S + 1;
+  check(r.bushBack[bush.id] <= r.time, 'les fruits repoussent');
+  [hare.x, hare.y] = [p.x + 30, p.y];
+  r.damage(hare, 1, p);
+  const d0 = Math.hypot(hare.x - p.x, hare.y - p.y);
+  for (let i = 0; i < 20; i++) r.step(), (p.atkCd = 999);
+  check(Math.hypot(hare.x - p.x, hare.y - p.y) > d0 + 60, 'frappé, il s\'enfuit');
 }
 
 {

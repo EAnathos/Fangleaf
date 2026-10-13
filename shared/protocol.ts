@@ -93,6 +93,7 @@ export type GameEvent =
   | { e: 'move'; id: number; kind: string } // un mini-boss lance une attaque spéciale
   | { e: 'challenge'; cave: number; id: number; by: number } // un dompteur a provoqué le géant : le combat commence
   | { e: 'chest'; id: number; to: number; gold: number; x: number; y: number } // coffre ouvert : or tiré au hasard
+  | { e: 'eat'; id: number; bush: number } // du gibier mange les fruits d'un buisson
   | { e: 'boom'; x: number; y: number; r: number; kind: string } // une attaque spéciale frappe
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire
   | { e: 'shot'; by: number; x: number; y: number; tx: number; ty: number; cls: ClassId } // flèche ou orbe
@@ -122,6 +123,7 @@ export interface Snapshot {
   units: UnitTuple[];
   ores: [number, number][]; // filons proches : [id, pv %] (0 = épuisé)
   chests: [number, number, number, number][]; // coffres des géants vaincus : [id, x, y, ouvert par ce dompteur (0/1)]
+  bare: number[]; // buissons proches dont les fruits ont été mangés (ils repoussent)
   caves: number[]; // par grotte : secondes avant le retour du mini-boss (0 = présent)
   camps: number[]; // emplacements de camp établis par le village
   buildings: BuildingId[]; // bâtiments construits au village

@@ -1,7 +1,7 @@
 // Un village : jusqu'à 3 joueurs, la carte et sa simulation autoritaire.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, CHEST_GOLD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, BUSH_REGROW_S, BUSH_SEEK_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
@@ -175,6 +175,7 @@ export class Room {
   private hazards: Hazard[] = [];
   private shots: Shot[] = [];
   private chests: Chest[] = [];
+  private bushBack: number[] = []; // par buisson : temps de simulation où ses fruits repoussent (0 : garni)
   readonly map: WorldMap;
   readonly camps: number[]; // emplacements de camp établis (index dans map.sites)
   readonly buildings: BuildingId[]; // bâtiments construits au village
@@ -194,6 +195,7 @@ export class Room {
     this.buildings = BUILDING_IDS.filter((b) => saved.buildings?.includes(b));
     this.oreHp = this.map.ores.map((o) => oreHp(o.zone));
     this.oreBack = this.map.ores.map(() => 0);
+    this.bushBack = this.map.bushes.map(() => 0);
     this.caveBoss = this.map.caves.map((c) => this.spawnBoss(c.id));
     this.caveBack = this.map.caves.map(() => 0);
     // Peuple la carte dès la création.
@@ -1376,6 +1378,7 @@ export class Room {
       u.target = 0;
       return;
     }
+    if (SPECIES[u.s].passive) return this.grazeAI(u);
     // Priorité au plus proche, dompteurs et monstres de meute confondus (réévalué à chaque tick).
     let t: Ent | undefined = this.nearest(u.x, u.y, this.aggroOf(u), this.isAllyOfPlayers);
     if (!t) {
@@ -1408,6 +1411,46 @@ export class Room {
       u.wanderY = u.homeY + Math.sin(a) * d;
     }
     this.move(u, u.wanderX, u.wanderY, u.speed * 0.35, 4);
+  }
+
+  /** Gibier passif : il n'attaque jamais ; il va manger aux buissons à fruits, et fuit qui le frappe. */
+  private grazeAI(u: Unit) {
+    if (u.lastAttacker) {
+      u.target = u.lastAttacker; // retenu comme celui qu'il fuit
+      u.lastAttacker = 0;
+    }
+    const foe = this.time - u.lastHitAt < FLEE_S ? this.getEnt(u.target) : undefined;
+    if (this.alive(foe)) {
+      const dx = u.x - foe.x, dy = u.y - foe.y, d = Math.hypot(dx, dy) || 1;
+      this.move(u, u.x + (dx / d) * 80, u.y + (dy / d) * 80, u.speed * 1.15, 0);
+      return;
+    }
+    u.target = 0;
+    u.wanderT -= DT;
+    if (u.wanderT <= 0) {
+      // Le buisson garni le plus proche de son coin, s'il y en a un : il y va et mange.
+      let best = -1, bd = BUSH_SEEK_R ** 2;
+      for (const b of this.map.bushes) {
+        const d = dist2(b.x, b.y, u.homeX, u.homeY);
+        if (d < bd && this.bushBack[b.id] <= this.time) [bd, best] = [d, b.id];
+      }
+      if (best >= 0) {
+        const b = this.map.bushes[best];
+        this.navTo(u, b.x, b.y + 14, u.speed * 0.6, 16);
+        if (dist2(u.x, u.y, b.x, b.y + 14) < 24 ** 2) {
+          this.bushBack[best] = this.time + BUSH_REGROW_S;
+          this.events.push({ e: 'eat', id: u.id, bush: best });
+          u.wanderT = 3 + Math.random() * 3; // il digère un moment avant de repartir
+          [u.wanderX, u.wanderY] = [u.x, u.y];
+        }
+        return;
+      }
+      u.wanderT = 2 + Math.random() * 4;
+      const a = Math.random() * Math.PI * 2, d = Math.random() * 140;
+      u.wanderX = u.homeX + Math.cos(a) * d;
+      u.wanderY = u.homeY + Math.sin(a) * d;
+    }
+    this.move(u, u.wanderX, u.wanderY, u.speed * 0.3, 4);
   }
 
   private followerAI(u: Unit) {
@@ -1737,6 +1780,8 @@ export class Room {
         if (dist2(o.x, o.y, viewer.x, viewer.y) > vr2) continue;
         ores.push([o.id, Math.round((100 * Math.max(0, this.oreHp[o.id])) / oreHp(o.zone))]);
       }
+      const bare: number[] = [];
+      for (const b of this.map.bushes) if (this.bushBack[b.id] > this.time && dist2(b.x, b.y, viewer.x, viewer.y) <= vr2) bare.push(b.id);
       const chests: [number, number, number, number][] = [];
       for (const ch of this.chests) {
         if (dist2(ch.x, ch.y, viewer.x, viewer.y) <= vr2) chests.push([ch.id, Math.round(ch.x), Math.round(ch.y), ch.opened.has(viewer.id) ? 1 : 0]);
@@ -1754,7 +1799,7 @@ export class Room {
           ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S))]
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
       }
-      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, caves, camps: this.camps, buildings: this.buildings, unlocked: this.unlocked, hazards, shots, ev: this.events });
+      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, caves, camps: this.camps, buildings: this.buildings, unlocked: this.unlocked, hazards, shots, ev: this.events });
     }
   }
 }

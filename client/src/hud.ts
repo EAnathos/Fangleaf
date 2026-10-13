@@ -578,7 +578,7 @@ export class Hud {
             el.className = `beast${known ? '' : ' unknown'}`;
             el.innerHTML = '<canvas></canvas><b></b><span class="tag"></span><span class="stats"></span><span class="desc"></span>';
             el.querySelector('b')!.textContent = known ? sp.name : '???';
-            const traits = [sp.ranged ? 'Tireur' : 'Mêlée', sp.swim ? 'aquatique' : '', MOUNTS[sp.key] ? 'monture en Alpha' : ''].filter(Boolean).join(' · ');
+            const traits = [sp.passive ? 'Passif' : sp.ranged ? 'Tireur' : 'Mêlée', sp.swim ? 'aquatique' : '', MOUNTS[sp.key] ? 'monture en Alpha' : ''].filter(Boolean).join(' · ');
             el.querySelector('.tag')!.textContent = known ? traits : '';
             el.querySelector('.stats')!.textContent = known ? `${sp.hp} PV · ${sp.dmg} dégâts` : '';
             el.querySelector('.desc')!.textContent = known ? SPECIES_DESC[sp.key] ?? '' : 'Pas encore croisé.';

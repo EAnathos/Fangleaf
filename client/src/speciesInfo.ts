@@ -1,6 +1,7 @@
 // Descriptions des espèces : bestiaire de la Tanière et page de dev /bestiary.html.
 
 export const SPECIES_DESC: Record<string, string> = {
+  hare: 'Gibier inoffensif qui grignote les baies des buissons. Il ne se bat pas : frappé, il détale.',
   slime: 'Lent et mou : la première proie du dompteur.',
   sporelin: 'Petit champignon sauteur. Fragile mais vif : il arrive en groupe.',
   wolf: 'Rapide, chasse en meute.',
