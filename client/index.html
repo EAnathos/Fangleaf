@@ -79,6 +79,7 @@
     <button id="build-prompt" class="btn prompt" hidden></button>
     <button id="revive-prompt" class="btn prompt revive" hidden></button>
     <div id="toasts" aria-live="polite"></div>
+    <div id="cave-fade" class="cave-fade" hidden></div>
     <div id="area-banner" class="area-banner" aria-live="polite" hidden><b></b><span></span></div>
 
     <div id="death" class="overlay" hidden>
@@ -193,6 +194,24 @@
         <p id="buy-desc"></p>
         <p class="small muted">Pour tout le village : un seul d'entre vous le paie.</p>
         <button id="buy-go" class="cta"></button>
+      </div>
+    </div>
+
+    <div id="talk" class="overlay dim" hidden>
+      <div class="panel modal talk" role="dialog" aria-modal="true" aria-labelledby="talk-title">
+        <div class="row between">
+          <h2 id="talk-title"></h2>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div class="row talk-body">
+          <canvas id="talk-portrait" class="talk-portrait" role="img"></canvas>
+          <p id="talk-line" class="talk-line"></p>
+        </div>
+        <p id="talk-hint" class="small muted"></p>
+        <div class="row talk-actions">
+          <button id="talk-later" class="btn">Pas maintenant</button>
+          <button id="talk-fight" class="cta danger-cta">Lancer le combat !</button>
+        </div>
       </div>
     </div>
 

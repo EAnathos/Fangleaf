@@ -1,28 +1,36 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_MOVES, BOSS_TALK_R, MOVE_NAMES, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, type BuildingId, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
 import type { PlayerState, UnitTuple } from '../../shared/protocol.ts';
 import type { WorldMap } from '../../shared/worldmap.ts';
 import { armorColor, drawUnit } from './sprites.ts';
-import { SPECIES_DESC } from './speciesInfo.ts';
+import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { FOREST_GROUND, ZONE_GROUND } from './world.ts';
 import type { Fog } from './fog.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
 export interface Spot {
   pos: { x: number; y: number };
   label: string;
-  panel?: 'forge' | 'den' | 'market' | 'travel' | 'camp' | 'buy'; // ouvre un panneau
+  panel?: 'forge' | 'den' | 'market' | 'travel' | 'camp' | 'buy' | 'talk'; // ouvre un panneau
   cave?: { id: number; enter: boolean }; // entre dans une grotte / en sort
   at?: number; // Pierre de passage : -1 village, sinon index du camp ; emplacement de camp : son index
   buy?: Purchase; // panneau d'achat : ce qui est à acheter
+  reach?: number; // portée d'interaction (par défaut BUILDING_REACH)
+}
+/** Géant endormi dans sa grotte : on peut aller lui parler. */
+export interface Sleeper {
+  cave: number;
+  x: number;
+  y: number;
+  r: number;
 }
 /** Ce que le village possède, d'après le dernier snapshot. */
 export interface VillageView {
@@ -30,6 +38,7 @@ export interface VillageView {
   camps: number[]; // emplacements de camp établis
   buildings: BuildingId[]; // bâtiments construits
   unlocked: number[]; // grottes débloquées
+  sleepers: Sleeper[]; // géants endormis à portée de vue
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 /** Prix et nom d'un achat pour le village. */
@@ -60,8 +69,9 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
         : { panel: 'buy', pos: c.entrance, buy: { cave: c.id }, label: `E — Débloquer la grotte · ${caveUnlockCost(c.zone)} or` },
       { cave: { id: c.id, enter: false }, pos: c.exit, label: 'E — Sortir de la grotte' },
     ]),
+    ...v.sleepers.map((z): Spot => ({ panel: 'talk', pos: z, at: z.cave, reach: z.r + BOSS_TALK_R, label: `E — Parler à ${SPECIES[map.caves[z.cave].boss].name}` })),
   ];
-  return spots.find((b) => Math.hypot(x - b.pos.x, y - b.pos.y) < BUILDING_REACH);
+  return spots.find((b) => Math.hypot(x - b.pos.x, y - b.pos.y) < (b.reach ?? BUILDING_REACH));
 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -101,6 +111,9 @@ export class Hud {
   camps: number[] = []; // camps établis
   buildings: BuildingId[] = []; // bâtiments construits
   unlocked: number[] = []; // grottes débloquées
+  sleepers: Sleeper[] = []; // géants endormis à portée de vue
+  onChallenge = (_cave: number) => {};
+  private talker: Portrait[] = []; // portrait du géant à qui l'on parle
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
   private spotAt = 0; // Pierre ou emplacement devant lequel on se tient (panneaux voyage et camp)
   private bigBg?: HTMLCanvasElement;
@@ -146,7 +159,9 @@ export class Hud {
       $<HTMLButtonElement>('reset-go').disabled = true;
       this.onReset();
     };
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy'] as const) {
+    $('talk-fight').onclick = () => this.onChallenge(this.spotAt);
+    $('talk-later').onclick = () => this.setPanel(null);
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -207,6 +222,18 @@ export class Hud {
     el.style.animation = '';
   }
 
+  /** Transition d'entrée ou de sortie de grotte : noir, puis l'image s'ouvre en iris (le lieu s'annonce par la bannière). */
+  caveFade() {
+    const el = $('cave-fade');
+    el.hidden = false;
+    el.style.animation = 'none';
+    void el.offsetWidth; // relance l'animation
+    el.style.animation = '';
+    clearTimeout(this.fadeTimer);
+    this.fadeTimer = window.setTimeout(() => (el.hidden = true), 1600);
+  }
+  private fadeTimer = 0;
+
   setPanel(panel: Panel) {
     this.panel = panel;
     $('forge').hidden = panel !== 'forge';
@@ -219,6 +246,7 @@ export class Hud {
     $('reset-confirm').hidden = true;
     $('travel').hidden = panel !== 'travel';
     $('camp').hidden = panel !== 'camp';
+    $('talk').hidden = panel !== 'talk';
     this.last.den = '';
     this.last.travel = '';
     this.last.cls = '';
@@ -290,6 +318,7 @@ export class Hud {
     if (this.panel === 'travel') this.updateTravel();
     if (this.panel === 'camp') this.updateCamp(me);
     if (this.panel === 'buy') this.updateBuy(me);
+    if (this.panel === 'talk') this.updateTalk();
     if (this.panel === 'market') this.updateMarket(me);
     if (this.panel === 'forge') this.updateForge(me);
     if (this.panel === 'den' && this.denTab === 'alphas') this.updateDen(me);
@@ -367,6 +396,21 @@ export class Hud {
     const btn = $<HTMLButtonElement>('camp-buy');
     btn.disabled = me.gold < CAMP_COST;
     btn.textContent = me.gold < CAMP_COST ? `Il te faut ${CAMP_COST} or` : `Établir le camp · ${CAMP_COST} or`;
+  }
+
+  /** Dialogue avec un géant endormi : sa réplique, puis on lance le combat (ou pas). */
+  private updateTalk() {
+    const c = this.map.caves[this.spotAt];
+    if (!c) return;
+    const sp = SPECIES[c.boss];
+    if (this.talker[0]?.s !== c.boss) {
+      $('talk-title').textContent = sp.name;
+      $('talk-line').textContent = `« ${BOSS_LINES[sp.key]?.intro ?? '…'} »`;
+      $('talk-hint').textContent = `PV multipliés par le nombre de dompteurs en ligne. Attaques spéciales : ${(BOSS_MOVES[sp.key] ?? []).map((m) => MOVE_NAMES[m.kind]).join(', ')}.`;
+      $('talk-portrait').setAttribute('aria-label', sp.name);
+      this.talker = [{ canvas: $<HTMLCanvasElement>('talk-portrait'), s: c.boss, seen: true }];
+    }
+    paintPortraits(this.talker);
   }
 
   /** Panneau d'achat pour le village : un bâtiment à construire ou une grotte à débloquer. */

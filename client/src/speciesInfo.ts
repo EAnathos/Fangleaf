@@ -14,3 +14,19 @@ export const SPECIES_DESC: Record<string, string> = {
   serpent: 'Nage dans les lacs sans jamais en sortir (tireur). Se dresse, puis tire un jet d\'eau rapide. À frapper depuis la rive ou à distance.',
   crab: 'Carapace épaisse, marche de côté et pince fort. Le tank des Lacs brumeux, qui protège les tireurs.',
 };
+
+/** Ce que dit chaque géant quand on vient lui parler (intro), puis son cri quand le combat commence. */
+export const BOSS_LINES: Record<string, { intro: string; cry: string }> = {
+  slime_queen: { intro: 'Blop ? Encore un dompteur qui veut me mettre en bocal… Tu sais que je colle aux bottes, au moins ?', cry: 'Blop blop BLOP !' },
+  spore_giant: { intro: 'Chut, je fais pousser mes champignons. Marche dessus et je t\'en fais une omelette.', cry: 'Atchoum… je veux dire : SPORES !' },
+  shadow_fang: { intro: 'Tu as apporté des croquettes ? Non ? Alors c\'est toi, les croquettes.', cry: 'Aouuuuh !' },
+  weaver: { intro: 'Huit pattes, huit yeux, et pas une seule envie d\'être dérangée. Tu restes pour le dîner ?', cry: 'Le dîner, c\'est toi !' },
+  old_tusk: { intro: 'De mon temps, les dompteurs frappaient avant d\'entrer. Et repartaient avec des bosses.', cry: 'À la charge, comme en quarante !' },
+  colossus: { intro: 'Je faisais la sieste. C\'était ma sieste préférée.', cry: 'GROAAAR ! (rends-moi ma sieste)' },
+  moss_heart: { intro: 'Trois siècles que personne ne m\'a parlé. Bon. Ça va être court.', cry: 'Pluie de cailloux, sors ton parapluie !' },
+  old_flame: { intro: 'Tu as froid ? Approche, approche… encore un peu…', cry: 'Tout feu, tout flamme !' },
+  rune_eye: { intro: 'Je t\'ai vu venir. Littéralement. Je ne fais que ça.', cry: 'Œil pour œil !' },
+  toad_king: { intro: 'Agenouille-toi devant le Roi des mares. Ou au moins, essuie tes pieds.', cry: 'Croâââ de guerre !' },
+  mist_hydra: { intro: 'Trois têtes, et aucune n\'est d\'accord pour te laisser passer.', cry: 'Tête la première !' },
+  titan_crab: { intro: 'Clac clac. Mon rocher, mon sable, ma grotte. Clac.', cry: 'Pince-moi si je rêve !' },
+};

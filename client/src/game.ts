@@ -3,7 +3,8 @@
 import { alphaStats, ARC_FLIGHT_S, BUILDINGS, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp } from '../../shared/math.ts';
 import type { GameEvent, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
-import { UNIT_FLAG_ALPHA, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
+import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
+import { BOSS_LINES } from './speciesInfo.ts';
 import { Fog } from './fog.ts';
 import { Fx } from './fx.ts';
 import { buildingNear, Hud } from './hud.ts';
@@ -57,6 +58,7 @@ export class Game {
     this.hud.onUnlock = (cave) => net.send({ t: 'unlock', cave });
     this.hud.onSell = (id) => net.send({ t: 'sell', id });
     this.hud.onBuy = (s) => net.send({ t: 'buy', s });
+    this.hud.onChallenge = (cave) => net.send({ t: 'challenge', cave });
     this.hud.onReset = () => net.send({ t: 'reset' });
     this.hud.onQuit = () => {
       net.close(); // le serveur sauvegarde la progression à la déconnexion
@@ -151,7 +153,7 @@ export class Game {
     }
     else if (cave) {
       const boss = SPECIES[cave.boss];
-      this.hud.banner(`Antre : ${boss.name}`, this.hud.caves[cave.id] ? 'Le géant n\'est pas encore revenu' : `Attention à ses attaques spéciales (zones rouges au sol) · son âme rend un Alpha légendaire`, true);
+      this.hud.banner(`Antre : ${boss.name}`, this.hud.caves[cave.id] ? 'Le géant n\'est pas encore revenu' : 'Il dort au fond de sa grotte : va lui parler (E) pour lancer le combat', true);
     }
     else {
       const z = Number(area.slice(4));
@@ -175,6 +177,9 @@ export class Game {
       location.href = location.pathname;
     } else if (m.t === 'error') this.hud.toast(m.msg);
     else if (m.t === 'teleport') {
+      // Entrée ou sortie de grotte : l'écran s'ouvre en iris depuis le noir.
+      const from = this.map.caveAt(this.me.x, this.me.y), to = this.map.caveAt(m.x, m.y);
+      if (from?.id !== to?.id) this.hud.caveFade();
       this.me.x = m.x;
       this.me.y = m.y;
     } else if (m.t === 's') {
@@ -240,6 +245,17 @@ export class Game {
       case 'move': {
         const b = this.posOf(e.id, players);
         if (b) this.fx.text(b.x, b.y - 70, `${MOVE_NAMES[e.kind as keyof typeof MOVE_NAMES] ?? e.kind} !`, '#FF9B78', 18, 1.3);
+        break;
+      }
+      case 'challenge': {
+        const b = this.posOf(e.id, players), boss = SPECIES[this.map.caves[e.cave]?.boss ?? 0];
+        this.hud.setPanel(this.hud.panel === 'talk' ? null : this.hud.panel);
+        if (b) {
+          this.fx.text(b.x, b.y - 90, `« ${BOSS_LINES[boss.key]?.cry ?? '!'} »`, '#FF9B78', 20, 2.2);
+          this.fx.ring(b.x, b.y, '#E8693F', 20, 160, 0.8);
+        }
+        this.shake = 0.35;
+        if (e.by !== this.myId) this.hud.toast(`${name(e.by)} a réveillé ${boss.name} !`);
         break;
       }
       case 'seen':
@@ -416,6 +432,10 @@ export class Game {
     this.hud.camps = this.net.latest?.camps ?? [];
     this.hud.buildings = this.net.latest?.buildings ?? [];
     this.hud.unlocked = this.net.latest?.unlocked ?? [];
+    this.hud.sleepers = (view?.units ?? []).flatMap((u) => {
+      const cave = u[2] & UNIT_FLAG_DORMANT ? this.map.caveAt(u[3], u[4]) : undefined;
+      return cave ? [{ cave: cave.id, x: u[3], y: u[4], r: SPECIES[u[1]].r }] : [];
+    });
     // Le brouillard se lève autour de chaque dompteur du village.
     if (!dead) this.fog.reveal(this.me.x, this.me.y, this.myId);
     for (const p of view?.players ?? []) if (p.id !== this.myId && !p.dead) this.fog.reveal(p.x, p.y, p.id);
@@ -521,6 +541,18 @@ export class Game {
             face: f.face, t: this.time, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, legend,
             charge, inWater: !!SPECIES[s].swim && this.map.isWater(x, y),
           });
+          if (boss && flags & UNIT_FLAG_DORMANT) {
+            // Géant endormi : il ronfle en attendant qu'on vienne lui parler.
+            ctx.font = '700 18px "Pixelify Sans", sans-serif';
+            ctx.textAlign = 'center';
+            for (let k = 0; k < 3; k++) {
+              const ph = (this.time * 0.45 + k / 3) % 1;
+              ctx.globalAlpha = Math.sin(ph * Math.PI);
+              ctx.fillStyle = '#EEE7D7';
+              ctx.fillText('z', x + r * 0.6 + ph * 34, y - r * 1.3 - ph * 46);
+            }
+            ctx.globalAlpha = 1;
+          }
           if (boss) {
             // Mini-boss : nom et grande barre de vie, toujours visibles.
             ctx.font = '700 15px "Pixelify Sans", sans-serif';

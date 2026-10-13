@@ -147,7 +147,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .prompt { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); border-color: var(--amber); color: var(--amber); font: 700 16px var(--display); }
 .prompt.den { border-color: var(--alpha); color: var(--alpha); }
 .prompt.revive { top: 66%; border-color: #7FCB5B; color: #7FCB5B; touch-action: none; user-select: none; }
-.prompt.danger { border-color: var(--enemy); color: #FF9B78; }
+.prompt.danger, .prompt.talk { border-color: var(--enemy); color: #FF9B78; }
 
 .area-banner { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; pointer-events: none; animation: banner 3.2s ease-out forwards; }
 .area-banner b { font: 700 46px var(--display); color: var(--amber); letter-spacing: 2px; text-shadow: 0 3px 0 #5B3F2C, 0 0 24px rgba(0, 0, 0, 0.6); }
@@ -278,3 +278,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .modal.market .ware { width: 56px; height: 48px; flex: none; }
 .modal.market .cta:disabled { opacity: 0.55; cursor: not-allowed; }
 .lg-stone { background: var(--stone); border-radius: 2px 2px 0 0 !important; }
+
+/* Entrée et sortie de grotte : l'écran s'ouvre en iris depuis le noir. */
+@property --iris { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
+.cave-fade { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at 50% 50%, transparent var(--iris), #07090A calc(var(--iris) + 6%)); animation: iris 1.5s ease-in forwards; }
+@keyframes iris { 0%, 25% { --iris: 0%; } 100% { --iris: 120%; } }
+
+/* Dialogue avec un géant endormi. */
+.modal.talk { width: min(520px, calc(100vw - 32px)); border-color: var(--enemy); }
+.modal.talk h2 { color: #FF9B78; }
+.talk-body { align-items: flex-start; gap: 16px; }
+.talk-portrait { width: 110px; height: 96px; flex: none; border-radius: 12px; background: radial-gradient(circle at 50% 60%, rgba(232, 105, 63, 0.18), transparent 70%); }
+.talk-line { margin: 0; flex: 1; padding: 12px 16px; border-radius: 12px; background: var(--night); border: 2px solid var(--line); font-size: 17px; line-height: 1.45; font-style: italic; position: relative; }
+.talk-line::before { content: ''; position: absolute; left: -10px; top: 22px; border: 8px solid transparent; border-right-color: var(--line); border-left: 0; }
+.talk-actions { justify-content: flex-end; }
+.talk-actions .cta { flex: none; padding: 0 20px; }
+.danger-cta { background: var(--enemy); }
+.danger-cta:hover:not(:disabled) { background: #FF8A65; }
+.talk-actions .btn { height: 56px; }

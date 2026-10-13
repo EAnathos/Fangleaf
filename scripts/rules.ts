@@ -371,6 +371,7 @@ const noop = () => {};
     });
     p.armor = 10;
     [p.x, p.y] = [boss.x + 120, boss.y + 60];
+    r.onChallenge(p, c.id); // on lui parle : le combat commence
     let hazards = 0, minions = 0;
     for (let i = 0; i < 20 * 25; i++) {
       p.hp = 9999; // on observe les attaques sans mourir
@@ -532,6 +533,7 @@ const noop = () => {};
   p.hp = p.maxHp = 9999;
   f.hp = f.maxHp = 9999;
   boss.moveCd = boss.moveCd.map(() => 99); // pas d'attaque spéciale : on observe le corps à corps
+  boss.dormant = false;
   for (let i = 0; i < 20 * 3; i++) {
     [p.x, p.y] = [boss.x + boss.r + 10, boss.y];
     [f.x, f.y] = [boss.x - boss.r - 10, boss.y];
@@ -585,6 +587,7 @@ const noop = () => {};
   for (const c of r.map.caves) {
     const boss = r.units.get(r.caveBoss[c.id]);
     boss.moveCd = boss.moveCd.map(() => 99); // on mesure la poursuite, pas les attaques spéciales
+    boss.dormant = false;
     const p = r.addPlayer('k', noop);
     p.cls = 'archer';
     p.hp = 99999;
@@ -996,6 +999,30 @@ const noop = () => {};
   const main = SPECIES.slice(0, 4); // espèce principale de chaque zone
   const ok = main.every((s, i) => i === 0 || (s.hp >= main[i - 1].hp * 2.4 && s.dmg >= main[i - 1].dmg * 1.75));
   check(ok, `progression des monstres : ${main.map((s) => `${s.hp}/${s.dmg}`).join(' → ')}`);
+}
+
+{
+  // Géant endormi : ni cible ni menace tant qu'on ne lui a pas parlé ; il se rendort quand la grotte se vide.
+  const r = room();
+  const c = r.map.caves[0];
+  const boss = r.units.get(r.caveBoss[c.id]);
+  const p = r.addPlayer('a', noop);
+  [p.x, p.y] = [boss.x + boss.r + 20, boss.y];
+  p.hp = 9999;
+  for (let i = 0; i < 20 * 3; i++) r.step();
+  check(boss.dormant && boss.hp === boss.maxHp && p.hp === 9999, 'géant endormi : on ne le frappe pas, il ne frappe pas');
+  [p.x, p.y] = [c.entrance.x, c.entrance.y + 70];
+  r.onChallenge(p, c.id);
+  check(boss.dormant, 'hors de sa grotte : impossible de le provoquer');
+  [p.x, p.y] = [boss.x + boss.r + 20, boss.y];
+  r.onChallenge(p, c.id);
+  check(!boss.dormant, 'on lui parle : il se réveille');
+  for (let i = 0; i < 20 * 3; i++) r.step();
+  check(boss.hp < boss.maxHp && p.hp < 9999, 'puis le combat s\'engage');
+  [p.x, p.y] = [c.entrance.x, c.entrance.y + 70];
+  r.tick = 0;
+  r.clearEmptyCaves();
+  check(boss.dormant && boss.hp === boss.maxHp && boss.x === boss.homeX, 'grotte vide : il se rendort, guéri, à sa place');
 }
 
 {

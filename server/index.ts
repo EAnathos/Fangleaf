@@ -160,6 +160,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'alphaCreate') room.onAlphaCreate(player, +msg.s);
     else if (msg.t === 'mount') room.onMount(player, +msg.id);
     else if (msg.t === 'cave') room.onCave(player, +msg.id, !!msg.enter);
+    else if (msg.t === 'challenge') room.onChallenge(player, +msg.cave);
     else if (msg.t === 'establish') room.onEstablish(player, +msg.site);
     else if (msg.t === 'travel') room.onTravel(player, +msg.to);
     else if (msg.t === 'build') room.onBuild(player, msg.b);

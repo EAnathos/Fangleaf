@@ -14,6 +14,7 @@ export type ClientMsg =
   | { t: 'legend'; s: number } // rendre légendaire l'Alpha de cette espèce avec l'âme de son géant
   | { t: 'mount'; id: number } // 0 = descendre
   | { t: 'cave'; id: number; enter: boolean } // entrer dans une grotte / en sortir
+  | { t: 'challenge'; cave: number } // parler au géant endormi de sa grotte : le combat commence
   | { t: 'establish'; site: number } // établir le camp de cet emplacement (pour tout le village)
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, sinon index du camp
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
@@ -77,6 +78,7 @@ export type ShotTuple = [number, number, number, number, number, number, number]
 export const UNIT_FLAG_ALPHA = 1;
 export const UNIT_FLAG_MOUNTED = 2; // Alpha chevauché : dessiné sous son dompteur
 export const UNIT_FLAG_LEGEND = 4; // Alpha légendaire
+export const UNIT_FLAG_DORMANT = 8; // géant qui attend qu'on vienne lui parler (ni cible ni menace)
 
 export type GameEvent =
   | { e: 'hit'; a: number; b: number; dmg: number }
@@ -88,6 +90,7 @@ export type GameEvent =
   | { e: 'mine'; by: number; id: number; done: boolean } // coup de pioche sur un filon (done : épuisé)
   | { e: 'boss'; cave: number; s: number; down: boolean } // mini-boss vaincu (down) ou de retour
   | { e: 'move'; id: number; kind: string } // un mini-boss lance une attaque spéciale
+  | { e: 'challenge'; cave: number; id: number; by: number } // un dompteur a provoqué le géant : le combat commence
   | { e: 'boom'; x: number; y: number; r: number; kind: string } // une attaque spéciale frappe
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire
   | { e: 'shot'; by: number; x: number; y: number; tx: number; ty: number; cls: ClassId } // flèche ou orbe

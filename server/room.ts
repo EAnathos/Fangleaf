@@ -1,7 +1,7 @@
 // Un village : jusqu'à 3 joueurs, la carte et sa simulation autoritaire.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
@@ -10,7 +10,7 @@ import {
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, GameEvent, PlayerState, ServerMsg, UnitTuple } from '../shared/protocol.ts';
-import { UNIT_FLAG_ALPHA, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
+import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Grid } from './grid.ts';
 import type { Profile } from './persist.ts';
@@ -56,6 +56,7 @@ interface Unit {
   pathGoalY: number;
   windup: number; // tireur : charge son tir (s restantes), immobile
   shotAt: number; // cible visée pendant la charge
+  dormant: boolean; // géant qui attend qu'un dompteur vienne lui parler : ni cible ni menace
 }
 
 /** Projectile d'un tireur : esquivable (trait, jet) ou annoncé au sol (cloche). */
@@ -827,7 +828,7 @@ export class Room {
       target: 0, lastAttacker: 0, lastHitAt: -Infinity, homeX: x, homeY: y, returning: false,
       wanderX: x, wanderY: y, wanderT: Math.random() * 3, reviveAt: 0, level: 0, recalling: false, legend: false,
       castUntil: 0, moveCd: (BOSS_MOVES[SPECIES[s].key] ?? []).map((m) => ('cd' in m ? m.cd * (0.4 + Math.random() * 0.3) : 0)), splitDone: 0, enraged: false, summoner: 0, stuck: 0, path: null, pathAt: -Infinity, pathGoalX: 0, pathGoalY: 0,
-      windup: 0, shotAt: 0,
+      windup: 0, shotAt: 0, dormant: false,
     };
     if (alpha) this.setAlphaLevel(u, level); // arrondit aussi les stats du niveau 0
     this.units.set(u.id, u);
@@ -860,7 +861,7 @@ export class Room {
     return best;
   }
 
-  private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0;
+  private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant;
   private isAllyOfPlayers = (e: Ent) => (e.kind === 'p' || e.owner !== 0) && !this.safe(e.x, e.y);
 
   private playerAttack(p: Player) {
@@ -934,6 +935,31 @@ export class Room {
     const bosses = new Set(this.caveBoss.filter((id, cave) => id && !occupied.has(cave)));
     if (!bosses.size) return;
     for (const m of [...this.units.values()]) if (m.summoner && !m.owner && bosses.has(m.summoner)) this.units.delete(m.id);
+    // Le géant se rendort, guéri, au fond de sa grotte : il faudra lui reparler.
+    for (const id of bosses) {
+      const u = this.units.get(id);
+      if (u && !u.dormant) this.calmBoss(u);
+    }
+  }
+
+  private calmBoss(u: Unit) {
+    const sp = SPECIES[u.s];
+    this.hazards = this.hazards.filter((h) => h.boss !== u);
+    Object.assign(u, {
+      dormant: true, hp: u.maxHp, x: u.homeX, y: u.homeY, target: 0, lastAttacker: 0, castUntil: 0, windup: 0,
+      splitDone: 0, enraged: false, atkCdBase: sp.atkCd, speed: sp.speed, path: null,
+    });
+  }
+
+  /** Parler au géant endormi de sa grotte, à côté de lui : il se réveille et le combat commence. */
+  onChallenge(p: Player, cave: number) {
+    const c = this.map.caves[cave];
+    const u = c && this.units.get(this.caveBoss[cave]);
+    if (!u || !u.dormant || p.dead || this.map.caveAt(p.x, p.y)?.id !== c.id) return;
+    if (dist2(p.x, p.y, u.x, u.y) > (u.r + BOSS_TALK_R) ** 2) return;
+    u.dormant = false;
+    u.target = p.id;
+    this.events.push({ e: 'challenge', cave, id: u.id, by: p.id });
   }
 
   private summonMinions(u: Unit, n: number, max: number) {
@@ -1096,6 +1122,7 @@ export class Room {
     if (!c) return 0;
     const u = this.createUnit(c.boss as SpeciesId, false, c.inside.x, c.inside.y - 60);
     u.maxHp = u.hp = SPECIES[u.s].hp * this.bossHpMult();
+    u.dormant = true; // il attend qu'on vienne lui parler
     return u.id;
   }
 
@@ -1312,6 +1339,7 @@ export class Room {
   }
 
   private wildAI(u: Unit) {
+    if (u.dormant) return; // géant qui attend qu'on lui parle
     if (u.returning) {
       if (this.move(u, u.homeX, u.homeY, u.speed * 1.3, 20)) {
         u.returning = false;
@@ -1674,7 +1702,7 @@ export class Room {
       for (const u of this.units.values()) {
         if (u.reviveAt || dist2(u.x, u.y, viewer.x, viewer.y) > vr2) continue;
         units.push([
-          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0), Math.round(u.x), Math.round(u.y),
+          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0), Math.round(u.x), Math.round(u.y),
           Math.round((100 * Math.max(0, u.hp)) / u.maxHp), u.owner,
         ]);
       }
