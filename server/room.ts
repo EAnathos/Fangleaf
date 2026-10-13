@@ -244,6 +244,7 @@ export class Room {
       }
     }
     this.players.set(p.id, p);
+    this.scaleBosses();
     this.refreshAlphas(p);
     send({ t: 'welcome', id: p.id, code: this.code, seed: this.seed, saved: !!p.userId, villageFound: found, founder: this.isFounder(p) });
     send({ t: 'teleport', x: p.x, y: p.y });
@@ -261,6 +262,7 @@ export class Room {
     if (!p) return;
     for (const uid of p.army) this.units.delete(uid);
     this.players.delete(id);
+    this.scaleBosses();
     this.events.push({ e: 'info', text: `${p.name} a quitté le village` });
   }
 
@@ -1092,7 +1094,25 @@ export class Room {
   private spawnBoss(cave: number) {
     const c = this.map.caves[cave];
     if (!c) return 0;
-    return this.createUnit(c.boss as SpeciesId, false, c.inside.x, c.inside.y - 60).id;
+    const u = this.createUnit(c.boss as SpeciesId, false, c.inside.x, c.inside.y - 60);
+    u.maxHp = u.hp = SPECIES[u.s].hp * this.bossHpMult();
+    return u.id;
+  }
+
+  /** PV des géants multipliés par le nombre de dompteurs en ligne dans le village (au moins ×1). */
+  private bossHpMult() {
+    return Math.max(1, this.players.size);
+  }
+
+  /** Quelqu'un arrive ou s'en va : chaque géant garde sa part de PV, sur un total recalculé. */
+  private scaleBosses() {
+    for (const id of this.caveBoss) {
+      const u = this.units.get(id);
+      if (!u) continue;
+      const ratio = u.hp / u.maxHp;
+      u.maxHp = SPECIES[u.s].hp * this.bossHpMult();
+      u.hp = u.maxHp * ratio;
+    }
   }
 
   /** Entrer dans une grotte (depuis son entrée) ou en sortir (depuis sa sortie), avec sa meute. */

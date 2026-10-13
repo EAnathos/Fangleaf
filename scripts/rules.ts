@@ -998,5 +998,20 @@ const noop = () => {};
   check(ok, `progression des monstres : ${main.map((s) => `${s.hp}/${s.dmg}`).join(' → ')}`);
 }
 
+{
+  // PV des géants : multipliés par le nombre de dompteurs en ligne, en gardant leur part de PV.
+  const r = room();
+  const boss = r.units.get(r.caveBoss[0]);
+  const base = SPECIES[boss.s].hp;
+  const p = r.addPlayer('a', noop);
+  check(boss.maxHp === base && boss.hp === base, `un dompteur : ${SPECIES[boss.s].name} à ${base} PV`);
+  r.damage(boss, base / 2, p);
+  r.addPlayer('b', noop);
+  check(boss.maxHp === base * 2 && Math.abs(boss.hp - base) < 1e-6, `deux dompteurs : PV doublés (${boss.hp}/${boss.maxHp}), toujours à moitié`);
+  const q = r.addPlayer('c', noop);
+  r.removePlayer(q.id);
+  check(boss.maxHp === base * 2, 'un dompteur s\'en va : on revient au total pour deux');
+}
+
 console.log(failed ? `\nÉCHEC (TEST_SEED=${TEST_SEED})` : '\nOK');
 process.exit(failed ? 1 : 0);
