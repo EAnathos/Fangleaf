@@ -25,6 +25,7 @@ export class Game {
   me = { x: 0, y: 0, fx: 1, fy: 0, moving: false };
   private flashes = new Map<number, number>();
   private charges = new Map<number, number>(); // tireur → début de la charge de son tir
+  private fades = new Map<object, number>(); // arbre → opacité de son feuillage (1 : opaque)
   private tools = new Map<number, { kind: Tool['kind']; at: number; tx: number; ty: number }>(); // dompteur → dernier coup d'outil (récolte)
   private shotsAt = 0; // réception du dernier snapshot (les projectiles droits sont extrapolés depuis)
   private faces = new Map<number, { x: number; face: number }>();
@@ -479,6 +480,18 @@ export class Game {
       const label = k === 0 && !active ? `${BUILDINGS.stone.name} · ${BUILDINGS.stone.cost} or` : undefined;
       if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
+    // Arbres de la carte : triés avec les créatures, feuillage transparent quand on passe dessous.
+    const trees = here ? [] : this.map.decorIn(camX - hw - 60, camY - hh - 60, camX + hw + 60, camY + hh + 140).filter((d) => d.kind === 0);
+    for (const d of trees) this.world.treeShadow(ctx, d.x, d.y);
+    for (const d of trees) {
+      const s = this.world.treeSize(d.x, d.y);
+      const under = Math.hypot(this.me.x - d.x, this.me.y - (d.y - s * 0.2)) < s + 14 && this.me.y < d.y + s * 0.5;
+      const fade = this.fades.get(d) ?? 1, target = under ? 0.3 : 1;
+      const next = fade + Math.sign(target - fade) * Math.min(Math.abs(target - fade), 0.08); // fondu en quelques images
+      if (next === 1) this.fades.delete(d);
+      else this.fades.set(d, next);
+      list.push({ y: d.y + s * 0.5, draw: () => this.world.tree(ctx, d.x, d.y, d.zone, next, false) });
+    }
     const oreState = new Map(this.net.latest?.ores ?? []);
     for (const o of this.map.ores) {
       if (!inView(o.x, o.y, 60)) continue;

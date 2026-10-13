@@ -140,9 +140,11 @@ export class World {
     const m = 1;
     const gx0 = Math.floor(ox / DECO_CELL) - m, gx1 = Math.floor((ox + CHUNK) / DECO_CELL) + m;
     const gy0 = Math.floor(oy / DECO_CELL) - m, gy1 = Math.floor((oy + CHUNK) / DECO_CELL) + m;
-    // Arbres et rochers du monde : ceux de la carte partagée (ce sont aussi des obstacles côté serveur).
+    // Rochers du monde : ceux de la carte partagée (ce sont aussi des obstacles côté serveur).
+    // Ses arbres, eux, sont dessinés à chaque image avec les créatures (voir treeShadow / tree).
     const big: [number, number, number, number][] = map
       .decorIn(gx0 * DECO_CELL, gy0 * DECO_CELL, (gx1 + 1) * DECO_CELL, (gy1 + 1) * DECO_CELL)
+      .filter((d) => d.kind === 1)
       .map((d) => [d.kind, d.x, d.y, d.zone]);
     for (let gy = gy0; gy <= gy1; gy++) {
       for (let gx = gx0; gx <= gx1; gx++) {
@@ -209,18 +211,32 @@ export class World {
     }
   }
 
-  private tree(ctx: CanvasRenderingContext2D, x: number, y: number, z: number) {
-    const s = 26 + hash2(x | 0, y | 0, this.seed) * 16;
-    // zone 5 (Lacs brumeux) : saules bleutés
-    const dark = z === 5 ? '#23403F' : z === 4 ? '#1E3634' : z === 3 ? '#2E3A22' : '#1C3324';
-    const mid = z === 5 ? '#36605A' : z === 4 ? '#2B4A45' : z === 3 ? '#425230' : '#28472F';
-    const light = z === 5 ? '#5A8A80' : z === 4 ? '#3C625A' : z === 3 ? '#5A6B3C' : '#386240';
+  /** Taille d'un arbre (même hasard que WorldMap.decorSize). */
+  treeSize(x: number, y: number) {
+    return 26 + hash2(x | 0, y | 0, this.seed) * 16;
+  }
+
+  /** Ombre portée d'un arbre, au sol (dessinée avant les créatures). */
+  treeShadow(ctx: CanvasRenderingContext2D, x: number, y: number) {
+    const s = this.treeSize(x, y);
     ctx.fillStyle = 'rgba(8,14,12,0.35)';
     ctx.beginPath();
     ctx.ellipse(x + 8, y + s * 0.55, s * 1.05, s * 0.45, 0, 0, TAU);
     ctx.fill();
+  }
+
+  /** Arbre : tronc puis feuillage ; fade < 1 rend le feuillage transparent (quelqu'un passe dessous). */
+  tree(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, fade = 1, shade = true) {
+    const s = this.treeSize(x, y);
+    // zone 5 (Lacs brumeux) : saules bleutés
+    const dark = z === 5 ? '#23403F' : z === 4 ? '#1E3634' : z === 3 ? '#2E3A22' : '#1C3324';
+    const mid = z === 5 ? '#36605A' : z === 4 ? '#2B4A45' : z === 3 ? '#425230' : '#28472F';
+    const light = z === 5 ? '#5A8A80' : z === 4 ? '#3C625A' : z === 3 ? '#5A6B3C' : '#386240';
+    if (shade) this.treeShadow(ctx, x, y);
     ctx.fillStyle = '#4A3424';
     ctx.fillRect(x - 4, y, 8, s * 0.5);
+    ctx.save();
+    ctx.globalAlpha *= fade;
     ctx.fillStyle = dark;
     ctx.beginPath();
     ctx.arc(x, y - s * 0.2, s, 0, TAU);
@@ -233,6 +249,7 @@ export class World {
     ctx.beginPath();
     ctx.arc(x - s * 0.3, y - s * 0.5, s * 0.35, 0, TAU);
     ctx.fill();
+    ctx.restore();
   }
 
   private rock(ctx: CanvasRenderingContext2D, x: number, y: number, z: number) {
