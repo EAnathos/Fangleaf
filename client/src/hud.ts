@@ -54,7 +54,6 @@ export const purchaseOf = (map: WorldMap, buy: Purchase): { name: string; cost: 
     : { name: `Grotte de ${SPECIES[map.caves[buy.cave].boss].name}`, cost: { gold: caveUnlockCost(map.caves[buy.cave].zone), wood: 0, stone: 0 }, hall: 0 };
 /** Ce qu'on peut dépenser : son or, et le bois et la pierre de la réserve du village. */
 type Funds = { gold: number; wood: number; stone: number };
-const haveText = (f: Funds) => `Tu as ${f.gold} or · réserve du village : ${f.wood} bois, ${f.stone} pierre`;
 const canPay = (f: Funds, c: Cost) => f.gold >= c.gold && f.wood >= c.wood && f.stone >= c.stone;
 /** Point d'interaction (touche E) à portée : bâtiments (ou leur chantier), Pierres de passage, emplacements de camp, grottes. */
 export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView): Spot | undefined => {
@@ -457,7 +456,6 @@ export class Hud {
     if (!buy) return;
     const { name, cost, hall } = purchaseOf(this.map, buy);
     const funds = this.funds(me);
-    $('buy-have').textContent = haveText(funds);
     this.costChips('buy-cost', funds, cost);
     $('buy-title').textContent = 'b' in buy ? `Construire : ${name}` : `Débloquer : ${name}`;
     if ('b' in buy) $('buy-desc').textContent = BUILDINGS[buy.b].desc;
@@ -489,12 +487,13 @@ export class Hud {
   /** Maison commune : ses niveaux (ce que chacun débloque), le prochain à payer, et l'état des portes des zones. */
   private updateHall(me: PlayerState) {
     const funds = this.funds(me);
-    $('hall-have').textContent = `Niveau ${this.hall}/${HALL_MAX} · ${haveText(funds)}`;
+    $('hall-have').textContent = `Niveau ${this.hall}/${HALL_MAX}`;
     const key = JSON.stringify([this.hall, this.beaten]);
     if (key !== this.last.hall) {
       this.last.hall = key;
       $('hall-levels').replaceChildren(
-        ...HALL.map((lv, i) => {
+        // ce qui est déjà débloqué, puis la prochaine amélioration (les suivantes restent cachées)
+        ...HALL.slice(0, Math.min(HALL_MAX, this.hall + 1)).map((lv, i) => {
           const n = i + 1, done = this.hall >= n, next = this.hall === i;
           const el = document.createElement('div');
           el.className = `hall-level${done ? ' done' : next ? ' next' : ' locked'}`;
