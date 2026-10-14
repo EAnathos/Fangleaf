@@ -1,4 +1,6 @@
 // Test de fumée : lance le serveur, connecte 4 bots, vérifie salons, snapshots, combat et forge.
+// Il vérifie le réseau de bout en bout, vite : l'économie (récolte, prix, éveils…) est couverte par test:rules,
+// alors après un premier combat le bot prend ses ressources par la triche de dev au lieu de chasser et récolter.
 // Usage : npm run smoke
 
 import { spawn } from 'node:child_process';
@@ -10,6 +12,8 @@ import { SPECIES } from '../shared/config.ts';
 const PORT = 3999;
 const server = spawn('npx', ['tsx', 'server/index.ts'], { env: { ...process.env, PORT: String(PORT), ALLOW_GUESTS: '1', SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '' }, stdio: 'pipe' }); // jamais la vraie base
 server.stderr.on('data', (d) => process.stderr.write(d));
+let ready = false; // le serveur écoute (il l'annonce sur sa sortie)
+server.stdout.on('data', (d) => (ready ||= String(d).includes('Fangleaf sur')));
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let failed = false;
@@ -51,7 +55,7 @@ class Bot {
 }
 
 async function main() {
-  await sleep(1500);
+  for (let i = 0; i < 200 && !ready; i++) await sleep(50);
   const host = new Bot();
   await host.open();
   host.send({ t: 'create', name: 'Hôte' });
@@ -73,14 +77,14 @@ async function main() {
   const map = new WorldMap(host.seed);
   let x = host.me()!.x, y = host.me()!.y;
   check(Math.hypot(x - map.spawn.x, y - map.spawn.y) < 150 && !map.inVillage(x, y), 'arrivée au camp de départ, loin du village');
-  // Pas de 10 px vers une cible, en glissant le long de l'eau comme le client.
-  // Loin de la cible, on suit le chemin de la carte : en ligne droite, le bot resterait coincé contre un arbre.
+  // Pas de 16 px vers une cible (320 px/s, juste sous la vitesse tolérée par le serveur), en glissant le long de l'eau comme le client.
+  // On suit toujours un itinéraire calculé : en ligne droite, le bot resterait coincé contre un arbre ou une palissade.
   let route: { x: number; y: number }[] = [], routeGoal = { x: NaN, y: NaN };
   const stepTo = (gx: number, gy: number, stop = 0) => {
     let tx = gx, ty = gy;
-    if (Math.hypot(gx - x, gy - y) > 120) {
+    if (Math.hypot(gx - x, gy - y) > 30) {
       if (Math.hypot(gx - routeGoal.x, gy - routeGoal.y) > 80 || !route.length) {
-        route = map.findPath(x, y, gx, gy, 60000) ?? [];
+        route = map.findPath(x, y, gx, gy, 400_000) ?? [];
         routeGoal = { x: gx, y: gy };
       }
       while (route.length > 1 && Math.hypot(route[0].x - x, route[0].y - y) < 24) route.shift();
@@ -88,7 +92,7 @@ async function main() {
     }
     const d = Math.hypot(tx - x, ty - y);
     if (d <= stop + 1) return true;
-    const s = Math.min(d - stop, 10), nx = x + ((tx - x) / d) * s, ny = y + ((ty - y) / d) * s;
+    const s = Math.min(d - stop, 16), nx = x + ((tx - x) / d) * s, ny = y + ((ty - y) / d) * s;
     if (!map.blocked(nx, ny)) [x, y] = [nx, ny];
     else if (!map.blocked(nx, y)) x = nx;
     else if (!map.blocked(x, ny)) y = ny;
@@ -96,13 +100,13 @@ async function main() {
     return false;
   };
 
-  // Le bot hôte chasse le Gluant sauvage le plus proche jusqu'à avoir de quoi s'équiper.
+  // Le bot hôte chasse la proie la plus proche jusqu'à son premier kill (combat et or vérifiés de bout en bout).
   const t0 = Date.now();
   let sawUnits = 0;
-  while (Date.now() - t0 < 90_000) {
+  while (Date.now() - t0 < 45_000) {
     sawUnits = Math.max(sawUnits, host.last?.units.filter((u) => u[6] === 0).length ?? 0);
     const me = host.me();
-    if (!me || me.dead || me.gold >= 25) break;
+    if (!me || me.dead || me.gold > 0) break;
     let best: [number, number] | undefined, bd = Infinity;
     for (const u of host.last!.units) {
       // toute proie de la zone 1 (hors géants), en deçà de la porte du village (fermée : Maison commune niv. 0)
@@ -129,48 +133,53 @@ async function main() {
 
   // Aller près d'un point, vu du serveur : les monstres bousculent le bot en chemin, alors on repart
   // de la position du serveur (et on recalcule l'itinéraire) tant qu'on n'y est pas.
+  // Budget de 25 s : au-delà, on note où le bot est resté coincé.
   const reach = async (gx: number, gy: number, r: number) => {
-    for (let k = 0; k < 6 && !host.me()!.dead; k++) {
-      [x, y] = [host.me()!.x, host.me()!.y];
+    const end = Date.now() + 25_000;
+    while (Date.now() < end) {
+      const m = host.me()!;
+      if (m.dead) {
+        await sleep(200); // tombé en chemin : il réapparaît au village
+        continue;
+      }
+      [x, y] = [m.x, m.y];
       route = [];
-      for (let i = 0; i < 400 && !stepTo(gx, gy); i++) await sleep(50);
+      for (let i = 0; i < 120 && !stepTo(gx, gy); i++) await sleep(50);
       await sleep(150);
       if (Math.hypot(host.me()!.x - gx, host.me()!.y - gy) <= r) return true;
+      if (Math.hypot(host.me()!.x - m.x, host.me()!.y - m.y) < 8) {
+        // n'a pas bougé de toute la tentative (coincé dans l'ouverture d'une palissade) : quelques pas de côté
+        const a = Math.random() * Math.PI * 2;
+        for (let i = 0; i < 6; i++) {
+          const nx = host.me()!.x + Math.cos(a) * 14, ny = host.me()!.y + Math.sin(a) * 14;
+          if (!map.blocked(nx, ny)) host.send({ t: 'pos', x: nx, y: ny, fx: 1, fy: 0 });
+          await sleep(60);
+        }
+      }
     }
+    const m = host.me()!;
+    const p = map.findPath(m.x, m.y, gx, gy, 400_000);
+    console.log(`  (graine ${host.seed}) (coincé à ${Math.round(Math.hypot(m.x - gx, m.y - gy))} px du but, en (${Math.round(m.x)}, ${Math.round(m.y)}), mort=${m.dead}, abscisse ${Math.round(map.arcAt(m.x, m.y))} / porte ${Math.round(map.gates[0])}, chemin ${p ? p.length + ' étapes' : 'introuvable'}, local (${Math.round(x)}, ${Math.round(y)}) ${map.blocked(x, y) ? 'bloqué' : 'libre'})`);
     return false;
   };
 
-  // Forge : du bois, dépôt à l'entrepôt, construction (10 or, 5 bois de la réserve) puis amélioration si assez d'or.
-  if (me.gold >= 10 && !me.dead) {
-    // D'abord du bois : le bois mort le plus proche entre le camp et le village (la forge en demande 5).
-    const wood = map.ores.filter((o) => o.res === 'wood' && map.arcAt(o.x, o.y) < 1550).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
-    // (les monstres qui passent sont combattus d'abord : on retente)
-    for (let k = 0; k < 4 && host.me()!.wood < 5 && !host.me()!.dead; k++) {
-      await reach(wood.x + 45, wood.y, 60);
-      for (let i = 0; i < 200 && host.me()!.wood < 5; i++) await sleep(50);
-    }
-    console.log(`  (bois récolté : ${host.me()!.wood})`);
-  }
-  if (me.gold >= 10 && !host.me()!.dead && host.me()!.wood >= 5) {
-    // Le bois du sac va dans la réserve du village (entrepôt) : c'est elle qui paie les constructions.
-    await reach(map.village.x, map.village.y + 60, 80);
-    await reach(map.store.x, map.store.y + 50, 60);
-    host.send({ t: 'deposit' });
-    await sleep(200);
-    check((host.last?.stock[0] ?? 0) >= 5, `bois déposé à l'entrepôt (réserve : ${host.last?.stock[0]})`);
-    await reach(map.forge.x + 20, map.forge.y + 75, 60);
-    host.send({ t: 'build', b: 'forge' });
-    await sleep(200);
-    const at = host.me()!;
-    check(!!host.last?.buildings.includes('forge'), `forge construite pour le village (or ${at.gold}, réserve ${host.last?.stock.join('/')}, à ${Math.round(Math.hypot(at.x - map.forge.x, at.y - map.forge.y))} px de la forge)`);
-    if (host.me()!.gold >= 20) {
-      host.send({ t: 'upgrade', what: 'armor' });
-      await sleep(200);
-      check(host.me()!.armor === 1, `armure améliorée (niv. ${host.me()!.armor}, or ${host.me()!.gold})`);
-    } else console.log('  (pas assez d\'or : amélioration d\'armure ignorée)');
-  } else {
-    console.log('  (pas assez d\'or ou de bois, ou mort : test de forge ignoré)');
-  }
+  // Forge : ressources de dev, dépôt à l'entrepôt, construction (or du dompteur, bois de la réserve) puis amélioration.
+  [x, y] = [host.me()!.x, host.me()!.y];
+  host.send({ t: 'cheat' }); // +300 or, +100 bois, +100 pierre
+  await sleep(150);
+  check(host.me()!.wood >= 100, `ressources de dev reçues (or ${host.me()!.gold}, bois ${host.me()!.wood})`);
+  await reach(map.store.x, map.store.y + 50, 60);
+  host.send({ t: 'deposit' });
+  await sleep(150);
+  check((host.last?.stock[0] ?? 0) >= 100 && host.me()!.wood === 0, `sac vidé à l'entrepôt (réserve : ${host.last?.stock.join(' bois, ')} pierre)`);
+  await reach(map.forge.x + 20, map.forge.y + 75, 60);
+  host.send({ t: 'build', b: 'forge' });
+  await sleep(150);
+  const at = host.me()!;
+  check(!!host.last?.buildings.includes('forge'), `forge construite pour le village (or ${at.gold}, réserve ${host.last?.stock.join('/')}, à ${Math.round(Math.hypot(at.x - map.forge.x, at.y - map.forge.y))} px de la forge)`);
+  host.send({ t: 'upgrade', what: 'armor' });
+  await sleep(150);
+  check(host.me()!.armor === 1, `armure améliorée (niv. ${host.me()!.armor}, or ${host.me()!.gold})`);
 
   // Anti-téléportation.
   const before = host.me()!;
