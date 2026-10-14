@@ -248,6 +248,7 @@ export class Hud {
     const el = $('area-banner');
     el.querySelector('b')!.textContent = title;
     el.querySelector('span')!.textContent = subtitle;
+    el.querySelector('span')!.hidden = !subtitle;
     el.classList.toggle('danger', danger);
     el.hidden = false;
     el.style.animation = 'none';

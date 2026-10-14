@@ -193,8 +193,7 @@ export class Game {
     }
     else {
       const z = Number(area.slice(4));
-      const names = SPECIES.filter((s) => s.zone === z).map((s) => s.name).join(' · ');
-      if (!first) this.hud.banner(ZONE_NAMES[z - 1], `Zone ${z} · ${names}`, z >= 3);
+      if (!first) this.hud.banner(ZONE_NAMES[z - 1], '', z >= 3); // juste le nom de la zone
     }
   }
 
