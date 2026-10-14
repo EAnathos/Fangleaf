@@ -300,10 +300,15 @@ const noop = () => {};
   const gold0 = p.gold;
   for (let i = 0; i < 20 * 15 && r.oreHp[o.id] > 0; i++) r.step();
   check(r.oreHp[o.id] <= 0 && p.gold === gold0 + oreGold(o.zone), `filon miné : +${p.gold - gold0} or (zone ${o.zone})`);
+  check(!r.map.blocked(o.x, o.y), 'épuisé, il disparaît : on passe à travers');
   r.time += 1000;
   r.tick = 9;
   r.step();
-  check(r.oreHp[o.id] > 0, 'le filon réapparaît après un délai');
+  check(r.oreHp[o.id] <= 0, 'quelqu\'un se tient à sa place : il attend pour réapparaître');
+  [p.x, p.y] = [o.x + 200, o.y];
+  r.tick = 9;
+  r.step();
+  check(r.oreHp[o.id] > 0 && r.map.blocked(o.x, o.y), 'le filon réapparaît après un délai, de nouveau solide');
 }
 
 {
@@ -1069,7 +1074,9 @@ const noop = () => {};
   // Gibier passif : il n'attaque jamais, mange aux buissons à fruits et fuit qui le frappe.
   const r = room();
   const s = SPECIES.findIndex((sp) => sp.passive);
-  const bush = r.map.bushes[0];
+  // un buisson dans un coin dégagé (le lièvre doit pouvoir y aller puis s'enfuir)
+  const open = (x: number, y: number) => [0, 1, 2, 3, 4, 5, 6, 7].every((k) => !r.map.blocked(x + Math.cos(k) * 160, y + Math.sin(k) * 160)) && !r.map.blocked(x, y);
+  const bush = r.map.bushes.find((b: { x: number; y: number }) => open(b.x + 120, b.y) && r.map.clearLine(b.x + 120, b.y, b.x, b.y + 14))!;
   check(r.map.bushes.length > 40, `${r.map.bushes.length} buissons à fruits sur la carte`);
   for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id); // seuls le lièvre et le dompteur
   const hare = r.createUnit(s, false, bush.x + 120, bush.y);

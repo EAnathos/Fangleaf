@@ -835,7 +835,15 @@ export class Room {
   private updateSpawns() {
     if (this.tick % 10 !== 0) return; // 2×/s suffit
     this.map.ores.forEach((o, i) => {
-      if (this.oreHp[i] <= 0 && this.time >= this.oreBack[i]) this.oreHp[i] = oreHp(o.zone);
+      if (this.oreHp[i] > 0 || this.time < this.oreBack[i]) return;
+      // il réapparaît (solide) seulement quand personne ne se tient à sa place
+      let free = true;
+      this.grid.query(o.x, o.y, 80, (e) => {
+        if (dist2(e.x, e.y, o.x, o.y) < (e.r + 18 + o.zone * 2 + 6) ** 2) free = false;
+      });
+      if (!free) return;
+      this.oreHp[i] = oreHp(o.zone);
+      this.map.oreDown.delete(i);
     });
     this.map.caves.forEach((c, i) => {
       if (this.caveBoss[i] || this.time < this.caveBack[i]) return;
@@ -1014,6 +1022,7 @@ export class Room {
     this.events.push({ e: 'mine', by: p.id, id: best, done });
     if (!done) return;
     this.oreBack[best] = this.time + ORE_RESPAWN_S;
+    this.map.oreDown.add(best); // épuisé : il disparaît, on passe à travers jusqu'à son retour
     p.dirty = true;
     if (o.res === 'gold') {
       const gold = oreGold(o.zone);

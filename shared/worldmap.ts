@@ -139,7 +139,9 @@ export class WorldMap {
   private buckets = new Map<number, number[]>(); // décor par case de 256 px
   readonly deepWater: number[][] = []; // par zone : x, y à la suite de points en eau profonde
   private segs = new Map<number, number[]>(); // segments de chemin par case de 256 px (ax, ay, bx, by à la suite)
-  private water = new Uint8Array(N * N);
+  private water = new Uint8Array(N * N); // 0 libre, 1 eau, 2 solide, 3 forêt, 4 filon ou tas à récolter (voir oreCell)
+  private oreCell = new Int32Array(N * N).fill(-1); // case occupée par un filon ou un tas : son index dans ores
+  readonly oreDown = new Set<number>(); // filons et tas épuisés : ils ont disparu (on passe à travers) jusqu'à leur retour
   private cdist = new Float32Array(N * N).fill(1e9); // distance à la colonne
   private arc = new Float32Array(N * N); // abscisse (le long de la colonne) du point de colonne le plus proche
 
@@ -427,10 +429,9 @@ export class WorldMap {
         const c = this.cellOf(x, y), edge = this.cdist[c] > this.halfWidth(this.arc[c]) - 170; // lisière : plus dense
         const forest = (f > 0.56 ? 4.5 : f > 0.48 ? 1.2 : 0.15) * (edge ? 3 : 1);
         const treeP = [0, 0.1, 0.2, 0.09, 0.05, 0.07][z] * forest;
-        const rockP = [0, 0.02, 0.03, 0.08, 0.12, 0.04][z];
-        if (h >= treeP + rockP) continue;
+        if (h >= treeP) continue; // les rochers ronds d'autrefois ont disparu : la pierre vient des rochers à casser
         if (this.pathDist(x, y) < 30) continue;
-        const d: Decor = { kind: h < treeP ? 0 : 1, x, y, zone: z };
+        const d: Decor = { kind: 0, x, y, zone: z };
         const key = Math.floor(x / BUCKET) * 100000 + Math.floor(y / BUCKET);
         let b = this.buckets.get(key);
         if (!b) this.buckets.set(key, (b = []));
@@ -483,7 +484,7 @@ export class WorldMap {
         if (this.ores.some((o) => dist2(x, y, o.x, o.y) < (first ? 160 : 300) ** 2) || this.bushes.some((b) => dist2(x, y, b.x, b.y) < 70 ** 2)) continue;
         if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 250 ** 2)) continue;
         this.ores.push({ id: this.ores.length, x, y, zone: this.zoneAt(x, y), res });
-        this.solidDisc(x, y, 18 + this.zoneAt(x, y) * 2);
+        this.solidOre(this.ores[this.ores.length - 1]);
         total++;
         if (s < VILLAGE_ARC) early++;
       }
@@ -528,6 +529,27 @@ export class WorldMap {
     }
   }
 
+  /** Filon ou tas à récolter : solide tant qu'il n'est pas épuisé (voir oreDown). */
+  private solidOre(o: Ore) {
+    const r = 18 + o.zone * 2;
+    for (let j = Math.floor((o.y - r + WORLD_HALF) / MAP_CELL); j <= Math.floor((o.y + r + WORLD_HALF) / MAP_CELL); j++) {
+      for (let i = Math.floor((o.x - r + WORLD_HALF) / MAP_CELL); i <= Math.floor((o.x + r + WORLD_HALF) / MAP_CELL); i++) {
+        if (i < 0 || j < 0 || i >= N || j >= N) continue;
+        const cx = -WORLD_HALF + (i + 0.5) * MAP_CELL, cy = -WORLD_HALF + (j + 0.5) * MAP_CELL, k = j * N + i;
+        if ((cx - o.x) ** 2 + (cy - o.y) ** 2 <= r * r && this.water[k] === 0) {
+          this.water[k] = 4;
+          this.oreCell[k] = o.id;
+        }
+      }
+    }
+  }
+
+  /** Case infranchissable (un filon épuisé ne l'est plus). */
+  private solid(k: number) {
+    const v = this.water[k];
+    return v !== 0 && !(v === 4 && this.oreDown.has(this.oreCell[k]));
+  }
+
   private solidRect(x0: number, y0: number, x1: number, y1: number) {
     for (let j = Math.floor((y0 + WORLD_HALF) / MAP_CELL); j <= Math.floor((y1 + WORLD_HALF) / MAP_CELL); j++) {
       for (let i = Math.floor((x0 + WORLD_HALF) / MAP_CELL); i <= Math.floor((x1 + WORLD_HALF) / MAP_CELL); i++) {
@@ -543,7 +565,7 @@ export class WorldMap {
       if (d.kind === 0) this.solidDisc(d.x, d.y + s * 0.15, s * 0.45);
       else this.solidDisc(d.x, d.y, s * 0.85);
     }
-    for (const o of this.ores) this.solidDisc(o.x, o.y, 18 + o.zone * 2);
+    for (const o of this.ores) this.solidOre(o);
     // palissade du village, avec ses 4 portes
     const v = this.village;
     for (let a = 0; a < Math.PI * 2; a += 0.02) {
@@ -590,7 +612,7 @@ export class WorldMap {
   /** Infranchissable : eau, obstacle solide (arbre, rocher, mur) ou hors du monde. */
   blocked(x: number, y: number) {
     if (x <= -WORLD_HALF || y <= -WORLD_HALF || x >= WORLD_HALF || y >= WORLD_HALF) return !this.caveAt(x, y);
-    return this.water[Math.floor((y + WORLD_HALF) / MAP_CELL) * N + Math.floor((x + WORLD_HALF) / MAP_CELL)] !== 0;
+    return this.solid(Math.floor((y + WORLD_HALF) / MAP_CELL) * N + Math.floor((x + WORLD_HALF) / MAP_CELL));
   }
 
   isWater(x: number, y: number) {
@@ -648,7 +670,7 @@ export class WorldMap {
     let gi = cell(bx), gj = cell(by);
     const inside = (i: number, j: number) => i >= 0 && j >= 0 && i < N && j < N;
     if (!inside(si, sj) || !inside(gi, gj)) return null;
-    if (this.water[gj * N + gi] !== 0) {
+    if (this.solid(gj * N + gi)) {
       const f = this.freeNear(bx, by);
       [gi, gj] = [cell(f.x), cell(f.y)];
     }
@@ -697,8 +719,8 @@ export class WorldMap {
         for (let dj = -1; dj <= 1; dj++) {
           if (!di && !dj) continue;
           const ni = ci + di, nj = cj + dj;
-          if (!inside(ni, nj) || this.water[nj * N + ni] !== 0) continue;
-          if (di && dj && (this.water[cj * N + ni] !== 0 || this.water[nj * N + ci] !== 0)) continue; // pas de coin coupé
+          if (!inside(ni, nj) || this.solid(nj * N + ni)) continue;
+          if (di && dj && (this.solid(cj * N + ni) || this.solid(nj * N + ci))) continue; // pas de coin coupé
           const nk = nj * N + ni, ng = gk + (di && dj ? 1.414 : 1);
           if (ng >= (g.get(nk) ?? Infinity)) continue;
           g.set(nk, ng);

@@ -140,29 +140,22 @@ export class World {
     const m = 1;
     const gx0 = Math.floor(ox / DECO_CELL) - m, gx1 = Math.floor((ox + CHUNK) / DECO_CELL) + m;
     const gy0 = Math.floor(oy / DECO_CELL) - m, gy1 = Math.floor((oy + CHUNK) / DECO_CELL) + m;
-    // Rochers du monde : ceux de la carte partagée (ce sont aussi des obstacles côté serveur).
-    // Ses arbres, eux, sont dessinés à chaque image avec les créatures (voir treeShadow / tree).
-    const big: [number, number, number, number][] = map
-      .decorIn(gx0 * DECO_CELL, gy0 * DECO_CELL, (gx1 + 1) * DECO_CELL, (gy1 + 1) * DECO_CELL)
-      .filter((d) => d.kind === 1)
-      .map((d) => [d.kind, d.x, d.y, d.zone]);
+    // Forêt hors du couloir (les arbres de la carte, eux, sont dessinés à chaque image avec les créatures).
+    const big: [number, number, number][] = [];
     for (let gy = gy0; gy <= gy1; gy++) {
       for (let gx = gx0; gx <= gx1; gx++) {
         this.smallDeco(ctx, gx, gy);
         // hors du couloir : forêt infranchissable, dessinée seulement (la grille la bloque déjà)
         const x = (gx + 0.2 + hash2(gx, gy, this.seed + 4) * 0.6) * DECO_CELL;
         const y = (gy + 0.2 + hash2(gx, gy, this.seed + 5) * 0.6) * DECO_CELL;
-        if (map.isForest(x, y) && hash2(gx, gy, this.seed + 3) < 0.9) big.push([0, x, y, map.zoneAt(x, y)]);
+        if (map.isForest(x, y) && hash2(gx, gy, this.seed + 3) < 0.9) big.push([x, y, map.zoneAt(x, y)]);
         // deuxième rangée décalée : un mur de feuillage sans trou
         const x2 = (gx + 0.7 + (hash2(gx, gy, this.seed + 6) - 0.5) * 0.3) * DECO_CELL, y2 = (gy + 0.7 + (hash2(gx, gy, this.seed + 7) - 0.5) * 0.3) * DECO_CELL;
-        if (map.isForest(x2, y2) && map.isForest(x2, y2 + 30)) big.push([0, x2, y2, map.zoneAt(x2, y2)]);
+        if (map.isForest(x2, y2) && map.isForest(x2, y2 + 30)) big.push([x2, y2, map.zoneAt(x2, y2)]);
       }
     }
-    big.sort((a, b) => a[2] - b[2]);
-    for (const [kind, x, y, z] of big) {
-      if (kind === 0) this.tree(ctx, x, y, z);
-      else this.rock(ctx, x, y, z);
-    }
+    big.sort((a, b) => a[1] - b[1]);
+    for (const [x, y, z] of big) this.tree(ctx, x, y, z);
     this.chunks.set(k, c);
     return c;
   }
@@ -250,28 +243,6 @@ export class World {
     ctx.arc(x - s * 0.3, y - s * 0.5, s * 0.35, 0, TAU);
     ctx.fill();
     ctx.restore();
-  }
-
-  private rock(ctx: CanvasRenderingContext2D, x: number, y: number, z: number) {
-    const s = 12 + hash2(x | 0, y | 0, this.seed + 1) * 14;
-    ctx.fillStyle = 'rgba(8,14,12,0.3)';
-    ctx.beginPath();
-    ctx.ellipse(x + 4, y + s * 0.5, s * 1.1, s * 0.45, 0, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#5E6763';
-    ctx.beginPath();
-    ctx.ellipse(x, y, s, s * 0.75, 0, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#7C8681';
-    ctx.beginPath();
-    ctx.ellipse(x - s * 0.25, y - s * 0.25, s * 0.5, s * 0.35, 0, 0, TAU);
-    ctx.fill();
-    if (z === 4) {
-      ctx.fillStyle = '#5E8F55';
-      ctx.beginPath();
-      ctx.ellipse(x + s * 0.2, y - s * 0.5, s * 0.5, s * 0.2, 0, 0, TAU);
-      ctx.fill();
-    }
   }
 
   private drawVillage() {

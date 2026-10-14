@@ -1222,20 +1222,16 @@ export function drawBush(ctx: Ctx, x: number, y: number, fruit: boolean, seed: n
 
 // ───────────────────────── Filons d'or ─────────────────────────
 
-/** Filon d'or : rocher veiné d'or qui scintille ; épuisé, il ne reste que des éclats. Bois mort et rochers : voir plus bas. */
+/** Filon d'or : rocher veiné d'or qui scintille (épuisé, il a disparu : rien à dessiner). Bois mort et rochers : voir plus bas. */
 export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: number, t: number, seed: number, res: Resource = 'gold') {
+  if (hpPct <= 0) return;
   if (res === 'wood') return drawDeadwood(ctx, x, y, zone, hpPct, t, seed);
   const r = 18 + zone * 3;
-  shadow(ctx, x, y, r);
-  if (hpPct <= 0) {
-    ctx.fillStyle = '#5E6763';
-    for (const [dx, dy, rr] of [[-8, 4, 5], [6, 6, 4], [0, -2, 6], [10, -4, 3]] as const) {
-      ctx.beginPath();
-      ctx.ellipse(x + dx, y + dy, rr, rr * 0.7, 0, 0, TAU);
-      ctx.fill();
-    }
-    return;
-  }
+  // ombre posée sous la base du rocher (pas décollée : il ne doit pas avoir l'air de voler)
+  ctx.fillStyle = 'rgba(8, 14, 12, 0.35)';
+  ctx.beginPath();
+  ctx.ellipse(x + 3, y + r * 0.42, r * 1.05, r * 0.32, 0, 0, TAU);
+  ctx.fill();
   const shake = hpPct < 100 ? Math.sin(t * 40 + seed) * 0.6 : 0;
   ctx.save();
   ctx.translate(x + shake, y);
@@ -1385,11 +1381,6 @@ function drawDeadwood(ctx: Ctx, x: number, y: number, zone: number, hpPct: numbe
   ctx.beginPath();
   ctx.ellipse(x + 3, y + 6, r * 1.3, r * 0.4, 0, 0, TAU);
   ctx.fill();
-  if (hpPct <= 0) {
-    ctx.fillStyle = '#B88A5A';
-    for (const [dx, dy] of [[-8, 2], [5, 5], [12, -1], [-2, -3]]) ctx.fillRect(x + dx, y + dy, 5, 2);
-    return;
-  }
   const shake = hpPct < 100 ? Math.sin(t * 40 + seed) * 0.6 : 0;
   ctx.save();
   ctx.translate(x + shake, y);

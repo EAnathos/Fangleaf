@@ -648,9 +648,15 @@ export class Game {
     }
     for (const k of gates) list.push(...this.world.gateParts(ctx, k, this.gateOpen(k)).filter((p) => p.y > camY - hh - 80 && p.y < camY + hh + 80));
     const oreState = new Map(this.net.latest?.ores ?? []);
+    // Filons et tas épuisés : disparus (on passe à travers, comme sur le serveur) jusqu'à leur retour.
+    for (const [id, hp] of oreState) {
+      if (hp <= 0) this.map.oreDown.add(id);
+      else this.map.oreDown.delete(id);
+    }
     for (const o of this.map.ores) {
       if (!inView(o.x, o.y, 60)) continue;
       const hp = oreState.get(o.id) ?? 100;
+      if (hp <= 0) continue;
       list.push({ y: o.y, draw: () => drawOre(ctx, o.x, o.y, o.zone, hp, this.time, o.id, o.res) });
     }
     const colorOf = new Map(players.map((p) => [p.id, p.color]));
