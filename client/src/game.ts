@@ -145,7 +145,7 @@ export class Game {
     );
     if (!candidates.length) {
       const owned = st.army.some((a) => a.alpha && MOUNTS[SPECIES[a.species].key]);
-      this.hud.toast(owned ? 'Ta monture est trop loin ou en train de ressusciter.' : 'Aucune monture : éveille un Alpha Loup, Sanglier ou Ours à la Tanière.');
+      this.hud.toast(owned ? 'Ta monture est trop loin ou en train de ressusciter.' : 'Aucune monture : éveille un Alpha Loup, Sanglier, Ours ou Escargot à la Tanière.');
       return;
     }
     const pick = candidates.find((u) => u[0] === this.lastMount) ?? candidates.sort((a, b) => Math.hypot(a[3] - this.me.x, a[4] - this.me.y) - Math.hypot(b[3] - this.me.x, b[4] - this.me.y))[0];
@@ -757,7 +757,7 @@ export class Game {
           const used = this.tools.get(p.id);
           const k = used ? (this.time - used.at) / 0.55 : 2;
           const tool: Tool | null = p.holding ? { kind: 'fruit', ang: Math.atan2(fy, fx), k: 0 }
-            : used && this.time - used.at < 0.9 && !p.mount ? { kind: used.kind, ang: Math.atan2(used.ty - y, used.tx - x), k: Math.min(1, k) } : null;
+            : used && this.time - used.at < 0.9 ? { kind: used.kind, ang: Math.atan2(used.ty - y, used.tx - x), k: Math.min(1, k) } : null;
           drawPlayer(
             ctx, x + back, y - lift, p.color, fx, fy, p.armor, p.name, this.time,
             isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool, p.weapon,

@@ -946,7 +946,10 @@ export class Room {
     return best;
   }
 
-  private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant;
+  /** Monstre sauvage qu'on combat : ni géant endormi, ni gibier passif (lui ne s'apprivoise qu'aux fruits). */
+  private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !SPECIES[e.s].passive;
+  /** Monstre sauvage qu'on peut nourrir d'un fruit (gibier passif compris, géants exclus plus bas). */
+  private isFeedable = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant;
   private isAllyOfPlayers = (e: Ent) => (e.kind === 'p' || e.owner !== 0) && !this.safe(e.x, e.y);
 
   private playerAttack(p: Player) {
@@ -997,7 +1000,7 @@ export class Room {
       p.holding = false;
       return;
     }
-    const t = this.nearest(p.x, p.y, PLAYER_R + 80, (e) => this.isWild(e) && !isBoss((e as Unit).s) && !(e as Unit).summoner) as Unit | undefined;
+    const t = this.nearest(p.x, p.y, PLAYER_R + 80, (e) => this.isFeedable(e) && !isBoss((e as Unit).s) && !(e as Unit).summoner) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (PLAYER_R + t.r + 26) ** 2) return;
     p.atkCd = FEED_CD;
     if (this.armySize(p) >= ARMY_CAP) {
@@ -1803,7 +1806,7 @@ export class Room {
     // Coup de pouce au départ : 50 % tant que la meute est vide.
     const chance = credit && this.armySize(credit) === 0 ? 0.5 : TAME_CHANCE;
     // Les renforts appelés par un géant ne s'apprivoisent pas.
-    if (credit && !u.summoner && Math.random() < chance) {
+    if (credit && !u.summoner && !sp.passive && Math.random() < chance) {
       if (this.armySize(credit) < ARMY_CAP) tame = true;
       else this.events.push({ e: 'full', to: credit.id });
     }

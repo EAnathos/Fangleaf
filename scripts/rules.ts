@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
 
@@ -1238,6 +1238,23 @@ const noop = () => {};
   p.atkCd = 0;
   r.feed(p);
   check(!p.holding, 'plus de fruit : la main se vide');
+  // Personne n'attaque le gibier passif (ni le dompteur, ni sa meute) : il ne s'apprivoise qu'aux fruits.
+  for (const w of [...r.units.values()]) if (!w.owner) r.units.delete(w.id);
+  p.army = [];
+  const wolf = r.createUnit(1, false, p.x, p.y);
+  r.makeTamed(wolf, p);
+  const prey = r.createUnit(snail, false, p.x + 25, p.y);
+  for (let i = 0; i < 20 * 4; i++) r.step();
+  check(prey.hp === prey.maxHp && !prey.owner, 'escargot à côté : ni le dompteur ni sa meute ne l\'attaquent');
+  for (let i = 0; i < 50; i++) {
+    const q = r.createUnit(snail, false, p.x + 20, p.y);
+    r.killUnit(q, p);
+  }
+  check(!p.army.some((id: number) => r.units.get(id)?.s === snail), 'un gibier vaincu ne s\'apprivoise jamais');
+  // L'Alpha escargot se monte, mais ralentit son cavalier.
+  const ride = r.spawnAlpha(p, snail, 0, false);
+  r.onMount(p, ride.id);
+  check(p.mount === ride.id && mountSpeedOf(snail) < 1, `à dos d'Alpha escargot : vitesse ×${mountSpeedOf(snail)}`);
 }
 
 {

@@ -147,7 +147,7 @@ export const weaponCost = (lvl: number) => Math.round(25 * Math.pow(1.6, lvl));
 // (1 essence par monstre de l'espèce vaincu), puis on le renforce, de plus en plus cher.
 // Montures : certains Alphas éveillés se chevauchent. Vitesse multipliée, et la monture encaisse
 // une partie des coups (elle peut tomber : on est désarçonné, elle ressuscite comme tout Alpha).
-export const MOUNTS: Record<string, number> = { wolf: 1.6, boar: 1.4, bear: 1.25 };
+export const MOUNTS: Record<string, number> = { wolf: 1.6, boar: 1.4, bear: 1.25, snail: 0.6 }; // l'escargot se monte, mais ralentit
 export const MOUNT_SHARE = 0.75; // part des dégâts reçus par la monture
 export const MOUNT_REACH = 240; // distance max pour enfourcher sa monture
 export const mountSpeedOf = (species: number) => MOUNTS[SPECIES_KEYS[species]] ?? 1;
