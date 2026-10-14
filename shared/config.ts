@@ -23,9 +23,9 @@ export interface Cost {
 }
 export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: number; stone: number; hall: number; desc: string }> = {
   forge: { name: 'Forge', cost: 10, wood: 5, stone: 0, hall: 0, desc: 'Choisis ta classe, améliore ton arme et ton armure.' },
-  den: { name: 'Tanière', cost: 20, wood: 20, stone: 15, hall: 2, desc: 'Éveille, renforce et range tes Alphas. Bestiaire des espèces croisées.' },
+  den: { name: 'Tanière', cost: 20, wood: 20, stone: 15, hall: 0, desc: 'Éveille, renforce et range tes Alphas. Bestiaire des espèces croisées.' },
   market: { name: 'Marché', cost: 50, wood: 25, stone: 10, hall: 1, desc: 'Vends les monstres de ta meute, achète des monstres des espèces déjà croisées.' },
-  stone: { name: 'Pierre de passage', cost: 200, wood: 10, stone: 40, hall: 3, desc: 'Voyage instantané entre le village et les camps établis.' },
+  stone: { name: 'Pierre de passage', cost: 200, wood: 10, stone: 40, hall: 2, desc: 'Voyage instantané entre le village et les camps établis.' },
 };
 /** « 20 or · 15 bois · 10 pierre » (les montants nuls sont omis). */
 export const costText = (c: Cost) => [c.gold && `${c.gold} or`, c.wood && `${c.wood} bois`, c.stone && `${c.stone} pierre`].filter(Boolean).join(' · ');
@@ -38,7 +38,6 @@ export const HALL_OFFSET = { x: 185, y: 150 };
 export const STORE_OFFSET = { x: -270, y: -55 };
 export const HALL: (Cost & { unlock: string })[] = [
   { gold: 20, wood: 15, stone: 10, unlock: 'Porte du village : la suite de la Lisière (zone 1) · Marché' },
-  { gold: 60, wood: 30, stone: 25, unlock: 'Tanière' },
   { gold: 200, wood: 60, stone: 50, unlock: 'Porte des Bois profonds (zone 2) · Pierre de passage' },
   { gold: 500, wood: 120, stone: 100, unlock: 'Porte des Landes (zone 3)' },
   { gold: 1200, wood: 200, stone: 180, unlock: 'Porte des Ruines moussues (zone 4)' },
@@ -48,7 +47,7 @@ export const HALL_MAX = HALL.length;
 /** Géants d'une zone (index d'espèce) : il faut tous les vaincre pour ouvrir la porte de la zone suivante. */
 export const zoneBosses = (z: number) => SPECIES.map((sp, i) => (sp.boss && sp.zone === z ? i : -1)).filter((i) => i >= 0);
 /** Niveau d'Hôtel de ville pour ouvrir la porte k (0 : sortie du village vers la zone 1 ; k ≥ 1 : vers la zone k + 1). */
-export const gateHall = (k: number) => (k === 0 ? 1 : k + 2);
+export const gateHall = (k: number) => (k === 0 ? 1 : k + 1);
 /** Porte k ouverte : Hôtel de ville au niveau requis et, après la première, géants de la zone k tous vaincus. */
 export const gateOpen = (k: number, hall: number, beaten: number[]) => hall >= gateHall(k) && (k === 0 || zoneBosses(k).every((b) => beaten.includes(b)));
 
