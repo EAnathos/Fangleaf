@@ -132,7 +132,7 @@ export class WorldMap {
   readonly forge: Pt;
   readonly den: Pt;
   readonly market: Pt;
-  readonly hall: Pt; // Maison commune
+  readonly hall: Pt; // Hôtel de ville
   readonly store: Pt; // entrepôt (réserve commune de bois et de pierre)
   readonly gates: number[] = []; // portes : abscisse le long du couloir ([0] sortie du village, puis début de chaque zone)
   readonly tents: Pt[] = []; // tentes du camp de départ (décalage depuis son feu), à l'opposé du chemin

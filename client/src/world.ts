@@ -450,7 +450,7 @@ export class World {
   }
 
   /**
-   * Maison commune (coordonnées du village) : en ruine au niveau 0, puis de plus en plus belle.
+   * Hôtel de ville (coordonnées du village) : en ruine au niveau 0, puis de plus en plus belle.
    * Un fanion par niveau sur le toit, une cheminée qui fume à partir du niveau 3.
    */
   drawHall(ctx: CanvasRenderingContext2D, lvl: number, t: number) {
@@ -536,7 +536,7 @@ export class World {
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(16,24,26,0.85)';
-    const label = lvl ? `Maison commune · niv. ${lvl}` : 'Maison commune · en ruine';
+    const label = lvl ? `Hôtel de ville · niv. ${lvl}` : 'Hôtel de ville · en ruine';
     ctx.strokeText(label, x, y - 74);
     ctx.fillStyle = '#F0B64A';
     ctx.fillText(label, x, y - 74);
@@ -654,7 +654,7 @@ export class World {
     ctx.ellipse(x1 - 26, y1 - 16, 10, 7, 0, 0, TAU);
     ctx.fill();
     const need = BUILDINGS[b].hall;
-    const label = `${BUILDINGS[b].name} · ${hall < need ? `Maison commune niv. ${need}` : costText(buildingCost(b))}`;
+    const label = `${BUILDINGS[b].name} · ${hall < need ? `Hôtel de ville niv. ${need}` : costText(buildingCost(b))}`;
     ctx.font = '700 15px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;

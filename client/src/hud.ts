@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_TALK_R, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_TALK_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
@@ -43,11 +43,11 @@ export interface VillageView {
   unlocked: number[]; // grottes débloquées
   sleepers: Sleeper[]; // géants endormis à portée de vue
   chests: [number, number, number, number][]; // coffres des géants : [id, x, y, déjà ouvert]
-  hall: number; // niveau de la Maison commune
+  hall: number; // niveau de l'Hôtel de ville
   bare: number[]; // buissons dont les baies ont été mangées ou cueillies
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
-/** Prix (or, bois, pierre), nom et niveau de Maison commune requis d'un achat pour le village. */
+/** Prix (or, bois, pierre), nom et niveau de Hôtel de ville requis d'un achat pour le village. */
 export const purchaseOf = (map: WorldMap, buy: Purchase): { name: string; cost: Cost; hall: number } =>
   'b' in buy
     ? { name: BUILDINGS[buy.b].name, cost: buildingCost(buy.b), hall: BUILDINGS[buy.b].hall }
@@ -60,7 +60,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
   const building = (b: BuildingId, pos: { x: number; y: number }, open: Spot): Spot =>
     v.buildings.includes(b) ? open : { panel: 'buy', pos, buy: { b }, label: `E — Construire : ${BUILDINGS[b].name} · ${costText(buildingCost(b))}` };
   const spots: Spot[] = [
-    { panel: 'hall', pos: map.hall, label: `E — Maison commune · niv. ${v.hall}` },
+    { panel: 'hall', pos: map.hall, label: `E — Hôtel de ville · niv. ${v.hall}` },
     { deposit: true, pos: map.store, label: 'E — Entrepôt : déposer ton bois et ta pierre' },
     building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Forge' }),
     building('den', map.den, { panel: 'den', pos: map.den, label: 'E — Tanière' }),
@@ -127,7 +127,7 @@ export class Hud {
   unlocked: number[] = []; // grottes débloquées
   sleepers: Sleeper[] = []; // géants endormis à portée de vue
   chests: [number, number, number, number][] = []; // coffres des géants vaincus
-  hall = 0; // niveau de la Maison commune
+  hall = 0; // niveau de l'Hôtel de ville
   stock: [number, number] = [0, 0]; // réserve du village : bois, pierre
   bare: number[] = []; // buissons sans baies
   onPick = () => {};
@@ -304,14 +304,14 @@ export class Hud {
     $('self-wood').textContent = `Bois ${me.wood}`;
     $('self-stone').textContent = `Pierre ${me.stone}`;
     $('self-fruits').textContent = `Baies ${me.fruits}`;
+    // au doigt seulement (sur PC : touche T) : tendre ou ranger un fruit
     const hold = $('hold-btn');
     hold.hidden = !me.fruits && !me.holding;
     hold.classList.toggle('on', me.holding);
-    hold.textContent = me.holding ? 'Ranger le fruit (T)' : 'Tendre un fruit (T) : apprivoiser';
-    $('stock-wood').textContent = `Bois ${this.stock[0]}`;
-    $('stock-stone').textContent = `Pierre ${this.stock[1]}`;
+    hold.textContent = me.holding ? 'Ranger le fruit' : 'Tendre un fruit';
     $('self-army').textContent = `Meute ${me.army.filter((a) => !a.alpha).length}/${ARMY_CAP}`;
     $('ping').textContent = ping ? `${ping} ms` : '';
+    $('invite').hidden = players.length >= MAX_PLAYERS; // village complet : plus personne à inviter
 
     // Groupe.
     const others = players.filter((p) => p.id !== me.id);
@@ -465,7 +465,7 @@ export class Hud {
     }
     const btn = $<HTMLButtonElement>('buy-go');
     btn.disabled = this.hall < hall || !canPay(funds, cost);
-    btn.textContent = this.hall < hall ? `Maison commune niv. ${hall} requise` : !canPay(funds, cost) ? 'Il manque des ressources' : `${'b' in buy ? 'Construire' : 'Débloquer'} pour le village`;
+    btn.textContent = this.hall < hall ? `Hôtel de ville niv. ${hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : `${'b' in buy ? 'Construire' : 'Débloquer'} pour le village`;
   }
 
   private funds(me: PlayerState): Funds {
@@ -478,37 +478,24 @@ export class Hud {
       ...([['gold', 'or'], ['wood', 'bois'], ['stone', 'pierre']] as const).filter(([k]) => c[k] > 0).map(([k, label]) => {
         const el = document.createElement('span');
         el.className = me[k] >= c[k] ? 'ok' : 'miss';
-        el.textContent = `${c[k]} ${label}${me[k] < c[k] ? ` (il en manque ${c[k] - me[k]})` : ''}`;
+        el.textContent = `${c[k]} ${label}`;
         return el;
       }),
     );
   }
 
-  /** Maison commune : ses niveaux (ce que chacun débloque), le prochain à payer, et l'état des portes des zones. */
+  /** Hôtel de ville : ses niveaux (ce que chacun débloque), le prochain à payer, et l'état des portes des zones. */
   private updateHall(me: PlayerState) {
     const funds = this.funds(me);
     $('hall-have').textContent = `Niveau ${this.hall}/${HALL_MAX}`;
     const key = JSON.stringify([this.hall, this.beaten]);
     if (key !== this.last.hall) {
       this.last.hall = key;
-      $('hall-levels').replaceChildren(
-        // ce qui est déjà débloqué, puis la prochaine amélioration (les suivantes restent cachées)
-        ...HALL.slice(0, Math.min(HALL_MAX, this.hall + 1)).map((lv, i) => {
-          const n = i + 1, done = this.hall >= n, next = this.hall === i;
-          const el = document.createElement('div');
-          el.className = `hall-level${done ? ' done' : next ? ' next' : ' locked'}`;
-          el.innerHTML = '<b></b><span></span><span class="tag"></span>';
-          el.querySelector('b')!.textContent = `Niv. ${n}`;
-          el.querySelector('span')!.textContent = lv.unlock;
-          el.querySelector('.tag')!.textContent = done ? 'Acquis' : next ? 'Prochain' : costText(lv);
-          return el;
-        }),
-      );
       $('hall-gates').replaceChildren(
         ...this.map.gates.map((_, k) => {
           const open = gateOpen(k, this.hall, this.beaten);
           const bosses = k === 0 ? [] : zoneBosses(k);
-          const needs = [`Maison commune niv. ${gateHall(k)}${this.hall >= gateHall(k) ? ' ✓' : ''}`, ...bosses.map((b) => `${SPECIES[b].name}${this.beaten.includes(b) ? ' ✓' : ''}`)];
+          const needs = [`Hôtel de ville niv. ${gateHall(k)}${this.hall >= gateHall(k) ? ' ✓' : ''}`, ...bosses.map((b) => `${SPECIES[b].name}${this.beaten.includes(b) ? ' ✓' : ''}`)];
           const row = document.createElement('div');
           row.className = `stone-row${open ? '' : ' locked'}`;
           row.innerHTML = '<div class="col"><b></b><span class="small muted"></span></div><span class="tag"></span>';
@@ -590,12 +577,9 @@ export class Hud {
   }
 
   private updateForge(me: PlayerState) {
-    $('forge-gold').textContent = String(me.gold);
     // Classe : la première est gratuite, changer ensuite coûte un peu d'or.
     const cost = me.cls === null ? 0 : CLASS_CHANGE_COST;
-    $('class-hint').textContent = me.cls === null
-      ? 'Choisis ta classe : le premier choix est gratuit.'
-      : `Classe : ${CLASSES[me.cls].name}. Changer coûte ${CLASS_CHANGE_COST} or.`;
+    $('class-hint').textContent = me.cls === null ? 'Choisis ta classe : le premier choix est gratuit.' : '';
     const classKey = `${me.cls}|${me.gold >= cost}`;
     if (classKey !== this.last.cls) {
       this.last.cls = classKey;

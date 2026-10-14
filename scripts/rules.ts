@@ -769,7 +769,7 @@ const noop = () => {};
   r.stock.wood = 10;
   r.stock.stone = 40;
   r.onBuild(p, 'stone');
-  check(!r.buildings.includes('stone') && p.gold === 200, `Maison commune trop basse : pas de Pierre (niveau ${BUILDINGS.stone.hall} requis)`);
+  check(!r.buildings.includes('stone') && p.gold === 200, `Hôtel de ville trop basse : pas de Pierre (niveau ${BUILDINGS.stone.hall} requis)`);
   r.hall = BUILDINGS.stone.hall;
   r.onBuild(p, 'stone');
   r.onTravel(p, 0);
@@ -1135,13 +1135,13 @@ const noop = () => {};
 }
 
 {
-  // Maison commune : chaque niveau coûte or, bois et pierre ; elle ouvre les portes avec les géants vaincus.
+  // Hôtel de ville : chaque niveau coûte or, bois et pierre ; elle ouvre les portes avec les géants vaincus.
   const r: any = new Room('TEST');
   let saved: { hall: number; beaten: number[] } = { hall: 0, beaten: [] };
   r.onVillage = (v: typeof saved) => (saved = v);
   const p = r.addPlayer('a', noop);
   const { map } = r;
-  // Porte du village (0) : fermée tant que la Maison commune est au niveau 0.
+  // Porte du village (0) : fermée tant que l'Hôtel de ville est au niveau 0.
   const before = map.spineAt(map.gates[0] - 60), after = map.spineAt(map.gates[0] + 60);
   const walk = (from: { x: number; y: number }, to: { x: number; y: number }, gate = 0) => {
     [p.x, p.y] = [from.x, from.y];
@@ -1151,7 +1151,7 @@ const noop = () => {};
     }
     return map.arcAt(p.x, p.y) > map.gates[gate];
   };
-  check(!walk(before, after), 'Maison commune niv. 0 : la porte du village ne se franchit pas');
+  check(!walk(before, after), 'Hôtel de ville niv. 0 : la porte du village ne se franchit pas');
   [p.x, p.y] = [map.hall.x, map.hall.y + 60];
   p.gold = HALL[0].gold;
   Object.assign(r.stock, { wood: HALL[0].wood, stone: HALL[0].stone - 1 });
@@ -1161,7 +1161,7 @@ const noop = () => {};
   r.onHall(p);
   check(r.hall === 1 && p.gold === 0 && r.stock.wood === 0 && r.stock.stone === 0 && saved.hall === 1, `niveau 1 pour ${HALL[0].gold} or, ${HALL[0].wood} bois, ${HALL[0].stone} pierre, sauvegardé`);
   check(walk(before, after), 'niveau 1 : la porte du village s\'ouvre');
-  // Porte de la zone 2 : Maison commune niv. 3 et tous les géants de la zone 1.
+  // Porte de la zone 2 : Hôtel de ville niv. 3 et tous les géants de la zone 1.
   const b1 = map.spineAt(map.gates[1] - 60), a1 = map.spineAt(map.gates[1] + 60);
   r.hall = gateHall(1);
   check(!walk(b1, a1, 1), 'géants de la zone 1 pas encore vaincus : porte de la zone 2 fermée');
@@ -1172,9 +1172,9 @@ const noop = () => {};
   }
   check(saved.beaten.includes(g1) && saved.beaten.includes(g2), 'géants vaincus retenus pour le village');
   r.hall = gateHall(1) - 1;
-  check(!walk(b1, a1, 1), `géants vaincus mais Maison commune niv. ${gateHall(1) - 1} : toujours fermée`);
+  check(!walk(b1, a1, 1), `géants vaincus mais Hôtel de ville niv. ${gateHall(1) - 1} : toujours fermée`);
   r.hall = gateHall(1);
-  check(walk(b1, a1, 1), `géants vaincus et Maison commune niv. ${gateHall(1)} : porte de la zone 2 ouverte`);
+  check(walk(b1, a1, 1), `géants vaincus et Hôtel de ville niv. ${gateHall(1)} : porte de la zone 2 ouverte`);
   // On peut toujours revenir en arrière, même par une porte fermée.
   r.hall = 0;
   [p.x, p.y] = [a1.x, a1.y];
@@ -1184,7 +1184,7 @@ const noop = () => {};
   }
   check(map.arcAt(p.x, p.y) < map.gates[1], 'revenir en arrière par une porte fermée : toujours possible');
   const again: any = new Room('TEST2', r.seed, { hall: 99, beaten: [g1, g1, 0, 999] });
-  check(again.hall === HALL_MAX && again.beaten.join() === String(g1), 'Maison commune et géants rechargés (bornés, doublons et non-géants ignorés)');
+  check(again.hall === HALL_MAX && again.beaten.join() === String(g1), 'Hôtel de ville et géants rechargés (bornés, doublons et non-géants ignorés)');
 }
 
 {

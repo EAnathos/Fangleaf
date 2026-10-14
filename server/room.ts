@@ -158,7 +158,7 @@ export interface VillageState {
   camps: number[];
   buildings: BuildingId[];
   unlocked: number[];
-  hall: number; // niveau de la Maison commune
+  hall: number; // niveau de l'Hôtel de ville
   beaten: number[]; // géants (espèce) déjà vaincus au moins une fois
   wood: number; // réserve commune (entrepôt)
   stone: number;
@@ -188,7 +188,7 @@ export class Room {
   readonly camps: number[]; // emplacements de camp établis (index dans map.sites)
   readonly buildings: BuildingId[]; // bâtiments construits au village
   readonly unlocked: number[]; // grottes débloquées (index dans map.caves)
-  hall: number; // niveau de la Maison commune
+  hall: number; // niveau de l'Hôtel de ville
   readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
   readonly stock = { wood: 0, stone: 0 }; // réserve commune de l'entrepôt
   onVillage?: (v: VillageState) => void; // sauvegarde, appelée quand le village change (camp, bâtiment, grotte)
@@ -392,7 +392,7 @@ export class Room {
     this.events.push({ e: 'built', b, by: p.id });
   }
 
-  /** Améliorer la Maison commune, devant elle : un niveau de plus pour tout le village (or, bois, pierre). */
+  /** Améliorer l'Hôtel de ville, devant elle : un niveau de plus pour tout le village (or, bois, pierre). */
   onHall(p: Player) {
     if (this.hall >= HALL_MAX || !this.near(p, this.map.hall) || !this.pay(p, HALL[this.hall])) return;
     this.hall++;
@@ -400,7 +400,7 @@ export class Room {
     this.events.push({ e: 'hall', lvl: this.hall, by: p.id });
   }
 
-  /** Porte k ouverte pour le village (Maison commune assez haute, géants de la zone vaincus). */
+  /** Porte k ouverte pour le village (Hôtel de ville assez haut, géants de la zone vaincus). */
   private gateIsOpen(k: number) {
     return gateOpen(k, this.hall, this.beaten);
   }

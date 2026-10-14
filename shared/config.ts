@@ -14,7 +14,7 @@ export const DEN_OFFSET = { x: 170, y: -150 };
 export const MARKET_OFFSET = { x: -180, y: -160 };
 export const BUILDING_REACH = 110;
 // Bâtiments du village : construits par n'importe quel membre contre de l'or, une fois pour tout le village.
-// Il faut aussi du bois et de la pierre (récoltés sur la carte), et parfois une Maison commune assez développée.
+// Il faut aussi du bois et de la pierre (récoltés sur la carte), et parfois un Hôtel de ville assez développé.
 export type BuildingId = 'forge' | 'den' | 'market' | 'stone';
 export interface Cost {
   gold: number;
@@ -31,10 +31,10 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: n
 export const costText = (c: Cost) => [c.gold && `${c.gold} or`, c.wood && `${c.wood} bois`, c.stone && `${c.stone} pierre`].filter(Boolean).join(' · ');
 export const buildingCost = (b: BuildingId): Cost => ({ gold: BUILDINGS[b].cost, wood: BUILDINGS[b].wood, stone: BUILDINGS[b].stone });
 
-// Maison commune : on l'améliore (or, bois, pierre) pour débloquer le reste du village et du monde.
+// Hôtel de ville : on l'améliore (or, bois, pierre) pour débloquer le reste du village et du monde.
 // HALL[n] : passage au niveau n + 1. La porte de la zone z + 1 demande aussi d'avoir vaincu les géants de la zone z.
 export const HALL_OFFSET = { x: 185, y: 150 };
-// Entrepôt : chacun y dépose le bois et la pierre de son sac ; constructions et Maison commune puisent dans cette réserve commune.
+// Entrepôt : chacun y dépose le bois et la pierre de son sac ; constructions et Hôtel de ville puisent dans cette réserve commune.
 export const STORE_OFFSET = { x: -270, y: -55 };
 export const HALL: (Cost & { unlock: string })[] = [
   { gold: 20, wood: 15, stone: 10, unlock: 'Porte du village : la suite de la Lisière (zone 1) · Marché' },
@@ -47,9 +47,9 @@ export const HALL: (Cost & { unlock: string })[] = [
 export const HALL_MAX = HALL.length;
 /** Géants d'une zone (index d'espèce) : il faut tous les vaincre pour ouvrir la porte de la zone suivante. */
 export const zoneBosses = (z: number) => SPECIES.map((sp, i) => (sp.boss && sp.zone === z ? i : -1)).filter((i) => i >= 0);
-/** Niveau de Maison commune pour ouvrir la porte k (0 : sortie du village vers la zone 1 ; k ≥ 1 : vers la zone k + 1). */
+/** Niveau d'Hôtel de ville pour ouvrir la porte k (0 : sortie du village vers la zone 1 ; k ≥ 1 : vers la zone k + 1). */
 export const gateHall = (k: number) => (k === 0 ? 1 : k + 2);
-/** Porte k ouverte : Maison commune au niveau requis et, après la première, géants de la zone k tous vaincus. */
+/** Porte k ouverte : Hôtel de ville au niveau requis et, après la première, géants de la zone k tous vaincus. */
 export const gateOpen = (k: number, hall: number, beaten: number[]) => hall >= gateHall(k) && (k === 0 || zoneBosses(k).every((b) => beaten.includes(b)));
 
 // Récolte : filons d'or (or et un peu de pierre), rochers (pierre) et bois mort (bois).

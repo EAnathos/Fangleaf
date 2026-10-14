@@ -191,7 +191,7 @@ export class Game {
   /** Ce qui manque pour ouvrir la porte k. */
   private gateWhy(k: number) {
     const need: string[] = [];
-    if (this.hud.hall < gateHall(k)) need.push(`Maison commune niv. ${gateHall(k)}`);
+    if (this.hud.hall < gateHall(k)) need.push(`Hôtel de ville niv. ${gateHall(k)}`);
     const left = k === 0 ? [] : zoneBosses(k).filter((b) => !this.hud.beaten.includes(b));
     if (left.length) need.push(`vaincre ${left.map((b) => SPECIES[b].name).join(', ')}`);
     return need.join(' · ');
@@ -325,7 +325,7 @@ export class Game {
         const h = this.map.hall;
         this.fx.ring(h.x, h.y, '#F0B64A', 20, 160, 1.2);
         this.fx.burst(h.x, h.y - 30, '#F0B64A', 30, 180);
-        this.hud.toast(e.by === this.myId ? `Maison commune au niveau ${e.lvl} : ${HALL[e.lvl - 1].unlock}` : `${name(e.by)} a amélioré la Maison commune (niv. ${e.lvl})`, 'good');
+        this.hud.toast(e.by === this.myId ? `Hôtel de ville au niveau ${e.lvl} : ${HALL[e.lvl - 1].unlock}` : `${name(e.by)} a amélioré l'Hôtel de ville (niv. ${e.lvl})`, 'good');
         break;
       }
       case 'pick': {
@@ -620,7 +620,7 @@ export class Game {
       // celle du village se construit ; celles des camps s'éveillent avec leur camp
       const active = k === 0 ? this.hud.buildings.includes('stone') : camps.includes(k - 1);
       const need = BUILDINGS.stone.hall;
-      const label = k === 0 && !active ? `${BUILDINGS.stone.name} · ${this.hud.hall < need ? `Maison commune niv. ${need}` : costText(buildingCost('stone'))}` : undefined;
+      const label = k === 0 && !active ? `${BUILDINGS.stone.name} · ${this.hud.hall < need ? `Hôtel de ville niv. ${need}` : costText(buildingCost('stone'))}` : undefined;
       if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
     // Arbres de la carte : triés avec les créatures, feuillage transparent quand on passe dessous.

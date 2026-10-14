@@ -109,7 +109,7 @@ async function main() {
     if (!me || me.dead || me.gold > 0) break;
     let best: [number, number] | undefined, bd = Infinity;
     for (const u of host.last!.units) {
-      // toute proie de la zone 1 (hors géants), en deçà de la porte du village (fermée : Maison commune niv. 0)
+      // toute proie de la zone 1 (hors géants), en deçà de la porte du village (fermée : Hôtel de ville niv. 0)
       if (u[6] !== 0 || SPECIES[u[1]].zone !== 1 || SPECIES[u[1]].boss || map.arcAt(u[3], u[4]) > map.gates[0] - 40) continue;
       const d = Math.hypot(u[3] - x, u[4] - y);
       if (d < bd) [bd, best] = [d, [u[3], u[4]]];
