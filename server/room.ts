@@ -1339,7 +1339,8 @@ export class Room {
       }
       case 'spores':
         // Nuages sous les dompteurs proches : ils restent 5 s et rongent ceux qui y restent.
-        for (const p of (u.owner ? this.wildNear(t.x, t.y, 200) : this.alliesNear(u.x, u.y, 650).filter((e) => e.kind === 'p')).slice(0, 3)) {
+        // (un Alpha légendaire n'en pose qu'un, sur sa cible)
+        for (const p of u.owner ? [t] : this.alliesNear(u.x, u.y, 650).filter((e) => e.kind === 'p').slice(0, 3)) {
           this.hazard(u, { kind: 2, x: p.x, y: p.y, r: 95, at: this.time + 0.9, until: this.time + 5.9, dmg: d * 0.6 });
         }
         break;

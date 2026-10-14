@@ -1393,6 +1393,20 @@ const noop = () => {};
 }
 
 {
+  // Champignon légendaire : un seul nuage de spores, sur sa cible (pas un par monstre autour).
+  const r = room();
+  for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
+  const p = r.addPlayer('a', noop);
+  [p.x, p.y] = [r.map.spawn.x, r.map.spawn.y + 80];
+  const shroom = r.spawnAlpha(p, 4, 0, true);
+  const foes = [0, 1, 2].map((k: number) => r.createUnit(3, false, p.x + 100 + k * 40, p.y));
+  r.grid.clear();
+  for (const e of [p, shroom, ...foes]) r.grid.insert(e);
+  r.castMove(shroom, { kind: 'spores', cd: 5 }, foes[0]);
+  check(r.hazards.filter((h: { kind: number }) => h.kind === 2).length === 1, 'Champignon légendaire : une seule zone de spores');
+}
+
+{
   // PV des géants : multipliés par le nombre de dompteurs en ligne, en gardant leur part de PV.
   const r = room();
   const boss = r.units.get(r.caveBoss[0]);
