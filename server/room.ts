@@ -1,7 +1,7 @@
 // Un village : jusqu'à 3 joueurs, la carte et sa simulation autoritaire.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
@@ -765,6 +765,13 @@ export class Room {
     return c < 0 ? this.map.village : this.map.sites[c];
   }
 
+  /** Zone où la meute se promène quand son dompteur s'y repose : la place du village, ou un camp établi. */
+  private safeArea(x: number, y: number) {
+    if (this.map.inVillage(x, y)) return { ...this.map.village, r: VILLAGE_R - 70 };
+    const c = this.campAt(x, y);
+    return c >= 0 ? { ...this.map.sites[c], r: CAMP_R - 50 } : null;
+  }
+
   /** Dans le village ou dans un camp établi : soins, et les monstres n'y attaquent pas. */
   safe(x: number, y: number) {
     return this.map.inVillage(x, y) || this.campAt(x, y) >= 0;
@@ -960,7 +967,8 @@ export class Room {
       this.grid.query(t.x, t.y, cls.splash + 40, (e) => {
         if (this.isWild(e) && this.alive(e) && dist2(e.x, e.y, t.x, t.y) <= (cls.splash! + e.r) ** 2) hit.push(e as Unit);
       });
-      for (const e of hit) this.damage(e, dmg, p);
+      // pleins dégâts au point d'impact, de moins en moins vers le bord de l'explosion
+      for (const e of hit) this.damage(e, dmg * (1 - (1 - MAGE_SPLASH_EDGE) * Math.min(1, Math.sqrt(dist2(e.x, e.y, t.x, t.y)) / cls.splash)), p);
     } else this.damage(t, dmg, p);
   }
 
@@ -1618,6 +1626,24 @@ export class Room {
       return;
     }
     if (o.dead) return;
+    // Au village ou dans un camp (dompteur et monstre à l'abri) : la meute se promène tranquillement.
+    const area = this.safeArea(o.x, o.y);
+    if (area && dist2(u.x, u.y, area.x, area.y) < area.r ** 2) {
+      u.wanderT -= DT;
+      if (u.wanderT <= 0) {
+        u.wanderT = 2 + Math.random() * 4;
+        for (let k = 0; k < 6; k++) {
+          const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * area.r;
+          const wx = area.x + Math.cos(a) * d, wy = area.y + Math.sin(a) * d;
+          if (this.map.blocked(wx, wy)) continue;
+          [u.wanderX, u.wanderY] = [wx, wy];
+          break;
+        }
+      }
+      if (dist2(u.wanderX, u.wanderY, area.x, area.y) > area.r ** 2) [u.wanderX, u.wanderY] = [u.x, u.y];
+      this.navTo(u, u.wanderX, u.wanderY, u.speed * 0.4, 6);
+      return;
+    }
     // Formation en tournesol autour du dompteur.
     const i = o.army.indexOf(u.id);
     const ang = i * 2.39996;
@@ -1666,7 +1692,11 @@ export class Room {
     p.reviveBy = 0;
     p.reviveT = 0;
     p.helping = false;
-    this.events.push({ e: 'pdie', id: p.id });
+    // Pénalité : une part de son or reste sur le champ de bataille.
+    const lost = Math.floor(p.gold * DEATH_GOLD_LOSS);
+    p.gold -= lost;
+    if (lost) p.dirty = true;
+    this.events.push({ e: 'pdie', id: p.id, gold: lost });
     // La meute se disperse : seuls les Alphas restent fidèles.
     let n = 0;
     p.army = p.army.filter((id) => {

@@ -107,6 +107,8 @@ export const CLASS_CHANGE_COST = 50; // la première classe est gratuite
 export const classOf = (cls: ClassId | null) => CLASSES[cls ?? 'warrior'];
 export const PLAYER_ATK_CD = 0.55;
 export const PLAYER_RESPAWN_S = 5;
+export const DEATH_GOLD_LOSS = 0.1; // part de son or perdue à chaque mort
+export const MAGE_SPLASH_EDGE = 0.4; // orbe du mage : dégâts au bord de l'explosion (pleins au point d'impact)
 /** Avec un autre dompteur dans le village, on reste à terre ce temps-là : il peut venir nous relever. */
 export const REVIVE_WINDOW_S = 10;
 export const REVIVE_HOLD_S = 5; // R maintenu près du corps

@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
 
@@ -1238,6 +1238,37 @@ const noop = () => {};
   p.atkCd = 0;
   r.feed(p);
   check(!p.holding, 'plus de fruit : la main se vide');
+}
+
+{
+  // Mort : une part de l'or est perdue ; mage : dégâts dégressifs loin du point d'impact ; meute en promenade au village.
+  const r = room();
+  const p = r.addPlayer('a', noop);
+  p.gold = 105;
+  r.killPlayer(p);
+  check(p.gold === 105 - Math.floor(105 * DEATH_GOLD_LOSS), `mort : ${Math.floor(105 * DEATH_GOLD_LOSS)} or perdus sur 105`);
+  r.time = p.respawnAt + 1;
+  r.updateRespawns();
+  for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
+  p.cls = 'mage';
+  p.atkCd = 0;
+  [p.x, p.y] = [r.map.spawn.x, r.map.spawn.y];
+  const a = r.createUnit(3, false, p.x + 150, p.y), b = r.createUnit(3, false, p.x + 150, p.y + 70);
+  r.grid.clear();
+  for (const e of [p, a, b]) r.grid.insert(e);
+  r.playerAttack(p);
+  const da = a.maxHp - a.hp, db = b.maxHp - b.hp;
+  check(da > 0 && db > 0 && db < da * 0.75, `orbe du mage : ${da.toFixed(1)} au point d'impact, ${db.toFixed(1)} à 70 px`);
+  // Au village, la meute flâne sur la place au lieu de rester en formation.
+  [p.x, p.y] = [r.map.village.x, r.map.village.y + 40];
+  const f = r.createUnit(1, false, p.x + 30, p.y);
+  r.makeTamed(f, p);
+  const spots = new Set<string>();
+  for (let i = 0; i < 20 * 30; i++) {
+    r.step();
+    if (i % 20 === 0) spots.add(`${Math.round(f.x / 60)},${Math.round(f.y / 60)}`);
+  }
+  check(spots.size >= 4 && r.map.inVillage(f.x, f.y), `au village, le Loup de la meute se promène (${spots.size} coins visités)`);
 }
 
 {

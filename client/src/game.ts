@@ -413,6 +413,7 @@ export class Game {
         break;
       }
       case 'pdie':
+        if (e.id === this.myId && e.gold) this.hud.toast(`Tu es tombé : ${e.gold} or perdus.`);
         if (e.id !== this.myId) this.hud.toast(`${name(e.id)} est tombé ! Maintiens R près de lui pour le relever.`);
         break;
       case 'previve': {

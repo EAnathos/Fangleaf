@@ -78,6 +78,8 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 - **E** près d'un bâtiment construit : Forge (classe, arme, armure), Tanière (Alphas des espèces déjà rencontrées, bestiaire), Marché (vendre les monstres de sa meute, acheter ceux des espèces déjà croisées) · **Échap** : fermer
 - **Clic sur la minicarte** (ou **M**) : grande carte, avec le brouillard des zones pas encore explorées · **Échap** ou **M** pour la fermer
 - **F** : monter sur son Alpha Loup, Sanglier ou Ours (ou en descendre)
+- **Mort** : tu perds 10 % de ton or ; ta meute ordinaire se disperse, tes Alphas restent
+- Au village ou dans un camp établi, ta meute et tes Alphas se promènent librement autour de toi
 - **R maintenu** (ou le bouton, au doigt) près d'un coéquipier à terre : le relever sur place avec la moitié de ses PV, après 5 s. Avec un autre dompteur dans le village, on reste à terre 10 s avant de repartir au camp ; seul, 5 s. Un Alpha tombé ne ressuscite qu'une fois son dompteur debout
 - **Récolte** : reste à côté d'un filon d'or (or et un peu de pierre), d'un rocher (pierre) ou de bois mort (bois) : ton personnage sort sa pioche ou sa hache tout seul quand aucun monstre n'est à portée. Bois et pierre vont dans ton sac : **E à l'entrepôt** du village pour les verser dans la réserve commune, qui paie les constructions
 - **Baies et gibier** : **E** près d'un buisson garni pour cueillir ses baies. **T** (ou le bouton) : tendre un fruit. L'Escargot des mousses (zone 1) et le Lièvre des ronces (zone 3), gibier passif qui n'attaque jamais, s'approchent peu à peu ; chaque fruit mangé a une chance de l'apprivoiser (bien plus faible pour un monstre hostile). Fruit en main, on ne se bat plus
