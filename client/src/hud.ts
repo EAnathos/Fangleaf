@@ -326,7 +326,7 @@ export class Hud {
 
     // Groupe.
     const others = players.filter((p) => p.id !== me.id);
-    const partyKey = JSON.stringify(others.map((p) => [p.name, p.hp, p.maxHp, p.army.length, p.dead, this.map.inVillage(p.x, p.y)]));
+    const partyKey = JSON.stringify(others.map((p) => [p.name, p.hp, p.maxHp, p.pack, p.dead, this.map.inVillage(p.x, p.y)]));
     if (partyKey !== this.last.party) {
       this.last.party = partyKey;
       const party = $('party');
@@ -335,7 +335,7 @@ export class Hud {
         ...others.map((p) => {
           const wrap = document.createElement('div');
           wrap.className = 'col';
-          const status = p.dead ? 'À terre' : this.map.inVillage(p.x, p.y) ? 'Au village' : `Meute ${p.army.length}`;
+          const status = p.dead ? 'À terre' : this.map.inVillage(p.x, p.y) ? 'Au village' : `Meute ${p.pack}`;
           wrap.innerHTML = `<div class="row"><b></b><span class="muted"></span></div><div class="bar thin"><div class="fill"></div></div>`;
           const b = wrap.querySelector('b')!;
           b.textContent = p.name;

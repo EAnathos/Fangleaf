@@ -60,16 +60,19 @@ export class World {
         ctx.drawImage(this.chunk(cx, cy), cx * CHUNK, cy * CHUNK, CHUNK + 1.5, CHUNK + 1.5); // léger recouvrement : pas de couture
       }
     }
-    if (this.chunks.size > 80) {
-      const first = this.chunks.keys().next().value!;
-      this.chunks.delete(first);
-    }
+    // Cache LRU : on oublie le morceau affiché il y a le plus longtemps (jamais un morceau à l'écran).
+    // 40 morceaux de 1 Mo suffisent largement (une dizaine à l'écran au plus) et ménagent la mémoire des mobiles.
+    while (this.chunks.size > 40) this.chunks.delete(this.chunks.keys().next().value!);
   }
 
   private chunk(cx: number, cy: number) {
     const k = `${cx},${cy}`;
     let c = this.chunks.get(k);
-    if (c) return c;
+    if (c) {
+      this.chunks.delete(k); // remis en fin de file : récemment affiché
+      this.chunks.set(k, c);
+      return c;
+    }
     c = document.createElement('canvas');
     c.width = c.height = CHUNK;
     const ctx = c.getContext('2d')!;

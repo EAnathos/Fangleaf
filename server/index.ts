@@ -36,7 +36,8 @@ const http = createServer((req, res) => {
 });
 
 const rooms = new Map<string, Room>();
-const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 4096 });
+// Messages compressés (snapshots JSON ~3 fois plus petits), au niveau le plus rapide : peu de CPU pour beaucoup de bande passante.
+const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 4096, perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 1 } } });
 
 const cleanName = (n: unknown) =>
   (typeof n === 'string' ? n : '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 16) || 'Dompteur';

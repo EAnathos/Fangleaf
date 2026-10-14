@@ -57,6 +57,7 @@ interface Unit {
   windup: number; // tireur : charge son tir (s restantes), immobile
   shotAt: number; // cible visée pendant la charge
   dormant: boolean; // géant qui attend qu'un dompteur vienne lui parler : ni cible ni menace
+  idle: boolean; // sauvage loin de tout dompteur : ni réflexion ni bousculade ce tick
   hitters: Set<number>; // géant : dompteurs qui l'ont frappé (eux ou leur meute) pendant ce combat, seuls ayants droit au coffre
 }
 
@@ -180,6 +181,8 @@ interface Chest {
   opened: Set<number>; // dompteurs qui l'ont déjà ouvert
   eligible: Set<number>; // dompteurs qui ont participé au combat : eux seuls peuvent l'ouvrir
 }
+
+const ACTIVE_R = VIEW_R + 500; // au-delà, les monstres sauvages restent immobiles (personne ne les voit)
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const makeCode = () =>
@@ -781,11 +784,14 @@ export class Room {
     for (const u of this.units.values()) if (!u.reviveAt && !this.isMount(u)) this.grid.insert(u);
 
     for (const p of this.players.values()) this.playerAttack(p);
+    const near = [...this.players.values()].filter((p) => !p.dead);
+    const watched = (u: Unit) => near.some((p) => dist2(p.x, p.y, u.x, u.y) < ACTIVE_R ** 2);
     for (const u of [...this.units.values()]) {
       if (u.reviveAt || u.hp <= 0) continue;
       if (this.isMount(u)) this.mountAttack(u);
       else if (u.owner) this.followerAI(u);
-      else this.wildAI(u);
+      // loin de tout dompteur, un sauvage ne fait que flâner sans témoin : on ne le fait pas réfléchir
+      else if (!(u.idle = !u.returning && !watched(u))) this.wildAI(u);
     }
     this.updateHazards();
     this.updateShots();
@@ -1026,7 +1032,7 @@ export class Room {
       target: 0, lastAttacker: 0, lastHitAt: -Infinity, homeX: x, homeY: y, returning: false,
       wanderX: x, wanderY: y, wanderT: Math.random() * 3, reviveAt: 0, level: 0, recalling: false, legend: false,
       castUntil: 0, moveCd: (BOSS_MOVES[SPECIES[s].key] ?? []).map((m) => ('cd' in m ? m.cd * (0.4 + Math.random() * 0.3) : 0)), splitDone: 0, enraged: false, summoner: 0, stuck: 0, path: null, pathAt: -Infinity, pathGoalX: 0, pathGoalY: 0,
-      windup: 0, shotAt: 0, dormant: false, hitters: new Set(),
+      windup: 0, shotAt: 0, dormant: false, idle: false, hitters: new Set(),
     };
     if (alpha) this.setAlphaLevel(u, level); // arrondit aussi les stats du niveau 0
     this.units.set(u.id, u);
@@ -1887,6 +1893,7 @@ export class Room {
   private makeTamed(u: Unit, p: Player) {
     const sp = SPECIES[u.s];
     u.owner = p.id;
+    u.idle = false;
     u.maxHp = Math.max(1, Math.round(sp.hp * TAMED_MULT));
     u.dmg = Math.max(1, Math.round(sp.dmg * TAMED_MULT));
     u.hp = u.maxHp;
@@ -1992,7 +1999,7 @@ export class Room {
     const before = new Map<Unit, [number, number]>();
     for (const u of this.units.values()) before.set(u, [u.x, u.y]);
     for (const u of this.units.values()) {
-      if (u.reviveAt || this.isMount(u)) continue;
+      if (u.reviveAt || u.idle || this.isMount(u)) continue;
       this.grid.query(u.x, u.y, u.r + 60, (o) => {
         if (o === u) return;
         if (o.kind === 'u' && (o.id < u.id || o.reviveAt)) return; // chaque paire une seule fois
@@ -2076,20 +2083,27 @@ export class Room {
   }
 
   private broadcast() {
-    const players: PlayerState[] = [...this.players.values()].map((p) => ({
-      id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: p.fx, fy: p.fy,
-      hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
-      essences: p.essences, saved: !!p.userId, dead: p.dead,
-      respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
-      revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),
-      mount: this.mountState(p),
-      slowed: p.slowUntil > this.time,
-      resting: p.resting.map((r) => ({ species: r.s, level: r.lvl, legend: r.legend })),
-      seen: [...p.seen],
-      awakening: [...p.awakening].map(([species, wakeAt]) => ({
-        species, left: Math.max(0, Math.ceil((wakeAt - Date.now()) / 1000)), total: alphaAwakenS(species),
-      })),
-    }));
+    // Chacun reçoit son état complet ; des autres, seulement ce qui s'affiche (pas leurs essences, bestiaire, Alphas…).
+    const full = new Map<number, PlayerState>(), light = new Map<number, PlayerState>();
+    for (const p of this.players.values()) {
+      const st: PlayerState = {
+        id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: Math.round(p.fx * 100) / 100, fy: Math.round(p.fy * 100) / 100,
+        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
+        essences: p.essences, saved: !!p.userId, dead: p.dead,
+        respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
+        revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),
+        pack: this.armySize(p),
+        mount: this.mountState(p),
+        slowed: p.slowUntil > this.time,
+        resting: p.resting.map((r) => ({ species: r.s, level: r.lvl, legend: r.legend })),
+        seen: [...p.seen],
+        awakening: [...p.awakening].map(([species, wakeAt]) => ({
+          species, left: Math.max(0, Math.ceil((wakeAt - Date.now()) / 1000)), total: alphaAwakenS(species),
+        })),
+      };
+      full.set(p.id, st);
+      light.set(p.id, { ...st, essences: [], army: [], resting: [], seen: [], awakening: [] });
+    }
     const vr2 = VIEW_R * VIEW_R;
     const caves = this.caveBoss.map((id, i) => (id ? 0 : Math.max(1, Math.ceil(this.caveBack[i] - this.time))));
     for (const viewer of this.players.values()) {
@@ -2133,6 +2147,7 @@ export class Room {
           ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S))]
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
       }
+      const players = [...this.players.values()].map((p) => (p === viewer ? full : light).get(p.id)!);
       viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
     }
   }

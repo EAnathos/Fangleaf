@@ -64,7 +64,8 @@ export interface PlayerState {
   respawnIn: number; // secondes, 0 si vivant
   revive: number; // à terre : avancement de la réanimation par un coéquipier (0..100)
   reviveBy: number; // id du coéquipier qui le relève (0 = personne)
-  army: ArmySlot[];
+  army: ArmySlot[]; // détail de la meute : envoyé à son seul dompteur (vide pour les autres)
+  pack: number; // taille de la meute (tout le monde la voit)
 }
 
 /** Résumé d'un membre de la meute pour le HUD. */
