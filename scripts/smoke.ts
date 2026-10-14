@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import WebSocket from 'ws';
 import type { ServerMsg, Snapshot } from '../shared/protocol.ts';
 import { WorldMap } from '../shared/worldmap.ts';
+import { SPECIES } from '../shared/config.ts';
 
 const PORT = 3999;
 const server = spawn('npx', ['tsx', 'server/index.ts'], { env: { ...process.env, PORT: String(PORT), ALLOW_GUESTS: '1', SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '' }, stdio: 'pipe' }); // jamais la vraie base
@@ -104,12 +105,17 @@ async function main() {
     if (!me || me.dead || me.gold >= 25) break;
     let best: [number, number] | undefined, bd = Infinity;
     for (const u of host.last!.units) {
-      if (u[6] !== 0 || u[1] !== 0 || map.arcAt(u[3], u[4]) > map.gates[0] - 40) continue; // la porte du village est fermée (Maison commune niv. 0)
+      // toute proie de la zone 1 (hors géants), en deçà de la porte du village (fermée : Maison commune niv. 0)
+      if (u[6] !== 0 || SPECIES[u[1]].zone !== 1 || SPECIES[u[1]].boss || map.arcAt(u[3], u[4]) > map.gates[0] - 40) continue;
       const d = Math.hypot(u[3] - x, u[4] - y);
       if (d < bd) [bd, best] = [d, [u[3], u[4]]];
     }
     if (best) stepTo(best[0], best[1], 50);
-    else stepTo(map.spineAt(map.gates[0] - 150).x, map.spineAt(map.gates[0] - 150).y); // rien en vue : on avance jusqu'à la porte du village
+    else {
+      // rien en vue : allers-retours entre le camp et la porte du village
+      const at = map.spineAt(Math.floor((Date.now() - t0) / 15000) % 2 ? 700 : map.gates[0] - 150);
+      stepTo(at.x, at.y);
+    }
     await sleep(50);
   }
   console.log(`  (chasse : ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
@@ -121,36 +127,38 @@ async function main() {
   check(!host.last!.units.some((u) => u[6] === 0 && u[2] & 1), 'aucun Alpha sauvage sur la carte');
   check(host.msgs.some((m) => m.t === 's' && m.ev.some((e) => e.e === 'hit')), 'des coups ont été échangés');
 
-  // Forge : du bois, retour au village, construction (10 or, 5 bois) puis amélioration si assez d'or.
+  // Aller près d'un point, vu du serveur : les monstres bousculent le bot en chemin, alors on repart
+  // de la position du serveur (et on recalcule l'itinéraire) tant qu'on n'y est pas.
+  const reach = async (gx: number, gy: number, r: number) => {
+    for (let k = 0; k < 6 && !host.me()!.dead; k++) {
+      [x, y] = [host.me()!.x, host.me()!.y];
+      route = [];
+      for (let i = 0; i < 400 && !stepTo(gx, gy); i++) await sleep(50);
+      await sleep(150);
+      if (Math.hypot(host.me()!.x - gx, host.me()!.y - gy) <= r) return true;
+    }
+    return false;
+  };
+
+  // Forge : du bois, dépôt à l'entrepôt, construction (10 or, 5 bois de la réserve) puis amélioration si assez d'or.
   if (me.gold >= 10 && !me.dead) {
     // D'abord du bois : le bois mort le plus proche entre le camp et le village (la forge en demande 5).
     const wood = map.ores.filter((o) => o.res === 'wood' && map.arcAt(o.x, o.y) < 1550).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0];
-    // (les monstres qui passent sont combattus d'abord : on se recale sur le serveur et on retente)
+    // (les monstres qui passent sont combattus d'abord : on retente)
     for (let k = 0; k < 4 && host.me()!.wood < 5 && !host.me()!.dead; k++) {
-      [x, y] = [host.me()!.x, host.me()!.y];
-      for (let i = 0; i < 300 && !stepTo(wood.x, wood.y, 45); i++) await sleep(50);
+      await reach(wood.x + 45, wood.y, 60);
       for (let i = 0; i < 200 && host.me()!.wood < 5; i++) await sleep(50);
     }
     console.log(`  (bois récolté : ${host.me()!.wood})`);
   }
   if (me.gold >= 10 && !host.me()!.dead && host.me()!.wood >= 5) {
-    // Retour par le camp puis le chemin dégagé jusqu'à la forge.
-    // camp → chemin de terre → porte → devant la forge (la palissade et les bâtiments sont solides)
-    const route: [number, number][] = [[map.spawn.x + 60, map.spawn.y + 60], ...map.path.slice(4), [map.village.x, map.village.y + 60], [map.store.x, map.store.y + 50]];
-    for (const [tx, ty] of route) for (let i = 0; i < 400 && !stepTo(tx, ty); i++) await sleep(50);
-    // Le bois du sac va dans la réserve du village : c'est elle qui paie les constructions.
-    [x, y] = [host.me()!.x, host.me()!.y];
-    for (let i = 0; i < 200 && !stepTo(map.store.x, map.store.y + 50); i++) await sleep(50);
+    // Le bois du sac va dans la réserve du village (entrepôt) : c'est elle qui paie les constructions.
+    await reach(map.village.x, map.village.y + 60, 80);
+    await reach(map.store.x, map.store.y + 50, 60);
     host.send({ t: 'deposit' });
     await sleep(200);
     check((host.last?.stock[0] ?? 0) >= 5, `bois déposé à l'entrepôt (réserve : ${host.last?.stock[0]})`);
-    for (let i = 0; i < 400 && !stepTo(map.forge.x + 20, map.forge.y + 75); i++) await sleep(50);
-    // Les monstres ont pu nous bousculer en chemin : on repart de la position du serveur pour les derniers pas.
-    for (let k = 0; k < 3 && Math.hypot(host.me()!.x - map.forge.x, host.me()!.y - map.forge.y) > 120; k++) {
-      [x, y] = [host.me()!.x, host.me()!.y];
-      for (let i = 0; i < 200 && !stepTo(map.forge.x + 20, map.forge.y + 75); i++) await sleep(50);
-      await sleep(200);
-    }
+    await reach(map.forge.x + 20, map.forge.y + 75, 60);
     host.send({ t: 'build', b: 'forge' });
     await sleep(200);
     const at = host.me()!;
