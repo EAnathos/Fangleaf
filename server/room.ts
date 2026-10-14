@@ -57,6 +57,7 @@ interface Unit {
   windup: number; // tireur : charge son tir (s restantes), immobile
   shotAt: number; // cible visée pendant la charge
   dormant: boolean; // géant qui attend qu'un dompteur vienne lui parler : ni cible ni menace
+  hitters: Set<number>; // géant : dompteurs qui l'ont frappé (eux ou leur meute) pendant ce combat, seuls ayants droit au coffre
 }
 
 /** Projectile d'un tireur : esquivable (trait, jet) ou annoncé au sol (cloche). */
@@ -147,6 +148,7 @@ interface Chest {
   x: number;
   y: number;
   opened: Set<number>; // dompteurs qui l'ont déjà ouvert
+  eligible: Set<number>; // dompteurs qui ont participé au combat : eux seuls peuvent l'ouvrir
 }
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -913,7 +915,7 @@ export class Room {
       target: 0, lastAttacker: 0, lastHitAt: -Infinity, homeX: x, homeY: y, returning: false,
       wanderX: x, wanderY: y, wanderT: Math.random() * 3, reviveAt: 0, level: 0, recalling: false, legend: false,
       castUntil: 0, moveCd: (BOSS_MOVES[SPECIES[s].key] ?? []).map((m) => ('cd' in m ? m.cd * (0.4 + Math.random() * 0.3) : 0)), splitDone: 0, enraged: false, summoner: 0, stuck: 0, path: null, pathAt: -Infinity, pathGoalX: 0, pathGoalY: 0,
-      windup: 0, shotAt: 0, dormant: false,
+      windup: 0, shotAt: 0, dormant: false, hitters: new Set(),
     };
     if (alpha) this.setAlphaLevel(u, level); // arrondit aussi les stats du niveau 0
     this.units.set(u.id, u);
@@ -1085,7 +1087,7 @@ export class Room {
     const sp = SPECIES[u.s];
     this.hazards = this.hazards.filter((h) => h.boss !== u);
     Object.assign(u, {
-      dormant: true, hp: u.maxHp, x: u.homeX, y: u.homeY, target: 0, lastAttacker: 0, castUntil: 0, windup: 0,
+      dormant: true, hitters: new Set(), hp: u.maxHp, x: u.homeX, y: u.homeY, target: 0, lastAttacker: 0, castUntil: 0, windup: 0,
       splitDone: 0, enraged: false, atkCdBase: sp.atkCd, speed: sp.speed, path: null,
     });
   }
@@ -1093,7 +1095,7 @@ export class Room {
   /** Ouvrir le coffre d'un géant vaincu, devant lui : une fois par dompteur, un montant d'or tiré au hasard. */
   onChest(p: Player, id: number) {
     const ch = this.chests.find((c) => c.id === id);
-    if (!ch || p.dead || ch.opened.has(p.id) || !this.near(p, ch)) return;
+    if (!ch || p.dead || !ch.eligible.has(p.id) || ch.opened.has(p.id) || !this.near(p, ch)) return;
     ch.opened.add(p.id);
     const [lo, hi] = CHEST_GOLD;
     const gold = Math.round(SPECIES[ch.s].gold * (lo + Math.random() * (hi - lo)));
@@ -1680,6 +1682,10 @@ export class Room {
       return;
     }
     t.hp -= amount;
+    if (isBoss(t.s) && !t.owner) {
+      const credit = by.kind === 'p' ? by.id : by.owner; // un coup de sa meute compte pour le dompteur
+      if (credit) t.hitters.add(credit);
+    }
     t.lastAttacker = by.id;
     t.lastHitAt = this.time;
     this.events.push({ e: 'hit', a: by.id, b: t.id, dmg: Math.round(amount * 100) / 100 }); // 2 décimales
@@ -1792,7 +1798,7 @@ export class Room {
       const cave = this.caveBoss.indexOf(u.id);
       if (cave >= 0) {
         const at = this.map.freeNear(u.x, u.y);
-        this.chests.push({ id: this.nextId++, cave, s: u.s, x: at.x, y: at.y, opened: new Set() });
+        this.chests.push({ id: this.nextId++, cave, s: u.s, x: at.x, y: at.y, opened: new Set(), eligible: new Set(u.hitters) });
         this.caveBoss[cave] = 0;
         this.caveBack[cave] = this.time + BOSS_RESPAWN_S;
         this.events.push({ e: 'boss', cave, s: u.s, down: true });
@@ -1943,7 +1949,7 @@ export class Room {
       for (const b of this.map.bushes) if (this.bushBack[b.id] > this.time && dist2(b.x, b.y, viewer.x, viewer.y) <= vr2) bare.push(b.id);
       const chests: [number, number, number, number][] = [];
       for (const ch of this.chests) {
-        if (dist2(ch.x, ch.y, viewer.x, viewer.y) <= vr2) chests.push([ch.id, Math.round(ch.x), Math.round(ch.y), ch.opened.has(viewer.id) ? 1 : 0]);
+        if (ch.eligible.has(viewer.id) && dist2(ch.x, ch.y, viewer.x, viewer.y) <= vr2) chests.push([ch.id, Math.round(ch.x), Math.round(ch.y), ch.opened.has(viewer.id) ? 1 : 0]);
       }
       const hazards: HazardTuple[] = [];
       for (const h of this.hazards) {
