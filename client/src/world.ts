@@ -667,48 +667,133 @@ export class World {
     ctx.fillText(label, (x0 + x1) / 2, y0 - 22);
   }
 
-  /** Tanière : butte de pierre, entrée sombre, bannière violette. */
+  /**
+   * Tanière : loge de rondins (même style que l'Hôtel de ville et la forge), toit d'ardoise violette,
+   * cornes croisées aux pignons, grande porte en arche griffée, blason à la patte et fanion violet.
+   */
   private drawDen(ctx: CanvasRenderingContext2D) {
-    const dx = DEN_OFFSET.x, dy = DEN_OFFSET.y;
-    ctx.fillStyle = 'rgba(8,14,12,0.3)';
+    const x = DEN_OFFSET.x, y = DEN_OFFSET.y;
+    // ombre portée, comme les autres bâtiments
+    ctx.fillStyle = 'rgba(8,14,12,0.35)';
+    ctx.fillRect(x - 66, y + 14, 146, 24);
+    // murs en rondins empilés
+    ctx.fillStyle = '#5B3F2C';
+    ctx.fillRect(x - 72, y - 14, 144, 46);
+    ctx.strokeStyle = 'rgba(16,24,26,0.3)';
+    ctx.lineWidth = 2;
+    for (let ly = y - 4; ly < y + 32; ly += 9) {
+      ctx.beginPath();
+      ctx.moveTo(x - 72, ly);
+      ctx.lineTo(x + 72, ly);
+      ctx.stroke();
+    }
+    // bouts de rondins aux angles
+    ctx.fillStyle = '#7A5A3A';
+    for (const sx of [-74, 74]) {
+      for (let ly = y - 10; ly < y + 32; ly += 9) {
+        ctx.beginPath();
+        ctx.arc(x + sx, ly, 4.5, 0, TAU);
+        ctx.fill();
+      }
+    }
+    // toit en croupe, ardoise violette, rangs de bardeaux
+    ctx.fillStyle = '#4E3F7A';
     ctx.beginPath();
-    ctx.ellipse(dx + 8, dy + 34, 82, 20, 0, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#5E6763';
-    ctx.beginPath();
-    ctx.ellipse(dx, dy, 78, 52, 0, Math.PI, 0);
-    ctx.lineTo(dx + 78, dy + 30);
-    ctx.lineTo(dx - 78, dy + 30);
+    ctx.moveTo(x - 86, y - 8);
+    ctx.lineTo(x - 54, y - 56);
+    ctx.lineTo(x + 54, y - 56);
+    ctx.lineTo(x + 86, y - 8);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#7C8681';
+    ctx.strokeStyle = 'rgba(16,24,26,0.28)';
+    ctx.lineWidth = 2;
+    for (let i = 1; i < 4; i++) {
+      const ry = y - 8 - i * 12, inset = i * 8;
+      ctx.beginPath();
+      ctx.moveTo(x - 86 + inset, ry);
+      ctx.lineTo(x + 86 - inset, ry);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#6A579E';
+    ctx.fillRect(x - 56, y - 60, 112, 6); // faîtage
+    // cornes croisées aux deux pignons
+    for (const sx of [-1, 1]) {
+      const hx = x + sx * 56, hy = y - 58;
+      ctx.strokeStyle = '#E9DFC8';
+      ctx.lineWidth = 3.5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(hx, hy);
+      ctx.quadraticCurveTo(hx + sx * 6, hy - 16, hx + sx * 16, hy - 20);
+      ctx.moveTo(hx, hy);
+      ctx.quadraticCurveTo(hx - sx * 4, hy - 14, hx - sx * 2, hy - 24);
+      ctx.stroke();
+    }
+    // grande porte en arche, sombre, encadrée de rideaux violets et griffée
+    ctx.fillStyle = '#3A2819';
     ctx.beginPath();
-    ctx.ellipse(dx - 22, dy - 30, 30, 12, -0.2, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#5E8F55';
-    ctx.beginPath();
-    ctx.ellipse(dx + 26, dy - 42, 26, 9, 0.2, 0, TAU);
+    ctx.moveTo(x - 24, y + 32);
+    ctx.lineTo(x - 24, y + 2);
+    ctx.arc(x, y + 2, 24, Math.PI, 0);
+    ctx.lineTo(x + 24, y + 32);
+    ctx.closePath();
     ctx.fill();
     ctx.fillStyle = '#10181A';
     ctx.beginPath();
-    ctx.ellipse(dx, dy + 14, 26, 24, 0, Math.PI, 0);
-    ctx.lineTo(dx + 26, dy + 30);
-    ctx.lineTo(dx - 26, dy + 30);
+    ctx.moveTo(x - 19, y + 32);
+    ctx.lineTo(x - 19, y + 4);
+    ctx.arc(x, y + 4, 19, Math.PI, 0);
+    ctx.lineTo(x + 19, y + 32);
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#5B3F2C';
-    ctx.fillRect(dx + 62, dy - 64, 6, 90);
+    ctx.fillStyle = '#7D68B8';
+    for (const sx of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(x + sx * 19, y - 12);
+      ctx.quadraticCurveTo(x + sx * 9, y + 6, x + sx * 14, y + 32);
+      ctx.lineTo(x + sx * 19, y + 32);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(233,223,200,0.55)'; // griffures sur le linteau
+    ctx.lineWidth = 1.5;
+    for (const k of [-6, 0, 6]) {
+      ctx.beginPath();
+      ctx.moveTo(x - 40 + k, y - 8);
+      ctx.lineTo(x - 34 + k, y + 8);
+      ctx.stroke();
+    }
+    // blason à la patte, au-dessus de la porte
+    ctx.fillStyle = '#7A5A3A';
+    ctx.beginPath();
+    ctx.moveTo(x - 12, y - 30);
+    ctx.lineTo(x + 12, y - 30);
+    ctx.lineTo(x + 12, y - 18);
+    ctx.quadraticCurveTo(x, y - 8, x - 12, y - 18);
+    ctx.closePath();
+    ctx.fill();
     ctx.fillStyle = '#B48CFF';
     ctx.beginPath();
-    ctx.moveTo(dx + 68, dy - 62);
-    ctx.lineTo(dx + 104, dy - 50);
-    ctx.lineTo(dx + 68, dy - 36);
+    ctx.ellipse(x, y - 19, 4, 3.5, 0, 0, TAU);
+    for (const [px, py] of [[-5, -25], [-1.7, -27], [1.7, -27], [5, -25]]) {
+      ctx.moveTo(x + px + 1.8, y + py);
+      ctx.arc(x + px, y + py, 1.8, 0, TAU);
+    }
+    ctx.fill();
+    // fanion violet
+    ctx.fillStyle = '#5B3F2C';
+    ctx.fillRect(x + 78, y - 70, 5, 100);
+    ctx.fillStyle = '#B48CFF';
+    ctx.beginPath();
+    ctx.moveTo(x + 83, y - 68);
+    ctx.lineTo(x + 112, y - 58);
+    ctx.lineTo(x + 83, y - 46);
     ctx.closePath();
     ctx.fill();
     ctx.font = '700 16px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#B48CFF';
-    ctx.fillText('Tanière', dx, dy - 64);
+    ctx.fillText('Tanière', x, y - 86);
   }
 
   private drawForge(ctx: CanvasRenderingContext2D) {
