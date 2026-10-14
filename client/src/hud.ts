@@ -468,6 +468,11 @@ export class Hud {
     btn.textContent = this.hall < hall ? `Hôtel de ville niv. ${hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : `${'b' in buy ? 'Construire' : 'Débloquer'} pour le village`;
   }
 
+  /** Zone ouverte pour le village : la zone 1, puis chaque zone dont la porte est ouverte. */
+  private zoneOpen(z: number) {
+    return z <= 1 || gateOpen(z - 1, this.hall, this.beaten);
+  }
+
   private funds(me: PlayerState): Funds {
     return { gold: me.gold, wood: this.stock[0], stone: this.stock[1] };
   }
@@ -520,7 +525,7 @@ export class Hud {
   private updateMarket(me: PlayerState) {
     $('market-gold').textContent = String(me.gold);
     const pack = me.army.filter((a) => !a.alpha);
-    const key = JSON.stringify([me.gold, me.seen, pack.map((a) => a.id)]);
+    const key = JSON.stringify([this.hall, this.beaten, me.gold, me.seen, pack.map((a) => a.id)]);
     if (key !== this.last.market) {
       this.last.market = key;
       this.buildMarket(me, pack);
@@ -559,7 +564,7 @@ export class Hud {
     );
     // Acheter : espèces déjà croisées (bestiaire), dans la limite de la meute.
     const full = pack.length >= ARMY_CAP;
-    const known = SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss && me.seen.includes(s));
+    const known = SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss && me.seen.includes(s) && this.zoneOpen(SPECIES[s].zone));
     $('market-buy').replaceChildren(
       ...(known.length
         ? known.map((s) => {
@@ -674,7 +679,7 @@ export class Hud {
   }
 
   private updateDen(me: PlayerState) {
-    const key = JSON.stringify([me.mount?.id, me.awakening, me.essences, me.resting, me.seen, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
+    const key = JSON.stringify([this.hall, this.beaten, me.mount?.id, me.awakening, me.essences, me.resting, me.seen, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
     if (key !== this.last.den) {
       this.last.den = key;
       this.buildDen(me);
@@ -694,9 +699,9 @@ export class Hud {
       + `<br>Équipés : <b>${equipped}/${ALPHA_EQUIP_MAX}</b> · les autres se reposent ici et comptent quand même pour le bonus.`;
 
     // Une carte par espèce déjà rencontrée (ou dont on a déjà l'Alpha) : éveiller son Alpha, puis le renforcer.
-    const known = SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss && (
-      me.seen.includes(s) || me.army.some((x) => x.alpha && x.species === s) || me.resting.some((x) => x.species === s) || me.awakening.some((w) => w.species === s)
-    ));
+    // espèces croisées dont la zone est ouverte (un Alpha déjà possédé reste visible, même d'une zone fermée)
+    const owned = (s: number) => me.army.some((x) => x.alpha && x.species === s) || me.resting.some((x) => x.species === s) || me.awakening.some((w) => w.species === s);
+    const known = SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss && (owned(s) || (me.seen.includes(s) && this.zoneOpen(SPECIES[s].zone))));
     if (!known.length) {
       $('alphas').replaceChildren(Object.assign(document.createElement('p'), { className: 'small muted', textContent: 'Aucune espèce rencontrée pour l\'instant : pars à la chasse, chaque espèce croisée pourra éveiller son Alpha ici.' }));
       return;
