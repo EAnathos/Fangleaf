@@ -628,7 +628,7 @@ export class Game {
     for (const d of trees) this.world.treeShadow(ctx, d.x, d.y);
     for (const d of trees) {
       const s = this.world.treeSize(d.x, d.y);
-      const under = Math.hypot(this.me.x - d.x, this.me.y - (d.y - s * 0.2)) < s + 14 && this.me.y < d.y + s * 0.5;
+      const under = Math.hypot(this.me.x - d.x, this.me.y - (d.y - s * 0.6)) < s + 14 && this.me.y < d.y + s * 0.5;
       const fade = this.fades.get(d) ?? 1, target = under ? 0.3 : 1;
       const next = fade + Math.sign(target - fade) * Math.min(Math.abs(target - fade), 0.08); // fondu en quelques images
       if (next === 1) this.fades.delete(d);

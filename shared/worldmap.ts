@@ -63,6 +63,16 @@ export interface Decor {
   zone: number;
 }
 
+/**
+ * Bord de l'intérieur d'une grotte dans la direction a, en part de l'ellipse CAVE_RX × CAVE_RY (de 0,82 à 1,08) :
+ * une paroi rocheuse irrégulière plutôt qu'un ovale parfait. Même forme pour le jeu (caveAt) et le dessin.
+ */
+export function caveEdge(c: Cave, a: number) {
+  const k = c.id * 1.7;
+  const n = Math.sin(a * 3 + k) * 0.06 + Math.sin(a * 5 + k * 2.3) * 0.045 + Math.sin(a * 9 + k * 0.7) * 0.025 + Math.sin(a * 14 + k * 1.3) * 0.015;
+  return 0.95 + n;
+}
+
 const DECO_CELL = 96;
 const BUCKET = 256;
 
@@ -598,7 +608,10 @@ export class WorldMap {
   /** Grotte dont l'intérieur contient ce point, s'il y en a une. */
   caveAt(x: number, y: number) {
     if (x < WORLD_HALF) return undefined;
-    return this.caves.find((c) => ((x - c.inside.x) / CAVE_RX) ** 2 + ((y - c.inside.y) / CAVE_RY) ** 2 < 1);
+    return this.caves.find((c) => {
+      const nx = (x - c.inside.x) / CAVE_RX, ny = (y - c.inside.y) / CAVE_RY;
+      return nx * nx + ny * ny < caveEdge(c, Math.atan2(ny, nx)) ** 2;
+    });
   }
 
   /** Bruit des lacs : coordonnées tournées et déformées pour des rives organiques, pas alignées sur la grille. */

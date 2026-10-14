@@ -3,7 +3,7 @@
 
 import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
-import { MAP_CELL, type Cave, type WorldMap } from '../../shared/worldmap.ts';
+import { caveEdge, MAP_CELL, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 
 const CHUNK = 512;
 const TILE = MAP_CELL;
@@ -218,30 +218,103 @@ export class World {
     ctx.fill();
   }
 
-  /** Arbre : tronc puis feuillage ; fade < 1 rend le feuillage transparent (quelqu'un passe dessous). */
+  /**
+   * Arbre : tronc à racines puis feuillage ; fade < 1 rend le feuillage transparent (quelqu'un passe dessous).
+   * Feuillus en touffes, sapins étagés dans les Bois profonds et les Landes, saules pleureurs aux Lacs brumeux.
+   */
   tree(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, fade = 1, shade = true) {
-    const s = this.treeSize(x, y);
-    // zone 5 (Lacs brumeux) : saules bleutés
+    const s = this.treeSize(x, y), h = hash2(x | 0, y | 0, this.seed + 9);
     const dark = z === 5 ? '#23403F' : z === 4 ? '#1E3634' : z === 3 ? '#2E3A22' : '#1C3324';
     const mid = z === 5 ? '#36605A' : z === 4 ? '#2B4A45' : z === 3 ? '#425230' : '#28472F';
     const light = z === 5 ? '#5A8A80' : z === 4 ? '#3C625A' : z === 3 ? '#5A6B3C' : '#386240';
+    const ink = 'rgba(10,18,14,0.55)';
     if (shade) this.treeShadow(ctx, x, y);
+    // tronc évasé et ses racines
     ctx.fillStyle = '#4A3424';
-    ctx.fillRect(x - 4, y, 8, s * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(x - 5, y - s * 0.5);
+    ctx.lineTo(x - 6, y + s * 0.38);
+    ctx.quadraticCurveTo(x - 12, y + s * 0.5, x - 15, y + s * 0.52);
+    ctx.lineTo(x + 15, y + s * 0.52);
+    ctx.quadraticCurveTo(x + 11, y + s * 0.48, x + 6, y + s * 0.38);
+    ctx.lineTo(x + 5, y - s * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,230,200,0.12)';
+    ctx.fillRect(x - 3, y, 2, s * 0.4);
     ctx.save();
     ctx.globalAlpha *= fade;
+    const pine = (z === 2 && h < 0.55) || (z === 3 && h < 0.35);
+    if (pine) {
+      // sapin : trois étages, le bas de chacun dentelé
+      for (let k = 0; k < 3; k++) {
+        const w = s * (1.15 - k * 0.3), base = y + s * (0.12 - k * 0.5), top = base - s * (0.95 - k * 0.12);
+        for (const [col, dy] of [[ink, 2.5], [k === 0 ? dark : k === 1 ? mid : light, 0]] as const) {
+          ctx.fillStyle = col;
+          ctx.beginPath();
+          ctx.moveTo(x, top + dy);
+          ctx.lineTo(x + w, base + dy);
+          for (let t = 1; t < 6; t++) ctx.lineTo(x + w - (2 * w * t) / 6, base + dy - (t % 2 ? s * 0.1 : 0));
+          ctx.lineTo(x - w, base + dy);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+      return;
+    }
+    // feuillu : touffes en couronne, ombrées en bas, éclaircies en haut à gauche
+    const cy = y - s * 0.62, n = 7; // assez haut pour laisser voir le tronc
+    const lumps: [number, number, number][] = [];
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * TAU + h * 3, d = s * (0.42 + hash2(k, x | 0, this.seed) * 0.12);
+      lumps.push([x + Math.cos(a) * d, cy + Math.sin(a) * d * 0.7, s * (0.38 + hash2(y | 0, k, this.seed) * 0.14)]);
+    }
+    lumps.push([x, cy, s * 0.62]);
+    const blob = (dx: number, dy: number, grow: number) => {
+      ctx.beginPath();
+      for (const [lx, ly, lr] of lumps) {
+        ctx.moveTo(lx + dx + lr + grow, ly + dy);
+        ctx.arc(lx + dx, ly + dy, lr + grow, 0, TAU);
+      }
+    };
+    ctx.fillStyle = ink;
+    blob(0, 2, 2.5);
+    ctx.fill();
     ctx.fillStyle = dark;
-    ctx.beginPath();
-    ctx.arc(x, y - s * 0.2, s, 0, TAU);
+    blob(0, 0, 0);
     ctx.fill();
     ctx.fillStyle = mid;
-    ctx.beginPath();
-    ctx.arc(x - s * 0.15, y - s * 0.35, s * 0.72, 0, TAU);
+    blob(-s * 0.08, -s * 0.1, -s * 0.12);
     ctx.fill();
     ctx.fillStyle = light;
-    ctx.beginPath();
-    ctx.arc(x - s * 0.3, y - s * 0.5, s * 0.35, 0, TAU);
-    ctx.fill();
+    for (const [lx, ly, lr] of lumps) {
+      if (ly > cy || lx > x + s * 0.2) continue; // seulement les touffes du haut, côté lumière
+      ctx.beginPath();
+      ctx.arc(lx - lr * 0.25, ly - lr * 0.3, lr * 0.42, 0, TAU);
+      ctx.fill();
+    }
+    if (z === 5) {
+      // saule : longues branches qui retombent
+      ctx.strokeStyle = mid;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let k = 0; k < 9; k++) {
+        const px = x - s * 0.9 + (k / 8) * s * 1.8, py = cy + s * 0.2 + Math.abs(k - 4) * -2;
+        ctx.moveTo(px, py);
+        ctx.quadraticCurveTo(px + 3, py + s * 0.4, px - 2, py + s * 0.75);
+      }
+      ctx.stroke();
+    } else if (z <= 2 && h > 0.8) {
+      // quelques fruits ou fleurs sur certains arbres de la Lisière
+      ctx.fillStyle = z === 1 ? '#E8A43C' : '#D886C9';
+      for (let k = 0; k < 5; k++) {
+        ctx.beginPath();
+        ctx.arc(x + (hash2(k, 3, x | 0) - 0.5) * s * 1.2, cy + (hash2(k, 7, y | 0) - 0.5) * s * 0.9, 2.5, 0, TAU);
+        ctx.fill();
+      }
+    }
     ctx.restore();
   }
 
@@ -807,14 +880,25 @@ export class World {
     ctx.beginPath();
     ctx.ellipse(x + 10, y + 40, 110, 26, 0, 0, TAU);
     ctx.fill();
+    // butte rocheuse anguleuse : des pans de roche plutôt qu'un dôme
     ctx.fillStyle = '#4A4F4C';
     ctx.beginPath();
-    ctx.moveTo(x - 105, y + 38);
-    ctx.quadraticCurveTo(x - 110, y - 50, x - 30, y - 78);
-    ctx.quadraticCurveTo(x + 40, y - 96, x + 95, y - 40);
-    ctx.quadraticCurveTo(x + 118, y + 6, x + 105, y + 38);
+    const crest: [number, number][] = [[-105, 38], [-112, 2], [-96, -34], [-70, -58], [-44, -66], [-22, -86], [6, -80], [30, -94], [58, -70], [84, -58], [100, -26], [116, 4], [105, 38]];
+    crest.forEach(([dx, dy], i) => {
+      const j = (hash2(i, c.id, 77) - 0.5) * 10;
+      if (i) ctx.lineTo(x + dx + j, y + dy + j * 0.6);
+      else ctx.moveTo(x + dx, y + dy);
+    });
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = 'rgba(16,24,26,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (const [ax, ay, bx, by] of [[-70, -58, -52, -10], [30, -94, 22, -44], [84, -58, 66, -14], [-96, -34, -74, 4]]) {
+      ctx.moveTo(x + ax, y + ay);
+      ctx.lineTo(x + bx, y + by);
+    }
+    ctx.stroke();
     ctx.fillStyle = '#616864';
     ctx.beginPath();
     ctx.ellipse(x - 40, y - 52, 38, 16, -0.3, 0, TAU);
@@ -876,10 +960,23 @@ export class World {
     ctx.translate(this.caveW / 2, this.caveH / 2);
     ctx.fillStyle = '#0C1012';
     ctx.fillRect(-this.caveW / 2, -this.caveH / 2, this.caveW, this.caveH);
-    // parois
+    // Contour rocheux irrégulier (le même que celui du jeu : caveEdge), à l'échelle k de l'ellipse.
+    const outline = (k: number, jag = 0) => {
+      ctx.beginPath();
+      for (let i = 0; i <= 120; i++) {
+        const a = (i / 120) * TAU, e = caveEdge(c, a) * k + (jag ? (hash2(i, c.id, this.seed + 5) - 0.5) * jag : 0);
+        const px = Math.cos(a) * CAVE_RX * e, py = Math.sin(a) * CAVE_RY * e;
+        if (i) ctx.lineTo(px, py);
+        else ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+    };
+    // parois : deux épaisseurs de roche anguleuse
     ctx.fillStyle = '#2A2E2D';
-    ctx.beginPath();
-    ctx.ellipse(0, 0, CAVE_RX + 70, CAVE_RY + 70, 0, 0, TAU);
+    outline(1.16, 0.05);
+    ctx.fill();
+    ctx.fillStyle = '#353A38';
+    outline(1.06, 0.035);
     ctx.fill();
     // sol
     const g = ctx.createRadialGradient(0, -40, 40, 0, 0, CAVE_RX);
@@ -887,12 +984,11 @@ export class World {
     g.addColorStop(0, tint);
     g.addColorStop(1, '#1E2220');
     ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, CAVE_RX, CAVE_RY, 0, 0, TAU);
+    outline(1);
     ctx.fill();
     // éboulis et rochers le long des parois
     for (let i = 0; i < 46; i++) {
-      const a = (i / 46) * TAU + hash2(i, c.id, this.seed) * 0.2, k = 0.9 + hash2(c.id, i, this.seed) * 0.12;
+      const a = (i / 46) * TAU + hash2(i, c.id, this.seed) * 0.2, k = (0.9 + hash2(c.id, i, this.seed) * 0.12) * caveEdge(c, a);
       const rx = Math.cos(a) * CAVE_RX * k, ry = Math.sin(a) * CAVE_RY * k, rr = 16 + hash2(i, i, this.seed + c.id) * 22;
       ctx.fillStyle = i % 3 ? '#3A3F3C' : '#4A504C';
       ctx.beginPath();
@@ -901,7 +997,7 @@ export class World {
     }
     // cristaux lumineux
     for (let i = 0; i < 9; i++) {
-      const a = hash2(i, c.id + 7, this.seed) * TAU, d = 0.55 + hash2(c.id, i + 3, this.seed) * 0.3;
+      const a = hash2(i, c.id + 7, this.seed) * TAU, d = (0.5 + hash2(c.id, i + 3, this.seed) * 0.28) * caveEdge(c, a);
       const cx = Math.cos(a) * CAVE_RX * d, cy = Math.sin(a) * CAVE_RY * d;
       if (cy > CAVE_RY - 200 && Math.abs(cx) < 140) continue; // pas devant la sortie
       ctx.fillStyle = 'rgba(111,183,255,0.18)';
