@@ -9,10 +9,11 @@ import type { PlayerState, UnitTuple } from '../../shared/protocol.ts';
 import type { WorldMap } from '../../shared/worldmap.ts';
 import { armorColor, drawUnit } from './sprites.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
+import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
 import { FOREST_GROUND, ZONE_GROUND } from './world.ts';
 import type { Fog } from './fog.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'settings' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
@@ -96,7 +97,7 @@ const duration = (sec: number) => (sec < 60 ? `${sec} s` : `${Math.floor(sec / 6
 export class Hud {
   private mini = $<HTMLCanvasElement>('minimap').getContext('2d')!;
   private miniBg: HTMLCanvasElement;
-  private last = { party: '', den: '', cls: '', travel: '', bestiary: '', market: '', hall: '' };
+  private last = { party: '', den: '', cls: '', travel: '', bestiary: '', market: '', hall: '', members: '' };
   private denTab: 'alphas' | 'bestiary' = 'alphas';
   private beasts: Portrait[] = [];
   private portraits: Portrait[] = []; // Alphas de la Tanière
@@ -135,6 +136,11 @@ export class Hud {
   onDeposit = () => {};
   beaten: number[] = []; // géants vaincus par le village
   onHall = () => {};
+  onAttackMode = () => {};
+  onKick = (_id: number) => {};
+  onUnban = (_user: string) => {};
+  capturing: Action | null = null; // réglages : action dont on attend la nouvelle touche
+  banned: { id: string; name: string }[] = []; // bannis du village (vu par le fondateur)
   onChest = (_id: number) => {};
   onChallenge = (_cave: number) => {};
   private talker: Portrait[] = []; // portrait du géant à qui l'on parle
@@ -185,9 +191,10 @@ export class Hud {
     };
     $('talk-fight').onclick = () => this.onChallenge(this.spotAt);
     $('hall-up').onclick = () => this.onHall();
+    this.initSettings(founder);
     $('hold-btn').onclick = () => this.onHold();
     $('talk-later').onclick = () => this.setPanel(null);
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'hall'] as const) {
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'hall', 'settings'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -274,6 +281,9 @@ export class Hud {
     $('camp').hidden = panel !== 'camp';
     $('talk').hidden = panel !== 'talk';
     $('hall').hidden = panel !== 'hall';
+    $('settings').hidden = panel !== 'settings';
+    this.capturing = null;
+    this.last.members = '';
     this.last.den = '';
     this.last.travel = '';
     this.last.cls = '';
@@ -341,11 +351,12 @@ export class Hud {
     const prompt = $('build-prompt');
     prompt.hidden = !b || !!this.panel;
     if (b) {
-      prompt.textContent = b.label;
+      // au doigt, pas de touche à rappeler ; sur PC, la touche réglée pour « interagir »
+      prompt.textContent = b.label.replace(/^E — /, touchOnly ? '' : `${keyLabel('interact')} — `);
       prompt.className = `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
       prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
     }
-    const building = this.panel !== null && this.panel !== 'map' && this.panel !== 'quit';
+    const building = this.panel !== null && this.panel !== 'map' && this.panel !== 'quit' && this.panel !== 'settings';
     if (building && b?.panel !== this.panel) this.setPanel(null);
     if (b?.buy) this.buying = b.buy;
     if (b?.at !== undefined && b.at !== this.spotAt) {
@@ -357,6 +368,7 @@ export class Hud {
     if (this.panel === 'buy') this.updateBuy(me);
     if (this.panel === 'talk') this.updateTalk();
     if (this.panel === 'hall') this.updateHall(me);
+    if (this.panel === 'settings') this.updateMembers(me, players);
     if (this.panel === 'market') this.updateMarket(me);
     if (this.panel === 'forge') this.updateForge(me);
     if (this.panel === 'den' && this.denTab === 'alphas') this.updateDen(me);
@@ -466,6 +478,115 @@ export class Hud {
     const btn = $<HTMLButtonElement>('buy-go');
     btn.disabled = this.hall < hall || !canPay(funds, cost);
     btn.textContent = this.hall < hall ? `Hôtel de ville niv. ${hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : `${'b' in buy ? 'Construire' : 'Débloquer'} pour le village`;
+  }
+
+  /** Paramètres : mode d'attaque et touches (PC), membres du village (expulsion par le fondateur). */
+  private initSettings(founder: boolean) {
+    this.founder = founder;
+    $('settings-open').onclick = () => this.setPanel('settings');
+    $('set-pc').hidden = touchOnly;
+    const mode = () => {
+      $('atk-auto').setAttribute('aria-checked', String(settings.attack === 'auto'));
+      $('atk-click').setAttribute('aria-checked', String(settings.attack === 'click'));
+    };
+    for (const m of ['auto', 'click'] as const) {
+      $(`atk-${m}`).onclick = () => {
+        settings.attack = m;
+        saveSettings();
+        mode();
+        this.onAttackMode();
+      };
+    }
+    mode();
+    const keymap = () =>
+      $('keymap').replaceChildren(
+        ...ACTIONS.map((a) => {
+          const row = document.createElement('div');
+          row.className = 'key-row';
+          row.innerHTML = '<span></span><button></button>';
+          row.querySelector('span')!.textContent = a.name;
+          const btn = row.querySelector('button')!;
+          const waiting = this.capturing === a.id;
+          btn.className = waiting ? 'wait' : '';
+          btn.textContent = waiting ? 'Appuie…' : keyLabel(a.id);
+          btn.onclick = () => {
+            this.capturing = waiting ? null : a.id;
+            keymap();
+          };
+          return row;
+        }),
+      );
+    this.keymap = keymap;
+    keymap();
+    $('keys-reset').onclick = () => {
+      resetKeys();
+      keymap();
+    };
+    // Touche choisie pour l'action en attente (Échap annule) ; on la retient par son code physique.
+    addEventListener('keydown', (e) => {
+      const a = this.capturing;
+      if (!a) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (e.key !== 'Escape') {
+        settings.keys[a] = { code: e.code, label: labelOf(e.code, e.key) };
+        saveSettings();
+      }
+      setTimeout(() => {
+        this.capturing = null;
+        keymap();
+      });
+    }, true);
+  }
+  private founder = false;
+  private keymap = () => {};
+
+  /** Membres en ligne (le fondateur peut les expulser) et comptes bannis (il peut les réintégrer). */
+  private updateMembers(me: PlayerState, players: PlayerState[]) {
+    const key = JSON.stringify([players.map((p) => [p.id, p.name]), this.banned]);
+    if (key === this.last.members) return;
+    this.last.members = key;
+    $('members').replaceChildren(
+      ...players.map((p) => {
+        const row = document.createElement('div');
+        row.className = 'stone-row';
+        row.innerHTML = '<div class="col"><b></b><span class="small muted"></span></div>';
+        const b = row.querySelector('b')!;
+        b.textContent = p.name;
+        b.style.color = p.color;
+        row.querySelector('.small')!.textContent = p.id === me.id ? (this.founder ? 'Toi · fondateur' : 'Toi') : 'En ligne';
+        if (this.founder && p.id !== me.id) {
+          const kick = document.createElement('button');
+          kick.className = 'kick';
+          kick.textContent = 'Expulser';
+          kick.onclick = () => {
+            if (!kick.classList.contains('sure')) {
+              kick.classList.add('sure');
+              kick.textContent = 'Confirmer : bannir';
+              setTimeout(() => {
+                kick.classList.remove('sure');
+                kick.textContent = 'Expulser';
+              }, 3000);
+              return;
+            }
+            this.onKick(p.id);
+          };
+          row.append(kick);
+        }
+        return row;
+      }),
+    );
+    $('banned-box').hidden = !this.founder || !this.banned.length;
+    $('banned').replaceChildren(
+      ...this.banned.map((u) => {
+        const row = document.createElement('div');
+        row.className = 'stone-row';
+        row.innerHTML = '<div class="col"><b></b><span class="small muted">Banni · sa progression est gardée</span></div><button class="cta">Débannir</button>';
+        row.querySelector('b')!.textContent = u.name;
+        row.querySelector('button')!.onclick = () => this.onUnban(u.id);
+        return row;
+      }),
+    );
   }
 
   /** Zone ouverte pour le village : la zone 1, puis chaque zone dont la porte est ouverte. */

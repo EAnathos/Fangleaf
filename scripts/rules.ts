@@ -1324,6 +1324,50 @@ const noop = () => {};
 }
 
 {
+  // Attaque au clic (PC) : rien sans ordre, puis on frappe le monstre visé.
+  const r = room();
+  for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
+  const p = r.addPlayer('a', noop);
+  [p.x, p.y] = [r.map.spawn.x, r.map.spawn.y];
+  const foe = r.createUnit(3, false, p.x + 40, p.y);
+  foe.hp = foe.maxHp = 9999;
+  foe.dmg = 0; // il ne tue pas le dompteur pendant le test
+  r.onMode(p, true);
+  for (let i = 0; i < 20 * 2; i++) r.step();
+  check(foe.hp === 9999, 'attaque au clic : sans clic, pas de coup');
+  r.onAttack(p, foe.x, foe.y);
+  for (let i = 0; i < 4; i++) r.step();
+  check(foe.hp < 9999, 'un clic sur le monstre : il est frappé');
+  r.onMode(p, false);
+  const hp = foe.hp;
+  for (let i = 0; i < 20 * 2; i++) r.step();
+  check(foe.hp < hp, 'retour à l\'attaque automatique');
+}
+
+{
+  // Expulsion : le fondateur bannit un compte (sa progression reste), puis peut le réintégrer.
+  const r: any = new Room('TEST', undefined, {});
+  r.founder = 'chef';
+  let saved: { banned: { id: string; name: string }[] } = { banned: [] };
+  r.onVillage = (v: typeof saved) => (saved = v);
+  const msgs: string[] = [];
+  let closed = false;
+  const chef = r.addPlayer('Chef', noop, { userId: 'chef', profile: null });
+  const bob = r.addPlayer('Bob', (m: { t: string; msg?: string }) => m.t === 'closed' && msgs.push(m.msg!), { userId: 'bob', profile: null });
+  bob.close = () => (closed = true);
+  r.onKick(bob, chef.id);
+  check(!r.isBanned('chef') && !closed, 'un membre ordinaire ne peut pas expulser');
+  r.onKick(chef, bob.id);
+  check(closed && msgs.length === 1 && r.isBanned('bob') && saved.banned.some((b) => b.id === 'bob'), 'le fondateur expulse Bob : renvoyé au lobby, banni, sauvegardé');
+  r.removePlayer(bob.id);
+  check(!r.full && r.players.size === 1, 'sa place se libère');
+  r.onUnban(chef, 'bob');
+  check(!r.isBanned('bob') && saved.banned.length === 0, 'débanni : il peut revenir (avec sa progression)');
+  const again: any = new Room('T2', r.seed, { banned: [{ id: 'x', name: 'X' }] });
+  check(again.isBanned('x'), 'bannis rechargés avec le village');
+}
+
+{
   // PV des géants : multipliés par le nombre de dompteurs en ligne, en gardant leur part de PV.
   const r = room();
   const boss = r.units.get(r.caveBoss[0]);

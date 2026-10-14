@@ -330,3 +330,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (pointer: fine) { .touch-only { display: none !important; } }
 .hold-btn.on { background: rgba(200, 50, 60, 0.25); color: #FFD3D6; }
 .prompt.pick { border-color: #C8323C; color: #F3A3AA; }
+
+/* Paramètres. */
+.modal.settings { width: min(560px, calc(100vw - 32px)); }
+.modal.settings > * { flex-shrink: 0; }
+.seg { gap: 8px; }
+.seg-btn { flex: 1; height: 44px; border-radius: 10px; border: 2px solid var(--line); background: var(--night); font-weight: 600; }
+.seg-btn[aria-checked="true"] { border-color: var(--amber); color: var(--amber); background: rgba(240, 182, 74, 0.12); }
+.keymap { display: grid; gap: 6px; }
+.key-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; font-size: 14px; color: var(--text-2); }
+.key-row button { min-width: 96px; height: 36px; border-radius: 8px; border: 2px solid var(--line); background: var(--night); font: 700 14px var(--display); color: var(--text); }
+.key-row button.wait { border-color: var(--amber); color: var(--amber); }
+.stone-row .kick { height: 36px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--enemy); background: transparent; color: #FF9B78; font-weight: 600; flex: none; }
+.stone-row .kick.sure { background: var(--enemy); color: var(--amber-ink); }

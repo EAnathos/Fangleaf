@@ -70,7 +70,7 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 
 ## Contrôles
 
-- **ZQSD / WASD / flèches** ou **glisser** (souris / doigt) : se déplacer
+- **ZQSD / WASD / flèches** ou **glisser** (souris / doigt) : se déplacer. Sur PC, toutes les touches se règlent (Échap › Paramètres), et l'attaque peut passer d'automatique (par défaut) au **clic gauche** vers le pointeur ; au doigt, rien ne change
 - Attaque automatique, la meute suit et combat seule
 - **Bâtiments du village** : ce ne sont au départ que des chantiers. **E** devant l'un d'eux pour le construire, une fois pour tout le village, avec ton or et le bois et la pierre de la réserve du village : Forge (10 or, 5 bois), Marché (50 or, 25 bois, 10 pierre), Tanière (20 or, 20 bois, 15 pierre), Pierre de passage (200 or, 10 bois, 40 pierre)
 - **Hôtel de ville** (E devant lui) : en ruine au départ. Chaque niveau (or, bois, pierre, pour tout le village) débloque la suite : niv. 1 porte du village et Marché, niv. 2 porte des Bois profonds et Pierre de passage, puis une porte de zone par niveau jusqu'au niv. 5
@@ -89,7 +89,9 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 - **E** devant une Pierre de passage (village, une fois construite, ou camp établi) : voyager d'un camp à l'autre avec ta meute
 - **Tanière › Bestiaire** : chaque espèce croisée s'y ajoute (sprite, stats, comment la combattre) ; les autres restent en silhouette
 - **E** devant une grotte : la débloquer pour tout le village (150 or × niveau de sa zone), puis entrer (E à la sortie pour ressortir). Le géant dort au fond : **E** près de lui pour lui parler, puis « Lancer le combat ! ». Ses PV sont multipliés par le nombre de dompteurs en ligne ; ses attaques spéciales s'annoncent par une zone au sol : sors-en avant l'impact. Vaincu, il laisse un **coffre** (E : chacun l'ouvre une fois, pour un montant d'or aléatoire) et parfois son âme, qui rend légendaire ton Alpha de cette espèce (Tanière). Si tout le monde sort, il se rendort, guéri.
-- **Échap** : menu — retour au lobby, ou supprimer le village pour repartir de zéro (fondateur ; les autres membres effacent seulement leur progression), avec confirmation
+- **Échap** : menu — retour au lobby, paramètres (touches, attaque, membres du village), ou supprimer le village pour repartir de zéro (fondateur ; les autres membres effacent seulement leur progression), avec confirmation
+- **Expulsion** (fondateur, Échap › Paramètres) : le joueur est renvoyé au lobby et banni, sa place se libère ; débanni, il revient avec sa progression
+- Le bouton **Inviter** disparaît quand le village est complet
 - **F9** (dev uniquement) : +300 or, +100 bois, +100 pierre et +30 essences de chaque espèce pour tester la forge, l'Hôtel de ville et la Tanière
 
 Bestiaire animé de toutes les espèces (outil de dev) : http://localhost:5173/bestiary.html

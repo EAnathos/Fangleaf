@@ -140,6 +140,7 @@
         </div>
         <div id="quit-main" class="col quit-main">
           <button id="quit-confirm" class="cta">Retour au lobby</button>
+          <button id="settings-open" class="btn">Paramètres</button>
           <button id="reset-ask" class="danger-btn"></button>
         </div>
         <div id="reset-confirm" class="col quit-main" hidden>
@@ -149,6 +150,33 @@
             <button id="reset-go" class="danger-btn solid"></button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="settings" class="overlay dim" hidden>
+      <div class="panel modal settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="row between">
+          <h2 id="settings-title">Paramètres</h2>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <section id="set-pc" class="col">
+          <h3 class="market-head">Attaque</h3>
+          <div class="row seg" role="radiogroup" aria-label="Attaque">
+            <button id="atk-auto" class="seg-btn" role="radio">Automatique</button>
+            <button id="atk-click" class="seg-btn" role="radio">Clic gauche</button>
+          </div>
+          <h3 class="market-head">Touches</h3>
+          <div id="keymap" class="keymap"></div>
+          <button id="keys-reset" class="btn">Touches par défaut</button>
+        </section>
+        <section class="col">
+          <h3 class="market-head">Membres du village</h3>
+          <div id="members" class="stones"></div>
+          <div id="banned-box" class="col" hidden>
+            <h3 class="market-head">Bannis</h3>
+            <div id="banned" class="stones"></div>
+          </div>
+        </section>
       </div>
     </div>
 

@@ -8,7 +8,8 @@ import { BOSS_LINES } from './speciesInfo.ts';
 import { Fog } from './fog.ts';
 import { Fx } from './fx.ts';
 import { buildingNear, Hud } from './hud.ts';
-import { initInput, moveDir, stick } from './input.ts';
+import { aim, initInput, moveDir, stick } from './input.ts';
+import { actionOf, keyLabel, matches, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
 import { drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool } from './sprites.ts';
 import { World } from './world.ts';
@@ -38,6 +39,7 @@ export class Game {
   private time = 0;
   private scale = 1;
   private sendTimer = 0;
+  private aimTimer = 0; // prochain coup au clic
   private wasDead = false;
   private fog: Fog;
   private lastMount = 0;
@@ -78,9 +80,14 @@ export class Game {
     this.hud.onAlphaEquip = (s, equip) => net.send({ t: 'alphaEquip', s, equip });
     this.hud.onAlphaCreate = (s) => net.send({ t: 'alphaCreate', s });
     this.hud.onHelp = (on) => this.setHelp(on);
-    this.hud.toast('ZQSD / flèches ou glisser pour bouger · attaque auto · E près d\'un bâtiment');
+    this.hud.toast(touchOnly ? 'Glisse pour bouger · attaque auto · touche un bouton pour interagir'
+      : `ZQSD / flèches pour bouger · ${settings.attack === 'click' ? 'clic gauche pour attaquer' : 'attaque auto'} · ${keyLabel('interact')} près d'un bâtiment · touches et attaque : Échap › Paramètres`);
     if (!villageFound) this.hud.toast('Suis le chemin de terre jusqu\'au village (étoile dorée : clique sur la minicarte).');
-    initInput(canvas, (code, key) => this.onKey(code, key), (_code, key) => (key === 'r' || key === '') && this.setHelp(false));
+    initInput(canvas, (code, key) => this.onKey(code, key), (code, key) => (key === '' || matches('revive', code, key)) && this.setHelp(false));
+    this.hud.onAttackMode = () => this.sendMode();
+    this.hud.onKick = (id) => net.send({ t: 'kick', id });
+    this.hud.onUnban = (user) => net.send({ t: 'unban', user });
+    this.sendMode();
     addEventListener('resize', () => this.resize());
     this.resize();
     net.onMessage = (m) => this.onMessage(m);
@@ -98,8 +105,15 @@ export class Game {
     this.hud.toast(text);
   }
 
+  /** Attaque au clic (PC) ou automatique : le serveur doit le savoir (au doigt, toujours automatique). */
+  private sendMode() {
+    this.net.send({ t: 'mode', manual: !touchOnly && settings.attack === 'click' });
+  }
+
   private onKey(code: string, key: string) {
-    if (key === 'e') {
+    if (this.hud.capturing) return; // réglages : la touche pressée est en train d'être assignée
+    const action = actionOf(code, key);
+    if (action === 'interact') {
       const st = this.self();
       const b = buildingNear(this.map, this.me.x, this.me.y, this.hud);
       if (this.hud.panel) this.hud.setPanel(null);
@@ -112,10 +126,10 @@ export class Game {
       // Échap ferme d'abord ce qui est ouvert (carte, forge, Tanière, confirmation) ; sinon, propose de revenir au lobby.
       this.hud.setPanel(this.hud.panel ? null : 'quit');
     }
-    else if (key === 'm') this.hud.setPanel(this.hud.panel === 'map' ? null : 'map');
-    else if (key === 'f') this.toggleMount();
-    else if (key === 't') this.toggleHold();
-    else if (key === 'r') this.setHelp(true);
+    else if (action === 'map') this.hud.setPanel(this.hud.panel === 'map' ? null : 'map');
+    else if (action === 'mount') this.toggleMount();
+    else if (action === 'fruit') this.toggleHold();
+    else if (action === 'revive') this.setHelp(true);
     else if (code === 'F9' && import.meta.env.DEV) this.net.send({ t: 'cheat' });
   }
 
@@ -527,6 +541,15 @@ export class Game {
       this.me.fx = dx / l;
       this.me.fy = dy / l;
     }
+    // Attaque au clic : tant que le bouton gauche est maintenu, on frappe vers le pointeur.
+    this.aimTimer -= dt;
+    if (aim.down && !dead && !this.hud.panel && this.aimTimer <= 0) {
+      this.aimTimer = 0.15;
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      const x = this.me.x + (aim.x * dpr - this.canvas.width / 2) / this.scale, y = this.me.y + (aim.y * dpr - this.canvas.height / 2) / this.scale;
+      this.net.send({ t: 'attack', x, y });
+      [this.me.fx, this.me.fy] = [(x - this.me.x) / (Math.hypot(x - this.me.x, y - this.me.y) || 1), (y - this.me.y) / (Math.hypot(x - this.me.x, y - this.me.y) || 1)];
+    }
     this.sendTimer -= dt;
     if (this.sendTimer <= 0 && !dead) {
       this.sendTimer = 1 / TICK_HZ;
@@ -543,6 +566,7 @@ export class Game {
     this.hud.unlocked = this.net.latest?.unlocked ?? [];
     this.hud.chests = this.net.latest?.chests ?? [];
     this.hud.hall = this.net.latest?.hall ?? 0;
+    this.hud.banned = this.net.latest?.banned ?? [];
     this.hud.stock = this.net.latest?.stock ?? [0, 0];
     this.hud.bare = this.net.latest?.bare ?? [];
     this.hud.beaten = this.net.latest?.beaten ?? [];

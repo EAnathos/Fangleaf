@@ -117,6 +117,10 @@ export interface Player {
   stone: number;
   fruits: number; // baies cueillies
   holding: boolean; // tend un fruit : il nourrit au lieu de frapper
+  manual: boolean; // attaque au clic : il ne frappe (ni ne récolte) que sur ordre
+  orderUntil: number; // attaque au clic : ordre valable jusqu'à ce temps de simulation
+  aimX: number; // point visé par le dernier clic
+  aimY: number;
   essences: number[];
   userId: string | null; // compte Supabase, null = invité (tests uniquement)
   dirty: boolean; // progression à sauvegarder
@@ -136,6 +140,7 @@ export interface Player {
   resting: { s: number; lvl: number; legend: boolean }[]; // Alphas rangés à la Tanière (pas sur le terrain)
   wiped?: boolean; // progression effacée : plus sauvegardé
   seen: Set<number>; // espèces déjà croisées (bestiaire de la Tanière)
+  close?: () => void; // coupe sa connexion (expulsion)
 }
 
 type Ent = Unit | Player;
@@ -164,6 +169,7 @@ export interface VillageState {
   beaten: number[]; // géants (espèce) déjà vaincus au moins une fois
   wood: number; // réserve commune (entrepôt)
   stone: number;
+  banned: { id: string; name: string }[]; // comptes expulsés par le fondateur
 }
 
 const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * classOf(p.cls).hp);
@@ -193,6 +199,7 @@ export class Room {
   hall: number; // niveau de l'Hôtel de ville
   readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
   readonly stock = { wood: 0, stone: 0 }; // réserve commune de l'entrepôt
+  banned: { id: string; name: string }[] = []; // comptes expulsés par le fondateur (leur progression est gardée)
   onVillage?: (v: VillageState) => void; // sauvegarde, appelée quand le village change (camp, bâtiment, grotte)
   founder: string | null = null; // compte qui a fondé le village (seul à pouvoir le supprimer)
   deleted = false; // supprimé : plus aucune sauvegarde
@@ -210,6 +217,7 @@ export class Room {
     this.beaten = indexes(saved.beaten, SPECIES.length).filter((s) => isBoss(s));
     this.stock.wood = Math.max(0, Math.floor(Number(saved.wood) || 0));
     this.stock.stone = Math.max(0, Math.floor(Number(saved.stone) || 0));
+    this.banned = (saved.banned ?? []).filter((b) => b && typeof b.id === 'string');
     this.oreHp = this.map.ores.map((o) => oreHp(o.zone));
     this.oreBack = this.map.ores.map(() => 0);
     this.bushBack = this.map.bushes.map(() => 0);
@@ -238,7 +246,7 @@ export class Room {
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
     };
@@ -284,6 +292,31 @@ export class Room {
     send({ t: 'teleport', x: p.x, y: p.y });
     this.events.push({ e: 'info', text: `${name} a rejoint le village` });
     return p;
+  }
+
+  /** Compte banni de ce village. */
+  isBanned(userId: string | null | undefined) {
+    return !!userId && this.banned.some((b) => b.id === userId);
+  }
+
+  /** Fondateur : expulser un dompteur. Son compte est banni (sa progression reste) et sa place se libère. */
+  onKick(p: Player, id: number) {
+    const t = this.players.get(id);
+    if (!t || t === p || !this.isFounder(p)) return;
+    if (t.userId && !this.isBanned(t.userId)) this.banned.push({ id: t.userId, name: t.name });
+    this.saveVillage();
+    this.events.push({ e: 'info', text: `${t.name} a été expulsé du village` });
+    t.send({ t: 'closed', msg: 'Tu as été expulsé de ce village par son fondateur.' });
+    t.close?.();
+  }
+
+  /** Fondateur : lever un bannissement ; le compte pourra revenir, avec sa progression. */
+  onUnban(p: Player, userId: string) {
+    if (!this.isFounder(p) || p.userId === null || !this.isBanned(userId)) return;
+    const b = this.banned.find((x) => x.id === userId)!;
+    this.banned = this.banned.filter((x) => x.id !== userId);
+    this.saveVillage();
+    this.events.push({ e: 'info', text: `${b.name} peut de nouveau rejoindre le village` });
   }
 
   /** Fondateur du village (sans compte enregistré, en test : tout le monde). */
@@ -382,7 +415,7 @@ export class Room {
   }
 
   private saveVillage() {
-    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, beaten: [...this.beaten], ...this.stock });
+    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, beaten: [...this.beaten], ...this.stock, banned: [...this.banned] });
   }
 
   /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
@@ -954,14 +987,30 @@ export class Room {
   private isFeedable = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant;
   private isAllyOfPlayers = (e: Ent) => (e.kind === 'p' || e.owner !== 0) && !this.safe(e.x, e.y);
 
+  /** Attaque au clic (PC) ou automatique. */
+  onMode(p: Player, manual: boolean) {
+    p.manual = manual;
+  }
+
+  /** Attaque au clic : un coup vers ce point (clic maintenu : un ordre toutes les 0,15 s). */
+  onAttack(p: Player, x: number, y: number) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    [p.aimX, p.aimY] = [x, y];
+    p.orderUntil = this.time + 0.3;
+  }
+
   private playerAttack(p: Player) {
     if (p.dead) return;
     p.atkCd -= DT;
     if (p.atkCd > 0) return;
     if (p.holding) return this.feed(p); // fruit en main : on nourrit, on ne frappe pas
+    if (p.manual && this.time > p.orderUntil) return; // attaque au clic : rien sans ordre
     const cls = classOf(p.cls);
     const reach = PLAYER_R + cls.range;
-    const t = this.nearest(p.x, p.y, reach + 50, this.isWild) as Unit | undefined;
+    // au clic : le monstre le plus proche du point visé ; sinon le plus proche du dompteur
+    const t = (p.manual
+      ? this.nearest(p.aimX, p.aimY, 140, (e) => this.isWild(e) && dist2(p.x, p.y, e.x, e.y) <= (reach + e.r) ** 2)
+      : this.nearest(p.x, p.y, reach + 50, this.isWild)) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (reach + t.r) ** 2) return this.mine(p);
     p.atkCd = cls.cd;
     const dmg = weaponDmg(p.weapon) * cls.dmg;
@@ -1998,7 +2047,7 @@ export class Room {
           ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S))]
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
       }
-      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
+      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
     }
   }
 }

@@ -56,18 +56,20 @@ export interface VillageSave {
   beaten: number[];
   wood: number; // réserve commune
   stone: number;
+  banned: { id: string; name: string }[]; // comptes expulsés par le fondateur
 }
 
 /** Graine et biens communs d'un village enregistré, ou null s'il n'existe pas. */
 export async function findVillage(code: string): Promise<({ seed: number; founder: string | null } & VillageSave) | null> {
   if (!db) return null;
-  const { data, error } = await db.from('villages').select('seed, camps, buildings, caves, hall, beaten, wood, stone, created_by').eq('code', code).maybeSingle();
+  const { data, error } = await db.from('villages').select('seed, camps, buildings, caves, hall, beaten, wood, stone, banned, created_by').eq('code', code).maybeSingle();
   if (error) throw new Error(`Lecture du village impossible : ${error.message}`);
   const list = (v: unknown) => (Array.isArray(v) ? v : []);
   return data
     ? {
       seed: Number(data.seed), camps: list(data.camps).map(Number), buildings: list(data.buildings), unlocked: list(data.caves).map(Number),
       hall: Number(data.hall ?? 0), beaten: list(data.beaten).map(Number), wood: Number(data.wood ?? 0), stone: Number(data.stone ?? 0),
+      banned: list(data.banned).filter((b) => b && typeof b.id === 'string').map((b) => ({ id: String(b.id), name: String(b.name ?? '') })),
       founder: data.created_by ?? null,
     }
     : null;
@@ -90,7 +92,7 @@ export async function deleteProgress(userId: string, code: string) {
 /** Biens communs du village (partagés par tous ses membres). */
 export async function saveVillage(code: string, v: VillageSave) {
   if (!db) return;
-  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked, hall: v.hall, beaten: v.beaten, wood: v.wood, stone: v.stone }).eq('code', code);
+  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked, hall: v.hall, beaten: v.beaten, wood: v.wood, stone: v.stone, banned: v.banned }).eq('code', code);
   if (error) console.error('Sauvegarde du village impossible :', error.message);
 }
 

@@ -22,7 +22,11 @@ export type ClientMsg =
   | { t: 'hall' } // améliorer la Maison commune (pour tout le village)
   | { t: 'pick' } // cueillir les baies du buisson garni le plus proche
   | { t: 'hold'; on: boolean } // tendre un fruit (ou le ranger) : le gibier passif s'approche
-  | { t: 'deposit' } // vider son sac (bois, pierre) dans la réserve du village, à l'entrepôt
+  | { t: 'deposit' }
+  | { t: 'kick'; id: number } // fondateur : expulser ce dompteur (banni du village)
+  | { t: 'unban'; user: string } // fondateur : lever le bannissement d'un compte
+  | { t: 'mode'; manual: boolean } // attaque au clic (PC) au lieu de l'attaque automatique
+  | { t: 'attack'; x: number; y: number } // attaque au clic : frapper vers ce point // vider son sac (bois, pierre) dans la réserve du village, à l'entrepôt
   | { t: 'unlock'; cave: number } // débloquer une grotte (pour tout le village)
   | { t: 'sell'; id: number } // Marché : vendre un monstre ordinaire de sa meute
   | { t: 'buy'; s: number } // Marché : acheter un monstre d'une espèce déjà croisée
@@ -140,6 +144,7 @@ export interface Snapshot {
   units: UnitTuple[];
   ores: [number, number][]; // filons proches : [id, pv %] (0 = épuisé)
   chests: [number, number, number, number][]; // coffres des géants vaincus : [id, x, y, ouvert par ce dompteur (0/1)]
+  banned: { id: string; name: string }[]; // comptes bannis du village (envoyé au seul fondateur)
   bare: number[]; // buissons proches dont les fruits ont été mangés (ils repoussent)
   caves: number[]; // par grotte : secondes avant le retour du mini-boss (0 = présent)
   camps: number[]; // emplacements de camp établis par le village

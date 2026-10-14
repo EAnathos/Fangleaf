@@ -110,6 +110,7 @@ wss.on('connection', (ws: WebSocket) => {
         if (saved === null) return send({ t: 'error', msg: `Aucun village avec le code ${code || '…'}.` });
         r = rooms.get(code) ?? Object.assign(new Room(code, saved.seed, saved), { founder: saved.founder }); // un autre joueur a pu le rouvrir pendant l'attente
       }
+      if (r.isBanned(user?.userId)) return send({ t: 'error', msg: 'Tu as été expulsé de ce village.' });
       if (r.full) return send({ t: 'error', msg: 'Ce village est complet (3 dompteurs max).' });
     }
 
@@ -125,6 +126,7 @@ wss.on('connection', (ws: WebSocket) => {
       userId = user.userId;
     }
     player = r.addPlayer(name, send, user ? { userId: user.userId, profile } : undefined);
+    player.close = () => ws.close();
     if (user && !profile) void save(r, player); // le village apparaît tout de suite dans « Ton village »
     console.log(`[${r.code}] ${player.name} ${msg.t === 'create' ? 'a fondé le village' : 'a rejoint'} (${r.players.size}/3)${user ? (profile ? ' · progression chargée' : ' · nouvelle progression') : ''}`);
   }
@@ -167,6 +169,10 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'build') room.onBuild(player, msg.b);
     else if (msg.t === 'hall') room.onHall(player);
     else if (msg.t === 'deposit') room.onDeposit(player);
+    else if (msg.t === 'kick') room.onKick(player, +msg.id);
+    else if (msg.t === 'unban') room.onUnban(player, String(msg.user));
+    else if (msg.t === 'mode') room.onMode(player, !!msg.manual);
+    else if (msg.t === 'attack') room.onAttack(player, +msg.x, +msg.y);
     else if (msg.t === 'pick') room.onPick(player);
     else if (msg.t === 'hold') room.onHold(player, !!msg.on);
     else if (msg.t === 'unlock') room.onUnlock(player, +msg.cave);
