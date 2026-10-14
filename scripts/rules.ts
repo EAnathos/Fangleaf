@@ -1294,6 +1294,36 @@ const noop = () => {};
 }
 
 {
+  // Alpha légendaire : il lance seul l'attaque spéciale de son géant, qui ne touche que les sauvages.
+  const r = room();
+  for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
+  const moves: string[] = [];
+  let friendlyFire = 0, bearId = 0;
+  const p = r.addPlayer('a', (m: { t: string; ev?: { e: string; id?: number; kind?: string; a?: number; b?: number }[] }) => {
+    for (const e of m.ev ?? []) {
+      if (e.e === 'move') moves.push(e.kind!);
+      if (e.e === 'hit' && e.a === bearId && e.b === p.id) friendlyFire++;
+    }
+  });
+  [p.x, p.y] = [r.map.spawn.x, r.map.spawn.y + 80];
+  p.hp = p.maxHp = 9999;
+  const bear = r.spawnAlpha(p, 6, 3, true); // Ours légendaire : Onde de choc et Rage du Colosse
+  bearId = bear.id;
+  [bear.x, bear.y] = [p.x + 40, p.y];
+  const foe = r.createUnit(3, false, p.x + 120, p.y);
+  foe.hp = foe.maxHp = 99999;
+  p.atkCd = 9999;
+  for (let i = 0; i < 20 * 12; i++) {
+    r.step();
+    p.atkCd = 9999;
+    p.hp = Math.max(p.hp, 9000);
+  }
+  const lost = 99999 - foe.hp;
+  check(moves.includes('slam'), `Ours légendaire : ${[...new Set(moves)].join(', ') || 'aucune'} attaque spéciale lancée`);
+  check(lost > 0 && friendlyFire === 0, `elle frappe le sauvage (−${Math.round(lost)} PV) sans toucher son dompteur`);
+}
+
+{
   // PV des géants : multipliés par le nombre de dompteurs en ligne, en gardant leur part de PV.
   const r = room();
   const boss = r.units.get(r.caveBoss[0]);

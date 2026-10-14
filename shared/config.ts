@@ -182,6 +182,9 @@ export const bossOf = (species: number) => SPECIES.findIndex((b) => b.boss && b.
 // Alpha légendaire : une âme du boss de l'espèce fait évoluer son Alpha.
 export const LEGEND_SOULS = 3;
 export const LEGEND_MULT = { hp: 1.5, dmg: 1.5, size: 1.15 };
+// Il hérite aussi des attaques spéciales de son géant, lancées seul en combat : un peu moins fortes et moins fréquentes.
+export const LEGEND_MOVE_DMG = 0.6;
+export const LEGEND_MOVE_CD = 1.3;
 /** Bonus de collection : +10 % de PV et de dégâts à tous les Alphas par Alpha éveillé (3 Alphas = +30 %). */
 export const COLLECTION_BONUS = 0.1;
 export const collectionMult = (alphaCount: number) => 1 + COLLECTION_BONUS * Math.max(0, alphaCount);

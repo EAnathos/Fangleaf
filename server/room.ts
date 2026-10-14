@@ -1,7 +1,7 @@
 // Un village : jusqu'à 3 joueurs, la carte et sa simulation autoritaire.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
@@ -1061,6 +1061,20 @@ export class Room {
     return out;
   }
 
+  /** Monstres sauvages vivants (combattus) dans un rayon. */
+  private wildNear(x: number, y: number, r: number) {
+    const out: Ent[] = [];
+    this.grid.query(x, y, r + 60, (e) => {
+      if (this.alive(e) && this.isWild(e) && dist2(x, y, e.x, e.y) <= (r + e.r) ** 2) out.push(e);
+    });
+    return out;
+  }
+
+  /** Qui une attaque spéciale peut toucher : les dompteurs et leurs meutes (géant), ou les sauvages (Alpha légendaire). */
+  private targetsNear(caster: Unit, x: number, y: number, r: number) {
+    return caster.owner ? this.wildNear(x, y, r) : this.alliesNear(x, y, r);
+  }
+
   private hazard(boss: Unit, h: Partial<Hazard> & Pick<Hazard, 'kind' | 'x' | 'y' | 'r' | 'at' | 'dmg'>) {
     this.hazards.push({ x2: h.x, y2: h.y, start: this.time, until: h.at, fired: false, nextTick: 0, boss, ...h });
   }
@@ -1129,6 +1143,25 @@ export class Room {
     }
   }
 
+  /**
+   * Alpha légendaire : il a hérité de l'attaque spéciale de son géant (bond, charge, onde de choc…) et la lance seul
+   * contre les monstres sauvages, avec sa recharge. Renvoie vrai pendant qu'il la prépare (il reste sur place).
+   */
+  private legendMove(u: Unit, t: Ent) {
+    if (u.castUntil > this.time) return true;
+    const boss = bossOf(u.s);
+    const moves = (boss < 0 ? [] : BOSS_MOVES[SPECIES[boss].key] ?? []).filter((m): m is Extract<BossMove, { cd: number }> => 'cd' in m && m.kind !== 'summon');
+    if (!moves.length) return false;
+    if (u.moveCd.length !== moves.length) u.moveCd = moves.map((m) => m.cd * 0.5);
+    moves.forEach((_, i) => (u.moveCd[i] -= DT));
+    const i = moves.findIndex((_, k) => u.moveCd[k] <= 0);
+    if (i < 0 || dist2(u.x, u.y, t.x, t.y) > 450 ** 2) return false;
+    u.moveCd[i] = moves[i].cd * LEGEND_MOVE_CD;
+    this.castMove(u, moves[i], t);
+    this.events.push({ e: 'move', id: u.id, kind: moves[i].kind });
+    return u.castUntil > this.time;
+  }
+
   /** Cerveau d'un mini-boss en combat. Renvoie vrai s'il est occupé (préparation d'une attaque). */
   private bossAI(u: Unit, t: Ent) {
     if (u.castUntil > this.time) return true;
@@ -1159,7 +1192,7 @@ export class Room {
   }
 
   private castMove(u: Unit, m: Extract<BossMove, { cd: number }>, t: Ent) {
-    const d = u.dmg;
+    const d = u.dmg * (u.owner ? LEGEND_MOVE_DMG : 1); // lancée par un Alpha légendaire : un peu atténuée
     switch (m.kind) {
       case 'leap': {
         // Bond : zone d'arrivée annoncée 1 s à l'avance, le boss y atterrit et écrase tout.
@@ -1173,7 +1206,7 @@ export class Room {
       }
       case 'spores':
         // Nuages sous les dompteurs proches : ils restent 5 s et rongent ceux qui y restent.
-        for (const p of this.alliesNear(u.x, u.y, 650).filter((e) => e.kind === 'p').slice(0, 3)) {
+        for (const p of (u.owner ? this.wildNear(t.x, t.y, 200) : this.alliesNear(u.x, u.y, 650).filter((e) => e.kind === 'p')).slice(0, 3)) {
           this.hazard(u, { kind: 2, x: p.x, y: p.y, r: 95, at: this.time + 0.9, until: this.time + 5.9, dmg: d * 0.6 });
         }
         break;
@@ -1203,7 +1236,7 @@ export class Room {
         break;
       }
       case 'rocks':
-        for (const e of this.alliesNear(u.x, u.y, 700).slice(0, 3)) {
+        for (const e of this.targetsNear(u, u.x, u.y, 700).slice(0, 3)) {
           this.hazard(u, { kind: 0, x: e.x, y: e.y, r: 80, at: this.time + 1.2, dmg: d * 1.4 });
         }
         break;
@@ -1246,7 +1279,7 @@ export class Room {
         h.onFire?.();
         this.events.push({ e: 'boom', x: Math.round(h.x2 === h.x && h.y2 === h.y ? h.x : h.x2), y: Math.round(h.y2), r: h.r, kind: ['circle', 'line', 'cloud', 'web'][h.kind] });
         if (h.kind === 2) continue; // les nuages frappent dans la durée
-        const hit = h.kind === 1 ? this.alliesOnLine(h) : this.alliesNear(h.x, h.y, h.r);
+        const hit = h.kind === 1 ? this.alliesOnLine(h) : this.targetsNear(h.boss, h.x, h.y, h.r);
         for (const e of hit) {
           if (h.kind === 3 && e.kind === 'p') e.slowUntil = this.time + WEB_SLOW_S;
           this.damage(e, h.dmg, h.boss);
@@ -1254,7 +1287,7 @@ export class Room {
       }
       if (h.fired && h.kind === 2 && this.time < h.until && this.time >= h.nextTick) {
         h.nextTick = this.time + 0.5;
-        for (const e of this.alliesNear(h.x, h.y, h.r)) this.damage(e, h.dmg * 0.5, h.boss);
+        for (const e of this.targetsNear(h.boss, h.x, h.y, h.r)) this.damage(e, h.dmg * 0.5, h.boss);
       }
     }
     this.hazards = this.hazards.filter((h) => !h.fired || (h.kind === 2 && this.time < h.until) || this.time < h.at + 0.3);
@@ -1263,7 +1296,7 @@ export class Room {
   private alliesOnLine(h: Hazard) {
     const dx = h.x2 - h.x, dy = h.y2 - h.y, len2 = dx * dx + dy * dy || 1;
     const midX = (h.x + h.x2) / 2, midY = (h.y + h.y2) / 2;
-    return this.alliesNear(midX, midY, Math.sqrt(len2) / 2 + h.r).filter((e) => {
+    return this.targetsNear(h.boss, midX, midY, Math.sqrt(len2) / 2 + h.r).filter((e) => {
       const k = Math.max(0, Math.min(1, ((e.x - h.x) * dx + (e.y - h.y) * dy) / len2));
       return Math.hypot(e.x - h.x - k * dx, e.y - h.y - k * dy) <= h.r + e.r;
     });
@@ -1627,6 +1660,7 @@ export class Room {
     if (!t) t = this.nearest(anchorX, anchorY, o.dead ? 120 : FOLLOW_ENGAGE_R, this.isWild, u.x, u.y);
     if (t) {
       u.target = t.id;
+      if (u.legend && this.legendMove(u, t)) return; // en pleine attaque spéciale
       this.tryAttack(u, t);
       return;
     }
@@ -1955,7 +1989,7 @@ export class Room {
       for (const h of this.hazards) {
         if (dist2(h.x, h.y, viewer.x, viewer.y) > vr2) continue;
         const prog = h.fired ? 100 : Math.min(99, Math.round((100 * (this.time - h.start)) / (h.at - h.start)));
-        hazards.push([h.kind, Math.round(h.x), Math.round(h.y), h.r, Math.round(h.x2), Math.round(h.y2), prog]);
+        hazards.push([h.kind, Math.round(h.x), Math.round(h.y), h.r, Math.round(h.x2), Math.round(h.y2), prog, h.boss.owner ? 1 : 0]);
       }
       const shots: ShotTuple[] = [];
       for (const sh of this.shots) {

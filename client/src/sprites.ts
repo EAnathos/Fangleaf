@@ -1423,7 +1423,9 @@ function drawDeadwood(ctx: Ctx, x: number, y: number, zone: number, hpPct: numbe
 
 /** Zone d'attaque d'un mini-boss : annonce (bord + remplissage qui progresse), puis effet. */
 export function drawHazard(ctx: Ctx, h: number[], t: number) {
-  const [kind, x, y, r, x2, y2, prog] = h;
+  const [kind, x, y, r, x2, y2, prog, ally] = h;
+  // rouge : attaque d'un géant (à esquiver) ; doré : attaque d'un Alpha légendaire (elle ne touche que les sauvages)
+  const ember = ally ? '240,182,74' : '232,105,63';
   const k = prog / 100;
   const active = prog >= 100;
   if (kind === 1) {
@@ -1432,11 +1434,11 @@ export function drawHazard(ctx: Ctx, h: number[], t: number) {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(ang);
-    ctx.fillStyle = 'rgba(232,105,63,0.18)';
+    ctx.fillStyle = `rgba(${ember},0.18)`;
     ctx.fillRect(0, -r, len, r * 2);
-    ctx.fillStyle = active ? 'rgba(255,200,160,0.55)' : 'rgba(232,105,63,0.4)';
+    ctx.fillStyle = active ? 'rgba(255,200,160,0.55)' : `rgba(${ember},0.4)`;
     ctx.fillRect(0, -r, len * k, r * 2);
-    ctx.strokeStyle = 'rgba(232,105,63,0.9)';
+    ctx.strokeStyle = `rgba(${ember},0.9)`;
     ctx.lineWidth = 3;
     ctx.strokeRect(0, -r, len, r * 2);
     ctx.restore();
@@ -1473,7 +1475,7 @@ export function drawHazard(ctx: Ctx, h: number[], t: number) {
     return;
   }
   // annonce circulaire : bord net, remplissage qui grossit jusqu'à l'impact
-  const color = kind === 2 ? '160,200,90' : kind === 3 ? '238,231,215' : '232,105,63';
+  const color = kind === 2 ? '160,200,90' : kind === 3 ? '238,231,215' : ember;
   ctx.fillStyle = `rgba(${color},0.14)`;
   ctx.beginPath();
   ctx.ellipse(x, y, r, r * 0.75, 0, 0, TAU);

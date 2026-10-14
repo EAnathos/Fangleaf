@@ -76,8 +76,11 @@ export interface ArmySlot {
 
 /** Unité compacte : [id, espèce, flags, x, y, pv%, idDuDompteur (0 = sauvage)] */
 export type UnitTuple = [number, number, number, number, number, number, number];
-/** Attaque spéciale au sol : [type, x, y, rayon, x2, y2, avancement %] — type 0 cercle, 1 ligne (x2,y2 = bout, rayon = demi-largeur), 2 nuage, 3 toile. avancement 100 = actif. */
-export type HazardTuple = [number, number, number, number, number, number, number];
+/**
+ * Attaque spéciale au sol : [type, x, y, rayon, x2, y2, avancement %, alliée] — type 0 cercle, 1 ligne (x2,y2 = bout,
+ * rayon = demi-largeur), 2 nuage, 3 toile. avancement 100 = actif. alliée 1 : lancée par un Alpha légendaire.
+ */
+export type HazardTuple = [number, number, number, number, number, number, number, number];
 /**
  * Projectile de tireur : [id, type, x, y, a, b, c] — type 0 trait (bolt), 1 en cloche (arc), 2 jet.
  * Trait et jet : (x, y) position, (a, b) vitesse px/s. Cloche : (x, y) départ, (a, b) point d'impact, c avancement %.
