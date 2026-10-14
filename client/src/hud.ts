@@ -615,26 +615,6 @@ export class Hud {
   private updateHall(me: PlayerState) {
     const funds = this.funds(me);
     $('hall-have').textContent = `Niveau ${this.hall}/${HALL_MAX}`;
-    const key = JSON.stringify([this.hall, this.beaten]);
-    if (key !== this.last.hall) {
-      this.last.hall = key;
-      $('hall-gates').replaceChildren(
-        ...this.map.gates.map((_, k) => {
-          const open = gateOpen(k, this.hall, this.beaten);
-          const bosses = k === 0 ? [] : zoneBosses(k);
-          const needs = [`Hôtel de ville niv. ${gateHall(k)}${this.hall >= gateHall(k) ? ' ✓' : ''}`, ...bosses.map((b) => `${SPECIES[b].name}${this.beaten.includes(b) ? ' ✓' : ''}`)];
-          const row = document.createElement('div');
-          row.className = `stone-row${open ? '' : ' locked'}`;
-          row.innerHTML = '<div class="col"><b></b><span class="small muted"></span></div><span class="tag"></span>';
-          row.querySelector('b')!.textContent = k === 0 ? 'Porte du village → suite de la Lisière' : `Porte → ${ZONE_NAMES[k]} (zone ${k + 1})`;
-          row.querySelector('.small')!.textContent = open ? 'Ouverte pour tout le village' : `Il faut : ${needs.join(' · ')}`;
-          const tag = row.querySelector<HTMLElement>('.tag')!;
-          tag.className = `tag ${open ? 'open' : 'shut'}`;
-          tag.textContent = open ? 'Ouverte' : 'Fermée';
-          return row;
-        }),
-      );
-    }
     const maxed = this.hall >= HALL_MAX, cost = HALL[this.hall];
     $('hall-cost').hidden = maxed;
     if (!maxed) this.costChips('hall-cost', funds, cost);

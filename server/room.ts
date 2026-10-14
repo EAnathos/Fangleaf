@@ -1088,13 +1088,10 @@ export class Room {
     p.atkCd -= DT;
     if (p.atkCd > 0) return;
     if (p.holding) return this.feed(p); // fruit en main : on nourrit, on ne frappe pas
-    if (p.manual && this.time > p.orderUntil) return; // attaque au clic : rien sans ordre
+    if (p.manual) return this.time <= p.orderUntil ? this.aimedAttack(p) : undefined; // attaque au clic : rien sans ordre
     const cls = classOf(p.cls);
     const reach = PLAYER_R + cls.range;
-    // au clic : le monstre le plus proche du point visé ; sinon le plus proche du dompteur
-    const t = (p.manual
-      ? this.nearest(p.aimX, p.aimY, 140, (e) => this.isWild(e) && dist2(p.x, p.y, e.x, e.y) <= (reach + e.r) ** 2)
-      : this.nearest(p.x, p.y, reach + 50, this.isWild)) as Unit | undefined;
+    const t = this.nearest(p.x, p.y, reach + 50, this.isWild) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (reach + t.r) ** 2) return this.mine(p);
     p.atkCd = cls.cd;
     const dmg = weaponDmg(p.weapon) * cls.dmg;
@@ -1108,6 +1105,55 @@ export class Room {
       // pleins dégâts au point d'impact, de moins en moins vers le bord de l'explosion
       for (const e of hit) this.damage(e, dmg * (1 - (1 - MAGE_SPLASH_EDGE) * Math.min(1, Math.sqrt(dist2(e.x, e.y, t.x, t.y)) / cls.splash)), p);
     } else this.damage(t, dmg, p);
+  }
+
+  /**
+   * Attaque au clic, dans la direction visée, qu'il y ait un monstre ou non : le guerrier frappe en arc devant lui,
+   * l'archer tire en ligne droite (le premier monstre sur la trajectoire), l'orbe du mage explose au point visé
+   * (dans sa portée). Tout monstre sauvage peut être touché, gibier passif compris (pas un géant endormi).
+   * Rien touché au corps à corps : il récolte le filon ou le tas à portée.
+   */
+  private aimedAttack(p: Player) {
+    const cls = classOf(p.cls);
+    const reach = PLAYER_R + cls.range;
+    const d = Math.hypot(p.aimX - p.x, p.aimY - p.y) || 1, ux = (p.aimX - p.x) / d, uy = (p.aimY - p.y) / d;
+    const dmg = weaponDmg(p.weapon) * cls.dmg;
+    const prey = (e: Ent) => this.isFeedable(e) && this.alive(e);
+    if (p.cls === 'mage') {
+      p.atkCd = cls.cd;
+      const k = Math.min(d, reach), bx = p.x + ux * k, by = p.y + uy * k;
+      this.events.push({ e: 'shot', by: p.id, x: p.x, y: p.y, tx: Math.round(bx), ty: Math.round(by), cls: 'mage' });
+      this.events.push({ e: 'boom', x: Math.round(bx), y: Math.round(by), r: cls.splash!, kind: 'orb' });
+      const hit: Ent[] = [];
+      this.grid.query(bx, by, cls.splash! + 40, (e) => prey(e) && dist2(e.x, e.y, bx, by) <= (cls.splash! + e.r) ** 2 && hit.push(e));
+      for (const e of hit) this.damage(e, dmg * (1 - (1 - MAGE_SPLASH_EDGE) * Math.min(1, Math.sqrt(dist2(e.x, e.y, bx, by)) / cls.splash!)), p);
+      return;
+    }
+    if (p.cls === 'archer') {
+      // flèche en ligne droite : le premier monstre dont elle frôle le corps
+      p.atkCd = cls.cd;
+      let best: Ent | undefined, bt = reach;
+      this.grid.query(p.x + ux * reach * 0.5, p.y + uy * reach * 0.5, reach * 0.5 + 60, (e) => {
+        if (!prey(e)) return;
+        const t = (e.x - p.x) * ux + (e.y - p.y) * uy;
+        if (t < 0 || t > reach || t >= bt) return;
+        if (Math.hypot(e.x - p.x - ux * t, e.y - p.y - uy * t) <= e.r + 6) [best, bt] = [e, t];
+      });
+      this.events.push({ e: 'shot', by: p.id, x: p.x, y: p.y, tx: Math.round(p.x + ux * bt), ty: Math.round(p.y + uy * bt), cls: 'archer' });
+      if (best) this.damage(best, dmg, p);
+      return;
+    }
+    // guerrier : coup en arc (±65°) devant lui, sur le plus proche
+    let best: Ent | undefined, bd = Infinity;
+    this.grid.query(p.x, p.y, reach + 60, (e) => {
+      if (!prey(e)) return;
+      const ex = e.x - p.x, ey = e.y - p.y, de = Math.hypot(ex, ey);
+      if (de > reach + e.r || de >= bd || (de > e.r && (ex * ux + ey * uy) / de < Math.cos((65 * Math.PI) / 180))) return;
+      [best, bd] = [e, de];
+    });
+    if (!best) return this.mine(p);
+    p.atkCd = cls.cd;
+    this.damage(best, dmg, p);
   }
 
   /** Cueillir les baies du buisson garni le plus proche (devant lui). */

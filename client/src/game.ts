@@ -40,6 +40,7 @@ export class Game {
   private scale = 1;
   private sendTimer = 0;
   private aimTimer = 0; // prochain coup au clic
+  private lastSwing = -9; // dernier coup d'épée dessiné (attaque au clic)
   private wasDead = false;
   private fog: Fog;
   private lastMount = 0;
@@ -285,7 +286,8 @@ export class Game {
         const a = this.posOf(e.a, players), b = this.posOf(e.b, players);
         const ranged = players.find((q) => q.id === e.a)?.cls;
         if (e.a === this.myId && a && b) {
-          if (ranged !== 'archer' && ranged !== 'mage') this.fx.slash(a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x));
+          // (attaque au clic : le coup est déjà dessiné quand on clique)
+          if (ranged !== 'archer' && ranged !== 'mage' && (touchOnly || settings.attack !== 'click')) this.fx.slash(a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x));
           this.fx.text(b.x, b.y - 24, fmtDmg(e.dmg), '#EEE7D7', 14, 0.7);
         }
         if (e.b === this.myId) this.fx.text(this.me.x, this.me.y - 30, `-${fmtDmg(e.dmg)}`, '#FF8A65', 15, 0.8);
@@ -387,7 +389,11 @@ export class Game {
         this.charges.set(e.id, this.time);
         break;
       case 'boom': {
-        const col = e.kind === 'cloud' ? '#A0BE5A' : e.kind === 'web' ? '#EEE7D7' : e.kind === 'splash' ? '#B9D86A' : '#E8693F';
+        const col = e.kind === 'cloud' ? '#A0BE5A' : e.kind === 'web' ? '#EEE7D7' : e.kind === 'splash' ? '#B9D86A' : e.kind === 'orb' ? '#B48CFF' : '#E8693F';
+        if (e.kind === 'orb') { // orbe du mage : pas de secousse, juste l'éclat violet
+          this.fx.ring(e.x, e.y, col, e.r * 0.3, e.r, 0.35);
+          break;
+        }
         this.fx.ring(e.x, e.y, col, e.r * 0.3, e.r, 0.45);
         this.fx.burst(e.x, e.y, col, 14, 160);
         if (Math.hypot(this.me.x - e.x, this.me.y - e.y) < e.r + 40) this.shake = 0.25;
@@ -561,6 +567,12 @@ export class Game {
       const dpr = Math.min(2, devicePixelRatio || 1);
       const x = this.me.x + (aim.x * dpr - this.canvas.width / 2) / this.scale, y = this.me.y + (aim.y * dpr - this.canvas.height / 2) / this.scale;
       this.net.send({ t: 'attack', x, y });
+      // guerrier : le coup part vers le pointeur, qu'il touche ou non (au rythme de son arme)
+      const st = this.self();
+      if (st && (st.cls ?? 'warrior') === 'warrior' && this.time - this.lastSwing >= CLASSES.warrior.cd) {
+        this.lastSwing = this.time;
+        this.fx.slash(this.me.x, this.me.y, Math.atan2(y - this.me.y, x - this.me.x));
+      }
       [this.me.fx, this.me.fy] = [(x - this.me.x) / (Math.hypot(x - this.me.x, y - this.me.y) || 1), (y - this.me.y) / (Math.hypot(x - this.me.x, y - this.me.y) || 1)];
     }
     this.sendTimer -= dt;
