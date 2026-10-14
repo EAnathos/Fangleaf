@@ -92,6 +92,7 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 - **Échap** : menu — retour au lobby, paramètres (touches, attaque, membres du village), ou supprimer le village pour repartir de zéro (fondateur ; les autres membres effacent seulement leur progression), avec confirmation
 - **Expulsion** (fondateur, Échap › Paramètres) : le joueur est renvoyé au lobby et banni, sa place se libère ; débanni, il revient avec sa progression
 - Le bouton **Inviter** disparaît quand le village est complet
+- Un membre **déconnecté** dort près du feu du village (« z z z »), ses Alphas équipés et sa meute autour de lui : certains dorment aussi, les autres flânent dans le village
 - **F9** (dev uniquement) : +300 or, +100 bois, +100 pierre et +30 essences de chaque espèce pour tester la forge, l'Hôtel de ville et la Tanière
 
 Bestiaire animé de toutes les espèces (outil de dev) : http://localhost:5173/bestiary.html

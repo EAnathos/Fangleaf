@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { TICK_HZ } from '../shared/config.ts';
 import type { ClientMsg, ServerMsg } from '../shared/protocol.ts';
-import { createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
+import { createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, loadMembers, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
 import { makeCode, Room, type Player } from './room.ts';
 
 try {
@@ -108,7 +108,15 @@ wss.on('connection', (ws: WebSocket) => {
       else {
         const saved = await findVillage(code);
         if (saved === null) return send({ t: 'error', msg: `Aucun village avec le code ${code || '…'}.` });
+        const reopened = !rooms.get(code);
         r = rooms.get(code) ?? Object.assign(new Room(code, saved.seed, saved), { founder: saved.founder }); // un autre joueur a pu le rouvrir pendant l'attente
+        // Les membres déconnectés dorment au village (on ne les montre pas s'ils sont bannis).
+        if (reopened) {
+          const room = r;
+          loadMembers(code)
+            .then((list) => list.forEach((m) => !room.isBanned(m.userId) && room.addSleeper(m.userId, m.profile)))
+            .catch((e) => console.error(e));
+        }
       }
       if (r.isBanned(user?.userId)) return send({ t: 'error', msg: 'Tu as été expulsé de ce village.' });
       if (r.full) return send({ t: 'error', msg: 'Ce village est complet (3 dompteurs max).' });

@@ -197,6 +197,20 @@ export class Game {
     }
   }
 
+  /** « z z z » qui montent en s'estompant au-dessus d'un dormeur. */
+  private snore(x: number, y: number, size: number, seed: number) {
+    const { ctx } = this;
+    ctx.font = `700 ${size}px "Pixelify Sans", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#EEE7D7';
+    for (let k = 0; k < 3; k++) {
+      const ph = (this.time * 0.45 + k / 3 + seed * 0.13) % 1;
+      ctx.globalAlpha = Math.sin(ph * Math.PI);
+      ctx.fillText('z', x + ph * size * 1.9, y - ph * size * 2.6);
+    }
+    ctx.globalAlpha = 1;
+  }
+
   private gateOpen(k: number) {
     return gateOpen(k, this.hud.hall, this.hud.beaten);
   }
@@ -706,18 +720,7 @@ export class Game {
             face: f.face, t: this.time, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, legend,
             charge, inWater: !!SPECIES[s].swim && this.map.isWater(x, y),
           });
-          if (boss && flags & UNIT_FLAG_DORMANT) {
-            // Géant endormi : il ronfle en attendant qu'on vienne lui parler.
-            ctx.font = '700 18px "Pixelify Sans", sans-serif';
-            ctx.textAlign = 'center';
-            for (let k = 0; k < 3; k++) {
-              const ph = (this.time * 0.45 + k / 3) % 1;
-              ctx.globalAlpha = Math.sin(ph * Math.PI);
-              ctx.fillStyle = '#EEE7D7';
-              ctx.fillText('z', x + r * 0.6 + ph * 34, y - r * 1.3 - ph * 46);
-            }
-            ctx.globalAlpha = 1;
-          }
+          if (boss && flags & UNIT_FLAG_DORMANT) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
           if (boss) {
             // Mini-boss : nom et grande barre de vie, toujours visibles.
             ctx.font = '700 15px "Pixelify Sans", sans-serif';
@@ -731,6 +734,28 @@ export class Game {
           } else if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
         },
       });
+    }
+    // Dompteurs déconnectés : endormis près du feu, leurs monstres flânent (ou dorment) dans le village.
+    const sleepers = this.net.latest?.sleepers ?? [];
+    for (const [name, color, armor, cls, x, y] of sleepers) {
+      if (!inView(x, y, 80)) continue;
+      list.push({ y, draw: () => {
+        drawPlayer(ctx, x, y, color, 0, 1, armor, name, this.time, false, false, false, false, cls || null);
+        this.snore(x + 14, y - 36, 15, x);
+      } });
+    }
+    for (const [id, s, flags, x, y, k] of this.net.latest?.dozers ?? []) {
+      if (!inView(x, y, 80)) continue;
+      const alpha = (flags & UNIT_FLAG_ALPHA) !== 0, legend = (flags & UNIT_FLAG_LEGEND) !== 0, asleep = (flags & UNIT_FLAG_DORMANT) !== 0;
+      const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
+      const f = this.faces.get(id) ?? { x, face: 1 };
+      if (Math.abs(x - f.x) > 0.5) f.face = x > f.x ? 1 : -1;
+      f.x = x;
+      this.faces.set(id, f);
+      list.push({ y, draw: () => {
+        drawUnit(ctx, { x, y, r, species: s, alpha, legend, wild: false, ownerColor: sleepers[k]?.[1], face: f.face, t: asleep ? 0 : this.time, seed: id * 1.7, flash: false });
+        if (asleep) this.snore(x + r * 0.5, y - r * 1.2, 12, id);
+      } });
     }
     for (const p of players) {
       const isMe = p.id === this.myId;

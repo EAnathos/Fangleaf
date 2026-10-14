@@ -9,7 +9,7 @@ import {
   armorMaxHp, armorReduction, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
-import type { ArmySlot, GameEvent, PlayerState, ServerMsg, UnitTuple } from '../shared/protocol.ts';
+import type { ArmySlot, DozerTuple, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
 import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Grid } from './grid.ts';
@@ -145,6 +145,31 @@ export interface Player {
 
 type Ent = Unit | Player;
 
+/** Monstre d'un dompteur déconnecté : purement décoratif (ni cible, ni obstacle). */
+interface Dozer {
+  id: number;
+  s: number;
+  alpha: boolean;
+  legend: boolean;
+  asleep: boolean; // il dort à côté de son dompteur ; sinon il flâne dans le village
+  x: number;
+  y: number;
+  wx: number; // but de sa promenade
+  wy: number;
+  wt: number; // secondes avant d'en changer
+}
+
+/** Dompteur déconnecté, endormi près du feu du village avec ses monstres. */
+interface Sleeper {
+  name: string;
+  color: string;
+  armor: number;
+  cls: string;
+  x: number;
+  y: number;
+  pack: Dozer[];
+}
+
 /** Coffre laissé par un géant vaincu : chaque dompteur l'ouvre une fois ; il disparaît au retour du géant. */
 interface Chest {
   id: number;
@@ -191,6 +216,7 @@ export class Room {
   private hazards: Hazard[] = [];
   private shots: Shot[] = [];
   private chests: Chest[] = [];
+  private sleepers = new Map<string, Sleeper>(); // membres déconnectés (compte, ou « invité:id »)
   private bushBack: number[] = []; // par buisson : temps de simulation où ses fruits repoussent (0 : garni)
   readonly map: WorldMap;
   readonly camps: number[]; // emplacements de camp établis (index dans map.sites)
@@ -285,6 +311,7 @@ export class Room {
         this.placeNear(u, p);
       }
     }
+    this.sleepers.delete(p.userId ?? ''); // il se réveille : il n'est plus endormi au village
     this.players.set(p.id, p);
     this.scaleBosses();
     this.refreshAlphas(p);
@@ -292,6 +319,53 @@ export class Room {
     send({ t: 'teleport', x: p.x, y: p.y });
     this.events.push({ e: 'info', text: `${name} a rejoint le village` });
     return p;
+  }
+
+  /**
+   * Membre déconnecté : il dort près du feu du village, ses Alphas équipés et sa meute autour de lui
+   * (un sur trois dort aussi, les autres flânent dans le village).
+   */
+  addSleeper(key: string, prof: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack'>) {
+    if (this.sleepers.has(key) || [...this.players.values()].some((p) => p.userId === key)) return;
+    const v = this.map.village, k = this.sleepers.size;
+    const a = 0.9 + k * 2.1, at = this.map.freeNear(v.x + Math.cos(a) * 95, v.y + Math.sin(a) * 70 + 10);
+    let hash = 0;
+    for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
+    const species = [
+      ...(prof.alphas ?? []).filter((x) => !x.rest && !x.wakeAt && x.s in SPECIES).map((x) => ({ s: x.s, alpha: true, legend: !!x.legend })),
+      ...(prof.pack ?? []).filter((s) => s in SPECIES && !SPECIES[s].boss).slice(0, ARMY_CAP).map((s) => ({ s, alpha: false, legend: false })),
+    ];
+    const pack = species.map((m, i): Dozer => {
+      const b = (i / Math.max(1, species.length)) * Math.PI * 2, d = 40 + (i % 3) * 18;
+      const pos = this.map.freeNear(at.x + Math.cos(b) * d, at.y + Math.sin(b) * d * 0.7);
+      return { id: this.nextId++, ...m, asleep: i % 3 === 0, x: pos.x, y: pos.y, wx: pos.x, wy: pos.y, wt: Math.random() * 3 };
+    });
+    this.sleepers.set(key, {
+      name: prof.name, color: PLAYER_COLORS[Math.abs(hash) % PLAYER_COLORS.length], armor: clamp(Number(prof.armor) || 0, 0, ARMOR_MAX),
+      cls: CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as string) : '', x: at.x, y: at.y, pack,
+    });
+  }
+
+  /** Les monstres éveillés des dormeurs flânent tranquillement dans le village. */
+  private updateSleepers() {
+    const v = this.map.village;
+    for (const z of this.sleepers.values()) {
+      for (const d of z.pack) {
+        if (d.asleep) continue;
+        d.wt -= DT;
+        if (d.wt <= 0) {
+          d.wt = 2 + Math.random() * 4;
+          const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * (VILLAGE_R - 80);
+          const wx = v.x + Math.cos(a) * r, wy = v.y + Math.sin(a) * r;
+          if (!this.map.blocked(wx, wy)) [d.wx, d.wy] = [wx, wy];
+        }
+        const dx = d.wx - d.x, dy = d.wy - d.y, len = Math.hypot(dx, dy);
+        if (len < 3) continue;
+        const step = Math.min(len, SPECIES[d.s].speed * 0.3 * DT), nx = d.x + (dx / len) * step, ny = d.y + (dy / len) * step;
+        if (this.map.blocked(nx, ny)) d.wt = 0; // un bâtiment sur la route : autre promenade
+        else [d.x, d.y] = [nx, ny];
+      }
+    }
   }
 
   /** Compte banni de ce village. */
@@ -327,8 +401,11 @@ export class Room {
   removePlayer(id: number) {
     const p = this.players.get(id);
     if (!p) return;
+    const prof = this.profileOf(p);
     for (const uid of p.army) this.units.delete(uid);
     this.players.delete(id);
+    // Il s'endort au village avec sa meute (sauf s'il a été expulsé ou a tout effacé).
+    if (!this.deleted && !p.wiped && !this.isBanned(p.userId)) this.addSleeper(p.userId ?? `invité:${p.id}`, prof);
     this.scaleBosses();
     this.events.push({ e: 'info', text: `${p.name} a quitté le village` });
   }
@@ -685,6 +762,7 @@ export class Room {
     this.updateRespawns();
     this.clearEmptyCaves();
     this.updateAwakenings();
+    this.updateSleepers();
     for (const p of this.players.values()) {
       if (p.villageFound || p.dead || !this.map.inVillage(p.x, p.y)) continue;
       p.villageFound = true; // découvert : la prochaine fois, on arrivera ici
@@ -2028,6 +2106,14 @@ export class Room {
         if (dist2(o.x, o.y, viewer.x, viewer.y) > vr2) continue;
         ores.push([o.id, Math.round((100 * Math.max(0, this.oreHp[o.id])) / oreHp(o.zone))]);
       }
+      const sleepers: SleeperTuple[] = [], dozers: DozerTuple[] = [];
+      for (const z of this.sleepers.values()) {
+        if (dist2(z.x, z.y, viewer.x, viewer.y) > vr2) continue;
+        const k = sleepers.push([z.name, z.color, z.armor, z.cls, Math.round(z.x), Math.round(z.y)]) - 1;
+        for (const d of z.pack) {
+          dozers.push([d.id, d.s, (d.alpha ? UNIT_FLAG_ALPHA : 0) | (d.legend ? UNIT_FLAG_LEGEND : 0) | (d.asleep ? UNIT_FLAG_DORMANT : 0), Math.round(d.x), Math.round(d.y), k]);
+        }
+      }
       const bare: number[] = [];
       for (const b of this.map.bushes) if (this.bushBack[b.id] > this.time && dist2(b.x, b.y, viewer.x, viewer.y) <= vr2) bare.push(b.id);
       const chests: [number, number, number, number][] = [];
@@ -2047,7 +2133,7 @@ export class Room {
           ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S))]
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
       }
-      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
+      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
     }
   }
 }

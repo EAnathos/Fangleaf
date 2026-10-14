@@ -91,6 +91,11 @@ export type HazardTuple = [number, number, number, number, number, number, numbe
  */
 export type ShotTuple = [number, number, number, number, number, number, number];
 
+/** Dompteur déconnecté, endormi au village : [nom, couleur, armure, classe ('' sans), x, y]. */
+export type SleeperTuple = [string, string, number, string, number, number];
+/** Monstre d'un dompteur endormi : [id, espèce, flags (UNIT_FLAG_ALPHA, _LEGEND, _DORMANT = endormi), x, y, index du dompteur dans sleepers]. */
+export type DozerTuple = [number, number, number, number, number, number];
+
 export const UNIT_FLAG_ALPHA = 1;
 export const UNIT_FLAG_MOUNTED = 2; // Alpha chevauché : dessiné sous son dompteur
 export const UNIT_FLAG_LEGEND = 4; // Alpha légendaire
@@ -145,6 +150,8 @@ export interface Snapshot {
   ores: [number, number][]; // filons proches : [id, pv %] (0 = épuisé)
   chests: [number, number, number, number][]; // coffres des géants vaincus : [id, x, y, ouvert par ce dompteur (0/1)]
   banned: { id: string; name: string }[]; // comptes bannis du village (envoyé au seul fondateur)
+  sleepers: SleeperTuple[]; // dompteurs déconnectés qui dorment au village
+  dozers: DozerTuple[]; // leurs monstres, qui flânent ou dorment autour d'eux
   bare: number[]; // buissons proches dont les fruits ont été mangés (ils repoussent)
   caves: number[]; // par grotte : secondes avant le retour du mini-boss (0 = présent)
   camps: number[]; // emplacements de camp établis par le village

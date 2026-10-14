@@ -1368,6 +1368,31 @@ const noop = () => {};
 }
 
 {
+  // Déconnecté : il dort au village, sa meute flâne autour (un monstre sur trois dort) ; il se réveille en revenant.
+  const r = room();
+  let snap: { sleepers: unknown[]; dozers: number[][] } = { sleepers: [], dozers: [] };
+  const watcher = r.addPlayer('w', (m: { t: string; sleepers?: unknown[]; dozers?: number[][] }) => m.t === 's' && (snap = m as typeof snap));
+  [watcher.x, watcher.y] = [r.map.village.x, r.map.village.y];
+  const p = r.addPlayer('Lou', noop, { userId: 'lou', profile: null });
+  r.spawnAlpha(p, 1, 2, false);
+  for (let i = 0; i < 4; i++) {
+    const u = r.createUnit(0, false, p.x, p.y);
+    r.makeTamed(u, p);
+  }
+  r.removePlayer(p.id);
+  r.step();
+  check(snap.sleepers.length === 1 && snap.dozers.length === 5, `Lou déconnecté : endormi au village avec ses ${snap.dozers.length} monstres`);
+  const awake = snap.dozers.filter((d) => !(d[2] & 8)), asleep = snap.dozers.length - awake.length;
+  const before = awake.map((d) => [d[3], d[4]]);
+  for (let i = 0; i < 20 * 8; i++) r.step();
+  const moved = snap.dozers.filter((d) => !(d[2] & 8)).filter((d, i) => Math.hypot(d[3] - before[i][0], d[4] - before[i][1]) > 20).length;
+  check(asleep >= 1 && moved >= 1 && snap.dozers.every((d) => r.map.inVillage(d[3], d[4])), `${asleep} dorment, ${moved} se promènent dans le village`);
+  r.addPlayer('Lou', noop, { userId: 'lou', profile: null });
+  r.step();
+  check(snap.sleepers.length === 0 && snap.dozers.length === 0, 'Lou revient : il n\'est plus endormi au village');
+}
+
+{
   // PV des géants : multipliés par le nombre de dompteurs en ligne, en gardant leur part de PV.
   const r = room();
   const boss = r.units.get(r.caveBoss[0]);

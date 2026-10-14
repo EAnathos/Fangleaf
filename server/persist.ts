@@ -114,6 +114,14 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   return data as Profile | null;
 }
 
+/** Membres enregistrés d'un village (pour les montrer endormis au village tant qu'ils sont déconnectés). */
+export async function loadMembers(code: string): Promise<{ userId: string; profile: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack'> }[]> {
+  if (!db) return [];
+  const { data, error } = await db.from('progress').select('user_id, name, armor, class, alphas, pack').eq('village_code', code);
+  if (error) throw new Error(`Lecture des membres impossible : ${error.message}`);
+  return (data ?? []).map((d) => ({ userId: String(d.user_id), profile: { name: d.name, armor: d.armor, class: d.class, alphas: d.alphas ?? [], pack: d.pack ?? [] } }));
+}
+
 export async function saveProgress(userId: string, code: string, p: Profile) {
   if (!db) return;
   const { error } = await db
