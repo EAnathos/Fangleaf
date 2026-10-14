@@ -1004,7 +1004,7 @@ export class Hud {
     });
   }
 
-  /** Emplacements de camp repérés : cercle (plein et doré une fois établi), Pierres de passage reliées. */
+  /** Emplacements de camp repérés : cercle (plein et doré une fois établi). */
   private drawCamps(ctx: CanvasRenderingContext2D, m: (v: number) => number, size: number) {
     this.map.sites.forEach((c, i) => {
       if (!this.fog.isExplored(c.x, c.y)) return;
@@ -1016,11 +1016,6 @@ export class Hud {
       ctx.arc(m(c.x), m(c.y), size, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-    });
-    this.map.stones.forEach((st, k) => {
-      if (k === 0 ? !this.buildings.includes('stone') : !this.camps.includes(k - 1)) return;
-      ctx.fillStyle = '#8FE3D6';
-      ctx.fillRect(m(st.x) + size * 0.9, m(st.y) - size * 1.4, size * 0.7, size * 1.2);
     });
   }
 
