@@ -108,6 +108,52 @@ export class Game {
     this.scale = clamp(Math.min(innerWidth / 1350, innerHeight / 800), 0.62, 1.25) * dpr;
   }
 
+  /** Grotte vide : cercle d'invocation là où le géant reviendra, avec le temps restant (il s'emballe à la fin). */
+  private drawBossReturn(ctx: CanvasRenderingContext2D, x: number, y: number, sec: number) {
+    const t = this.time, soon = sec <= 10, k = soon ? 1 - sec / 10 : 0;
+    const pulse = 0.5 + 0.5 * Math.sin(t * (soon ? 8 + k * 10 : 2.5));
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(1, 0.45); // posé au sol
+    ctx.globalAlpha = 0.35 + 0.25 * pulse + 0.3 * k;
+    ctx.strokeStyle = soon ? '#F0B64A' : '#8FA9B8';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, 84, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 68, 0, Math.PI * 2);
+    ctx.stroke();
+    // runes qui tournent, de plus en plus vite
+    ctx.rotate(t * (0.4 + k * 4));
+    ctx.fillStyle = ctx.strokeStyle;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.fillRect(Math.cos(a) * 76 - 3.5, Math.sin(a) * 76 - 3.5, 7, 7);
+    }
+    ctx.restore();
+    // étincelles qui montent juste avant le retour
+    if (soon && Math.random() < 0.2 + k * 0.6) this.fx.burst(x + (Math.random() - 0.5) * 100, y + (Math.random() - 0.5) * 40, '#F0B64A', 1, 40);
+    ctx.save();
+    ctx.font = '700 28px "Pixelify Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(8,14,12,0.8)';
+    ctx.fillStyle = soon ? '#F0B64A' : '#D8E4DA';
+    const label = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+    const s = soon ? 1 + 0.15 * pulse : 1;
+    ctx.translate(x, y - 6);
+    ctx.scale(s, s);
+    ctx.strokeText(label, 0, 0);
+    ctx.fillText(label, 0, 0);
+    ctx.font = '600 12px Outfit, sans-serif';
+    ctx.fillStyle = 'rgba(216,228,218,0.75)';
+    ctx.strokeText('retour du géant', 0, 20);
+    ctx.fillText('retour du géant', 0, 20);
+    ctx.restore();
+  }
+
   toast(text: string) {
     this.hud.toast(text);
   }
@@ -615,7 +661,18 @@ export class Game {
         const c = this.map.caves[e.cave];
         const near = c && (this.map.caveAt(this.me.x, this.me.y)?.id === c.id || Math.hypot(this.me.x - c.entrance.x, this.me.y - c.entrance.y) < 1500);
         if (e.down) this.hud.toast(`${bossName(e.s)} est vaincu ! Ouvre son coffre (E) · retour du géant dans 5 min.`, 'good');
-        else if (near) this.hud.toast(`${SPECIES[e.s].name} est de retour dans sa grotte…`);
+        else if (near) this.hud.toast(`${bossName(e.s)} est de retour dans sa grotte…`);
+        if (!e.down && c && this.map.caveAt(this.me.x, this.me.y)?.id === c.id) {
+          // il réapparaît sous nos yeux : le cercle d'invocation éclate
+          const x = c.inside.x, y = c.inside.y - 60, col = SPECIES[e.s].color;
+          this.fx.ring(x, y, '#F0B64A', 20, 220, 1.0);
+          this.fx.ring(x, y, col, 10, 150, 0.7);
+          this.fx.burst(x, y, col, 40, 240);
+          this.fx.burst(x, y, '#F0B64A', 20, 160);
+          this.fx.text(x, y - SPECIES[e.s].r - 50, bossName(e.s), '#F0B64A', 24, 2.2);
+          this.shake = 0.45;
+          sound.play('roar');
+        }
         break;
       }
       case 'awaken': {
@@ -826,6 +883,7 @@ export class Game {
     // seulement la grotte où l'on se trouve : jamais celle d'à côté
     const here = this.map.caveAt(camX, camY);
     if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
+    if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id]);
     const cs = this.world.campSize;
     ctx.drawImage(this.world.camp, spawn.x - cs / 2, spawn.y - cs / 2);
     const vs = this.world.villageSize;
