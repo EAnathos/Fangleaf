@@ -16,6 +16,8 @@ import { World } from './world.ts';
 import { WorldMap } from '../../shared/worldmap.ts';
 
 /** Dégâts affichés arrondis à 2 décimales, à la française : 6,4 · 12 · 4,85. */
+/** Nom propre d'un géant (sinon le nom de son espèce). */
+const bossName = (s: number) => SPECIES[s].title ?? SPECIES[s].name;
 const MIST_FADE_S = 2.5; // une brume qui se lève met ce temps à se dissiper
 const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
 
@@ -328,7 +330,7 @@ export class Game {
     const need: string[] = [];
     if (this.hud.hall < gateHall(k)) need.push(`Hôtel de ville niv. ${gateHall(k)}`);
     const left = k === 0 ? [] : zoneBosses(k).filter((b) => !this.hud.beaten.includes(b));
-    if (left.length) need.push(`vaincre ${left.map((b) => SPECIES[b].name).join(', ')}`);
+    if (left.length) need.push(`vaincre ${left.map(bossName).join(', ')}`);
     return need.join(' · ');
   }
 
@@ -441,7 +443,7 @@ export class Game {
           this.fx.ring(b.x, b.y, '#E8693F', 20, 160, 0.8);
         }
         this.shake = 0.35;
-        if (e.by !== this.myId) this.hud.toast(`${name(e.by)} a réveillé ${boss.name} !`);
+        if (e.by !== this.myId) this.hud.toast(`${name(e.by)} a réveillé ${bossName(this.map.caves[e.cave]?.boss ?? 0)} !`);
         break;
       }
       case 'chest':
@@ -483,7 +485,7 @@ export class Game {
         break;
       }
       case 'beaten':
-        this.hud.toast(`Première victoire du village sur ${SPECIES[e.s].name} !`, 'good');
+        this.hud.toast(`Première victoire du village sur ${bossName(e.s)} !`, 'good');
         break;
       case 'eat': {
         const b = this.map.bushes[e.bush];
@@ -537,7 +539,7 @@ export class Game {
       case 'boss': {
         const c = this.map.caves[e.cave];
         const near = c && (this.map.caveAt(this.me.x, this.me.y)?.id === c.id || Math.hypot(this.me.x - c.entrance.x, this.me.y - c.entrance.y) < 1500);
-        if (e.down) this.hud.toast(`${SPECIES[e.s].name} est vaincu ! Ouvre son coffre (E) · retour du géant dans 5 min.`, 'good');
+        if (e.down) this.hud.toast(`${bossName(e.s)} est vaincu ! Ouvre son coffre (E) · retour du géant dans 5 min.`, 'good');
         else if (near) this.hud.toast(`${SPECIES[e.s].name} est de retour dans sa grotte…`);
         break;
       }
@@ -844,9 +846,9 @@ export class Game {
             ctx.textAlign = 'center';
             ctx.lineWidth = 4;
             ctx.strokeStyle = 'rgba(16,24,26,0.85)';
-            ctx.strokeText(SPECIES[s].name, x, y - r * 1.6 - 14);
+            ctx.strokeText(SPECIES[s].title ?? SPECIES[s].name, x, y - r * 1.6 - 14);
             ctx.fillStyle = '#F0B64A';
-            ctx.fillText(SPECIES[s].name, x, y - r * 1.6 - 14);
+            ctx.fillText(SPECIES[s].title ?? SPECIES[s].name, x, y - r * 1.6 - 14);
             hpBar(ctx, x, y - r * 1.6 - 8, 90, hp, '#E8693F');
           } else if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
         },

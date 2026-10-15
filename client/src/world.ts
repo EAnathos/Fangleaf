@@ -906,7 +906,7 @@ export class World {
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(16,24,26,0.85)';
-    const label = `Grotte · ${SPECIES[c.boss].name}`;
+    const label = SPECIES[c.boss].title ?? SPECIES[c.boss].name; // le nom du géant qui l'habite
     ctx.strokeText(label, x, y - 128);
     ctx.fillStyle = bossHere ? '#FF9B78' : '#C9CFC2';
     ctx.fillText(label, x, y - 128);
