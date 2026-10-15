@@ -183,14 +183,14 @@ export class Game {
     const first = this.area === '';
     this.area = area;
     if (area === 'camp') this.hud.banner('Camp de départ', first ? 'Le village t\'attend au bout du chemin' : 'De retour au camp');
-    else if (area === 'village') this.hud.banner('Village', 'Feu de camp · Forge · Tanière · Marché · Pierre de passage');
+    else if (area === 'village') this.hud.banner('Village', '');
     else if (area.startsWith('site')) {
       if (area.endsWith('+')) this.hud.banner(campName(site), 'Feu de camp · réapparition · Pierre de passage');
       else this.hud.banner('Emplacement de camp', 'Établis-le pour tout le village (E) : soins, réapparition, voyage');
     }
     else if (cave) {
       const boss = SPECIES[cave.boss];
-      this.hud.banner(`Antre : ${boss.name}`, this.hud.caves[cave.id] ? 'Le géant n\'est pas encore revenu' : 'Il dort au fond de sa grotte : va lui parler (E) pour lancer le combat', true);
+      this.hud.banner(boss.title ?? boss.name, '', true); // le nom du géant qui habite la grotte
     }
     else {
       const z = Number(area.slice(4));

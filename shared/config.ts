@@ -116,10 +116,11 @@ export const REVIVE_HP = 0.5; // relevé avec la moitié de ses PV
 export const PLAYER_COLORS = ['#5CC8B8', '#E6A15C', '#D886C9'];
 
 export const ARMY_CAP = 12; // meute ordinaire (les Alphas ne comptent pas)
-export const RECALL_R = 320; // trop loin du dompteur : la meute lâche tout et revient
+export const RECALL_R = 420; // trop loin du dompteur : la meute lâche tout et revient
 export const RECALL_DONE_R = 110;
 export const TAME_CHANCE = 0.25;
-export const TAMED_MULT = 0.5; // un monstre apprivoisé a 50 % des PV et des dégâts de sa version sauvage
+export const TAMED_MULT = 0.5; // un monstre apprivoisé a 50 % des dégâts de sa version sauvage…
+export const TAMED_HP_MULT = 0.575; // … et 57,5 % de ses PV (+15 % par rapport à la moitié)
 export const GOLD_SHARE_R = 700;
 
 export const ALPHA_MULT = { hp: 2.5, dmg: 2.5, size: 1.6 }; // Alpha niv. 0 = 2,5× le monstre de base
@@ -258,6 +259,7 @@ export interface Species {
   pack: [number, number];
   boss?: boolean; // mini-boss de grotte : n'apparaît que dans sa grotte, ne s'apprivoise pas, lâche son âme
   base?: string; // boss : espèce dont il est la version géante (son âme rend légendaire l'Alpha de cette espèce)
+  title?: string; // boss : son nom propre (affiché en entrant dans sa grotte et quand on lui parle)
   sprite?: string; // apparence à réutiliser (par défaut : key)
   ranged?: Ranged; // tireur : attaque à distance (projectile esquivable) au lieu du corps à corps
   swim?: boolean; // sauvage, il ne quitte jamais l'eau (apprivoisé, il suit son dompteur sur terre)
@@ -291,24 +293,24 @@ export const SPECIES: Species[] = [
   { key: 'wisp', name: 'Feu follet', color: '#6FB7FF', r: 18, hp: 300, dmg: 40, speed: 110, atkCd: 1.2, gold: 22, zone: 4, population: 21, pack: [1, 2] },
   // Mini-boss des grottes : la version géante de chaque espèce. Leur « essence » est leur âme.
   // (ordre conservé : les index servent dans les sauvegardes)
-  { key: 'slime_queen', name: 'Gluant Géant', color: '#9BE070', r: 60, hp: 420, dmg: 8, speed: 190, atkCd: 1.1, gold: 60, zone: 1, population: 0, pack: [1, 1], boss: true, sprite: 'slime', base: 'slime' },
-  { key: 'shadow_fang', name: "Croc-d'Ombre", color: '#4A4E6A', r: 48, hp: 1150, dmg: 22, speed: 235, atkCd: 0.8, gold: 150, zone: 2, population: 0, pack: [1, 1], boss: true, sprite: 'wolf', base: 'wolf' },
-  { key: 'old_tusk', name: 'Vieille-Défense', color: '#6E3F24', r: 54, hp: 2700, dmg: 40, speed: 200, atkCd: 1.1, gold: 300, zone: 3, population: 0, pack: [1, 1], boss: true, sprite: 'boar', base: 'boar' },
-  { key: 'moss_heart', name: 'Cœur-de-Mousse', color: '#3F5E45', r: 63, hp: 6200, dmg: 65, speed: 185, atkCd: 1.5, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, sprite: 'golem', base: 'golem' },
-  { key: 'spore_giant', name: 'Champignon Géant', color: '#B8432E', r: 57, hp: 360, dmg: 6, speed: 205, atkCd: 1.2, gold: 60, zone: 1, population: 0, pack: [1, 1], boss: true, sprite: 'sporelin', base: 'sporelin' },
-  { key: 'weaver', name: 'Mère Tisseuse', color: '#4E3760', r: 51, hp: 1000, dmg: 24, speed: 220, atkCd: 0.9, gold: 150, zone: 2, population: 0, pack: [1, 1], boss: true, sprite: 'spider', base: 'spider' },
-  { key: 'colossus', name: 'Ours Colosse', color: '#4F3524', r: 63, hp: 3300, dmg: 34, speed: 190, atkCd: 1.3, gold: 300, zone: 3, population: 0, pack: [1, 1], boss: true, sprite: 'bear', base: 'bear' },
-  { key: 'old_flame', name: 'Feu Ancien', color: '#4F8BFF', r: 54, hp: 5000, dmg: 75, speed: 200, atkCd: 1.3, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, sprite: 'wisp', base: 'wisp' },
+  { key: 'slime_queen', name: 'Gluant Géant', color: '#9BE070', r: 60, hp: 420, dmg: 8, speed: 190, atkCd: 1.1, gold: 60, zone: 1, population: 0, pack: [1, 1], boss: true, title: 'Gélatine Ire, reine des Gluants', sprite: 'slime', base: 'slime' },
+  { key: 'shadow_fang', name: "Croc-d'Ombre", color: '#4A4E6A', r: 48, hp: 1150, dmg: 22, speed: 235, atkCd: 0.8, gold: 150, zone: 2, population: 0, pack: [1, 1], boss: true, title: 'Grisecroc le Hurleur', sprite: 'wolf', base: 'wolf' },
+  { key: 'old_tusk', name: 'Vieille-Défense', color: '#6E3F24', r: 54, hp: 2700, dmg: 40, speed: 200, atkCd: 1.1, gold: 300, zone: 3, population: 0, pack: [1, 1], boss: true, title: 'Grognard le Vieux Solitaire', sprite: 'boar', base: 'boar' },
+  { key: 'moss_heart', name: 'Cœur-de-Mousse', color: '#3F5E45', r: 63, hp: 6200, dmg: 65, speed: 185, atkCd: 1.5, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Moussegrave le Millénaire', sprite: 'golem', base: 'golem' },
+  { key: 'spore_giant', name: 'Champignon Géant', color: '#B8432E', r: 57, hp: 360, dmg: 6, speed: 205, atkCd: 1.2, gold: 60, zone: 1, population: 0, pack: [1, 1], boss: true, title: 'Amanite la Vénéneuse', sprite: 'sporelin', base: 'sporelin' },
+  { key: 'weaver', name: 'Mère Tisseuse', color: '#4E3760', r: 51, hp: 1000, dmg: 24, speed: 220, atkCd: 0.9, gold: 150, zone: 2, population: 0, pack: [1, 1], boss: true, title: 'Arachnée la Fileuse', sprite: 'spider', base: 'spider' },
+  { key: 'colossus', name: 'Ours Colosse', color: '#4F3524', r: 63, hp: 3300, dmg: 34, speed: 190, atkCd: 1.3, gold: 300, zone: 3, population: 0, pack: [1, 1], boss: true, title: 'Ursus Mâchefer', sprite: 'bear', base: 'bear' },
+  { key: 'old_flame', name: 'Feu Ancien', color: '#4F8BFF', r: 54, hp: 5000, dmg: 75, speed: 200, atkCd: 1.3, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Lueur, la Flamme Ancienne', sprite: 'wisp', base: 'wisp' },
   // Itération 16 : un tireur dans les Ruines moussues, et la zone 5 (Lacs brumeux) au-delà du Camp avancé.
   { key: 'watcher', name: 'Guetteur runique', color: '#6E7570', r: 22, hp: 320, dmg: 38, speed: 55, atkCd: 2.0, gold: 20, zone: 4, population: 22, pack: [1, 2], ranged: { kind: 'bolt', range: 320, windup: 0.6, speed: 260 } },
   { key: 'toad', name: 'Crapaud-mortier', color: '#6E8F45', r: 24, hp: 900, dmg: 50, speed: 75, atkCd: 2.4, gold: 40, zone: 5, population: 18, pack: [1, 2], ranged: { kind: 'arc', range: 340, windup: 0.55, speed: 0, splash: 52 } },
   { key: 'serpent', name: 'Serpent des brumes', color: '#4A93A0', r: 22, hp: 700, dmg: 45, speed: 105, atkCd: 1.8, gold: 36, zone: 5, population: 16, pack: [1, 1], ranged: { kind: 'jet', range: 360, windup: 0.45, speed: 560 }, swim: true },
   { key: 'crab', name: 'Crabe des berges', color: '#D46A43', r: 24, hp: 1400, dmg: 55, speed: 70, atkCd: 1.4, gold: 45, zone: 5, population: 16, pack: [1, 2] },
   // Géants des nouvelles espèces : une grotte chacun (zone 4 : Œil des Ruines ; zone 5 : les trois autres).
-  { key: 'rune_eye', name: 'Œil des Ruines', color: '#5E6662', r: 57, hp: 5500, dmg: 70, speed: 185, atkCd: 1.4, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, sprite: 'watcher', base: 'watcher' },
-  { key: 'toad_king', name: 'Crapaud-Roi', color: '#5F8A3A', r: 60, hp: 11000, dmg: 100, speed: 190, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'toad', base: 'toad' },
-  { key: 'mist_hydra', name: 'Hydre des brumes', color: '#3E8290', r: 57, hp: 9500, dmg: 95, speed: 205, atkCd: 1.2, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'serpent', base: 'serpent' },
-  { key: 'titan_crab', name: 'Crabe Titan', color: '#B9532F', r: 63, hp: 14000, dmg: 110, speed: 185, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'crab', base: 'crab' },
+  { key: 'rune_eye', name: 'Œil des Ruines', color: '#5E6662', r: 57, hp: 5500, dmg: 70, speed: 185, atkCd: 1.4, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Œil-de-Pierre le Veilleur', sprite: 'watcher', base: 'watcher' },
+  { key: 'toad_king', name: 'Crapaud-Roi', color: '#5F8A3A', r: 60, hp: 11000, dmg: 100, speed: 190, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Croâ XIV, roi des Mares', sprite: 'toad', base: 'toad' },
+  { key: 'mist_hydra', name: 'Hydre des brumes', color: '#3E8290', r: 57, hp: 9500, dmg: 95, speed: 205, atkCd: 1.2, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Brumentine aux Trois Têtes', sprite: 'serpent', base: 'serpent' },
+  { key: 'titan_crab', name: 'Crabe Titan', color: '#B9532F', r: 63, hp: 14000, dmg: 110, speed: 185, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Pince-d’Acier le Titan', sprite: 'crab', base: 'crab' },
   // Gibier passif : il broute les buissons à fruits et s'enfuit quand on le frappe (pas de géant). S'apprivoise surtout aux baies.
   { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 30, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 3, population: 20, pack: [1, 3], passive: true },
   { key: 'snail', name: 'Escargot des mousses', color: '#C99A5B', r: 12, hp: 22, dmg: 1, speed: 32, atkCd: 1.4, gold: 2, zone: 1, population: 20, pack: [1, 2], passive: true },
@@ -336,10 +338,11 @@ export const BUSH_PICK_R = 80; // distance pour cueillir
 export const FEED_CD = 1; // s entre deux fruits donnés
 export const LURE_R = 340; // le gibier passif voit un fruit tendu de cette distance
 export const fruitTameChance = (species: number) => (SPECIES[species].passive ? 0.34 : 0.05);
+export const FRUIT_ESSENCE = 0.25; // un fruit mangé par un gibier passif (sans l'apprivoiser) peut laisser une essence
 
 export const WILD_AGGRO_R = 220;
 export const WILD_REGEN_DELAY = 4; // s sans être frappé avant que le monstre sauvage récupère
 export const WILD_REGEN = 0.08; // part des PV max récupérée par seconde ensuite
 export const WILD_LEASH_R = 650;
-export const FOLLOW_ENGAGE_R = 260; // la meute engage les ennemis à cette distance du dompteur
-export const FOLLOW_MAX_R = 300; // une cible plus loin du dompteur est abandonnée
+export const FOLLOW_ENGAGE_R = 320; // la meute engage les ennemis à cette distance du dompteur
+export const FOLLOW_MAX_R = 400; // une cible plus loin du dompteur est abandonnée

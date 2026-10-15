@@ -400,7 +400,7 @@ const noop = () => {};
     r.killUnit(w, p);
     if (w.owner === p.id) tamed = w;
   }
-  check(!!tamed && tamed.maxHp === Math.round(SPECIES[1].hp * 0.5) && tamed.dmg === Math.round(SPECIES[1].dmg * 0.5),
+  check(!!tamed && tamed.maxHp === Math.round(SPECIES[1].hp * 0.575) && tamed.dmg === Math.round(SPECIES[1].dmg * 0.5),
     `Loup apprivoisé : ${tamed?.maxHp} PV / ${tamed?.dmg} dégâts (sauvage : ${SPECIES[1].hp} / ${SPECIES[1].dmg})`);
 }
 
@@ -490,7 +490,7 @@ const noop = () => {};
   const r2 = room();
   const p2 = r2.addPlayer('a', noop, { userId: 'u1', profile: prof });
   const back = p2.army.map((id: number) => r2.units.get(id));
-  check(back.length === 3 && back.every((u: { maxHp: number; s: number }) => u.maxHp === Math.round(SPECIES[u.s].hp * 0.5)), 'meute retrouvée à la reconnexion (stats d\'apprivoisés)');
+  check(back.length === 3 && back.every((u: { maxHp: number; s: number }) => u.maxHp === Math.round(SPECIES[u.s].hp * 0.575)), 'meute retrouvée à la reconnexion (stats d\'apprivoisés)');
 }
 
 {
@@ -1238,6 +1238,18 @@ const noop = () => {};
     p.army = [];
   }
   check(wild > 0 && wild / n < 0.12, `Gluant hostile nourri : ${wild} apprivoisés sur ${n} fruits`);
+  // Un gibier passif nourri sans être apprivoisé laisse parfois une essence de son espèce.
+  const ess0 = p.essences[snail];
+  for (let i = 0; i < 120; i++) {
+    const w = r.createUnit(snail, false, p.x + 20, p.y);
+    p.atkCd = 0;
+    p.army = [];
+    r.grid.clear();
+    r.grid.insert(w);
+    r.feed(p);
+    r.units.delete(w.id);
+  }
+  check(p.essences[snail] > ess0, `escargots nourris : ${p.essences[snail] - ess0} essences d'Escargot obtenues`);
   p.holding = true;
   p.fruits = 0;
   p.atkCd = 0;
@@ -1338,13 +1350,13 @@ const noop = () => {};
   r.onAttack(p, foe.x, foe.y);
   for (let i = 0; i < 4; i++) r.step();
   check(foe.hp < 9999, 'un clic sur le monstre : il est frappé');
-  // dans le vide : le coup part quand même ; un gibier passif sur la trajectoire est touché
+  // dans le vide : le coup part quand même, mais un gibier passif n'est jamais touché
   const hare = r.createUnit(SPECIES.findIndex((sp) => sp.key === 'snail'), false, p.x - 30, p.y);
   const before = foe.hp;
   p.atkCd = 0;
   r.onAttack(p, p.x - 200, p.y);
   for (let i = 0; i < 3; i++) r.step();
-  check(foe.hp === before && hare.hp < hare.maxHp, 'clic dans l\'autre sens : le golem n\'est pas touché, l\'escargot si');
+  check(foe.hp === before && hare.hp === hare.maxHp, 'clic vers l\'escargot : ni lui (gibier passif) ni le golem derrière ne sont touchés');
   p.cls = 'archer';
   p.atkCd = 0;
   const far = r.createUnit(3, false, p.x, p.y - 250);

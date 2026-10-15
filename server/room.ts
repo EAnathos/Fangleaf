@@ -1,10 +1,10 @@
 // Un village : jusqu'à 3 joueurs, la carte et sa simulation autoritaire.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
-  PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_MULT, VIEW_R,
+  PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
   armorMaxHp, armorReduction, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
@@ -1110,7 +1110,7 @@ export class Room {
   /**
    * Attaque au clic, dans la direction visée, qu'il y ait un monstre ou non : le guerrier frappe en arc devant lui,
    * l'archer tire en ligne droite (le premier monstre sur la trajectoire), l'orbe du mage explose au point visé
-   * (dans sa portée). Tout monstre sauvage peut être touché, gibier passif compris (pas un géant endormi).
+   * (dans sa portée). Tout monstre sauvage hostile peut être touché (jamais le gibier passif ni un géant endormi).
    * Rien touché au corps à corps : il récolte le filon ou le tas à portée.
    */
   private aimedAttack(p: Player) {
@@ -1118,7 +1118,7 @@ export class Room {
     const reach = PLAYER_R + cls.range;
     const d = Math.hypot(p.aimX - p.x, p.aimY - p.y) || 1, ux = (p.aimX - p.x) / d, uy = (p.aimY - p.y) / d;
     const dmg = weaponDmg(p.weapon) * cls.dmg;
-    const prey = (e: Ent) => this.isFeedable(e) && this.alive(e);
+    const prey = (e: Ent) => this.isWild(e) && this.alive(e); // jamais le gibier passif, même au clic
     if (p.cls === 'mage') {
       p.atkCd = cls.cd;
       const k = Math.min(d, reach), bx = p.x + ux * k, by = p.y + uy * k;
@@ -1193,7 +1193,14 @@ export class Room {
     if (Math.random() < fruitTameChance(t.s)) {
       this.makeTamed(t, p);
       this.events.push({ e: 'tame', id: t.id, by: p.id, s: t.s });
-    } else this.events.push({ e: 'feed', by: p.id, id: t.id });
+    } else {
+      this.events.push({ e: 'feed', by: p.id, id: t.id });
+      if (SPECIES[t.s].passive && Math.random() < FRUIT_ESSENCE) {
+        // repu, le gibier laisse parfois une essence de son espèce
+        p.essences[t.s] += 1;
+        this.events.push({ e: 'essence', to: p.id, s: t.s, x: t.x, y: t.y });
+      }
+    }
     if (p.fruits <= 0) p.holding = false;
   }
 
@@ -1941,7 +1948,7 @@ export class Room {
     const sp = SPECIES[u.s];
     u.owner = p.id;
     u.idle = false;
-    u.maxHp = Math.max(1, Math.round(sp.hp * TAMED_MULT));
+    u.maxHp = Math.max(1, Math.round(sp.hp * TAMED_HP_MULT));
     u.dmg = Math.max(1, Math.round(sp.dmg * TAMED_MULT));
     u.hp = u.maxHp;
     u.target = 0;

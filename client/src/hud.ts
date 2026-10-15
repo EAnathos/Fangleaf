@@ -1,8 +1,8 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_TALK_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
-  BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
+  BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
 import type { PlayerState, UnitTuple } from '../../shared/protocol.ts';
@@ -317,12 +317,14 @@ export class Hud {
     $('self-fruits').textContent = `Baies ${me.fruits}`;
     // au doigt seulement (sur PC : touche T) : tendre ou ranger un fruit
     const hold = $('hold-btn');
-    hold.hidden = !me.fruits && !me.holding;
     hold.classList.toggle('on', me.holding);
     hold.textContent = me.holding ? 'Ranger le fruit' : 'Tendre un fruit';
     $('self-army').textContent = `Meute ${me.army.filter((a) => !a.alpha).length}/${ARMY_CAP}`;
     $('ping').textContent = ping ? `${ping} ms` : '';
     $('invite').hidden = players.length >= MAX_PLAYERS; // village complet : plus personne à inviter
+    // au doigt, « Tendre un fruit » seulement près d'un gibier passif (ou si on en tend déjà un)
+    const prey = units.some((u) => !u[6] && SPECIES[u[1]].passive && Math.hypot(u[3] - myPos.x, u[4] - myPos.y) < LURE_R);
+    $('hold-btn').hidden = me.holding ? false : !me.fruits || !prey;
 
     // Groupe.
     const others = players.filter((p) => p.id !== me.id);
@@ -455,7 +457,7 @@ export class Hud {
     if (!c) return;
     const sp = SPECIES[c.boss];
     if (this.talker[0]?.s !== c.boss) {
-      $('talk-title').textContent = sp.name;
+      $('talk-title').textContent = sp.title ?? sp.name;
       $('talk-line').textContent = `« ${BOSS_LINES[sp.key]?.intro ?? '…'} »`;
       $('talk-portrait').setAttribute('aria-label', sp.name);
       this.talker = [{ canvas: $<HTMLCanvasElement>('talk-portrait'), s: c.boss, seen: true }];
@@ -485,6 +487,7 @@ export class Hud {
   private initSettings(founder: boolean) {
     this.founder = founder;
     $('settings-open').onclick = () => this.setPanel('settings');
+    $('menu-open').onclick = () => this.setPanel(this.panel === 'quit' ? null : 'quit');
     $('set-pc').hidden = touchOnly;
     const mode = () => {
       $('atk-auto').setAttribute('aria-checked', String(settings.attack === 'auto'));
@@ -676,8 +679,8 @@ export class Hud {
           btn.dataset.buy = String(s);
           btn.disabled = full || me.gold < price;
           btn.textContent = full ? 'Meute pleine' : me.gold < price ? `Il te faut ${price} or` : `Acheter · ${price} or`;
-          const sp = SPECIES[s], tamed = (n: number) => Math.max(1, Math.round(n * TAMED_MULT)); // mêmes stats que dans la meute
-          return row(s, `Zone ${sp.zone} · ${tamed(sp.hp)} PV · ${tamed(sp.dmg)} dégâts`, btn);
+          const sp = SPECIES[s], tamed = (n: number, k: number) => Math.max(1, Math.round(n * k)); // mêmes stats que dans la meute
+          return row(s, `Zone ${sp.zone} · ${tamed(sp.hp, TAMED_HP_MULT)} PV · ${tamed(sp.dmg, TAMED_MULT)} dégâts`, btn);
         })
         : [Object.assign(document.createElement('p'), { className: 'small muted', textContent: 'Aucune espèce croisée pour l\'instant.' })]),
     );
