@@ -144,33 +144,121 @@ function slime(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   eyes(ctx, r * 0.12, -r * 0.05, r * 0.32, r * 0.14, '#10181A', u.wild);
 }
 
-function wolf(ctx: Ctx, r: number, fill: string, u: UnitLook) {
-  ctx.fillStyle = fill;
-  // queue
+/**
+ * Loup cendré : fourrure épaisse en touffes (contours dentelés), gris charbon, reflet clair le long de l'échine,
+ * poitrail et museau plus clairs, regard ambre qui luit. Le géant (Grisecroc) porte la même robe, plus sombre.
+ */
+const WOLF_COAT = { fur: '#5C6066', shade: '#3E4247', dark: '#2C2F33', light: '#8E949C', eye: '#F0B64A' };
+const SHADOW_WOLF_COAT = { fur: '#44474F', shade: '#2E3036', dark: '#1F2125', light: '#6E747E', eye: '#E8693F' };
+
+function wolf(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
+  const coat = SPECIES[u.species]?.boss ? SHADOW_WOLF_COAT : WOLF_COAT;
+  const fur = u.flash ? '#FFFFFF' : coat.fur, shade = u.flash ? '#FFFFFF' : coat.shade, dark = u.flash ? '#FFFFFF' : coat.dark;
+  const line = (rr: number) => {
+    ctx.strokeStyle = 'rgba(12,18,16,0.6)';
+    ctx.lineWidth = Math.max(1.5, rr * 0.1);
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  };
+  // touffes : une ellipse au contour dentelé
+  const tufts = (cx: number, cy: number, rx: number, ry: number, n: number, col: string) => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    for (let k = 0; k <= n * 2; k++) {
+      const a = (k / (n * 2)) * TAU, d = k % 2 ? 1 : 1.18;
+      const x = cx + Math.cos(a) * rx * d, y = cy + Math.sin(a) * ry * d;
+      if (k) ctx.lineTo(x, y);
+      else ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+  const leg = (x: number, y: number, w: number, h: number, sw: number, col: string) => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2 + sw, y, w, h, w * 0.4);
+    ctx.fill();
+  };
+  const step = Math.sin(u.t * 9 + u.seed) * r * 0.08;
+  // queue touffue qui balance
+  ctx.save();
+  ctx.translate(-0.85 * r, -0.05 * r);
+  ctx.rotate(-0.45 + Math.sin(u.t * 6 + u.seed) * 0.15);
+  tufts(-0.38 * r, 0, 0.42 * r, 0.2 * r, 7, shade);
+  line(r);
+  ctx.restore();
+  for (const [x, sw] of [[-0.6, step], [0.42, -step]] as const) leg(x * r, 0.3 * r, 0.2 * r, 0.5 * r, sw, dark);
+  // corps, ventre dans l'ombre, reflet le long de l'échine
+  tufts(-0.12 * r, -0.02 * r, 0.82 * r, 0.42 * r, 11, fur);
+  line(r);
+  ctx.fillStyle = shade;
   ctx.beginPath();
-  ctx.ellipse(-r * 1.05, -r * 0.1, r * 0.45, r * 0.18, -0.6 + Math.sin(u.t * 8 + u.seed) * 0.25, 0, TAU);
+  ctx.ellipse(-0.12 * r, 0.24 * r, 0.6 * r, 0.13 * r, 0, 0, TAU);
   ctx.fill();
+  if (!u.flash) {
+    ctx.save();
+    ctx.globalAlpha = 0.75;
+    tufts(-0.15 * r, -0.3 * r, 0.6 * r, 0.1 * r, 8, coat.light);
+    ctx.restore();
+  }
+  for (const [x, sw] of [[-0.4, -step], [0.46, step]] as const) leg(x * r, 0.28 * r, 0.22 * r, 0.54 * r, sw, shade);
+  // grosse fourrure du cou, poitrail clair, puis la tête
+  tufts(0.55 * r, -0.08 * r, 0.36 * r, 0.38 * r, 8, fur);
+  line(r);
+  if (!u.flash) tufts(0.62 * r, 0.06 * r, 0.16 * r, 0.2 * r, 5, coat.light);
+  ctx.fillStyle = fur;
   ctx.beginPath();
-  ctx.ellipse(0, r * 0.1, r * 1.1, r * 0.68, 0, 0, TAU);
+  ctx.moveTo(0.5 * r, -0.42 * r);
+  ctx.quadraticCurveTo(0.8 * r, -0.6 * r, 1.0 * r, -0.3 * r);
+  ctx.lineTo(1.32 * r, -0.14 * r);
+  ctx.quadraticCurveTo(1.38 * r, 0.02 * r, 1.22 * r, 0.06 * r);
+  ctx.quadraticCurveTo(0.9 * r, 0.14 * r, 0.62 * r, 0.04 * r);
+  ctx.closePath();
   ctx.fill();
-  ink(ctx, r);
-  // oreilles
-  ctx.beginPath();
-  ctx.moveTo(r * 0.05, -r * 0.35); ctx.lineTo(r * 0.25, -r * 1.05); ctx.lineTo(r * 0.5, -r * 0.4);
-  ctx.moveTo(r * 0.5, -r * 0.4); ctx.lineTo(r * 0.8, -r * 1.0); ctx.lineTo(r * 0.95, -r * 0.25);
-  ctx.fill();
-  // museau
-  ctx.fillStyle = u.flash ? '#FFFFFF' : '#C7CDD8';
-  ctx.beginPath();
-  ctx.ellipse(r * 0.85, r * 0.2, r * 0.38, r * 0.26, 0, 0, TAU);
-  ctx.fill();
+  line(r);
+  for (const ox of [0.58, 0.76]) {
+    ctx.fillStyle = shade;
+    ctx.beginPath();
+    ctx.moveTo(ox * r, -0.44 * r);
+    ctx.lineTo((ox + 0.05) * r, -0.78 * r);
+    ctx.lineTo((ox + 0.17) * r, -0.42 * r);
+    ctx.closePath();
+    ctx.fill();
+    line(r * 0.5);
+  }
+  if (!u.flash) {
+    ctx.fillStyle = coat.light; // museau plus clair
+    ctx.beginPath();
+    ctx.ellipse(1.12 * r, -0.03 * r, 0.18 * r, 0.07 * r, -0.2, 0, TAU);
+    ctx.fill();
+  }
   ctx.fillStyle = '#10181A';
   ctx.beginPath();
-  ctx.arc(r * 1.15, r * 0.12, r * 0.09, 0, TAU);
+  ctx.ellipse(1.33 * r, -0.12 * r, 0.07 * r, 0.055 * r, 0, 0, TAU);
   ctx.fill();
-  eyes(ctx, r * 0.5, -r * 0.08, r * 0.2, r * 0.11, u.alpha ? '#B48CFF' : '#F0B64A', u.wild);
+  // œil qui luit (violet pour un Alpha), sourcil froncé chez le sauvage
+  const iris = u.alpha ? '#B48CFF' : coat.eye, ex = 0.92 * r, ey = -0.27 * r, es = 0.08 * r;
+  ctx.save();
+  ctx.shadowColor = iris;
+  ctx.shadowBlur = r * 0.35;
+  ctx.fillStyle = iris;
+  ctx.beginPath();
+  ctx.ellipse(ex, ey, es * 1.2, es, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = '#10181A';
+  ctx.beginPath();
+  ctx.ellipse(ex + es * 0.2, ey, es * 0.45, es * 0.8, 0, 0, TAU);
+  ctx.fill();
+  if (u.wild) {
+    ctx.strokeStyle = '#10181A';
+    ctx.lineWidth = Math.max(1.5, es * 0.7);
+    ctx.beginPath();
+    ctx.moveTo(ex - es * 1.6, ey - es * 1.9);
+    ctx.lineTo(ex + es * 1.3, ey - es * 0.9);
+    ctx.stroke();
+  }
 }
-
 
 function golem(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   ctx.fillStyle = u.flash ? '#FFFFFF' : '#4A5F47';
