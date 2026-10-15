@@ -2101,7 +2101,7 @@ export class Room {
       const cave = this.caveBoss.indexOf(u.id);
       if (cave >= 0) {
         const c = this.map.caves[cave];
-        const at = this.map.freeNear(c.inside.x, c.inside.y - 60); // là où le géant dormait
+        const at = this.map.freeNear(c.inside.x, c.inside.y - 190); // au fond, derrière la place du géant (son compte à rebours reste visible)
         this.chests.push({ id: this.nextId++, cave, s: u.s, x: at.x, y: at.y, opened: new Set(), eligible: new Set(u.hitters) });
         this.caveBoss[cave] = 0;
         this.caveBack[cave] = this.time + BOSS_RESPAWN_S;

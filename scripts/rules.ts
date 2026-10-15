@@ -342,7 +342,7 @@ const noop = () => {};
   }
   check(souls > 0 && souls <= 3, `âme lâchée parfois, jamais plus de 3 en poche (${souls} après 40 victoires)`);
   const chest = r.chests.find((ch: { cave: number }) => ch.cave === c.id);
-  check(!!chest && Math.hypot(chest.x - c.inside.x, chest.y - (c.inside.y - 60)) < 60, 'le coffre apparaît là où dormait le géant');
+  check(!!chest && Math.hypot(chest.x - c.inside.x, chest.y - (c.inside.y - 190)) < 60, 'le coffre apparaît au fond de la grotte, derrière la place du géant');
   check(r.caveBoss[c.id] === 0 && r.caveBack[c.id] > r.time + BOSS_RESPAWN_S - 1, 'le mini-boss reviendra après le délai');
   check(!p.army.some((id: number) => r.units.get(id)?.s === c.boss), 'un mini-boss ne s\'apprivoise pas');
   [p.x, p.y] = [c.exit.x, c.exit.y];
