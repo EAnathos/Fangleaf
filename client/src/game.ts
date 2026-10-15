@@ -1,7 +1,7 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
 import { alphaStats, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
-import { clamp } from '../../shared/math.ts';
+import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
 import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
@@ -16,6 +16,7 @@ import { World } from './world.ts';
 import { WorldMap } from '../../shared/worldmap.ts';
 
 /** Dégâts affichés arrondis à 2 décimales, à la française : 6,4 · 12 · 4,85. */
+const MIST_FADE_S = 2.5; // une brume qui se lève met ce temps à se dissiper
 const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
 
 export class Game {
@@ -200,6 +201,60 @@ export class Game {
     }
   }
 
+  /**
+   * Brume des zones fermées : des bancs de nuages couvrent tout ce qui est au-delà de la première porte fermée
+   * (on ne peut pas y entrer). À sa lisière, ce qu'il faut pour la lever. Une porte qui s'ouvre se dissipe en fondu.
+   */
+  private drawMist(camX: number, camY: number, hw: number, hh: number) {
+    const { ctx, map } = this;
+    const closed = map.gates.findIndex((_, k) => !this.gateOpen(k));
+    const fogArc = closed < 0 ? Infinity : map.gates[closed];
+    const fading = [...this.mistLifted].filter(([k, t]) => this.time - t < MIST_FADE_S && map.gates[k] < fogArc);
+    if (fogArc === Infinity && !fading.length) return;
+    if (!this.puff) {
+      // nuage rond et doux, pré-rendu une fois
+      const c = (this.puff = document.createElement('canvas'));
+      c.width = c.height = 128;
+      const g = c.getContext('2d')!, grad = g.createRadialGradient(64, 64, 6, 64, 64, 64);
+      grad.addColorStop(0, 'rgba(226,232,236,0.95)');
+      grad.addColorStop(0.55, 'rgba(206,214,220,0.7)');
+      grad.addColorStop(1, 'rgba(190,200,208,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 128, 128);
+    }
+    const STEP = 64, feather = 140;
+    // densité : 0 avant la lisière, 1 un peu après ; idem (en s'estompant) pour une brume qui se lève
+    const density = (a: number) => {
+      let d = Math.min(1, Math.max(0, (a - (fogArc - feather)) / (feather * 1.6)));
+      for (const [k, t] of fading) {
+        if (a > map.gates[k] - feather && a < fogArc) d = Math.max(d, Math.min(1, (a - (map.gates[k] - feather)) / (feather * 1.6)) * (1 - (this.time - t) / MIST_FADE_S));
+      }
+      return d;
+    };
+    for (let gx = Math.floor((camX - hw - 120) / STEP); gx <= (camX + hw + 120) / STEP; gx++) {
+      for (let gy = Math.floor((camY - hh - 120) / STEP); gy <= (camY + hh + 120) / STEP; gy++) {
+        const h = hash2(gx, gy, 41);
+        const x = gx * STEP + (h - 0.5) * 40, y = gy * STEP + (hash2(gy, gx, 43) - 0.5) * 40;
+        if (Math.abs(x) >= WORLD_HALF || Math.abs(y) >= WORLD_HALF) continue;
+        const d = density(map.arcAt(x, y));
+        if (d <= 0) continue;
+        const size = 150 + h * 90, drift = Math.sin(this.time * 0.25 + h * 9) * 14;
+        ctx.globalAlpha = d * 0.85;
+        ctx.drawImage(this.puff, x + drift - size / 2, y - size / 2 + Math.cos(this.time * 0.2 + h * 7) * 8, size, size);
+      }
+    }
+    ctx.globalAlpha = 1;
+    // panneau à la lisière de la brume : la zone, et ce qu'il faut pour la lever
+    if (closed >= 0) {
+      const c = map.spineAt(fogArc - 90);
+      if (Math.abs(c.x - camX) < hw + 300 && Math.abs(c.y - camY) < hh + 300) {
+        this.world.drawGateLabel(ctx, c.x, c.y, closed === 0 ? 'Brume · suite de la Lisière' : `Brume · ${ZONE_NAMES[closed]}`, this.gateWhy(closed));
+      }
+    }
+  }
+  private puff?: HTMLCanvasElement;
+  private mistLifted = new Map<number, number>(); // porte → moment où sa brume a commencé à se lever
+
   /** « z z z » qui montent en s'estompant au-dessus d'un dormeur. */
   private snore(x: number, y: number, size: number, seed: number) {
     const { ctx } = this;
@@ -233,7 +288,8 @@ export class Game {
     if (this.gatesOpen && this.net.latest) {
       open.forEach((o, k) => {
         if (!o || this.gatesOpen![k]) return;
-        this.hud.toast(k === 0 ? 'La porte du village est ouverte : la Lisière vous attend !' : `La porte des ${ZONE_NAMES[k]} (zone ${k + 1}) est ouverte !`, 'good');
+        this.mistLifted.set(k, this.time); // sa brume se dissipe en fondu
+        this.hud.toast(k === 0 ? 'La brume se lève : la Lisière vous attend !' : `La brume se lève sur les ${ZONE_NAMES[k]} !`, 'good');
         const c = this.map.spineAt(this.map.gates[k]);
         this.fx.ring(c.x, c.y, '#7FCB5B', 20, 260, 1.2);
       });
@@ -559,7 +615,7 @@ export class Game {
       else if (ok(this.me.x, ny)) this.me.y = ny;
       if (shut >= 0 && this.time - this.gateToast > 4) {
         this.gateToast = this.time;
-        this.hud.toast(`${shut === 0 ? 'Porte du village' : `Porte des ${ZONE_NAMES[shut]}`} fermée · ${this.gateWhy(shut)}`);
+        this.hud.toast(`La brume bloque le passage · ${this.gateWhy(shut)}`);
       }
       const l = Math.hypot(dx, dy);
       this.me.fx = dx / l;
@@ -649,11 +705,6 @@ export class Game {
     this.world.drawHall(ctx, this.hud.hall, this.time);
     this.world.drawStore(ctx, this.hud.stock);
     ctx.restore();
-    // Portes des zones (dans le couloir, à l'écran) : palissade en travers, couchée une fois ouverte.
-    const gates = this.map.gates.map((g, k) => k).filter((k) => {
-      const c = this.map.spineAt(this.map.gates[k]);
-      return !here && inView(c.x, c.y, 1100);
-    });
     const camps = this.net.latest?.camps ?? [];
     this.map.sites.forEach((c, i) => inView(c.x, c.y, 260) && this.world.drawSite(ctx, i, camps.includes(i), this.time));
 
@@ -701,7 +752,6 @@ export class Game {
       const lid = opened ? (at === undefined ? 1 : Math.min(1, (this.time - at) / 0.45)) : 0;
       list.push({ y, draw: () => drawChest(ctx, x, y, lid, this.time, drop) });
     }
-    for (const k of gates) list.push(...this.world.gateParts(ctx, k, this.gateOpen(k)).filter((p) => p.y > camY - hh - 80 && p.y < camY + hh + 80));
     const oreState = new Map(this.net.latest?.ores ?? []);
     // Filons et tas épuisés : disparus (on passe à travers, comme sur le serveur) jusqu'à leur retour.
     for (const [id, hp] of oreState) {
@@ -834,10 +884,7 @@ export class Game {
     }
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.draw();
-    for (const k of gates) {
-      const open = this.gateOpen(k);
-      this.world.drawGateLabel(ctx, k, open, k === 0 ? 'Porte du village' : `Porte · ${ZONE_NAMES[k]}`, open ? '' : this.gateWhy(k));
-    }
+    if (!here) this.drawMist(camX, camY, hw, hh);
     for (const [, kind, x, y, a, b, c] of shots) {
       if (kind === 1) drawShot(ctx, kind, x, y, a, b, Math.min(100, c + (late * 100) / ARC_FLIGHT_S), this.time);
       else drawShot(ctx, kind, x + a * late, y + b * late, a, b, 0, this.time);

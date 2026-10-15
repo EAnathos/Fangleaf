@@ -993,9 +993,22 @@ export class Room {
     }
   }
 
+  /** Abscisse de la première porte fermée : au-delà, tout est sous la brume (rien n'y apparaît). */
+  private fogArc() {
+    const k = this.map.gates.findIndex((_, i) => !this.gateIsOpen(i));
+    return k < 0 ? Infinity : this.map.gates[k];
+  }
+
+  /** Zone ouverte au village : la zone 1, puis chaque zone dont la porte s'est ouverte. */
+  private zoneOpen(z: number) {
+    return z <= 1 || this.gateIsOpen(z - 1);
+  }
+
   private spawnPack(s: SpeciesId): boolean {
     const sp = SPECIES[s];
     const { map } = this;
+    if (!this.zoneOpen(sp.zone)) return false; // zone encore sous la brume : pas de monstre
+    const fog = this.fogArc();
     // On vise le tronçon du couloir de la zone, puis on vérifie la zone réelle (frontières déformées par le bruit).
     const zl = map.length / ZONES;
     for (let attempt = 0; attempt < 40; attempt++) {
@@ -1015,6 +1028,7 @@ export class Room {
         [cx, cy] = [c.x + nv.x * off, c.y + nv.y * off];
       }
       if ((sp.swim ? !map.isWater(cx, cy) : map.blocked(cx, cy)) || map.zoneAt(cx, cy) !== sp.zone) continue;
+      if (map.arcAt(cx, cy) > fog - 150) continue; // jamais dans la brume (ni tout contre)
       if (map.inVillage(cx, cy, 250) || dist2(cx, cy, map.spawn.x, map.spawn.y) < SPAWN_SAFE_R ** 2) continue;
       if (map.siteAt(cx, cy, CAMP_R + 300) >= 0) continue;
       let tooClose = false;

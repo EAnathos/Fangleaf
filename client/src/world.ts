@@ -545,84 +545,20 @@ export class World {
     ctx.fillText(label, x, y - 74);
   }
 
-  /**
-   * Porte k : une palissade en travers du couloir, en pièces à trier en profondeur avec les créatures.
-   * Fermée, pieux dressés et portail clos ; ouverte, les pieux sont couchés et le portail grand ouvert.
-   */
-  gateParts(ctx: CanvasRenderingContext2D, k: number, open: boolean): { y: number; draw: () => void }[] {
-    const { map } = this;
-    const s = map.gates[k], c = map.spineAt(s), n = map.normalAt(s), half = map.halfWidth(s) + 180;
-    const tx = n.y, ty = -n.x; // le long du couloir
-    const parts: { y: number; draw: () => void }[] = [];
-    for (let o = -half; o <= half; o += 22) {
-      if (Math.abs(o) < 46) continue; // le portail, au milieu
-      const px = c.x + n.x * o, py = c.y + n.y * o;
-      if (map.isWater(px, py) || map.isForest(px, py)) continue;
-      const h = 30 + hash2(Math.round(o), k, this.seed) * 10;
-      parts.push({ y: py, draw: () => {
-        if (open) {
-          // pieu couché au sol
-          ctx.strokeStyle = '#6B4A33';
-          ctx.lineWidth = 7;
-          ctx.lineCap = 'round';
-          ctx.beginPath();
-          ctx.moveTo(px - tx * 4, py - ty * 4);
-          ctx.lineTo(px + tx * (h - 6), py + ty * (h - 6) + 4);
-          ctx.stroke();
-          return;
-        }
-        ctx.fillStyle = 'rgba(8,14,12,0.3)';
-        ctx.beginPath();
-        ctx.ellipse(px + 3, py + 4, 9, 4, 0, 0, TAU);
-        ctx.fill();
-        ctx.fillStyle = '#6B4A33';
-        ctx.fillRect(px - 5, py - h, 10, h);
-        ctx.fillStyle = '#8A6A45';
-        ctx.beginPath();
-        ctx.moveTo(px - 5, py - h);
-        ctx.lineTo(px, py - h - 8);
-        ctx.lineTo(px + 5, py - h);
-        ctx.closePath();
-        ctx.fill();
-      } });
-    }
-    // portail : deux battants, fermés ou rabattus
-    for (const side of [-1, 1]) {
-      const hx = c.x + n.x * side * 46, hy = c.y + n.y * side * 46;
-      parts.push({ y: Math.max(hy, c.y), draw: () => {
-        ctx.fillStyle = '#4A3424';
-        ctx.fillRect(hx - 6, hy - 52, 12, 56);
-        const ex = open ? hx + tx * 40 : c.x, ey = open ? hy + ty * 40 : c.y;
-        ctx.fillStyle = '#7A5A3A';
-        ctx.beginPath();
-        ctx.moveTo(hx, hy - 44);
-        ctx.lineTo(ex, ey - 44);
-        ctx.lineTo(ex, ey - 4);
-        ctx.lineTo(hx, hy - 4);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = '#3A2819';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      } });
-    }
-    return parts;
-  }
-
-  /** Panneau d'une porte, au-dessus de tout : son nom, et ce qui manque pour l'ouvrir. */
-  drawGateLabel(ctx: CanvasRenderingContext2D, k: number, open: boolean, label: string, sub: string) {
-    const c = this.map.spineAt(this.map.gates[k]);
+  /** Panneau à la lisière d'une brume, au-dessus de tout : la zone, et ce qui manque pour la lever. */
+  drawGateLabel(ctx: CanvasRenderingContext2D, x: number, y: number, label: string, sub: string) {
+    const c = { x, y: y + 60 };
     ctx.font = '700 15px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(16,24,26,0.85)';
     ctx.strokeText(label, c.x, c.y - 74);
-    ctx.fillStyle = open ? '#7FCB5B' : '#FF9B78';
+    ctx.fillStyle = '#EEE7D7';
     ctx.fillText(label, c.x, c.y - 74);
     if (!sub) return;
     ctx.font = '600 13px Outfit, sans-serif';
     ctx.strokeText(sub, c.x, c.y - 56);
-    ctx.fillStyle = '#EEE7D7';
+    ctx.fillStyle = '#FF9B78';
     ctx.fillText(sub, c.x, c.y - 56);
   }
 

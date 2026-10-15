@@ -25,7 +25,9 @@ const check = (ok: boolean, label: string) => {
 // Village de test : tous les bâtiments construits et toutes les grottes débloquées (sauf mention contraire).
 const ALL_CAVES = Array.from({ length: 64 }, (_, i) => i);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const room = (): any => new Room('TEST', undefined, { buildings: [...BUILDING_IDS], unlocked: ALL_CAVES, hall: HALL_MAX });
+const ALL_BOSSES = SPECIES.map((sp, i) => (sp.boss ? i : -1)).filter((i) => i >= 0);
+// (toutes les portes ouvertes : Hôtel de ville au maximum, tous les géants vaincus)
+const room = (): any => new Room('TEST', undefined, { buildings: [...BUILDING_IDS], unlocked: ALL_CAVES, hall: HALL_MAX, beaten: ALL_BOSSES });
 const noop = () => {};
 
 {
@@ -1445,6 +1447,15 @@ const noop = () => {};
   r.onChat(p, '   ');
   r.step();
   check(said.length === 2 && said[0] === 'Salut tout le monde' && said[1].length === 200, `chat : ${said.length} messages relayés (espaces nettoyés, rafale et vide ignorés, 200 caractères max)`);
+}
+
+{
+  // Brume : rien n'apparaît au-delà de la première porte fermée, ni d'espèce d'une zone encore fermée.
+  const r: any = new Room('TEST', undefined, { hall: 2 }); // porte du village ouverte, Bois profonds fermés (géants invaincus)
+  const fog = r.map.gates[1];
+  const wild = [...r.units.values()].filter((u: { owner: number; s: number }) => !u.owner && !SPECIES[u.s].boss);
+  check(wild.length > 50 && wild.every((u: { x: number; y: number; s: number }) => r.map.arcAt(u.x, u.y) < fog && SPECIES[u.s].zone === 1),
+    `zone 2 sous la brume : ${wild.length} monstres, tous de la zone 1 et en deçà de la brume`);
 }
 
 {
