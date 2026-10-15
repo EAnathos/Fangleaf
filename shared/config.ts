@@ -70,6 +70,17 @@ export const VILLAGE_STONE_OFFSET = { x: 95, y: 225 }; // Pierre de passage du v
 export const campName = (i: number) => (i === 0 ? 'Camp avancé' : `Camp avancé ${i + 1}`);
 
 export const PLAYER_R = 16;
+/**
+ * Géants endormis : des obstacles pour le dompteur (même règle côté client et serveur).
+ * On ne peut pas entrer dans leur cercle ; déjà dedans, on peut seulement s'en éloigner.
+ */
+export const sleeperBlocks = (bosses: Iterable<{ x: number; y: number; r: number }>, ox: number, oy: number, x: number, y: number) => {
+  for (const b of bosses) {
+    const R = b.r + PLAYER_R, d2 = (x - b.x) ** 2 + (y - b.y) ** 2;
+    if (d2 < R * R && d2 < (ox - b.x) ** 2 + (oy - b.y) ** 2) return true;
+  }
+  return false;
+};
 export const PLAYER_SPEED = 210;
 export const PLAYER_RANGE = 62; // portée de pioche (filons), au-delà des rayons
 

@@ -1,7 +1,7 @@
 // Un village : jusqu'à 3 joueurs, la carte et sa simulation autoritaire.
 
 import {
-  bossMelee,
+  bossMelee, sleeperBlocks,
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
@@ -461,8 +461,9 @@ export class Room {
     }
     // Pas de traversée de l'eau : on glisse le long de la berge si possible. Une porte fermée ne se franchit pas.
     const nx = p.x + dx, ny = p.y + dy; // les bords du monde et les grottes sont gérés par blocked()
+    const sleeping = this.sleepingBosses(p);
     const ok = (x: number, y: number) => {
-      if (this.map.blocked(x, y)) return false;
+      if (this.map.blocked(x, y) || sleeperBlocks(sleeping, p.x, p.y, x, y)) return false;
       const g = this.map.gateCrossed(p.x, p.y, x, y);
       return g < 0 || this.gateIsOpen(g);
     };
@@ -1543,6 +1544,13 @@ export class Room {
       const k = Math.max(0, Math.min(1, ((e.x - h.x) * dx + (e.y - h.y) * dy) / len2));
       return Math.hypot(e.x - h.x - k * dx, e.y - h.y - k * dy) <= h.r + e.r;
     });
+  }
+
+  /** Géant endormi de la grotte où se trouve le dompteur (un obstacle : on ne le traverse pas). */
+  private sleepingBosses(p: Player): Unit[] {
+    const c = this.map.caveAt(p.x, p.y);
+    const u = c && this.units.get(this.caveBoss[c.id]);
+    return u && u.dormant ? [u] : [];
   }
 
   /** Le dompteur est dans une grotte dont le géant est réveillé (combat en cours). */

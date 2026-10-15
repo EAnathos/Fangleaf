@@ -644,6 +644,16 @@ const noop = () => {};
   for (const e of [boss, f, p]) r.grid.insert(e);
   r.separate();
   check(boss.x === home[0] && boss.y === home[1] && Math.hypot(f.x - boss.x, f.y - boss.y) >= boss.r + f.r - 0.5, 'géant endormi immobile : c\'est le monstre qui s\'écarte');
+  // le dompteur ne le traverse pas : il bute contre lui en avançant
+  [p.x, p.y] = [boss.x - boss.r - 60, boss.y];
+  for (let i = 0; i < 40; i++) {
+    p.lastPosMs = Date.now() - 50;
+    r.onPos(p, p.x + 10, p.y, 1, 0);
+  }
+  check(p.x < boss.x - boss.r - 15 && p.x > boss.x - boss.r - 30, `le dompteur bute contre le géant endormi (bord à ${Math.round(boss.x - boss.r - p.x)} px)`);
+  boss.dormant = false;
+  r.onPos(p, p.x + 10, p.y, 1, 0);
+  check(p.x > boss.x - boss.r - 15, 'réveillé, il ne bloque plus le passage');
 }
 
 {

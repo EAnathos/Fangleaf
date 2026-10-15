@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
 import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -786,7 +786,7 @@ export class Game {
       // Même règle que le serveur pour les portes fermées : on ne les franchit pas en avançant.
       let shut = -1;
       const ok = (x: number, y: number) => {
-        if (this.map.blocked(x, y)) return false;
+        if (this.map.blocked(x, y) || sleeperBlocks(this.hud.sleepers, this.me.x, this.me.y, x, y)) return false;
         const g = this.map.gateCrossed(this.me.x, this.me.y, x, y);
         if (g < 0 || this.gateOpen(g)) return true;
         shut = g;
