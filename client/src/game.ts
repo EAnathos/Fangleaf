@@ -253,6 +253,56 @@ export class Game {
     }
   }
   private puff?: HTMLCanvasElement;
+  private bubbles = new Map<number, { text: string; until: number }>(); // dompteur → message affiché au-dessus de lui
+
+  /** Bulles de chat au-dessus des dompteurs (dessinées par-dessus tout le reste). */
+  private drawBubbles(players: PlayerState[]) {
+    const { ctx } = this;
+    ctx.font = '600 13px Outfit, sans-serif';
+    ctx.textAlign = 'center';
+    for (const p of players) {
+      const b = this.bubbles.get(p.id);
+      if (!b) continue;
+      if (this.time > b.until || p.dead) {
+        this.bubbles.delete(p.id);
+        continue;
+      }
+      // découpe en lignes de 180 px au plus, 3 lignes au plus
+      const lines: string[] = [];
+      let line = '';
+      for (const word of b.text.split(' ')) {
+        const next = line ? `${line} ${word}` : word;
+        if (ctx.measureText(next).width > 180 && line) {
+          lines.push(line);
+          line = word;
+        } else line = next;
+      }
+      lines.push(line);
+      if (lines.length > 3) {
+        lines.length = 3; // trop long : on coupe la 3e ligne sur son dernier mot entier
+        lines[2] = `${lines[2].replace(/\s+\S*$/, '')}…`;
+      }
+      const isMe = p.id === this.myId, x = isMe ? this.me.x : p.x;
+      const lift = p.mount ? alphaStats(p.mount.species, 0, 1, p.mount.legend).r * 0.8 : 0;
+      const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 20, h = lines.length * 16 + 10;
+      const by = (isMe ? this.me.y : p.y) - lift - 46 - h; // au-dessus du nom
+      const fade = Math.min(1, (b.until - this.time) / 0.4);
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = 'rgba(238,231,215,0.95)';
+      ctx.strokeStyle = 'rgba(16,24,26,0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(x - w / 2, by, w, h, 8);
+      ctx.moveTo(x - 6, by + h);
+      ctx.lineTo(x, by + h + 7);
+      ctx.lineTo(x + 6, by + h);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#10181A';
+      lines.forEach((l, i) => ctx.fillText(l, x, by + 18 + i * 16));
+      ctx.globalAlpha = 1;
+    }
+  }
   private mistLifted = new Map<number, number>(); // porte → moment où sa brume a commencé à se lever
 
   /** « z z z » qui montent en s'estompant au-dessus d'un dormeur. */
@@ -542,6 +592,7 @@ export class Game {
         break;
       case 'chat':
         this.hud.chat(e.name, e.color, e.text, e.by === this.myId);
+        this.bubbles.set(e.by, { text: e.text, until: this.time + 4 + Math.min(4, e.text.length * 0.05) }); // bulle au-dessus de lui
         break;
       case 'info':
         this.hud.toast(e.text);
@@ -885,6 +936,7 @@ export class Game {
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.draw();
     if (!here) this.drawMist(camX, camY, hw, hh);
+    this.drawBubbles(players);
     for (const [, kind, x, y, a, b, c] of shots) {
       if (kind === 1) drawShot(ctx, kind, x, y, a, b, Math.min(100, c + (late * 100) / ARC_FLIGHT_S), this.time);
       else drawShot(ctx, kind, x + a * late, y + b * late, a, b, 0, this.time);

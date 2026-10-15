@@ -988,60 +988,131 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   ctx.stroke();
 }
 
-/** Serpent des brumes : nage dans les lacs, se dresse pour tirer un jet d'eau (zone 5, tireur). */
+/**
+ * Serpent des brumes, en dragon des lacs : tête à cornes et barbillons, crinière d'algues, anneaux écailleux
+ * à ventre clair. Dans l'eau, seuls ses anneaux affleurent (une pointe de crinière sur chacun) ; il se dresse
+ * pour cracher son jet. Sa version géante (l'Hydre des brumes) porte la même apparence.
+ */
 function serpent(ctx: Ctx, r: number, fill: string, u: UnitLook) {
+  const scale = u.flash ? '#FFFFFF' : fill, belly = u.flash ? '#FFFFFF' : '#E8D9A8', mane = u.flash ? '#FFFFFF' : '#4F7C45';
   const rise = u.charge ?? 0;
-  const belly = u.flash ? '#FFFFFF' : '#9ED2C8';
-  for (const [k, x] of [[0, -1.3], [1, -0.55]] as const) {
-    const yy = 0.35 * r + Math.sin(u.t * 3 + k + u.seed) * 0.05 * r;
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.ellipse(x * r, yy, 0.32 * r, 0.24 * r, 0, Math.PI, 0);
-    if (!u.inWater) ctx.ellipse(x * r, yy, 0.32 * r, 0.14 * r, 0, 0, Math.PI); // sur terre : anneaux entiers
-    ctx.fill();
-    ink(ctx, r);
-    if (u.inWater) {
-      ctx.strokeStyle = 'rgba(200,235,240,0.5)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.ellipse(x * r, yy + 0.02 * r, 0.45 * r, 0.1 * r, 0, 0, TAU);
-      ctx.stroke();
-    }
+  const pts: [number, number][] = [];
+  for (let i = 0; i < 14; i++) {
+    const k = i / 13;
+    pts.push([(0.1 - k * 1.7) * r, (0.38 + Math.sin(k * 7 - u.t * 4 + u.seed) * 0.12) * r]);
   }
-  const hy = -(0.35 + rise * 0.5) * r;
-  ctx.strokeStyle = fill;
-  ctx.lineWidth = 0.42 * r;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(0.1 * r, 0.4 * r);
-  ctx.quadraticCurveTo(0.05 * r, hy * 0.4, 0.35 * r, hy);
-  ctx.stroke();
-  ctx.strokeStyle = belly;
-  ctx.lineWidth = 0.14 * r;
-  ctx.beginPath();
-  ctx.moveTo(0.18 * r, 0.35 * r);
-  ctx.quadraticCurveTo(0.13 * r, hy * 0.4, 0.38 * r, hy + 0.1 * r);
-  ctx.stroke();
-  ctx.fillStyle = fill;
-  ctx.beginPath();
-  ctx.ellipse(0.5 * r, hy, 0.42 * r, 0.28 * r, 0.15, 0, TAU);
-  ctx.fill();
-  ink(ctx, r);
-  ctx.fillStyle = u.flash ? '#FFFFFF' : '#7FC9D6';
-  ctx.beginPath();
-  ctx.moveTo(0.2 * r, hy - 0.2 * r);
-  ctx.lineTo(0.05 * r, hy - 0.6 * r);
-  ctx.lineTo(0.45 * r, hy - 0.25 * r);
-  ctx.closePath();
-  ctx.fill();
-  eyes(ctx, 0.6 * r, hy - 0.06 * r, 0.12 * r, 0.07 * r, '#F0B64A', u.wild);
-  if (u.inWater) {
-    ctx.strokeStyle = 'rgba(200,235,240,0.55)';
+  const ripple = (x: number, y: number, w: number) => {
+    ctx.strokeStyle = 'rgba(200,235,240,0.5)';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.ellipse(0.12 * r, 0.42 * r, 0.55 * r, 0.13 * r, 0, 0, TAU);
+    ctx.ellipse(x, y, w * (1 + Math.sin(u.t * 3) * 0.06), w * 0.25, 0, 0, TAU);
+    ctx.stroke();
+  };
+  if (!u.inWater) {
+    // corps en S, plus fin vers la queue, et écailles du ventre
+    for (const [c, extra] of [['rgba(12,18,16,0.75)', 3], [scale, 0]] as const) {
+      ctx.strokeStyle = c;
+      ctx.lineCap = 'round';
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineWidth = 0.44 * r + (0.14 * r - 0.44 * r) * (i / (pts.length - 1)) + extra;
+        ctx.beginPath();
+        ctx.moveTo(pts[i - 1][0], pts[i - 1][1]);
+        ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.stroke();
+      }
+    }
+    ctx.fillStyle = belly;
+    for (let i = 1; i < 12; i++) {
+      ctx.beginPath();
+      ctx.ellipse(pts[i][0], pts[i][1] + 0.1 * r, 0.06 * r, 0.04 * r, 0, 0, TAU);
+      ctx.fill();
+    }
+  } else {
+    for (const [x, y] of [pts[3], pts[7], pts[11]]) {
+      ctx.fillStyle = scale;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 0.26 * r, 0.2 * r, 0, Math.PI, 0);
+      ctx.fill();
+      ink(ctx, r);
+      ctx.fillStyle = mane;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.08 * r, y - 0.16 * r);
+      ctx.lineTo(x, y - 0.34 * r);
+      ctx.lineTo(x + 0.08 * r, y - 0.16 * r);
+      ctx.fill();
+      ripple(x, y, 0.38 * r);
+    }
+  }
+  // cou dressé (plus haut quand il charge son jet)
+  const hy = -(0.38 + rise * 0.5) * r;
+  for (const [c, w] of [['rgba(12,18,16,0.75)', 0.44 * r + 3], [scale, 0.44 * r]] as const) {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0.1 * r, 0.38 * r);
+    ctx.quadraticCurveTo(0, hy * 0.3, 0.3 * r, hy);
     ctx.stroke();
   }
+  // crinière d'algues le long du cou
+  ctx.strokeStyle = mane;
+  ctx.lineWidth = 0.08 * r;
+  for (let k = 0; k < 5; k++) {
+    const y0 = 0.3 * r + (hy - 0.3 * r) * (k / 5), x0 = -0.05 * r + k * 0.06 * r;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.quadraticCurveTo(x0 - 0.2 * r, y0 - 0.05 * r, x0 - 0.3 * r + Math.sin(u.t * 4 + k) * 0.04 * r, y0 + 0.08 * r);
+    ctx.stroke();
+  }
+  // tête : museau long, cornes, barbillons
+  ctx.fillStyle = scale;
+  ctx.beginPath();
+  ctx.moveTo(0.15 * r, hy - 0.18 * r);
+  ctx.quadraticCurveTo(0.6 * r, hy - 0.3 * r, 1.0 * r, hy - 0.05 * r);
+  ctx.lineTo(1.02 * r, hy + 0.08 * r);
+  ctx.quadraticCurveTo(0.6 * r, hy + 0.22 * r, 0.15 * r, hy + 0.14 * r);
+  ctx.closePath();
+  ctx.fill();
+  ink(ctx, r);
+  ctx.strokeStyle = belly;
+  ctx.lineWidth = 0.07 * r;
+  ctx.beginPath();
+  ctx.moveTo(0.3 * r, hy - 0.2 * r);
+  ctx.quadraticCurveTo(0.15 * r, hy - 0.5 * r, -0.05 * r, hy - 0.55 * r);
+  ctx.moveTo(0.42 * r, hy - 0.22 * r);
+  ctx.quadraticCurveTo(0.34 * r, hy - 0.5 * r, 0.18 * r, hy - 0.6 * r);
+  ctx.stroke();
+  ctx.strokeStyle = mane;
+  ctx.lineWidth = 0.04 * r;
+  ctx.beginPath();
+  ctx.moveTo(0.95 * r, hy + 0.06 * r);
+  ctx.quadraticCurveTo(1.15 * r, hy + 0.2 * r, 1.05 * r, hy + 0.4 * r);
+  ctx.moveTo(0.85 * r, hy + 0.1 * r);
+  ctx.quadraticCurveTo(0.95 * r, hy + 0.3 * r, 0.82 * r, hy + 0.45 * r);
+  ctx.stroke();
+  // œil de reptile qui luit (violet pour un Alpha)
+  const iris = u.alpha ? '#B48CFF' : '#F0B64A', ex = 0.58 * r, ey = hy - 0.08 * r, es = 0.075 * r;
+  ctx.save();
+  ctx.shadowColor = iris;
+  ctx.shadowBlur = es * 5;
+  ctx.fillStyle = iris;
+  ctx.beginPath();
+  ctx.ellipse(ex, ey, es * 1.2, es, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = '#10181A';
+  ctx.beginPath();
+  ctx.ellipse(ex + es * 0.15, ey, es * 0.3, es * 0.85, 0, 0, TAU);
+  ctx.fill();
+  if (u.wild) {
+    ctx.strokeStyle = '#10181A';
+    ctx.lineWidth = Math.max(1.5, es * 0.6);
+    ctx.beginPath();
+    ctx.moveTo(ex - es * 1.5, ey - es * 1.7);
+    ctx.lineTo(ex + es * 1.3, ey - es * 0.8);
+    ctx.stroke();
+  }
+  if (u.inWater) ripple(0.1 * r, 0.42 * r, 0.5 * r);
 }
 
 /** Crabe des berges : carapace épaisse, marche de côté, pince fort (zone 5, mêlée). */
