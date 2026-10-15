@@ -5,15 +5,16 @@ import {
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
-import type { PlayerState, UnitTuple } from '../../shared/protocol.ts';
+import type { BoardRow, PlayerState, UnitTuple } from '../../shared/protocol.ts';
 import type { WorldMap } from '../../shared/worldmap.ts';
 import { armorColor, drawUnit } from './sprites.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
+import { sound } from './audio.ts';
 import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
 import { FOREST_GROUND, ZONE_GROUND } from './world.ts';
 import type { Fog } from './fog.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'settings' | 'chat' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'settings' | 'chat' | 'board' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
@@ -194,7 +195,7 @@ export class Hud {
     this.initSettings(founder);
     $('hold-btn').onclick = () => this.onHold();
     $('talk-later').onclick = () => this.setPanel(null);
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'hall', 'settings'] as const) {
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'hall', 'settings', 'board'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -284,6 +285,8 @@ export class Hud {
     $('hall').hidden = panel !== 'hall';
     $('settings').hidden = panel !== 'settings';
     $('chat').hidden = panel !== 'chat';
+    $('board').hidden = panel !== 'board';
+    if (panel === 'board') this.onBoard(); // le serveur répond avec le tableau à jour
     if (panel !== 'chat' && document.activeElement === $('chat-input')) $('chat-input').blur(); // les touches reviennent au jeu
     if (panel === 'chat') {
       this.unread = 0;
@@ -367,7 +370,7 @@ export class Hud {
       prompt.className = `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
       prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
     }
-    const building = this.panel !== null && this.panel !== 'map' && this.panel !== 'quit' && this.panel !== 'settings' && this.panel !== 'chat';
+    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board'].includes(this.panel);
     if (building && b?.panel !== this.panel) this.setPanel(null);
     if (b?.buy) this.buying = b.buy;
     if (b?.at !== undefined && b.at !== this.spotAt) {
@@ -495,6 +498,7 @@ export class Hud {
   private initSettings(founder: boolean) {
     this.founder = founder;
     $('settings-open').onclick = () => this.setPanel('settings');
+    $('board-open').onclick = () => this.setPanel('board');
     $('menu-open').onclick = () => this.setPanel(this.panel === 'quit' ? null : 'quit');
     $('chat-open').onclick = () => this.setPanel(this.panel === 'chat' ? null : 'chat');
     $('chat-form').addEventListener('submit', (e) => {
@@ -508,6 +512,21 @@ export class Hud {
       if (e.key === 'Escape') this.setPanel(null);
     });
     $('set-pc').hidden = touchOnly;
+    // Son : volumes et coupure (gardés dans ce navigateur), appliqués tout de suite
+    for (const k of ['master', 'music', 'sfx'] as const) {
+      const input = $<HTMLInputElement>(`vol-${k}`);
+      input.value = String(Math.round(sound.settings[k] * 100));
+      input.oninput = () => {
+        sound.settings[k] = Number(input.value) / 100;
+        sound.apply();
+      };
+    }
+    const mute = $<HTMLInputElement>('vol-mute');
+    mute.checked = sound.settings.muted;
+    mute.onchange = () => {
+      sound.settings.muted = mute.checked;
+      sound.apply();
+    };
     const mode = () => {
       $('atk-auto').setAttribute('aria-checked', String(settings.attack === 'auto'));
       $('atk-click').setAttribute('aria-checked', String(settings.attack === 'click'));
@@ -611,6 +630,34 @@ export class Hud {
       }),
     );
   }
+
+  /** Tableau du village reçu du serveur : un rang par membre, couronne pour le premier de chaque colonne. */
+  board(rows: BoardRow[]) {
+    const best = (k: 'bosses' | 'tamed' | 'given') => Math.max(1, ...rows.map((r) => r[k]));
+    const top = { bosses: best('bosses'), tamed: best('tamed'), given: best('given') };
+    rows.sort((a, b) => b.bosses - a.bosses || b.tamed - a.tamed || b.given - a.given);
+    $('board-rows').replaceChildren(
+      ...rows.map((r) => {
+        const tr = document.createElement('tr');
+        const who = document.createElement('td');
+        const b = document.createElement('b');
+        b.textContent = r.name;
+        b.style.color = r.color;
+        who.append(b);
+        if (!r.online) who.append(Object.assign(document.createElement('span'), { className: 'off', textContent: 'endormi' }));
+        tr.append(who);
+        for (const k of ['bosses', 'tamed', 'given'] as const) {
+          const td = document.createElement('td');
+          const lead = r[k] === top[k];
+          td.className = lead ? 'top' : '';
+          td.textContent = `${lead ? '👑 ' : ''}${r[k]}`;
+          tr.append(td);
+        }
+        return tr;
+      }),
+    );
+  }
+  onBoard = () => {};
 
   /** Nouveau message : gardé dans l'historique ; chat fermé, seul le compteur du bouton 💬 le signale. */
   chat(name: string, color: string, text: string, mine: boolean) {

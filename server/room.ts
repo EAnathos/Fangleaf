@@ -9,7 +9,7 @@ import {
   armorMaxHp, armorReduction, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
-import type { ArmySlot, DozerTuple, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
+import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
 import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Grid } from './grid.ts';
@@ -143,6 +143,7 @@ export interface Player {
   seen: Set<number>; // espèces déjà croisées (bestiaire de la Tanière)
   close?: () => void; // coupe sa connexion (expulsion)
   chatAt?: number; // dernier message envoyé (anti-spam)
+  stats: Stats; // tableau du village
 }
 
 type Ent = Unit | Player;
@@ -170,6 +171,7 @@ interface Sleeper {
   x: number;
   y: number;
   pack: Dozer[];
+  stats: Stats; // pour le tableau du village
 }
 
 /** Coffre laissé par un géant vaincu : chaque dompteur l'ouvre une fois ; il disparaît au retour du géant. */
@@ -184,6 +186,13 @@ interface Chest {
 }
 
 const ACTIVE_R = VIEW_R + 500; // au-delà, les monstres sauvages restent immobiles (personne ne les voit)
+
+/** Statistiques lues d'un profil (champs manquants ou invalides : 0). */
+const statsOf = (s?: Partial<Stats>): Stats => ({
+  bosses: Math.max(0, Math.floor(Number(s?.bosses) || 0)),
+  tamed: Math.max(0, Math.floor(Number(s?.tamed) || 0)),
+  given: Math.max(0, Math.floor(Number(s?.given) || 0)),
+});
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const makeCode = () =>
@@ -276,7 +285,7 @@ export class Room {
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, stats: { bosses: 0, tamed: 0, given: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
     };
@@ -286,6 +295,7 @@ export class Room {
       p.wood = Math.max(0, Math.floor(prof.wood ?? 0));
       p.stone = Math.max(0, Math.floor(prof.stone ?? 0));
       p.fruits = Math.max(0, Math.floor(prof.fruits ?? 0));
+      p.stats = statsOf(prof.stats);
       p.weapon = clamp(prof.weapon, 0, WEAPON_MAX);
       p.armor = clamp(prof.armor, 0, ARMOR_MAX);
       p.cls = CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as ClassId) : null;
@@ -329,7 +339,7 @@ export class Room {
    * Membre déconnecté : il dort près du feu du village, ses Alphas équipés et sa meute autour de lui
    * (un sur trois dort aussi, les autres flânent dans le village).
    */
-  addSleeper(key: string, prof: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack'>) {
+  addSleeper(key: string, prof: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats'>) {
     if (this.sleepers.has(key) || [...this.players.values()].some((p) => p.userId === key)) return;
     const v = this.map.village, k = this.sleepers.size;
     const a = 0.9 + k * 2.1, at = this.map.freeNear(v.x + Math.cos(a) * 95, v.y + Math.sin(a) * 70 + 10);
@@ -346,7 +356,7 @@ export class Room {
     });
     this.sleepers.set(key, {
       name: prof.name, color: PLAYER_COLORS[Math.abs(hash) % PLAYER_COLORS.length], armor: clamp(Number(prof.armor) || 0, 0, ARMOR_MAX),
-      cls: CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as string) : '', x: at.x, y: at.y, pack,
+      cls: CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as string) : '', x: at.x, y: at.y, pack, stats: statsOf(prof.stats),
     });
   }
 
@@ -378,6 +388,15 @@ export class Room {
     if (!text || (p.chatAt !== undefined && this.time - p.chatAt < 0.5)) return;
     p.chatAt = this.time;
     this.events.push({ e: 'chat', by: p.id, name: p.name, color: p.color, text });
+  }
+
+  /** Tableau du village : chaque membre (en ligne ou endormi au village), géants battus, apprivoisements, dons. */
+  onBoard(p: Player) {
+    const rows: BoardRow[] = [
+      ...[...this.players.values()].map((q) => ({ name: q.name, color: q.color, online: true, ...q.stats })),
+      ...[...this.sleepers.values()].map((z) => ({ name: z.name, color: z.color, online: false, ...z.stats })),
+    ];
+    p.send({ t: 'board', rows });
   }
 
   /** Compte banni de ce village. */
@@ -466,7 +485,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen] };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen], stats: { ...p.stats } };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -492,6 +511,7 @@ export class Room {
   onDeposit(p: Player) {
     if (!this.near(p, this.map.store) || (!p.wood && !p.stone)) return;
     this.events.push({ e: 'deposit', by: p.id, wood: p.wood, stone: p.stone });
+    p.stats.given += p.wood + p.stone;
     this.stock.wood += p.wood;
     this.stock.stone += p.stone;
     p.wood = p.stone = 0;
@@ -1216,6 +1236,7 @@ export class Room {
     if (Math.random() < fruitTameChance(t.s)) {
       this.makeTamed(t, p);
       this.events.push({ e: 'tame', id: t.id, by: p.id, s: t.s });
+      p.stats.tamed++;
     } else {
       this.events.push({ e: 'feed', by: p.id, id: t.id });
       if (SPECIES[t.s].passive && Math.random() < FRUIT_ESSENCE) {
@@ -2034,6 +2055,12 @@ export class Room {
         this.events.push({ e: 'die', x: m.x, y: m.y, s: m.s, alpha: false });
       }
       // Il ne s'apprivoise pas et revient après un délai.
+      // tableau du village : un géant de plus pour chacun de ceux qui l'ont combattu
+      for (const q of this.players.values()) {
+        if (!u.hitters.has(q.id)) continue;
+        q.stats.bosses++;
+        q.dirty = true;
+      }
       if (!this.beaten.includes(u.s)) {
         // première victoire du village sur ce géant : elle compte pour ouvrir la porte de la zone suivante
         this.beaten.push(u.s);
@@ -2066,6 +2093,7 @@ export class Room {
       this.makeTamed(u, credit);
       credit.dirty = true;
       this.events.push({ e: 'tame', id: u.id, by: credit.id, s: u.s });
+      credit.stats.tamed++;
     } else {
       this.units.delete(u.id);
       this.events.push({ e: 'die', x: u.x, y: u.y, s: u.s, alpha: u.alpha });

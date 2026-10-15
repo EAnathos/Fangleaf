@@ -6,6 +6,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { BuildingId } from '../shared/config.ts';
+import type { Stats } from '../shared/protocol.ts';
 
 export interface Profile {
   name: string;
@@ -21,6 +22,7 @@ export interface Profile {
   class: string | null; // classe choisie à la forge
   pack: number[]; // meute ordinaire : espèce de chaque monstre apprivoisé
   seen: number[]; // espèces déjà croisées (bestiaire)
+  stats?: Partial<Stats>; // tableau du village : géants battus, monstres apprivoisés, dons à l'entrepôt
 }
 
 let db: SupabaseClient | null = null;
@@ -106,7 +108,7 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   if (!db) return null;
   const { data, error } = await db
     .from('progress')
-    .select('name, gold, wood, stone, fruits, weapon, armor, essences, alphas, village_found, class, pack, seen')
+    .select('name, gold, wood, stone, fruits, weapon, armor, essences, alphas, village_found, class, pack, seen, stats')
     .eq('user_id', userId)
     .eq('village_code', code)
     .maybeSingle();
@@ -115,11 +117,11 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
 }
 
 /** Membres enregistrés d'un village (pour les montrer endormis au village tant qu'ils sont déconnectés). */
-export async function loadMembers(code: string): Promise<{ userId: string; profile: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack'> }[]> {
+export async function loadMembers(code: string): Promise<{ userId: string; profile: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats'> }[]> {
   if (!db) return [];
-  const { data, error } = await db.from('progress').select('user_id, name, armor, class, alphas, pack').eq('village_code', code);
+  const { data, error } = await db.from('progress').select('user_id, name, armor, class, alphas, pack, stats').eq('village_code', code);
   if (error) throw new Error(`Lecture des membres impossible : ${error.message}`);
-  return (data ?? []).map((d) => ({ userId: String(d.user_id), profile: { name: d.name, armor: d.armor, class: d.class, alphas: d.alphas ?? [], pack: d.pack ?? [] } }));
+  return (data ?? []).map((d) => ({ userId: String(d.user_id), profile: { name: d.name, armor: d.armor, class: d.class, alphas: d.alphas ?? [], pack: d.pack ?? [], stats: d.stats ?? {} } }));
 }
 
 export async function saveProgress(userId: string, code: string, p: Profile) {

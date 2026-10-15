@@ -2,6 +2,19 @@
 
 import type { BuildingId, ClassId } from './config.ts';
 
+/** Statistiques d'un dompteur dans son village (tableau du village). */
+export interface Stats {
+  bosses: number; // géants vaincus (en ayant pris part au combat)
+  tamed: number; // monstres apprivoisés
+  given: number; // bois et pierre donnés à l'entrepôt
+}
+/** Ligne du tableau du village. */
+export interface BoardRow extends Stats {
+  name: string;
+  color: string;
+  online: boolean;
+}
+
 export type ClientMsg =
   | { t: 'create'; name: string; token?: string } // token : session Supabase (optionnel)
   | { t: 'join'; code: string; name: string; token?: string }
@@ -24,6 +37,7 @@ export type ClientMsg =
   | { t: 'hold'; on: boolean } // tendre un fruit (ou le ranger) : le gibier passif s'approche
   | { t: 'deposit' }
   | { t: 'chat'; text: string } // message pour tout le village
+  | { t: 'board' } // demander le tableau du village
   | { t: 'kick'; id: number } // fondateur : expulser ce dompteur (banni du village)
   | { t: 'unban'; user: string } // fondateur : lever le bannissement d'un compte
   | { t: 'mode'; manual: boolean } // attaque au clic (PC) au lieu de l'attaque automatique
@@ -174,4 +188,5 @@ export type ServerMsg =
   | { t: 'error'; msg: string }
   | { t: 'teleport'; x: number; y: number }
   | { t: 'pong'; ts: number }
+  | { t: 'board'; rows: BoardRow[] } // tableau du village (membres en ligne et déconnectés)
   | Snapshot;

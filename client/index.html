@@ -148,6 +148,7 @@
         <div id="quit-main" class="col quit-main">
           <button id="quit-confirm" class="cta">Retour au lobby</button>
           <button id="invite" class="btn">Inviter des amis · <span id="code-label"></span></button>
+          <button id="board-open" class="btn">Tableau du village</button>
           <button id="settings-open" class="btn">Paramètres</button>
           <button id="reset-ask" class="danger-btn"></button>
         </div>
@@ -161,12 +162,33 @@
       </div>
     </div>
 
+    <div id="board" class="overlay dim" hidden>
+      <div class="panel modal board" role="dialog" aria-modal="true" aria-labelledby="board-title">
+        <div class="row between">
+          <h2 id="board-title">Tableau du village</h2>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <table class="board-table">
+          <thead><tr><th scope="col">Dompteur</th><th scope="col">Géants battus</th><th scope="col">Monstres apprivoisés</th><th scope="col">Dons à l'entrepôt</th></tr></thead>
+          <tbody id="board-rows"></tbody>
+        </table>
+        <p class="small muted">Dons : bois et pierre déposés à l'entrepôt. 👑 : en tête de la colonne.</p>
+      </div>
+    </div>
+
     <div id="settings" class="overlay dim" hidden>
       <div class="panel modal settings" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="row between">
           <h2 id="settings-title">Paramètres</h2>
           <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
         </div>
+        <section class="col">
+          <h3 class="market-head">Son</h3>
+          <label class="vol-row"><span>Général</span><input id="vol-master" type="range" min="0" max="100"></label>
+          <label class="vol-row"><span>Ambiance</span><input id="vol-music" type="range" min="0" max="100"></label>
+          <label class="vol-row"><span>Bruitages</span><input id="vol-sfx" type="range" min="0" max="100"></label>
+          <label class="vol-row mute"><input id="vol-mute" type="checkbox"><span>Couper le son</span></label>
+        </section>
         <section id="set-pc" class="col">
           <h3 class="market-head">Attaque</h3>
           <div class="row seg" role="radiogroup" aria-label="Attaque">

@@ -1459,6 +1459,35 @@ const noop = () => {};
 }
 
 {
+  // Tableau du village : géants battus, apprivoisements, dons ; enregistrés et visibles pour les déconnectés.
+  const r = room();
+  for (const u of [...r.units.values()]) if (!u.owner && !SPECIES[u.s].boss) r.units.delete(u.id);
+  let board: { name: string; online: boolean; bosses: number; tamed: number; given: number }[] = [];
+  const p = r.addPlayer('Lou', (m: { t: string; rows?: typeof board }) => m.t === 'board' && (board = m.rows!), { userId: 'lou', profile: null });
+  const q = r.addPlayer('Max', noop, { userId: 'max', profile: null });
+  const c = r.map.caves[0];
+  const boss = r.units.get(r.caveBoss[c.id]);
+  r.damage(boss, 1, q);
+  r.damage(boss, boss.hp, p);
+  for (let i = 0; i < 30 && p.stats.tamed === 0; i++) {
+    const w = r.createUnit(1, false, p.x + 20, p.y);
+    r.killUnit(w, p);
+  }
+  p.wood = 7;
+  p.stone = 5;
+  [p.x, p.y] = [r.map.store.x, r.map.store.y + 50];
+  r.onDeposit(p);
+  r.onBoard(p);
+  const lou = board.find((b) => b.name === 'Lou'), max = board.find((b) => b.name === 'Max');
+  check(lou?.bosses === 1 && max?.bosses === 1 && lou.tamed === 1 && lou.given === 12, `tableau : Lou ${lou?.bosses} géant, ${lou?.tamed} apprivoisé, ${lou?.given} donnés ; Max ${max?.bosses} géant`);
+  const prof = r.profileOf(p);
+  r.removePlayer(p.id);
+  q.send = (m: { t: string; rows?: typeof board }) => m.t === 'board' && (board = m.rows!);
+  r.onBoard(q);
+  check(prof.stats?.given === 12 && board.some((b) => b.name === 'Lou' && !b.online && b.given === 12), 'statistiques enregistrées ; Lou déconnecté reste au tableau');
+}
+
+{
   // PV des géants : multipliés par le nombre de dompteurs en ligne, en gardant leur part de PV.
   const r = room();
   const boss = r.units.get(r.caveBoss[0]);

@@ -354,3 +354,19 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .chat input:focus { outline: none; border-color: var(--ally); }
 .chat-open { position: relative; }
 .unread { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--enemy); color: var(--amber-ink); font: 700 11px/18px var(--body); }
+
+/* Tableau du village. */
+.modal.board { width: min(620px, calc(100vw - 32px)); border-color: var(--amber); }
+.modal.board h2 { color: var(--amber); }
+.board-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.board-table th { text-align: right; font: 600 13px var(--body); color: var(--muted); padding: 6px 8px; border-bottom: 2px solid var(--line); }
+.board-table th:first-child, .board-table td:first-child { text-align: left; }
+.board-table td { text-align: right; padding: 8px; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.board-table td b { font: 700 15px var(--display); }
+.board-table .off { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.board-table .top { color: var(--amber); font-weight: 700; }
+
+.vol-row { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 12px; font-size: 14px; color: var(--text-2); }
+.vol-row input[type="range"] { accent-color: var(--amber); width: 100%; }
+.vol-row.mute { grid-template-columns: auto 1fr; }
+.vol-row.mute input { accent-color: var(--amber); width: 18px; height: 18px; }
