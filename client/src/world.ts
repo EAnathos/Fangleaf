@@ -4,6 +4,7 @@
 import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
 import { caveEdge, MAP_CELL, type Cave, type WorldMap } from '../../shared/worldmap.ts';
+import { drawEntrance, INSIDE, insideProp } from './caves.ts';
 
 const CHUNK = 512;
 const TILE = MAP_CELL;
@@ -897,83 +898,21 @@ export class World {
   readonly caveW = (CAVE_RX + 160) * 2;
   readonly caveH = (CAVE_RY + 160) * 2;
 
-  /** Entrée d'une grotte sur la carte : butte rocheuse, ouverture sombre, deux torches. */
+  /** Entrée d'une grotte sur la carte, selon son biome (voir caves.ts), et son nom. */
   drawCaveEntrance(ctx: CanvasRenderingContext2D, c: Cave, t: number, bossHere: boolean) {
     const { x, y } = c.entrance;
-    ctx.fillStyle = 'rgba(8,14,12,0.35)';
-    ctx.beginPath();
-    ctx.ellipse(x + 10, y + 40, 110, 26, 0, 0, TAU);
-    ctx.fill();
-    // butte rocheuse anguleuse : des pans de roche plutôt qu'un dôme
-    ctx.fillStyle = '#4A4F4C';
-    ctx.beginPath();
-    const crest: [number, number][] = [[-105, 38], [-112, 2], [-96, -34], [-70, -58], [-44, -66], [-22, -86], [6, -80], [30, -94], [58, -70], [84, -58], [100, -26], [116, 4], [105, 38]];
-    crest.forEach(([dx, dy], i) => {
-      const j = (hash2(i, c.id, 77) - 0.5) * 10;
-      if (i) ctx.lineTo(x + dx + j, y + dy + j * 0.6);
-      else ctx.moveTo(x + dx, y + dy);
-    });
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(16,24,26,0.35)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (const [ax, ay, bx, by] of [[-70, -58, -52, -10], [30, -94, 22, -44], [84, -58, 66, -14], [-96, -34, -74, 4]]) {
-      ctx.moveTo(x + ax, y + ay);
-      ctx.lineTo(x + bx, y + by);
-    }
-    ctx.stroke();
-    ctx.fillStyle = '#616864';
-    ctx.beginPath();
-    ctx.ellipse(x - 40, y - 52, 38, 16, -0.3, 0, TAU);
-    ctx.ellipse(x + 48, y - 46, 26, 12, 0.3, 0, TAU);
-    ctx.fill();
-    ctx.fillStyle = '#4E7A49';
-    ctx.beginPath();
-    ctx.ellipse(x + 8, y - 78, 34, 10, 0.1, 0, TAU);
-    ctx.fill();
-    // ouverture
-    ctx.fillStyle = '#07090A';
-    ctx.beginPath();
-    ctx.moveTo(x - 40, y + 38);
-    ctx.quadraticCurveTo(x - 44, y - 30, x, y - 36);
-    ctx.quadraticCurveTo(x + 44, y - 30, x + 40, y + 38);
-    ctx.closePath();
-    ctx.fill();
-    if (bossHere) {
-      // deux yeux qui luisent au fond quand le mini-boss est là
-      const blink = Math.sin(t * 1.3 + c.id) > 0.92 ? 0.2 : 1;
-      ctx.fillStyle = `rgba(232,105,63,${0.8 * blink})`;
-      ctx.beginPath();
-      ctx.arc(x - 9, y - 4, 3, 0, TAU);
-      ctx.arc(x + 9, y - 4, 3, 0, TAU);
-      ctx.fill();
-    }
-    for (const side of [-1, 1]) {
-      const tx = x + side * 60, ty = y + 10;
-      ctx.fillStyle = '#5B3F2C';
-      ctx.fillRect(tx - 3, ty - 26, 6, 30);
-      const f = 1 + Math.sin(t * 11 + side * 2 + c.id) * 0.12;
-      ctx.fillStyle = '#E8693F';
-      ctx.beginPath();
-      ctx.ellipse(tx, ty - 32 * f, 6, 10 * f, 0, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = '#F0B64A';
-      ctx.beginPath();
-      ctx.ellipse(tx, ty - 30 * f, 3, 5 * f, 0, 0, TAU);
-      ctx.fill();
-    }
+    drawEntrance(ctx, x, y, c.zone, t, bossHere);
     ctx.font = '700 15px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(16,24,26,0.85)';
     const label = `Grotte · ${SPECIES[c.boss].name}`;
-    ctx.strokeText(label, x, y - 104);
+    ctx.strokeText(label, x, y - 128);
     ctx.fillStyle = bossHere ? '#FF9B78' : '#C9CFC2';
-    ctx.fillText(label, x, y - 104);
+    ctx.fillText(label, x, y - 128);
   }
 
-  /** Intérieur d'une grotte (pré-rendu) : sol de roche, parois, cristaux, sortie lumineuse. */
+  /** Intérieur d'une grotte (pré-rendu) : sol et parois aux couleurs du biome, éboulis, décors du biome, sortie lumineuse. */
   caveInterior(c: Cave) {
     let cv = this.caveCanvas.get(c.id);
     if (cv) return cv;
@@ -996,7 +935,8 @@ export class World {
       ctx.closePath();
     };
     // parois : deux épaisseurs de roche anguleuse
-    ctx.fillStyle = '#2A2E2D';
+    const style = INSIDE[c.zone - 1];
+    ctx.fillStyle = style.wall;
     outline(1.16, 0.05);
     ctx.fill();
     ctx.fillStyle = '#353A38';
@@ -1004,7 +944,7 @@ export class World {
     ctx.fill();
     // sol
     const g = ctx.createRadialGradient(0, -40, 40, 0, 0, CAVE_RX);
-    const tint = ['#4A4636', '#3C4046', '#4A3B30', '#33443C', '#2F4447'][c.zone - 1];
+    const tint = style.floor;
     g.addColorStop(0, tint);
     g.addColorStop(1, '#1E2220');
     ctx.fillStyle = g;
@@ -1019,23 +959,12 @@ export class World {
       ctx.ellipse(rx, ry, rr, rr * 0.7, a, 0, TAU);
       ctx.fill();
     }
-    // cristaux lumineux
-    for (let i = 0; i < 9; i++) {
-      const a = hash2(i, c.id + 7, this.seed) * TAU, d = (0.5 + hash2(c.id, i + 3, this.seed) * 0.28) * caveEdge(c, a);
-      const cx = Math.cos(a) * CAVE_RX * d, cy = Math.sin(a) * CAVE_RY * d;
-      if (cy > CAVE_RY - 200 && Math.abs(cx) < 140) continue; // pas devant la sortie
-      ctx.fillStyle = 'rgba(111,183,255,0.18)';
-      ctx.beginPath();
-      ctx.arc(cx, cy, 34, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = '#7FC6FF';
-      ctx.beginPath();
-      ctx.moveTo(cx, cy - 16);
-      ctx.lineTo(cx + 6, cy);
-      ctx.lineTo(cx, cy + 6);
-      ctx.lineTo(cx - 6, cy);
-      ctx.closePath();
-      ctx.fill();
+    // décors du biome au pied des parois : racines, champignons, ossements, stèles à runes, flaques
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * TAU + hash2(i, c.id + 7, this.seed) * 0.25, k = 0.8 * caveEdge(c, a);
+      const px = Math.cos(a) * CAVE_RX * k, py = Math.sin(a) * CAVE_RY * k;
+      if (py > CAVE_RY - 220 && Math.abs(px) < 150) continue; // pas devant la sortie
+      insideProp(ctx, c.zone, px, py, a, i);
     }
     // sortie : rai de lumière du jour
     const ex = c.exit.x - c.inside.x, ey = c.exit.y - c.inside.y;
