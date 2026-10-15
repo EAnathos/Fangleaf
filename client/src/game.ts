@@ -837,6 +837,7 @@ export class Game {
     for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall);
     this.world.drawHall(ctx, this.hud.hall, this.time);
     this.world.drawStore(ctx, this.hud.stock);
+    this.world.drawBoard(ctx);
     ctx.restore();
     const camps = this.net.latest?.camps ?? [];
     this.map.sites.forEach((c, i) => inView(c.x, c.y, 260) && this.world.drawSite(ctx, i, camps.includes(i), this.time));

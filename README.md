@@ -92,7 +92,7 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 - **Échap** : menu — retour au lobby, paramètres (touches, attaque, membres du village), ou supprimer le village pour repartir de zéro (fondateur ; les autres membres effacent seulement leur progression), avec confirmation
 - **Expulsion** (fondateur, Échap › Paramètres) : le joueur est renvoyé au lobby et banni, sa place se libère ; débanni, il revient avec sa progression
 - **Chat** : C (réglable) ou le bouton 💬 sous la minicarte, qui compte les messages non lus ; chaque message s'affiche aussi quelques secondes dans une bulle au-dessus de son auteur. Rien n'est conservé : en revenant, on repart d'un chat vide
-- **Tableau du village** (Menu) : géants battus, monstres apprivoisés et dons à l'entrepôt de chaque membre, déconnectés compris
+- **Tableau du village** (panneau sur la place du village, ou Menu) : géants battus, monstres apprivoisés et dons à l'entrepôt de chaque membre, déconnectés compris
 - **Son** : ambiance propre à chaque lieu (village, camp, zones, grottes) et bruitages, entièrement synthétisés ; volumes et coupure dans Échap › Paramètres
 - **Menu** (Échap, ou le bouton ☰ sous la minicarte) : inviter des amis (le bouton disparaît quand le village est complet), paramètres, retour au lobby
 - Un membre **déconnecté** dort près du feu du village (« z z z »), ses Alphas équipés et sa meute autour de lui : certains dorment aussi, les autres flânent dans le village

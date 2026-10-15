@@ -36,6 +36,8 @@ export const buildingCost = (b: BuildingId): Cost => ({ gold: BUILDINGS[b].cost,
 export const HALL_OFFSET = { x: 185, y: 150 };
 // Entrepôt : chacun y dépose le bois et la pierre de son sac ; constructions et Hôtel de ville puisent dans cette réserve commune.
 export const STORE_OFFSET = { x: -270, y: -55 };
+// Panneau du village, au bord de la place : le tableau des exploits de chacun.
+export const BOARD_OFFSET = { x: 68, y: -86 };
 export const HALL: (Cost & { unlock: string })[] = [
   { gold: 20, wood: 15, stone: 10, unlock: 'Porte du village : la suite de la Lisière (zone 1) · Marché' },
   { gold: 200, wood: 60, stone: 50, unlock: 'Porte des Bois profonds (zone 2) · Pierre de passage' },

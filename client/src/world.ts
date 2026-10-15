@@ -1,7 +1,7 @@
 // Terrain procédural par morceaux (chunks) mis en cache, village et camp de départ pré-rendus.
 // Tout découle de la WorldMap partagée : zones, lacs, chemin du camp au village.
 
-import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
+import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, BOARD_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
 import { caveEdge, MAP_CELL, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 import { drawEntrance, INSIDE, insideProp } from './caves.ts';
@@ -399,6 +399,43 @@ export class World {
     }
 
     return c;
+  }
+
+  /** Panneau du village (coordonnées du village) : planche sur deux poteaux, couverte de petites affiches. */
+  drawBoard(ctx: CanvasRenderingContext2D) {
+    const x = BOARD_OFFSET.x, y = BOARD_OFFSET.y;
+    ctx.fillStyle = 'rgba(8,14,12,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(x + 3, y + 4, 26, 6, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#5B3F2C';
+    ctx.fillRect(x - 20, y - 34, 5, 38);
+    ctx.fillRect(x + 15, y - 34, 5, 38);
+    // planche et son cadre
+    ctx.fillStyle = '#4A3322';
+    ctx.fillRect(x - 25, y - 44, 50, 30);
+    ctx.fillStyle = '#9A7448';
+    ctx.fillRect(x - 22, y - 41, 44, 24);
+    // affiches épinglées
+    const notes: [number, number, number, number, string][] = [[-18, -38, 13, 15, '#EFE3C4'], [-2, -39, 11, 9, '#E9D6A8'], [11, -37, 9, 13, '#F2E8CF'], [-1, -28, 12, 9, '#E4CFA0']];
+    for (const [nx, ny, w, h, c] of notes) {
+      ctx.fillStyle = c;
+      ctx.fillRect(x + nx, y + ny, w, h);
+      ctx.fillStyle = 'rgba(90,70,50,0.55)';
+      for (let l = 3; l < h - 2; l += 3) ctx.fillRect(x + nx + 2, y + ny + l, w - 4, 1);
+      ctx.fillStyle = '#B8432E';
+      ctx.beginPath();
+      ctx.arc(x + nx + w / 2, y + ny + 1.5, 1.4, 0, TAU);
+      ctx.fill();
+    }
+    // petit toit
+    ctx.fillStyle = '#6B4A33';
+    ctx.beginPath();
+    ctx.moveTo(x - 30, y - 43);
+    ctx.lineTo(x, y - 54);
+    ctx.lineTo(x + 30, y - 43);
+    ctx.closePath();
+    ctx.fill();
   }
 
   /** Entrepôt (coordonnées du village) : caisses, rondins et tas de pierres, qui grossissent avec la réserve. */

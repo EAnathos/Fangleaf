@@ -21,7 +21,7 @@ export type Purchase = { b: BuildingId } | { cave: number };
 export interface Spot {
   pos: { x: number; y: number };
   label: string;
-  panel?: 'forge' | 'den' | 'market' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall'; // ouvre un panneau
+  panel?: 'forge' | 'den' | 'market' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'board'; // ouvre un panneau
   cave?: { id: number; enter: boolean }; // entre dans une grotte / en sort
   at?: number; // Pierre de passage : -1 village, sinon index du camp ; emplacement de camp : son index
   buy?: Purchase; // panneau d'achat : ce qui est à acheter
@@ -63,6 +63,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     v.buildings.includes(b) ? open : { panel: 'buy', pos, buy: { b }, label: `E — Construire : ${BUILDINGS[b].name} · ${costText(buildingCost(b))}` };
   const spots: Spot[] = [
     { panel: 'hall', pos: map.hall, label: `E — Hôtel de ville · niv. ${v.hall}` },
+    { panel: 'board', pos: map.board, label: 'E — Tableau du village' },
     { deposit: true, pos: map.store, label: 'E — Entrepôt : déposer ton bois et ta pierre' },
     building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Forge' }),
     building('den', map.den, { panel: 'den', pos: map.den, label: 'E — Tanière' }),

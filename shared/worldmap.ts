@@ -12,7 +12,7 @@
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = forêt hors du couloir).
 
-import { CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, PATH_LEN, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type Resource } from './config.ts';
+import { CAVE_RX, CAVE_RY, BOARD_OFFSET, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, PATH_LEN, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -134,6 +134,7 @@ export class WorldMap {
   readonly market: Pt;
   readonly hall: Pt; // Hôtel de ville
   readonly store: Pt; // entrepôt (réserve commune de bois et de pierre)
+  readonly board: Pt; // panneau du village (tableau des exploits)
   readonly gates: number[] = []; // portes : abscisse le long du couloir ([0] sortie du village, puis début de chaque zone)
   readonly tents: Pt[] = []; // tentes du camp de départ (décalage depuis son feu), à l'opposé du chemin
   readonly sites: Pt[] = []; // emplacements de camp (un au bout de chaque série de 4 zones)
@@ -171,6 +172,7 @@ export class WorldMap {
     this.market = { x: village.x + MARKET_OFFSET.x, y: village.y + MARKET_OFFSET.y };
     this.hall = { x: village.x + HALL_OFFSET.x, y: village.y + HALL_OFFSET.y };
     this.store = { x: village.x + STORE_OFFSET.x, y: village.y + STORE_OFFSET.y };
+    this.board = { x: village.x + BOARD_OFFSET.x, y: village.y + BOARD_OFFSET.y };
     for (const s of [VILLAGE_ARC + VILLAGE_R + 200, ...Array.from({ length: ZONES - 1 }, (_, k) => (k + 1) * ZONE_LEN)]) if (s < this.length - 300) this.gates.push(s);
     this.stones.push({ x: village.x + VILLAGE_STONE_OFFSET.x, y: village.y + VILLAGE_STONE_OFFSET.y });
     for (let s = 4 * ZONE_LEN; s <= this.length + 1; s += 4 * ZONE_LEN) {
@@ -589,6 +591,7 @@ export class WorldMap {
     for (const k of [-1, 0, 1]) this.solidDisc(v.x + DEN_OFFSET.x + k * 46, v.y + DEN_OFFSET.y - 6, 38);
     this.solidDisc(v.x, v.y, 20);
     this.solidRect(v.x + STORE_OFFSET.x - 36, v.y + STORE_OFFSET.y - 14, v.x + STORE_OFFSET.x + 36, v.y + STORE_OFFSET.y + 14); // entrepôt
+    this.solidRect(v.x + BOARD_OFFSET.x - 22, v.y + BOARD_OFFSET.y - 4, v.x + BOARD_OFFSET.x + 22, v.y + BOARD_OFFSET.y + 6); // panneau
     // camp de départ : tentes et cercle de pierres
     const sp = this.spawn;
     for (const t of this.tents) this.solidRect(sp.x + t.x - 36, sp.y + t.y - 6, sp.x + t.x + 36, sp.y + t.y + 26);
