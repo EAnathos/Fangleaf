@@ -1232,60 +1232,53 @@ export function drawShot(ctx: Ctx, kind: number, x: number, y: number, a: number
   }
 }
 
-/** Lièvre des ronces : gibier passif aux grandes oreilles, qui sautille (jamais l'air méchant). */
-function hare(ctx: Ctx, r: number, fill: string, u: UnitLook) {
-  const hop = Math.max(0, Math.sin(u.t * 8 + u.seed)) * r * 0.22;
-  ctx.translate(0, -hop);
-  const light = u.flash ? '#FFFFFF' : '#E9DCC4';
-  // pattes arrière
-  ctx.fillStyle = u.flash ? '#FFFFFF' : '#9C7E58';
-  ctx.beginPath();
-  ctx.ellipse(-0.45 * r, 0.62 * r, 0.42 * r, 0.16 * r, 0, 0, TAU);
-  ctx.fill();
-  // corps
-  ctx.fillStyle = fill;
-  ctx.beginPath();
-  ctx.ellipse(-0.15 * r, 0.1 * r, 0.85 * r, 0.62 * r, 0, 0, TAU);
-  ctx.fill();
-  ink(ctx, r);
-  // queue blanche
-  ctx.fillStyle = light;
-  ctx.beginPath();
-  ctx.arc(-0.98 * r, -0.05 * r, 0.2 * r, 0, TAU);
-  ctx.fill();
-  // tête
-  ctx.fillStyle = fill;
-  ctx.beginPath();
-  ctx.ellipse(0.62 * r, -0.2 * r, 0.42 * r, 0.36 * r, 0, 0, TAU);
-  ctx.fill();
-  ink(ctx, r);
-  // grandes oreilles, qui frémissent
+/** Lièvre des ronces, en lapin boule : tout rond et duveteux, petites oreilles, grands yeux brillants, joues roses (gibier passif). */
+function hare(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
+  const fur = u.flash ? '#FFFFFF' : '#D8C7A8', shade = u.flash ? '#FFFFFF' : '#B9A57E', pale = u.flash ? '#FFFFFF' : '#F4ECDC';
+  const ell = (x: number, y: number, rx: number, ry: number, rot: number, col: string) => {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, rot, 0, TAU);
+    ctx.fill();
+  };
+  ctx.translate(0, -Math.max(0, Math.sin(u.t * 8 + u.seed)) * r * 0.16); // il sautille
   const flick = Math.sin(u.t * 3 + u.seed) * 0.08;
-  for (const [ox, rot] of [[0.45, -0.35 + flick], [0.68, -0.12 - flick]] as const) {
+  ell(-0.35 * r, 0.62 * r, 0.22 * r, 0.12 * r, 0, shade);
+  ell(0.3 * r, 0.62 * r, 0.22 * r, 0.12 * r, 0, shade);
+  // boule de poils au contour duveteux
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  for (let k = 0; k <= 28; k++) {
+    const a = (k / 28) * TAU, d = k % 2 ? 1 : 1.06;
+    const x = Math.cos(a) * 0.78 * r * d, y = 0.1 * r + Math.sin(a) * 0.62 * r * d;
+    if (k) ctx.lineTo(x, y);
+    else ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(12,18,16,0.55)';
+  ctx.lineWidth = Math.max(1.3, r * 0.09);
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+  ell(0.05 * r, 0.32 * r, 0.42 * r, 0.24 * r, 0, pale);
+  ell(-0.82 * r, 0.05 * r, 0.16 * r, 0.15 * r, 0, '#FFFFFF'); // queue
+  for (const [ox, rot] of [[0.1, -0.3 + flick], [0.42, 0.25 - flick]] as const) {
     ctx.save();
-    ctx.translate(ox * r, -0.45 * r);
+    ctx.translate(ox * r, -0.42 * r);
     ctx.rotate(rot);
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.ellipse(0, -0.48 * r, 0.14 * r, 0.5 * r, 0, 0, TAU);
-    ctx.fill();
-    ink(ctx, r * 0.6);
-    ctx.fillStyle = u.flash ? '#FFFFFF' : '#E8A9A0';
-    ctx.beginPath();
-    ctx.ellipse(0, -0.45 * r, 0.06 * r, 0.34 * r, 0, 0, TAU);
-    ctx.fill();
+    ell(0, -0.28 * r, 0.13 * r, 0.32 * r, 0, fur);
+    ink(ctx, r * 0.5);
+    ell(0, -0.26 * r, 0.06 * r, 0.2 * r, 0, u.flash ? '#FFFFFF' : '#F2B8B0');
     ctx.restore();
   }
-  // museau et œil doux
-  ctx.fillStyle = light;
-  ctx.beginPath();
-  ctx.ellipse(0.92 * r, -0.08 * r, 0.16 * r, 0.12 * r, 0, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = '#E8A9A0';
-  ctx.beginPath();
-  ctx.arc(1.02 * r, -0.12 * r, 0.06 * r, 0, TAU);
-  ctx.fill();
-  eyes(ctx, 0.7 * r, -0.28 * r, 0, 0.08 * r, '#10181A', false);
+  // grands yeux doux (violets pour un Alpha), reflet blanc
+  for (const ex of [0.2, 0.52]) {
+    ell(ex * r, -0.08 * r, 0.11 * r, 0.13 * r, 0, u.alpha ? '#B48CFF' : '#10181A');
+    ell((ex - 0.035) * r, -0.12 * r, 0.04 * r, 0.04 * r, 0, '#FFFFFF');
+  }
+  ell(0.08 * r, 0.08 * r, 0.08 * r, 0.05 * r, 0, 'rgba(240,140,140,0.6)');
+  ell(0.64 * r, 0.08 * r, 0.08 * r, 0.05 * r, 0, 'rgba(240,140,140,0.6)');
+  ell(0.37 * r, 0.04 * r, 0.05 * r, 0.035 * r, 0, '#D8706A');
 }
 
 /** Escargot des mousses : coquille en spirale, corps qui ondule doucement, cornes à yeux (gibier passif). */
