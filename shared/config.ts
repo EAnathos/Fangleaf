@@ -41,9 +41,9 @@ export const BOARD_OFFSET = { x: 68, y: -86 };
 export const HALL: (Cost & { unlock: string })[] = [
   { gold: 20, wood: 15, stone: 10, unlock: 'Porte du village : la suite de la Lisière (zone 1) · Marché' },
   { gold: 200, wood: 60, stone: 50, unlock: 'Porte des Bois profonds (zone 2) · Pierre de passage' },
-  { gold: 500, wood: 120, stone: 100, unlock: 'Porte des Landes (zone 3)' },
-  { gold: 1200, wood: 200, stone: 180, unlock: 'Porte des Ruines moussues (zone 4)' },
-  { gold: 2500, wood: 300, stone: 300, unlock: 'Porte des Lacs brumeux (zone 5)' },
+  { gold: 500, wood: 160, stone: 140, unlock: 'Porte des Landes (zone 3)' },
+  { gold: 1500, wood: 350, stone: 300, unlock: 'Porte des Ruines moussues (zone 4)' },
+  { gold: 3000, wood: 600, stone: 550, unlock: 'Porte des Lacs brumeux (zone 5)' },
 ];
 export const HALL_MAX = HALL.length;
 /** Géants d'une zone (index d'espèce) : il faut tous les vaincre pour ouvrir la porte de la zone suivante. */
