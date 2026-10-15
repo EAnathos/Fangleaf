@@ -2,6 +2,7 @@
 
 import { TICK_HZ } from '../../shared/config.ts';
 import type { ClientMsg, PlayerState, ServerMsg, Snapshot, UnitTuple } from '../../shared/protocol.ts';
+import { SnapshotState } from '../../shared/snapshot.ts';
 
 const INTERP_DELAY_TICKS = 2; // 100 ms
 
@@ -13,6 +14,7 @@ export interface View {
 export class Net {
   private ws: WebSocket;
   private snaps: Snapshot[] = [];
+  private state = new SnapshotState(); // reconstitue l'état complet à partir des snapshots différentiels
   private renderTick = 0;
   ping = 0;
   onMessage: (m: ServerMsg) => void = () => {};
@@ -22,8 +24,8 @@ export class Net {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     this.ws = new WebSocket(`${proto}://${location.host}/ws`);
     this.ws.onmessage = (ev) => {
-      const m = JSON.parse(ev.data) as ServerMsg;
-      if (m.t === 's') this.push(m);
+      let m = JSON.parse(ev.data) as ServerMsg;
+      if (m.t === 's') this.push((m = this.state.apply(m)));
       else if (m.t === 'pong') this.ping = Math.round(performance.now() - m.ts);
       this.onMessage(m);
     };

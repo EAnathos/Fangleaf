@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import WebSocket from 'ws';
 import type { ServerMsg, Snapshot } from '../shared/protocol.ts';
 import { WorldMap } from '../shared/worldmap.ts';
+import { SnapshotState } from '../shared/snapshot.ts';
 import { SPECIES } from '../shared/config.ts';
 
 const PORT = 3999;
@@ -29,10 +30,12 @@ class Bot {
   id = 0;
   code = '';
   seed = 0;
+  private state = new SnapshotState(); // snapshots différentiels → état complet
   constructor() {
     this.ws = new WebSocket(`ws://localhost:${PORT}/ws`);
     this.ws.on('message', (raw) => {
-      const m = JSON.parse(String(raw)) as ServerMsg;
+      let m = JSON.parse(String(raw)) as ServerMsg;
+      if (m.t === 's') m = this.state.apply(m);
       this.msgs.push(m);
       if (m.t === 's') this.last = m;
       if (m.t === 'welcome') {

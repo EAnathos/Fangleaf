@@ -11,6 +11,7 @@ import {
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
 import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
+import { SnapshotDiff } from '../shared/snapshot.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Grid } from './grid.ts';
 import type { Profile } from './persist.ts';
@@ -229,7 +230,8 @@ export class Room {
   private hazards: Hazard[] = [];
   private shots: Shot[] = [];
   private chests: Chest[] = [];
-  private sleepers = new Map<string, Sleeper>(); // membres déconnectés (compte, ou « invité:id »)
+  private sleepers = new Map<string, Sleeper>();
+  private diffs = new Map<number, SnapshotDiff>(); // par spectateur : ce qu'il a déjà reçu (envoi différentiel) // membres déconnectés (compte, ou « invité:id »)
   private bushBack: number[] = []; // par buisson : temps de simulation où ses fruits repoussent (0 : garni)
   readonly map: WorldMap;
   readonly camps: number[]; // emplacements de camp établis (index dans map.sites)
@@ -435,6 +437,7 @@ export class Room {
     const prof = this.profileOf(p);
     for (const uid of p.army) this.units.delete(uid);
     this.players.delete(id);
+    this.diffs.delete(id);
     // Il s'endort au village avec sa meute (sauf s'il a été expulsé ou a tout effacé).
     if (!this.deleted && !p.wiped && !this.isBanned(p.userId)) this.addSleeper(p.userId ?? `invité:${p.id}`, prof);
     this.scaleBosses();
@@ -2253,7 +2256,11 @@ export class Room {
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
       }
       const players = [...this.players.values()].map((p) => (p === viewer ? full : light).get(p.id)!);
-      viewer.send({ t: 's', tick: this.tick, players, units, ores, chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
+      // envoi différentiel : seulement ce qui a changé depuis le dernier snapshot de ce spectateur
+      let diff = this.diffs.get(viewer.id);
+      if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
+      const [changed, gone] = diff.diffUnits(units);
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
     }
   }
 }

@@ -163,8 +163,9 @@ export interface Snapshot {
   t: 's';
   tick: number;
   players: PlayerState[];
-  units: UnitTuple[];
-  ores: [number, number][]; // filons proches : [id, pv %] (0 = épuisé)
+  units: UnitTuple[]; // sur le réseau : seulement les unités nouvelles ou changées (voir snapshot.ts)
+  gone: number[]; // unités sorties de la vue depuis le snapshot précédent
+  ores: [number, number][]; // filons proches : [id, pv %] (0 = épuisé) ; sur le réseau : seulement ceux qui ont changé
   chests: [number, number, number, number][]; // coffres des géants vaincus : [id, x, y, ouvert par ce dompteur (0/1)]
   banned: { id: string; name: string }[]; // comptes bannis du village (envoyé au seul fondateur)
   sleepers: SleeperTuple[]; // dompteurs déconnectés qui dorment au village

@@ -3,6 +3,7 @@
 import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
+import { SnapshotState } from '../shared/snapshot.ts';
 
 // Hasard reproductible : même graine à chaque exécution, donc même résultat en local et en CI.
 // TEST_SEED=… npm run test:rules pour en essayer une autre.
@@ -1485,6 +1486,32 @@ const noop = () => {};
   q.send = (m: { t: string; rows?: typeof board }) => m.t === 'board' && (board = m.rows!);
   r.onBoard(q);
   check(prof.stats?.given === 12 && board.some((b) => b.name === 'Lou' && !b.online && b.given === 12), 'statistiques enregistrées ; Lou déconnecté reste au tableau');
+}
+
+{
+  // Envoi différentiel : l'état reconstitué par le client correspond à l'état complet (à 2 px près).
+  const r = room();
+  let full: { units: number[][]; players: { id: number; gold: number; essences: number[] }[] } = { units: [], players: [] };
+  const state = new SnapshotState();
+  const p = r.addPlayer('a', (m: { t: string }) => m.t === 's' && (full = state.apply(m as never) as never));
+  let raw: { units: number[][]; players: Record<string, unknown>[] } = { units: [], players: [] };
+  r.addPlayer('b', (m: { t: string }) => m.t === 's' && (raw = m as never));
+  const c = r.map.spineAt(2600);
+  [p.x, p.y] = [c.x, c.y];
+  p.hp = 1e9;
+  let ok = true;
+  for (let i = 0; i < 100; i++) {
+    r.step();
+    p.hp = 1e9;
+    const truth = [...r.units.values()].filter((u: { x: number; y: number; reviveAt: number }) => !u.reviveAt && Math.hypot(u.x - p.x, u.y - p.y) <= 1250);
+    const byId = new Map(full.units.map((u) => [u[0], u]));
+    if (truth.length !== full.units.length || truth.some((u: { id: number; x: number; y: number }) => !byId.has(u.id) || Math.abs(byId.get(u.id)![3] - u.x) > 2.5 || Math.abs(byId.get(u.id)![4] - u.y) > 2.5)) ok = false;
+  }
+  p.gold = 1234;
+  r.step();
+  check(ok && full.players.find((x) => x.id === p.id)?.gold === 1234 && full.players.find((x) => x.id === p.id)!.essences.length === SPECIES.length,
+    `état reconstitué fidèle (${full.units.length} unités, or et essences du dompteur à jour)`);
+  check(Object.keys(raw.players.find((x) => x.id !== undefined && Object.keys(x).length < 6) ?? { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 }).length < 6, 'un dompteur dont rien n\'a changé ne coûte presque rien (seulement son id et ses changements)');
 }
 
 {
