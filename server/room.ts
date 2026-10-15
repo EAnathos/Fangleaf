@@ -684,6 +684,13 @@ export class Room {
     this.events.push({ e: 'alphaUp', id: u?.id ?? 0, by: p.id, s, lvl: lvl + 1 });
   }
 
+  /** Une âme de ce géant sert-elle encore au dompteur ? Non s'il en a déjà assez, ou si son Alpha est déjà légendaire. */
+  private wantsSoul(p: Player, boss: number) {
+    if (p.essences[boss] >= LEGEND_SOULS) return false;
+    const base = SPECIES.findIndex((sp) => sp.key === SPECIES[boss].base);
+    return !(this.fieldAlpha(p, base)?.legend || p.resting.some((r) => r.s === base && r.legend));
+  }
+
   /** Éveille l'Alpha d'une espèce (un seul par espèce) avec les essences récoltées. */
   /** Âme du boss de l'espèce → l'Alpha devient légendaire (stats ×1,5, plus grand). */
   onLegend(p: Player, s: number) {
@@ -2054,6 +2061,7 @@ export class Room {
     for (const p of this.players.values()) {
       if (p.dead || dist2(p.x, p.y, u.x, u.y) > GOLD_SHARE_R ** 2) continue;
       if (!boss) p.gold += gold; // l'or d'un géant est dans son coffre
+      if (boss && !this.wantsSoul(p, u.s)) continue; // Alpha déjà légendaire, ou déjà 3 âmes : pas d'âme en plus
       if (Math.random() < (boss ? BOSS_SOUL_DROP : ESSENCE_DROP)) {
         p.essences[u.s] += 1; // pour un mini-boss, c'est son âme
         this.events.push({ e: boss ? 'soul' : 'essence', to: p.id, s: u.s, x: u.x, y: u.y });
@@ -2084,7 +2092,8 @@ export class Room {
       }
       const cave = this.caveBoss.indexOf(u.id);
       if (cave >= 0) {
-        const at = this.map.freeNear(u.x, u.y);
+        const c = this.map.caves[cave];
+        const at = this.map.freeNear(c.inside.x, c.inside.y - 60); // là où le géant dormait
         this.chests.push({ id: this.nextId++, cave, s: u.s, x: at.x, y: at.y, opened: new Set(), eligible: new Set(u.hitters) });
         this.caveBoss[cave] = 0;
         this.caveBack[cave] = this.time + BOSS_RESPAWN_S;
@@ -2132,8 +2141,15 @@ export class Room {
         const push = (min - d) * 0.5;
         const nx = d2 ? dx / d : Math.random() - 0.5, ny = d2 ? dy / d : Math.random() - 0.5;
         if (o.kind === 'p') {
+          if (u.dormant) return; // géant endormi : on ne le pousse pas, il reste au centre de sa grotte
           u.x += nx * push * 2;
           u.y += ny * push * 2;
+        } else if (u.dormant || (o as Unit).dormant) {
+          // un géant endormi ne bouge pas : c'est l'autre qui s'écarte de toute la distance
+          const k = u.dormant ? -2 : 2;
+          const m = u.dormant ? o : u;
+          m.x += nx * push * k;
+          m.y += ny * push * k;
         } else {
           u.x += nx * push;
           u.y += ny * push;

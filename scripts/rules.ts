@@ -340,7 +340,9 @@ const noop = () => {};
     r.killUnit(b, p);
     souls = p.essences[c.boss];
   }
-  check(souls > 0 && souls < 40, `âme lâchée parfois (${souls} sur 40 victoires)`);
+  check(souls > 0 && souls <= 3, `âme lâchée parfois, jamais plus de 3 en poche (${souls} après 40 victoires)`);
+  const chest = r.chests.find((ch: { cave: number }) => ch.cave === c.id);
+  check(!!chest && Math.hypot(chest.x - c.inside.x, chest.y - (c.inside.y - 60)) < 60, 'le coffre apparaît là où dormait le géant');
   check(r.caveBoss[c.id] === 0 && r.caveBack[c.id] > r.time + BOSS_RESPAWN_S - 1, 'le mini-boss reviendra après le délai');
   check(!p.army.some((id: number) => r.units.get(id)?.s === c.boss), 'un mini-boss ne s\'apprivoise pas');
   [p.x, p.y] = [c.exit.x, c.exit.y];
@@ -361,6 +363,15 @@ const noop = () => {};
   r.onLegend(p, al.s);
   check(al.legend && Math.abs(al.maxHp - hp0 * 1.5) <= 1 && p.essences[c.boss] === soulsBefore - 3,
     `3 âmes de ${SPECIES[c.boss].name} : Alpha ${SPECIES[base].name} légendaire (PV ${hp0} → ${al.maxHp})`);
+  p.essences[c.boss] = 0;
+  [p.x, p.y] = [c.inside.x, c.inside.y + 80];
+  for (let k = 0; k < 40; k++) {
+    const b = r.units.get(r.caveBoss[c.id]) ?? r.units.get(r.spawnBoss(c.id));
+    r.caveBoss[c.id] = b.id;
+    [b.x, b.y] = [p.x + 30, p.y];
+    r.killUnit(b, p);
+  }
+  check(p.essences[c.boss] === 0, 'Alpha déjà légendaire : le géant ne lâche plus d\'âme');
   const prof = r.profileOf(p);
   const r2 = room();
   const p2 = r2.addPlayer('a', noop, { userId: 'u9', profile: prof });
@@ -616,6 +627,23 @@ const noop = () => {};
   const [n1, d1, base1] = hits('shadow_fang');
   check(n1 === 1 && d1 > base1, `Croc-d'Ombre ne frappe qu'une cible, plus fort (${d1} au lieu de ${base1})`);
   check(hits('slime_queen')[0] === 2 && hits('colossus')[0] === 2, 'la reine des Gluants et l\'ours en frappent deux à la fois');
+}
+
+{
+  // Un géant endormi ne se pousse pas : il reste au centre de sa grotte.
+  const r = room();
+  const c = r.map.caves[0];
+  const boss = r.units.get(r.caveBoss[c.id]);
+  const home = [boss.x, boss.y];
+  const p = r.addPlayer('a', noop);
+  const f = r.createUnit(1, false, boss.x + boss.r * 0.5, boss.y);
+  f.owner = p.id;
+  p.army.push(f.id);
+  [p.x, p.y] = [boss.x - boss.r * 0.5, boss.y];
+  r.grid.clear();
+  for (const e of [boss, f, p]) r.grid.insert(e);
+  r.separate();
+  check(boss.x === home[0] && boss.y === home[1] && Math.hypot(f.x - boss.x, f.y - boss.y) >= boss.r + f.r - 0.5, 'géant endormi immobile : c\'est le monstre qui s\'écarte');
 }
 
 {
