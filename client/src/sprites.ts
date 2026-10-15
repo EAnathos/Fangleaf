@@ -1460,69 +1460,116 @@ export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: num
 
 // ───────────────────────── Coffre des géants ─────────────────────────
 
-/** Coffre en bois cerclé d'or. lid : 0 fermé → 1 grand ouvert (or qui luit dedans) ; drop : hauteur de chute. */
+/** Coffre royal : bois rouge, coins et cerclages dorés, gemme sur la serrure. lid : 0 fermé → 1 grand ouvert ; drop : hauteur de chute. */
 export function drawChest(ctx: Ctx, x: number, y: number, lid: number, t: number, drop = 0) {
   const sk = 1 - Math.min(0.5, drop / 160); // l'ombre rétrécit pendant la chute
   ctx.fillStyle = 'rgba(8, 14, 12, 0.35)';
   ctx.beginPath();
-  ctx.ellipse(x, y, 27 * sk, 8 * sk, 0, 0, TAU);
+  ctx.ellipse(x, y + 2, 30 * sk, 8 * sk, 0, 0, TAU);
   ctx.fill();
   ctx.save();
   ctx.translate(x, y - drop);
-  const w = 46, h = 26;
-  if (lid < 1) {
-    // halo doré qui pulse tant qu'il est fermé : il attire l'œil
-    const pulse = 0.5 + Math.sin(t * 4) * 0.2;
-    const g = ctx.createRadialGradient(0, -14, 4, 0, -14, 60);
-    g.addColorStop(0, `rgba(240,182,74,${0.3 * pulse * (1 - lid)})`);
-    g.addColorStop(1, 'rgba(240,182,74,0)');
+  const w = 50, h = 24, open = lid > 0;
+  const box = (bx: number, by: number, bw: number, bh: number, r: number, fill: string, line = true) => {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, r);
+    ctx.fill();
+    if (line) ink(ctx, 18);
+  };
+  const coin = (cx: number, cy: number) => {
+    ctx.fillStyle = '#C98A2A';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + 0.8, 3.2, 2.4, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#FFD86A';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 3.2, 2.4, 0, 0, TAU);
+    ctx.fill();
+  };
+  const glow = (gy: number, r: number, rgb: string, a: number) => {
+    const g = ctx.createRadialGradient(0, gy, 2, 0, gy, r);
+    g.addColorStop(0, `rgba(${rgb},${a})`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.arc(0, -14, 60, 0, TAU);
+    ctx.arc(0, gy, r, 0, TAU);
     ctx.fill();
+  };
+  const sparkle = (sx: number, sy: number, r: number) => {
+    ctx.fillStyle = '#FFF3C4';
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * TAU, d = i % 2 ? r * 0.3 : r;
+      ctx.lineTo(sx + Math.cos(a) * d, sy + Math.sin(a) * d);
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+  // halo doré qui pulse tant qu'il est fermé : il attire l'œil
+  if (lid < 1) glow(-24, 62, '240,182,74', (0.22 + Math.sin(t * 4) * 0.06) * (1 - lid));
+  if (open) {
+    // couvercle relevé derrière (sa face intérieure), qui se redresse pendant l'ouverture
+    const lh = 22 * lid;
+    box(-w / 2, -h - 14 - lh, w, lh, Math.min(5, lh / 2), '#5A1E1E');
+    if (lh > 10) box(-w / 2 + 4, -h - 10 - lh, w - 8, lh - 7, 3, '#7E2A2A', false);
+    ctx.fillStyle = '#F0B64A';
+    ctx.fillRect(-w / 2, -h - 14 - lh, 5, lh);
+    ctx.fillRect(w / 2 - 5, -h - 14 - lh, 5, lh);
+    // ouverture : velours sombre rempli d'or, et la gemme
+    box(-w / 2, -h - 14, w, 16, 3, '#3A1414');
+    glow(-h - 8, 40, '255,214,110', 0.55 * lid);
+    for (const [cx, cy] of [[-14, -7], [-6, -10], [3, -8], [12, -6], [-9, -3], [8, -3], [0, -4]]) coin(cx, -h + cy);
+    ctx.fillStyle = '#5CC8E8';
+    ctx.beginPath();
+    ctx.moveTo(-1, -h - 15);
+    ctx.lineTo(4, -h - 11);
+    ctx.lineTo(-1, -h - 7);
+    ctx.lineTo(-6, -h - 11);
+    ctx.closePath();
+    ctx.fill();
+    sparkle(14, -h - 20 + Math.sin(t * 3) * 2, 4 * lid);
+    sparkle(-16, -h - 16 + Math.cos(t * 2.6) * 2, 3 * lid);
   }
   // caisse
-  ctx.fillStyle = '#7A4E2D';
-  ctx.beginPath();
-  ctx.roundRect(-w / 2, -h, w, h, 4);
-  ctx.fill();
-  ink(ctx, 22);
-  ctx.fillStyle = '#5B3820';
-  for (const k of [-0.25, 0.25]) ctx.fillRect(k * w - 1.5, -h, 3, h);
-  if (lid > 0) {
-    // trésor qui déborde
-    ctx.fillStyle = '#F0B64A';
-    ctx.beginPath();
-    ctx.ellipse(0, -h, w / 2 - 4, 7, 0, Math.PI, 0);
-    ctx.fill();
-    ctx.fillStyle = '#FFE08A';
-    for (const [cx, cy] of [[-10, -h - 3], [4, -h - 5], [13, -h - 2]]) {
+  box(-w / 2, -h, w, h, 4, '#8E3326');
+  ctx.fillStyle = '#6E2419';
+  ctx.fillRect(-w / 2 + 3, -h + 12, w - 6, 2);
+  // coins dorés
+  ctx.fillStyle = '#F0B64A';
+  for (const sx of [-1, 1]) {
+    for (const [y0, y1] of [[-h, -h + 9], [0, -9]]) {
       ctx.beginPath();
-      ctx.arc(cx, cy, 3, 0, TAU);
+      ctx.moveTo((sx * w) / 2, y0);
+      ctx.lineTo(sx * (w / 2 - 9), y0);
+      ctx.lineTo((sx * w) / 2, y1);
+      ctx.closePath();
       ctx.fill();
     }
   }
-  // couvercle : il pivote vers l'arrière en s'ouvrant (vu de haut, il remonte et s'aplatit)
-  const lh = 16 * (1 - lid * 0.75), ly = -h - lid * 14;
-  ctx.fillStyle = '#8B5A33';
-  ctx.beginPath();
-  ctx.moveTo(-w / 2, ly);
-  ctx.lineTo(-w / 2, ly - lh * 0.55);
-  ctx.quadraticCurveTo(0, ly - lh * 1.25, w / 2, ly - lh * 0.55);
-  ctx.lineTo(w / 2, ly);
-  ctx.closePath();
-  ctx.fill();
-  ink(ctx, 22);
-  // cerclages et serrure dorés
-  ctx.fillStyle = '#F0B64A';
   ctx.fillRect(-w / 2, -h, w, 3);
-  if (lid < 0.5) {
+  if (!open) {
+    // couvercle bombé, cerclé d'or
+    ctx.fillStyle = '#A43E2E';
     ctx.beginPath();
-    ctx.roundRect(-5, -h - 4, 10, 10, 2);
+    ctx.moveTo(-w / 2, -h);
+    ctx.lineTo(-w / 2, -h - 8);
+    ctx.bezierCurveTo(-w / 2, -h - 22, w / 2, -h - 22, w / 2, -h - 8);
+    ctx.lineTo(w / 2, -h);
+    ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = '#3A2819';
-    ctx.fillRect(-1, -h, 2, 4);
-  }
+    ink(ctx, 18);
+    ctx.fillStyle = '#F0B64A';
+    for (const k of [-0.3, 0.3]) ctx.fillRect(k * w - 2.5, -h - 18, 5, 18);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(-w / 2 + 6, -h - 13, w - 12, 2);
+    // serrure et sa gemme
+    box(-6, -h - 5, 12, 13, 3, '#F0B64A');
+    ctx.fillStyle = '#5CC8E8';
+    ctx.beginPath();
+    ctx.arc(0, -h + 0.5, 2.6, 0, TAU);
+    ctx.fill();
+  } else box(-6, -h + 1, 12, 7, 2, '#F0B64A');
   ctx.restore();
 }
 
