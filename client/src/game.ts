@@ -69,6 +69,7 @@ export class Game {
     this.hud.onChest = (id) => net.send({ t: 'chest', id });
     this.hud.onHall = () => net.send({ t: 'hall' });
     this.hud.onDeposit = () => net.send({ t: 'deposit' });
+    this.hud.onChat = (text) => net.send({ t: 'chat', text });
     this.hud.onPick = () => net.send({ t: 'pick' });
     this.hud.onHold = () => this.toggleHold();
     this.hud.onReset = () => net.send({ t: 'reset' });
@@ -127,6 +128,7 @@ export class Game {
       // Échap ferme d'abord ce qui est ouvert (carte, forge, Tanière, confirmation) ; sinon, propose de revenir au lobby.
       this.hud.setPanel(this.hud.panel ? null : 'quit');
     }
+    else if (action === 'chat' && !this.hud.panel) this.hud.setPanel('chat');
     else if (action === 'map') this.hud.setPanel(this.hud.panel === 'map' ? null : 'map');
     else if (action === 'mount') this.toggleMount();
     else if (action === 'fruit') this.toggleHold();
@@ -481,6 +483,9 @@ export class Game {
         break;
       case 'full':
         if (e.to === this.myId) this.fx.text(this.me.x, this.me.y - 40, `Meute pleine`, '#A9B3A6', 14);
+        break;
+      case 'chat':
+        this.hud.chat(e.name, e.color, e.text, e.by === this.myId);
         break;
       case 'info':
         this.hud.toast(e.text);

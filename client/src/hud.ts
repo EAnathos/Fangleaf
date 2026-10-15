@@ -13,7 +13,7 @@ import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, setti
 import { FOREST_GROUND, ZONE_GROUND } from './world.ts';
 import type { Fog } from './fog.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'settings' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'settings' | 'chat' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
@@ -283,6 +283,14 @@ export class Hud {
     $('talk').hidden = panel !== 'talk';
     $('hall').hidden = panel !== 'hall';
     $('settings').hidden = panel !== 'settings';
+    $('chat').hidden = panel !== 'chat';
+    if (panel !== 'chat' && document.activeElement === $('chat-input')) $('chat-input').blur(); // les touches reviennent au jeu
+    if (panel === 'chat') {
+      this.unread = 0;
+      $('chat-unread').hidden = true;
+      this.renderChat();
+      $<HTMLInputElement>('chat-input').focus();
+    }
     this.capturing = null;
     this.last.members = '';
     this.last.den = '';
@@ -290,7 +298,7 @@ export class Hud {
     this.last.cls = '';
     this.last.market = '';
     this.last.hall = '';
-    if (panel) $(panel === 'map' ? 'bigmap' : panel).querySelector<HTMLButtonElement>('.close')!.focus();
+    if (panel && panel !== 'chat') $(panel === 'map' ? 'bigmap' : panel).querySelector<HTMLButtonElement>('.close')!.focus();
   }
 
   toast(text: string, kind: '' | 'alpha' | 'good' = '') {
@@ -359,7 +367,7 @@ export class Hud {
       prompt.className = `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
       prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
     }
-    const building = this.panel !== null && this.panel !== 'map' && this.panel !== 'quit' && this.panel !== 'settings';
+    const building = this.panel !== null && this.panel !== 'map' && this.panel !== 'quit' && this.panel !== 'settings' && this.panel !== 'chat';
     if (building && b?.panel !== this.panel) this.setPanel(null);
     if (b?.buy) this.buying = b.buy;
     if (b?.at !== undefined && b.at !== this.spotAt) {
@@ -488,6 +496,17 @@ export class Hud {
     this.founder = founder;
     $('settings-open').onclick = () => this.setPanel('settings');
     $('menu-open').onclick = () => this.setPanel(this.panel === 'quit' ? null : 'quit');
+    $('chat-open').onclick = () => this.setPanel(this.panel === 'chat' ? null : 'chat');
+    $('chat-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = $<HTMLInputElement>('chat-input');
+      if (input.value.trim()) this.onChat(input.value);
+      input.value = '';
+      this.setPanel(null); // comme dans Minecraft : on envoie et on retourne au jeu
+    });
+    $('chat-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') this.setPanel(null);
+    });
     $('set-pc').hidden = touchOnly;
     const mode = () => {
       $('atk-auto').setAttribute('aria-checked', String(settings.attack === 'auto'));
@@ -592,6 +611,37 @@ export class Hud {
       }),
     );
   }
+
+  /** Nouveau message : gardé dans l'historique ; chat fermé, seul le compteur du bouton 💬 le signale. */
+  chat(name: string, color: string, text: string, mine: boolean) {
+    this.chatLog.push({ name, color, text });
+    if (this.chatLog.length > 60) this.chatLog.shift();
+    if (this.panel === 'chat') return this.renderChat();
+    if (mine) return;
+    this.unread++;
+    $('chat-unread').hidden = false;
+    $('chat-unread').textContent = String(Math.min(this.unread, 99));
+  }
+
+  private renderChat() {
+    const log = $('chat-log');
+    log.replaceChildren(
+      ...(this.chatLog.length
+        ? this.chatLog.map((m) => {
+          const p = document.createElement('p');
+          const b = document.createElement('b');
+          b.textContent = m.name;
+          b.style.color = m.color;
+          p.append(b, m.text);
+          return p;
+        })
+        : [Object.assign(document.createElement('p'), { className: 'empty', textContent: 'Aucun message pour l\'instant.' })]),
+    );
+    log.scrollTop = log.scrollHeight;
+  }
+  private chatLog: { name: string; color: string; text: string }[] = [];
+  private unread = 0;
+  onChat = (_text: string) => {};
 
   /** Zone ouverte pour le village : la zone 1, puis chaque zone dont la porte est ouverte. */
   private zoneOpen(z: number) {

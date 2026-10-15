@@ -23,6 +23,7 @@ export type ClientMsg =
   | { t: 'pick' } // cueillir les baies du buisson garni le plus proche
   | { t: 'hold'; on: boolean } // tendre un fruit (ou le ranger) : le gibier passif s'approche
   | { t: 'deposit' }
+  | { t: 'chat'; text: string } // message pour tout le village
   | { t: 'kick'; id: number } // fondateur : expulser ce dompteur (banni du village)
   | { t: 'unban'; user: string } // fondateur : lever le bannissement d'un compte
   | { t: 'mode'; manual: boolean } // attaque au clic (PC) au lieu de l'attaque automatique
@@ -141,6 +142,7 @@ export type GameEvent =
   | { e: 'unlock'; cave: number; by: number } // une grotte vient d'être débloquée
   | { e: 'trade'; to: number; s: number; gold: number; sold: boolean } // Marché : monstre vendu ou acheté
   | { e: 'travel'; id: number; x: number; y: number; tx: number; ty: number } // voyage par Pierre de passage
+  | { e: 'chat'; by: number; name: string; color: string; text: string } // message d'un dompteur
   | { e: 'info'; text: string };
 
 export interface Snapshot {

@@ -1434,6 +1434,20 @@ const noop = () => {};
 }
 
 {
+  // Chat : une ligne nettoyée, 200 caractères au plus, pas de rafale.
+  const r = room();
+  const said: string[] = [];
+  const p = r.addPlayer('a', (m: { t: string; ev?: { e: string; text?: string }[] }) => m.t === 's' && m.ev!.forEach((e) => e.e === 'chat' && said.push(e.text!)));
+  r.onChat(p, '  Salut   tout le monde  ');
+  r.onChat(p, 'trop vite');
+  r.time += 1;
+  r.onChat(p, 'x'.repeat(500));
+  r.onChat(p, '   ');
+  r.step();
+  check(said.length === 2 && said[0] === 'Salut tout le monde' && said[1].length === 200, `chat : ${said.length} messages relayés (espaces nettoyés, rafale et vide ignorés, 200 caractères max)`);
+}
+
+{
   // PV des géants : multipliés par le nombre de dompteurs en ligne, en gardant leur part de PV.
   const r = room();
   const boss = r.units.get(r.caveBoss[0]);

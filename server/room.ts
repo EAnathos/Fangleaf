@@ -142,6 +142,7 @@ export interface Player {
   wiped?: boolean; // progression effacée : plus sauvegardé
   seen: Set<number>; // espèces déjà croisées (bestiaire de la Tanière)
   close?: () => void; // coupe sa connexion (expulsion)
+  chatAt?: number; // dernier message envoyé (anti-spam)
 }
 
 type Ent = Unit | Player;
@@ -369,6 +370,14 @@ export class Room {
         else [d.x, d.y] = [nx, ny];
       }
     }
+  }
+
+  /** Chat : un message pour tout le village (une ligne, 200 caractères au plus, pas plus de 2 par seconde). */
+  onChat(p: Player, raw: string) {
+    const text = raw.replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (!text || (p.chatAt !== undefined && this.time - p.chatAt < 0.5)) return;
+    p.chatAt = this.time;
+    this.events.push({ e: 'chat', by: p.id, name: p.name, color: p.color, text });
   }
 
   /** Compte banni de ce village. */

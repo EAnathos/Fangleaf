@@ -1,7 +1,7 @@
 // Réglages du joueur sur PC (gardés dans ce navigateur) : touches et façon d'attaquer.
 // Au doigt, rien ne change : on glisse pour se déplacer et l'attaque reste automatique.
 
-export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'map' | 'revive';
+export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'map' | 'revive' | 'chat';
 /**
  * Une touche : par code physique (déplacements : ZQSD en AZERTY = WASD en QWERTY) ou par lettre tapée
  * (raccourcis : sinon M ne marche pas en AZERTY). Une touche choisie par le joueur est toujours gardée par code.
@@ -26,6 +26,7 @@ export const ACTIONS: { id: Action; name: string }[] = [
   { id: 'mount', name: 'Monter / descendre' },
   { id: 'map', name: 'Carte' },
   { id: 'revive', name: 'Relever un coéquipier (maintenir)' },
+  { id: 'chat', name: 'Ouvrir le chat' },
 ];
 
 const DEFAULTS: Settings = {
@@ -39,6 +40,7 @@ const DEFAULTS: Settings = {
     mount: { key: 'f', label: 'F' },
     map: { key: 'm', label: 'M' },
     revive: { key: 'r', label: 'R' },
+    chat: { key: 'Enter', label: 'Entrée' },
   },
   attack: 'auto',
 };
@@ -87,6 +89,7 @@ export const keyLabel = (a: Action) => settings.keys[a].label;
 /** Nom lisible d'une touche pressée, pour l'enregistrer. */
 export function labelOf(code: string, key: string) {
   if (key === ' ') return 'Espace';
+  if (key === 'Enter') return 'Entrée';
   if (key.length === 1) return key.toUpperCase();
   return { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' }[code] ?? key;
 }

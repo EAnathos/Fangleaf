@@ -343,3 +343,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .key-row button.wait { border-color: var(--amber); color: var(--amber); }
 .stone-row .kick { height: 36px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--enemy); background: transparent; color: #FF9B78; font-weight: 600; flex: none; }
 .stone-row .kick.sure { background: var(--enemy); color: var(--amber-ink); }
+
+/* Chat (comme dans Minecraft) : n'apparaît que lorsqu'on l'ouvre. */
+.chat { position: absolute; left: 16px; bottom: 16px; width: min(460px, calc(100vw - 32px)); padding: 10px; display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
+.chat-log { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; font-size: 14px; }
+.chat-log p { margin: 0; line-height: 1.35; overflow-wrap: anywhere; }
+.chat-log b { margin-right: 6px; }
+.chat-log .empty { color: var(--muted); font-style: italic; }
+.chat input { flex: 1; height: 40px; padding: 0 12px; border-radius: 10px; border: 2px solid var(--line); background: var(--night); color: var(--text); font: inherit; }
+.chat input:focus { outline: none; border-color: var(--ally); }
+.chat-open { position: relative; }
+.unread { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--enemy); color: var(--amber-ink); font: 700 11px/18px var(--body); }

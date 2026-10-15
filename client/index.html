@@ -72,11 +72,18 @@
     <section class="hud-tr">
       <canvas id="minimap" width="180" height="180" aria-label="Minicarte"></canvas>
       <div class="row tr-buttons">
+        <button id="chat-open" class="btn chat-open" aria-label="Chat">💬<span id="chat-unread" class="unread" hidden></span></button>
         <button id="menu-open" class="btn" aria-label="Menu">☰ Menu</button>
       </div>
       <span id="ping" class="muted small"></span>
     </section>
 
+    <div id="chat" class="chat panel" hidden>
+      <div id="chat-log" class="chat-log" aria-live="polite"></div>
+      <form id="chat-form" class="row">
+        <input id="chat-input" maxlength="200" autocomplete="off" placeholder="Message pour le village…" aria-label="Message">
+      </form>
+    </div>
     <button id="build-prompt" class="btn prompt" hidden></button>
     <button id="hold-btn" class="btn hold-btn touch-only" hidden></button>
     <button id="revive-prompt" class="btn prompt revive" hidden></button>
