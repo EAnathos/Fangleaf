@@ -2,7 +2,6 @@
 
 import './styles.css';
 import { authEnabled, currentAccount, lastVillage, signInWithGoogle, signOut } from './auth.ts';
-import { Game } from './game.ts';
 import { startLobbyScene } from './lobbyScene.ts';
 import { Net } from './net.ts';
 
@@ -26,6 +25,13 @@ try {
 } catch { /* stockage indisponible */ }
 
 startLobbyScene($<HTMLCanvasElement>('lobby-scene'), () => !$('lobby').hidden);
+
+// Le jeu (carte, HUD, son…) est un module à part : le lobby s'affiche sans l'attendre,
+// puis on le télécharge en arrière-plan pour qu'il soit prêt au moment de jouer.
+let gameModule: Promise<typeof import('./game.ts')> | null = null;
+const loadGame = () => (gameModule ??= import('./game.ts'));
+if ('requestIdleCallback' in window) requestIdleCallback(() => void loadGame());
+else setTimeout(() => void loadGame(), 1500);
 
 const invited = new URLSearchParams(location.search).get('v')?.toUpperCase().slice(0, 6) || null;
 
@@ -103,8 +109,10 @@ $('lobby-form').addEventListener('submit', async (e) => {
   }
   const token = account.token;
   const net = new Net();
+  let Game: (typeof import('./game.ts'))['Game'];
   try {
-    await net.ready();
+    // le jeu doit être chargé avant d'entrer : le serveur enchaîne « welcome » et la position de départ
+    [{ Game }] = await Promise.all([loadGame(), net.ready()]);
   } catch {
     $('lobby-error').textContent = 'Serveur injoignable. Est-il lancé ?';
     go.disabled = false;
