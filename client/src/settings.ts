@@ -40,7 +40,7 @@ const DEFAULTS: Settings = {
     mount: { key: 'f', label: 'F' },
     map: { key: 'm', label: 'M' },
     revive: { key: 'r', label: 'R' },
-    chat: { key: 'Enter', label: 'Entrée' },
+    chat: { key: 'c', label: 'C' },
   },
   attack: 'auto',
 };
@@ -53,7 +53,9 @@ export const touchOnly = typeof matchMedia === 'function' && matchMedia('(pointe
 function load(): Settings {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE) ?? 'null') as Partial<Settings> | null;
-    return { keys: { ...DEFAULTS.keys, ...(saved?.keys ?? {}) }, attack: saved?.attack === 'click' ? 'click' : 'auto' };
+    const keys = { ...DEFAULTS.keys, ...(saved?.keys ?? {}) };
+    if (keys.chat.key === 'Enter' && !keys.chat.code) keys.chat = DEFAULTS.keys.chat; // ancienne touche par défaut du chat : C désormais
+    return { keys, attack: saved?.attack === 'click' ? 'click' : 'auto' };
   } catch {
     return structuredClone(DEFAULTS);
   }

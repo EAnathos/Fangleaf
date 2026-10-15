@@ -289,7 +289,7 @@ export class Hud {
       this.unread = 0;
       $('chat-unread').hidden = true;
       this.renderChat();
-      $<HTMLInputElement>('chat-input').focus();
+      setTimeout(() => $<HTMLInputElement>('chat-input').focus()); // après la touche d'ouverture : pas de « c » tapé dans le champ
     }
     this.capturing = null;
     this.last.members = '';

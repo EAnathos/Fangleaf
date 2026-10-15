@@ -44,7 +44,6 @@ export class Game {
   private lastSwing = -9; // dernier coup d'épée dessiné (attaque au clic)
   private wasDead = false;
   private fog: Fog;
-  private lastMount = 0;
   private area = '';
   private shake = 0;
   private areaTimer = 0;
@@ -153,7 +152,7 @@ export class Game {
     this.net.send({ t: 'help', on });
   }
 
-  /** F : descendre, ou monter sur l'Alpha chevauchable le plus proche (de préférence le dernier utilisé). */
+  /** F : descendre, ou monter sur l'Alpha chevauchable le plus proche. */
   private toggleMount() {
     const st = this.self();
     if (!st || st.dead) return;
@@ -166,7 +165,8 @@ export class Game {
       this.hud.toast(owned ? 'Ta monture est trop loin ou en train de ressusciter.' : 'Aucune monture : éveille un Alpha Loup, Sanglier, Ours ou Escargot à la Tanière.');
       return;
     }
-    const pick = candidates.find((u) => u[0] === this.lastMount) ?? candidates.sort((a, b) => Math.hypot(a[3] - this.me.x, a[4] - this.me.y) - Math.hypot(b[3] - this.me.x, b[4] - this.me.y))[0];
+    // toujours l'Alpha chevauchable le plus proche
+    const pick = candidates.sort((a, b) => Math.hypot(a[3] - this.me.x, a[4] - this.me.y) - Math.hypot(b[3] - this.me.x, b[4] - this.me.y))[0];
     this.net.send({ t: 'mount', id: pick[0] });
   }
 
@@ -583,7 +583,6 @@ export class Game {
         break;
       case 'mount':
         if (e.by === this.myId && e.on) {
-          this.lastMount = e.id;
           this.hud.toast('En selle ! F pour descendre.', 'good');
         } else if (e.by === this.myId) this.hud.toast('Tu as mis pied à terre.');
         break;
