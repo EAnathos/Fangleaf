@@ -645,7 +645,6 @@ export class Hud {
         b.textContent = r.name;
         b.style.color = r.color;
         who.append(b);
-        if (!r.online) who.append(Object.assign(document.createElement('span'), { className: 'off', textContent: 'endormi' }));
         tr.append(who);
         for (const k of ['bosses', 'tamed', 'given'] as const) {
           const td = document.createElement('td');
