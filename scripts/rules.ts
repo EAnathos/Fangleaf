@@ -472,12 +472,13 @@ const noop = () => {};
   const f = r.createUnit(1, false, out.x, out.y);
   f.owner = p.id;
   p.army.push(f.id);
-  let maxStuck = 0;
+  let maxStuck = 0, closest = Infinity; // au plus près : ensuite, il peut repartir chasser ce qui apparaît autour
   for (let i = 0; i < 20 * 12; i++) {
     r.step();
     maxStuck = Math.max(maxStuck, f.stuck);
+    closest = Math.min(closest, Math.hypot(f.x - p.x, f.y - p.y));
   }
-  check(Math.hypot(f.x - p.x, f.y - p.y) < 160 && maxStuck < 2.5, `le Loup de la meute fait le tour par la porte (arrivé à ${Math.round(Math.hypot(f.x - p.x, f.y - p.y))} px, jamais coincé)`);
+  check(closest < 160 && maxStuck < 2.5, `le Loup de la meute fait le tour par la porte (arrivé à ${Math.round(closest)} px, jamais coincé)`);
 }
 
 {
@@ -587,6 +588,53 @@ const noop = () => {};
   settle();
   check(!r.map.caveAt(p.x, p.y) && inside() === 0, 'sortie volontaire : les renforts disparaissent');
   check(r.units.has(boss.id), 'le géant, lui, reste dans sa grotte');
+}
+
+{
+  // Coup ordinaire d'un géant : une seule cible, plus fort (deux pour la reine des Gluants et l'ours) ; les zones, c'est pour ses compétences.
+  const r = room();
+  const hits = (key: string) => {
+    const c = r.map.caves.find((k: { boss: number }) => SPECIES[k.boss].key === key);
+    const boss = r.units.get(r.caveBoss[c.id]);
+    boss.dormant = false;
+    boss.atkCd = 0;
+    const p = r.addPlayer('m' + key, noop);
+    [p.x, p.y] = [boss.x, boss.y + 400];
+    const pack = [0, 1, 2, 3].map((k) => {
+      const u = r.createUnit(1, false, boss.x + Math.cos(k * 1.5) * (boss.r + 4), boss.y + Math.sin(k * 1.5) * (boss.r + 4));
+      u.owner = p.id;
+      u.maxHp = u.hp = 99999;
+      p.army.push(u.id);
+      return u;
+    });
+    r.grid.clear();
+    for (const u of pack) r.grid.insert(u);
+    r.bossMelee(boss);
+    const hurt = pack.filter((u) => u.hp < u.maxHp);
+    return [hurt.length, hurt.length ? Math.round(99999 - hurt[0].hp) : 0, boss.dmg];
+  };
+  const [n1, d1, base1] = hits('shadow_fang');
+  check(n1 === 1 && d1 > base1, `Croc-d'Ombre ne frappe qu'une cible, plus fort (${d1} au lieu de ${base1})`);
+  check(hits('slime_queen')[0] === 2 && hits('colossus')[0] === 2, 'la reine des Gluants et l\'ours en frappent deux à la fois');
+}
+
+{
+  // Un Alpha tombé ne revient pas pendant un combat de géant : il attend la fin du combat.
+  const r = room();
+  const c = r.map.caves[0];
+  const boss = r.units.get(r.caveBoss[c.id]);
+  boss.dormant = false;
+  boss.moveCd = boss.moveCd.map(() => 99);
+  const p = r.addPlayer('a', noop);
+  [p.x, p.y] = [c.exit.x, c.exit.y - 50];
+  const a = r.createUnit(1, false, p.x, p.y);
+  Object.assign(a, { owner: p.id, alpha: true, reviveAt: r.time + 0.01, hp: 0 });
+  p.army.push(a.id);
+  for (let i = 0; i < 5; i++) r.step();
+  check(a.reviveAt > 0, 'géant réveillé : l\'Alpha attend');
+  r.units.delete(boss.id); // combat fini
+  for (let i = 0; i < 5; i++) r.step();
+  check(a.reviveAt === 0 && a.hp === a.maxHp, 'combat fini : l\'Alpha revient aussitôt');
 }
 
 {
@@ -1210,8 +1258,10 @@ const noop = () => {};
   check(p.fruits === BERRIES_PICKED, 'buisson vide : rien de plus');
   // Fruit tendu : l'escargot vient vers le dompteur.
   p.fruits = 40;
-  const u = r.createUnit(snail, false, p.x + 250, p.y);
-  if (r.map.blocked(u.x, u.y)) [u.x, u.y] = [p.x, p.y + 250];
+  // à 250 px, en vue directe du dompteur (pas derrière un rocher ou un arbre)
+  const spot = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => ({ x: p.x + Math.cos(k * Math.PI / 4) * 250, y: p.y + Math.sin(k * Math.PI / 4) * 250 }))
+    .find((q) => !r.map.blocked(q.x, q.y) && r.map.clearLine(q.x, q.y, p.x, p.y)) ?? { x: p.x + 250, y: p.y };
+  const u = r.createUnit(snail, false, spot.x, spot.y);
   const d0 = Math.hypot(u.x - p.x, u.y - p.y);
   r.onHold(p, true);
   let fed = 0, tamedAt = -1;

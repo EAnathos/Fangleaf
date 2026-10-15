@@ -1,6 +1,7 @@
 // Un village : jusqu'à 3 joueurs, la carte et sa simulation autoritaire.
 
 import {
+  bossMelee,
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
@@ -902,6 +903,7 @@ export class Room {
       if (!u.reviveAt || this.time < u.reviveAt) continue;
       const owner = this.players.get(u.owner);
       if (!owner || owner.dead) continue; // il attend que son dompteur soit debout (pas de retour près du boss)
+      if (this.bossFight(owner)) continue; // ni pendant un combat de géant : il revient une fois le combat fini
       u.reviveAt = 0;
       u.hp = u.maxHp;
       u.target = 0;
@@ -1536,6 +1538,13 @@ export class Room {
     });
   }
 
+  /** Le dompteur est dans une grotte dont le géant est réveillé (combat en cours). */
+  private bossFight(p: Player) {
+    const c = this.map.caveAt(p.x, p.y);
+    const u = c && this.units.get(this.caveBoss[c.id]);
+    return !!u && !u.dormant && u.hp > 0;
+  }
+
   /** Fait apparaître le mini-boss d'une grotte, au fond de son intérieur. */
   private spawnBoss(cave: number) {
     const c = this.map.caves[cave];
@@ -1752,10 +1761,13 @@ export class Room {
   private bossMelee(u: Unit) {
     u.atkCd -= DT;
     if (u.atkCd > 0) return;
-    const hit = this.alliesNear(u.x, u.y, u.r + 14).filter((e) => !(e.kind === 'p' && this.safe(e.x, e.y)));
-    if (!hit.length) return;
+    const near = this.alliesNear(u.x, u.y, u.r + 14).filter((e) => !(e.kind === 'p' && this.safe(e.x, e.y)));
+    if (!near.length) return;
     u.atkCd = u.atkCdBase;
-    for (const e of hit) this.damage(e, u.dmg, u);
+    // sa cible d'abord, puis les plus proches : les attaques de zone restent pour ses compétences
+    const melee = bossMelee(SPECIES[u.s].key);
+    near.sort((a, b) => Number(b.id === u.target) - Number(a.id === u.target) || dist2(u.x, u.y, a.x, a.y) - dist2(u.x, u.y, b.x, b.y));
+    for (const e of near.slice(0, melee.targets)) this.damage(e, u.dmg * melee.mult, u);
   }
 
   private wildAI(u: Unit) {
@@ -2179,7 +2191,7 @@ export class Room {
       if (!u) continue;
       out.push({
         id: u.id, species: u.s, alpha: u.alpha, level: u.level, legend: u.legend, hp: Math.round((100 * Math.max(0, u.hp)) / u.maxHp),
-        reviveIn: u.reviveAt ? Math.max(0, Math.ceil(u.reviveAt - this.time)) : 0,
+        reviveIn: u.reviveAt ? Math.max(1, Math.ceil(u.reviveAt - this.time)) : 0, // au moins 1 : il peut attendre la fin d'un combat de géant
       });
     }
     return out;
