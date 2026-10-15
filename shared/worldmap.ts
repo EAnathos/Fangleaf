@@ -591,7 +591,7 @@ export class WorldMap {
     for (const k of [-1, 0, 1]) this.solidDisc(v.x + DEN_OFFSET.x + k * 46, v.y + DEN_OFFSET.y - 6, 38);
     this.solidDisc(v.x, v.y, 20);
     this.solidRect(v.x + STORE_OFFSET.x - 36, v.y + STORE_OFFSET.y - 14, v.x + STORE_OFFSET.x + 36, v.y + STORE_OFFSET.y + 14); // entrepôt
-    this.solidRect(v.x + BOARD_OFFSET.x - 22, v.y + BOARD_OFFSET.y - 4, v.x + BOARD_OFFSET.x + 22, v.y + BOARD_OFFSET.y + 6); // panneau
+    this.solidRect(v.x + BOARD_OFFSET.x - 18, v.y + BOARD_OFFSET.y - 2, v.x + BOARD_OFFSET.x + 18, v.y + BOARD_OFFSET.y + 4); // panneau
     // camp de départ : tentes et cercle de pierres
     const sp = this.spawn;
     for (const t of this.tents) this.solidRect(sp.x + t.x - 36, sp.y + t.y - 6, sp.x + t.x + 36, sp.y + t.y + 26);

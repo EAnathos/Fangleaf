@@ -63,11 +63,11 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     v.buildings.includes(b) ? open : { panel: 'buy', pos, buy: { b }, label: `E — Construire : ${BUILDINGS[b].name} · ${costText(buildingCost(b))}` };
   const spots: Spot[] = [
     { panel: 'hall', pos: map.hall, label: `E — Hôtel de ville · niv. ${v.hall}` },
-    { panel: 'board', pos: map.board, label: 'E — Tableau du village' },
     { deposit: true, pos: map.store, label: 'E — Entrepôt : déposer ton bois et ta pierre' },
     building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Forge' }),
     building('den', map.den, { panel: 'den', pos: map.den, label: 'E — Tanière' }),
     building('market', map.market, { panel: 'market', pos: map.market, label: 'E — Marché' }),
+    { panel: 'board', pos: map.board, reach: 55, label: 'E — Tableau du village' }, // petit : la Tanière d'à côté passe avant
     building('stone', map.stones[0], { panel: 'travel', pos: map.stones[0], label: 'E — Pierre de passage', at: -1 }),
     ...map.sites.map((site, i): Spot =>
       v.camps.includes(i)
