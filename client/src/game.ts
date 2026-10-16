@@ -41,6 +41,7 @@ export class Game {
   private fx = new Fx();
   private skyFx = new SkyFx(); // nuit et pluie
   private dt = 0;
+  private palisadeUp = false;
   me = { x: 0, y: 0, fx: 1, fy: 0, moving: false };
   private flashes = new Map<number, number>();
   private charges = new Map<number, number>(); // tireur → début de la charge de son tir
@@ -70,7 +71,7 @@ export class Game {
     this.ctx = canvas.getContext('2d')!;
     this.map = new WorldMap(seed);
     this.world = new World(this.map);
-    this.fog = new Fog(`fangleaf.fog.v5.${seed}`, (x, y) => !this.map.isForest(x, y)); // v5 : carte agrandie (6 zones)
+    this.fog = new Fog(`fangleaf.fog.v6.${seed}`, (x, y) => !this.map.isForest(x, y)); // v6 : l'île
     this.hud = new Hud(code, this.map, this.fog, founder);
     this.hud.onMount = (id) => net.send({ t: 'mount', id });
     this.hud.onCave = (id, enter) => net.send({ t: 'cave', id, enter });
@@ -251,7 +252,7 @@ export class Game {
     this.net.send({ t: 'mount', id: pick[0] });
   }
 
-  /** Annonce le lieu quand on y entre : camp de départ, village ou zone de danger. */
+  /** Annonce le lieu quand on y entre : plage d'arrivée, village ou zone de danger. */
   private updateArea(dt: number) {
     this.areaTimer -= dt;
     if (this.areaTimer > 0) return;
@@ -270,7 +271,7 @@ export class Game {
     if (area === this.area) return;
     const first = this.area === '';
     this.area = area;
-    if (area === 'camp') this.hud.banner('Camp de départ', first ? 'Le village t\'attend au bout du chemin' : 'De retour au camp');
+    if (area === 'camp') this.hud.banner('Plage du naufrage', first ? 'Suis le chemin de cailloux jusqu\'au feu de camp' : 'De retour sur la plage');
     else if (area === 'village') this.hud.banner('Village', '');
     else if (area.startsWith('site')) {
       if (area.endsWith('+')) this.hud.banner(campName(site), 'Feu de camp · réapparition · Pierre de passage');
@@ -828,7 +829,8 @@ export class Game {
         break;
       }
       case 'built': {
-        const pos = e.b === 'stone' ? this.map.stones[0] : this.map[e.b];
+        const pos = this.map.buildingPos(e.b);
+        if (e.b === 'palisade') this.map.setPalisade(true);
         this.fx.ring(pos.x, pos.y, '#F0B64A', 20, 140, 1.2);
         this.fx.burst(pos.x, pos.y, '#F0B64A', 30, 180);
         this.hud.toast(e.by === this.myId ? `Nouveau bâtiment pour tout le village : ${BUILDINGS[e.b].name} !` : `${name(e.by)} a construit : ${BUILDINGS[e.b].name}`, 'good');
@@ -936,6 +938,8 @@ export class Game {
     this.hud.hall = this.net.latest?.hall ?? 0;
     this.hud.banned = this.net.latest?.banned ?? [];
     this.hud.stock = this.net.latest?.stock ?? [0, 0];
+    const palisade = this.hud.buildings.includes('palisade');
+    if (palisade !== this.palisadeUp) this.map.setPalisade((this.palisadeUp = palisade)); // solide une fois construite (comme côté serveur)
     this.hud.bare = this.net.latest?.bare ?? [];
     this.hud.beaten = this.net.latest?.beaten ?? [];
     this.watchGates();
@@ -1150,7 +1154,7 @@ export class Game {
     ctx.translate(village.x, village.y);
     this.world.drawCampfire(ctx, this.time);
     // bâtiments : construits, ou leur chantier avec son prix
-    for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall);
+    for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall, this.hud.buildings.includes(`plot_${b}`));
     this.world.drawHall(ctx, this.hud.hall, this.time);
     this.world.drawStore(ctx, this.hud.stock);
     this.world.drawBoard(ctx);
@@ -1183,8 +1187,10 @@ export class Game {
       const label = k === 0 && !active ? `${BUILDINGS.stone.name} · ${this.hud.hall < need ? `Hôtel de ville niv. ${need}` : costText(buildingCost('stone'))}` : undefined;
       if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
-    // Palissade du village : pieux hauts, triés avec les créatures (on passe derrière).
-    if (!here && inView(village.x, village.y, VILLAGE_R + 60)) {
+    // Palissade du village : pieux hauts, triés avec les créatures (on passe derrière) ; pas encore construite : son tracé.
+    const palisade = this.hud.buildings.includes('palisade');
+    if (!here && !palisade && inView(village.x, village.y, VILLAGE_R + 60)) this.world.drawPalisadePlan(ctx);
+    if (!here && palisade && inView(village.x, village.y, VILLAGE_R + 60)) {
       this.world.stakes.forEach((st, k) => inView(st.x, st.y, 40) && list.push({ y: st.y, draw: () => this.world.drawStake(ctx, k) }));
       this.world.gatePosts.forEach((g, k) => inView(g.x, g.y, 60) && list.push({ y: g.y, draw: () => this.world.drawGatePost(ctx, k, this.time) }));
     }

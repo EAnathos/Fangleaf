@@ -5,7 +5,7 @@ export const DT = 1 / TICK_HZ;
 
 export const MAX_PLAYERS = 3;
 export const MAX_VILLAGES = 3; // villages par compte (on choisit le sien au lobby)
-export const WORLD_HALF = 7200; // carte de -7200 à 7200 : un long couloir sinueux dans la forêt (voir worldmap.ts)
+export const WORLD_HALF = 9600; // carte de -9600 à 9600 : une île au milieu de la mer (voir worldmap.ts)
 export const VILLAGE_R = 360;
 export const VIEW_R = 1250; // rayon d'intérêt : unités envoyées à chaque joueur
 
@@ -16,16 +16,22 @@ export const MARKET_OFFSET = { x: -180, y: -160 };
 export const BUILDING_REACH = 110;
 // Bâtiments du village : construits par n'importe quel membre contre de l'or, une fois pour tout le village.
 // Il faut aussi du bois et de la pierre (récoltés sur la carte), et parfois un Hôtel de ville assez développé.
-export type BuildingId = 'forge' | 'den' | 'market' | 'stone';
+export type BuildingId = 'forge' | 'den' | 'market' | 'stone' | 'palisade' | 'plot_forge' | 'plot_den' | 'plot_market';
 export interface Cost {
   gold: number;
   wood: number;
   stone: number;
 }
-export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: number; stone: number; hall: number; desc: string }> = {
-  forge: { name: 'Forge', cost: 10, wood: 5, stone: 0, hall: 0, desc: 'Choisis ta classe, améliore ton arme et ton armure.' },
-  den: { name: 'Tanière', cost: 20, wood: 20, stone: 15, hall: 0, desc: 'Éveille, renforce et range tes Alphas. Bestiaire des espèces croisées.' },
-  market: { name: 'Marché', cost: 50, wood: 25, stone: 10, hall: 1, desc: 'Vends les monstres de ta meute, achète des monstres des espèces déjà croisées.' },
+// Mise en place du camp : au départ, il n'y a que le feu. On monte la palissade, puis on défriche l'emplacement
+// de chaque bâtiment avant de pouvoir le bâtir (needs : ce qu'il faut avoir fait avant).
+export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: number; stone: number; hall: number; desc: string; needs?: BuildingId }> = {
+  palisade: { name: 'Palissade', cost: 0, wood: 15, stone: 0, hall: 0, desc: 'Les pieux du village, et ses quatre portes. Il la faut pour bâtir l\'Hôtel de ville.' },
+  plot_forge: { name: 'Emplacement de la forge', cost: 0, wood: 4, stone: 4, hall: 0, desc: 'Défricher et aplanir le terrain de la forge.' },
+  plot_den: { name: 'Emplacement de la Tanière', cost: 0, wood: 8, stone: 4, hall: 0, desc: 'Défricher le terrain de la Tanière.' },
+  plot_market: { name: 'Emplacement du marché', cost: 0, wood: 8, stone: 6, hall: 0, desc: 'Défricher le terrain du marché.' },
+  forge: { name: 'Forge', cost: 10, wood: 5, stone: 0, hall: 0, desc: 'Choisis ta classe, améliore ton arme et ton armure.', needs: 'plot_forge' },
+  den: { name: 'Tanière', cost: 20, wood: 20, stone: 15, hall: 0, desc: 'Éveille, renforce et range tes Alphas. Bestiaire des espèces croisées.', needs: 'plot_den' },
+  market: { name: 'Marché', cost: 50, wood: 25, stone: 10, hall: 1, desc: 'Vends les monstres de ta meute, achète des monstres des espèces déjà croisées.', needs: 'plot_market' },
   stone: { name: 'Pierre de passage', cost: 200, wood: 10, stone: 40, hall: 2, desc: 'Voyage instantané entre le village et les camps établis.' },
 };
 /** « 20 or · 15 bois · 10 pierre » (les montants nuls sont omis). */
@@ -325,7 +331,7 @@ export interface Species {
   speed: number;
   atkCd: number;
   gold: number;
-  zone: number; // 1 à ZONES : zones de plus en plus dangereuses en s'éloignant du camp de départ
+  zone: number; // 1 à ZONES : zones de plus en plus dangereuses en s'éloignant de la plage d'arrivée
   population: number;
   pack: [number, number];
   boss?: boolean; // mini-boss de grotte : n'apparaît que dans sa grotte, ne s'apprivoise pas, lâche son âme
@@ -409,11 +415,10 @@ export const SPECIES_KEYS = SPECIES.map((s) => s.key);
 /** Espèces triées par zone (pour l'affichage : Tanière, bestiaire). */
 export const SPECIES_BY_ZONE = SPECIES.map((_, i) => i).sort((a, b) => SPECIES[a].zone - SPECIES[b].zone || a - b);
 
-// Le monde est un long couloir (voir worldmap.ts) découpé en ZONES zones successives de PATH_LEN / ZONES.
-export const PATH_LEN = 30000;
+// Le monde est une île (voir worldmap.ts) découpée en ZONES zones successives, de plus en plus loin de la plage d'arrivée.
 export const ZONES = 6;
 export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable'];
-export const SPAWN_SAFE_R = 420; // pas de monstre qui apparaît près du camp de départ
+export const SPAWN_SAFE_R = 420; // pas de monstre qui apparaît près de la plage d'arrivée
 
 // Buissons à fruits : le gibier passif vient y manger ; les fruits repoussent ensuite.
 export const BUSH_REGROW_S = 45;

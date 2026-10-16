@@ -1,18 +1,20 @@
 // Carte générée à partir d'une graine : même graine = même carte côté serveur et côté client.
 //
-// - Le monde est un long couloir sinueux (la « colonne ») qui part d'un bord de la carte (haut, droite ou bas)
-//   et serpente sur PATH_LEN px ; autour, une forêt infranchissable.
-// - Camp de départ au début du couloir, village (la base) un peu plus loin : il faut le trouver.
-// - Zones de danger : ZONES tronçons successifs le long du couloir, frontières déformées par du bruit ;
+// - Le monde est une île de forme et de taille aléatoires au milieu de la mer. Elle s'étire le long d'une
+//   « colonne » (une ligne courbe) : la côte est à une distance variable de cette colonne, au bord bruité.
+// - Mer peu profonde le long de la côte (le serpent y nage), puis mer profonde, infranchissable.
+// - Relief : des collines qui montent et descendent (affichage seulement, rien d'infranchissable).
+// - On arrive sur la plage d'un bout de l'île (une épave, des planches) ; un chemin de cailloux mène au village.
+// - Zones de danger : ZONES bandes successives à travers l'île, de plus en plus loin de la plage, frontières bruitées ;
 //   la zone 5 (Lacs brumeux) est criblée de lacs, où nagent les Serpents des brumes ; la 6 (Mer de sable) n'a que de rares oasis.
 // - Au bout de la zone 4 : un emplacement de camp, que le village peut établir contre de l'or
 //   (feu qui soigne, point de réapparition, Pierre de passage pour voyager entre camps).
-// - Lacs infranchissables dans le couloir, en laissant toujours libre une voie centrale.
+// - Lacs dans l'île, en laissant toujours libre une voie centrale.
 // - Une grotte par espèce (deux ou trois par zone), gardée par la version géante de l'espèce (entrée sur la carte, intérieur hors du monde).
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
-// - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = forêt hors du couloir).
+// - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = mer profonde).
 
-import { CAVE_RX, CAVE_RY, BOARD_OFFSET, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, PATH_LEN, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type Resource } from './config.ts';
+import { CAVE_RX, CAVE_RY, BOARD_OFFSET, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -21,15 +23,19 @@ const LAKE_THRESHOLD = 0.64;
 const LAKE_THRESHOLD_LAKES = 0.54; // zone 5 (Lacs brumeux) : bien plus d'eau
 const LAKE_THRESHOLD_DESERT = 0.8; // zone 6 (Mer de sable) : de rares oasis
 const SPINE_STEP = 100;
-const ZONE_LEN = PATH_LEN / ZONES;
-const LAKES_FROM = 4 * ZONE_LEN; // début de la zone des lacs
-const DESERT_FROM = 5 * ZONE_LEN; // début de la Mer de sable
+const ISLAND_LEN: [number, number] = [14000, 20000]; // longueur de la colonne : l'île est plus ou moins grande
+const HALF_W: [number, number] = [1000, 2100]; // demi-largeur de l'île (avant le bruit de la côte)
+const COAST_NOISE = 900; // la côte s'écarte de ± la moitié de ceci
+export const SEA_SHALLOW = 520; // mer peu profonde le long de la côte (le serpent y nage), puis mer profonde
+export const BEACH = 190; // largeur de la plage, côté terre
 const DENS = 7; // tanières de suricates
 const ZONE_BLEND = 900; // largeur de la transition (affichage) entre deux zones
-const STAMP_R = 1300; // au-delà, forêt profonde : on ne calcule plus la distance au couloir
+const STAMP_R = 3700; // au-delà, mer profonde : on ne calcule plus la distance à la colonne
 const LANE = 230; // voie centrale jamais inondée
 const CAVE_GAP = 4000; // > VIEW_R + 2 × CAVE_RX + la demi-largeur de l'écran
-const VILLAGE_ARC = 1550; // abscisse du village le long du couloir
+const VILLAGE_ARC = 800; // abscisse du village le long de la colonne
+const ZONE1_EXTRA = VILLAGE_ARC + VILLAGE_R; // la zone 1 commence par la plage et le village : elle est plus longue
+const TAU = Math.PI * 2;
 
 export interface Pt {
   x: number;
@@ -81,49 +87,40 @@ const DECO_CELL = 96;
 const BUCKET = 256;
 
 /** Colonne du couloir : marche aléatoire depuis un bord, qui évite les bords et ses propres boucles. */
+/**
+ * Colonne de l'île : une courbe douce (direction, ondulation et courbure tirées au sort), rééchantillonnée tous
+ * les SPINE_STEP px, centrée sur la carte ; raccourcie si elle n'y tient pas (avec la mer autour).
+ */
 function makeSpine(seed: number): Pt[] {
   const rand = rng(seed ^ 0x1234567);
-  const MARGIN = 1100, SEP = 2100;
-  let best: Pt[] = [];
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const side = Math.floor(rand() * 3); // 0 : haut, 1 : droite, 2 : bas
-    const r = (rand() - 0.5) * 2 * (WORLD_HALF - 2500);
-    let p = side === 0 ? { x: r, y: -WORLD_HALF + 200 } : side === 1 ? { x: WORLD_HALF - 200, y: r } : { x: r, y: WORLD_HALF - 200 };
-    let h = side === 0 ? Math.PI / 2 : side === 1 ? Math.PI : -Math.PI / 2;
-    const pts = [p];
-    let turn = 0, ok = true;
-    while ((pts.length - 1) * SPINE_STEP < PATH_LEN) {
-      const n = pts.length;
-      let steer = 0;
-      if (n > 14) {
-        turn = (turn + (rand() - 0.5) * 0.05) * 0.93;
-        // on regarde 900 px devant : trop près d'un bord, on tourne vers le centre ; trop près du couloir déjà tracé, on s'en écarte
-        const ax = p.x + Math.cos(h) * 900, ay = p.y + Math.sin(h) * 900;
-        if (Math.abs(ax) > WORLD_HALF - MARGIN || Math.abs(ay) > WORLD_HALF - MARGIN) {
-          let d = Math.atan2(-p.y, -p.x) - h;
-          while (d > Math.PI) d -= 2 * Math.PI;
-          while (d < -Math.PI) d += 2 * Math.PI;
-          steer += Math.sign(d) * 0.06;
-        }
-        for (let i = 0; i < n - 30; i += 3) {
-          const q = pts[i];
-          if (dist2(q.x, q.y, ax, ay) < (SEP + 500) ** 2) {
-            steer -= Math.sign(Math.cos(h) * (q.y - p.y) - Math.sin(h) * (q.x - p.x)) * 0.05;
-            break;
-          }
-        }
-      }
-      h += clamp(turn + steer, -0.09, 0.09);
-      p = { x: p.x + Math.cos(h) * SPINE_STEP, y: p.y + Math.sin(h) * SPINE_STEP };
-      if (n > 14 && (Math.abs(p.x) > WORLD_HALF - 700 || Math.abs(p.y) > WORLD_HALF - 700)) ok = false;
-      for (let i = 0; ok && i < n - 30; i++) if (dist2(pts[i].x, pts[i].y, p.x, p.y) < SEP * SEP) ok = false;
-      if (!ok) break;
-      pts.push(p);
+  const len = ISLAND_LEN[0] + rand() * (ISLAND_LEN[1] - ISLAND_LEN[0]);
+  const ang = rand() * TAU, wob = 400 + rand() * 1400, waves = 0.6 + rand() * 1.2, ph = rand() * TAU, bend = (rand() - 0.5) * 0.5;
+  const dx = Math.cos(ang), dy = Math.sin(ang), room = WORLD_HALF - HALF_W[1] - COAST_NOISE / 2 - SEA_SHALLOW - 400;
+  for (let scale = 1; ; scale -= 0.04) {
+    const L = len * scale;
+    // courbe dense, puis points tous les SPINE_STEP px le long de la courbe
+    const dense: Pt[] = [];
+    for (let i = 0; i <= 400; i++) {
+      const t = i / 400, s = (t - 0.5) * L;
+      const off = wob * Math.sin(t * Math.PI * 2 * waves + ph) * scale + bend * L * (t - 0.5) ** 2 * 2;
+      dense.push({ x: dx * s - dy * off, y: dy * s + dx * off });
     }
-    if (ok) return pts;
-    if (pts.length > best.length) best = pts;
+    const pts: Pt[] = [dense[0]];
+    let carry = 0;
+    for (let i = 1; i < dense.length; i++) {
+      const a = dense[i - 1], b = dense[i], seg = Math.hypot(b.x - a.x, b.y - a.y);
+      let d = SPINE_STEP - carry;
+      while (d <= seg) {
+        pts.push({ x: a.x + ((b.x - a.x) * d) / seg, y: a.y + ((b.y - a.y) * d) / seg });
+        d += SPINE_STEP;
+      }
+      carry = seg - (d - SPINE_STEP);
+    }
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const p of pts) [x0, x1, y0, y1] = [Math.min(x0, p.x), Math.max(x1, p.x), Math.min(y0, p.y), Math.max(y1, p.y)];
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    if ((x1 - x0) / 2 <= room && (y1 - y0) / 2 <= room || scale < 0.5) return pts.map((p) => ({ x: p.x - cx, y: p.y - cy }));
   }
-  return best;
 }
 
 export class WorldMap {
@@ -131,7 +128,7 @@ export class WorldMap {
   readonly length: number; // longueur réelle de la colonne
   readonly spawn: Pt;
   readonly village: Pt;
-  readonly gate: Pt; // porte du village côté camp de départ, où arrive le chemin
+  readonly gate: Pt; // porte du village côté plage, où arrive le chemin de cailloux
   trailGate!: Pt; // porte d'où part la piste vers le bout du couloir
   readonly forge: Pt;
   readonly den: Pt;
@@ -140,7 +137,8 @@ export class WorldMap {
   readonly store: Pt; // entrepôt (réserve commune de bois et de pierre)
   readonly board: Pt; // panneau du village (tableau des exploits)
   readonly gates: number[] = []; // portes : abscisse le long du couloir ([0] sortie du village, puis début de chaque zone)
-  readonly tents: Pt[] = []; // tentes du camp de départ (décalage depuis son feu), à l'opposé du chemin
+  readonly wreck: { boat: Pt; out: number; planks: { x: number; y: number; a: number; l: number }[] } = { boat: { x: 0, y: 0 }, out: 0, planks: [] }; // épave sur la plage d'arrivée (décalages depuis le point d'arrivée)
+  readonly zoneLen: number; // longueur (le long de la colonne) des zones 2 à 6 ; la zone 1 a en plus la plage et le village
   readonly sites: Pt[] = []; // emplacements de camp (un au bout de chaque série de 4 zones)
   private siteArcs: number[] = []; // abscisse de chaque emplacement le long du couloir
   readonly siteLayout: { tents: Pt[]; flag: Pt }[] = []; // décalages depuis le feu, à l'écart de la piste qui arrive
@@ -160,28 +158,42 @@ export class WorldMap {
   readonly oreDown = new Set<number>(); // filons et tas épuisés : ils ont disparu (on passe à travers) jusqu'à leur retour
   private cdist = new Float32Array(N * N).fill(1e9); // distance à la colonne
   private arc = new Float32Array(N * N); // abscisse (le long de la colonne) du point de colonne le plus proche
+  private shore = new Float32Array(N * N).fill(1e9); // distance à la côte : négative dans l'île, positive en mer
+  private palisadeCells: number[] = []; // cases de la palissade (solides seulement une fois construite)
 
   constructor(readonly seed: number) {
     const rand = rng(seed ^ 0x5f3759df);
     this.spine = makeSpine(seed);
     this.length = (this.spine.length - 1) * SPINE_STEP;
-    this.stampCorridor();
+    this.zoneLen = (this.length - ZONE1_EXTRA) / ZONES;
+    this.stampIsland();
 
-    this.spawn = this.spineAt(450);
+    // Arrivée sur la plage du bout de l'île : on part de la colonne vers le large jusqu'au sable.
+    const s0 = this.spine[0], s1 = this.spine[Math.min(4, this.spine.length - 1)];
+    const ol = Math.hypot(s0.x - s1.x, s0.y - s1.y) || 1, ox = (s0.x - s1.x) / ol, oy = (s0.y - s1.y) / ol;
+    let d = 0;
+    while (d < 4000 && this.shoreAt(s0.x + ox * d, s0.y + oy * d) < -BEACH * 0.6) d += 16;
+    this.spawn = { x: s0.x + ox * (d - 90), y: s0.y + oy * (d - 90) };
     const village = (this.village = this.spineAt(VILLAGE_ARC));
     this.gate = this.gateToward(this.spawn);
-    const away = Math.atan2(this.spawn.y - this.gate.y, this.spawn.x - this.gate.x);
-    for (const k of [-1, 1]) this.tents.push({ x: Math.cos(away + k * 1.1) * 100, y: Math.sin(away + k * 1.1) * 100 - 20 });
+    // épave : la barque échouée côté mer, des planches éparpillées autour
+    const wr = rng(seed ^ 0xb0a7), out = Math.atan2(oy, ox);
+    this.wreck.out = out;
+    this.wreck.boat = { x: ox * 120 - oy * 60, y: oy * 120 + ox * 60 };
+    for (let k = 0; k < 9; k++) {
+      const a = out + (wr() - 0.5) * 3.4, r = 70 + wr() * 130;
+      this.wreck.planks.push({ x: Math.cos(a) * r, y: Math.sin(a) * r, a: wr() * Math.PI, l: 26 + wr() * 22 });
+    }
     this.forge = { x: village.x + FORGE_OFFSET.x, y: village.y + FORGE_OFFSET.y };
     this.den = { x: village.x + DEN_OFFSET.x, y: village.y + DEN_OFFSET.y };
     this.market = { x: village.x + MARKET_OFFSET.x, y: village.y + MARKET_OFFSET.y };
     this.hall = { x: village.x + HALL_OFFSET.x, y: village.y + HALL_OFFSET.y };
     this.store = { x: village.x + STORE_OFFSET.x, y: village.y + STORE_OFFSET.y };
     this.board = { x: village.x + BOARD_OFFSET.x, y: village.y + BOARD_OFFSET.y };
-    for (const s of [VILLAGE_ARC + VILLAGE_R + 200, ...Array.from({ length: ZONES - 1 }, (_, k) => (k + 1) * ZONE_LEN)]) if (s < this.length - 300) this.gates.push(s);
+    for (const s of [VILLAGE_ARC + VILLAGE_R + 200, ...Array.from({ length: ZONES - 1 }, (_, k) => this.zoneTo(k + 1))]) if (s < this.length - 300) this.gates.push(s);
     this.stones.push({ x: village.x + VILLAGE_STONE_OFFSET.x, y: village.y + VILLAGE_STONE_OFFSET.y });
-    for (let s = 4 * ZONE_LEN; s <= this.length + 1; s += 4 * ZONE_LEN) {
-      const at = Math.min(s, this.length) - 650, site = this.spineAt(at), from = this.spineAt(at - 300);
+    for (const s of [this.zoneTo(4)]) {
+      const at = s - 650, site = this.spineAt(at), from = this.spineAt(at - 300);
       const a = Math.atan2(from.y - site.y, from.x - site.x); // direction d'où arrive la piste
       const off = (ang: number, d: number) => ({ x: Math.cos(ang) * d, y: Math.sin(ang) * d });
       this.sites.push(site);
@@ -195,21 +207,21 @@ export class WorldMap {
     this.buildTrail();
     this.indexPaths();
 
-    // Lacs : seulement dans le couloir, hors de la voie centrale, du camp, du village et des emplacements de camp.
+    // Lacs : seulement dans l'île, hors de la voie centrale, de la plage, du village et des emplacements de camp.
     for (let j = 0; j < N; j++) {
       for (let i = 0; i < N; i++) {
         const k = j * N + i;
-        if (this.water[k] !== 0 || this.cdist[k] < LANE) continue;
+        if (this.water[k] !== 0 || this.cdist[k] < LANE || this.shore[k] > -BEACH - 120) continue;
         const p = { x: -WORLD_HALF + (i + 0.5) * MAP_CELL, y: -WORLD_HALF + (j + 0.5) * MAP_CELL };
         if (dist2(p.x, p.y, village.x, village.y) < (VILLAGE_R + 160) ** 2) continue;
         if (dist2(p.x, p.y, this.spawn.x, this.spawn.y) < 320 ** 2) continue;
         if (this.sites.some((c) => dist2(p.x, p.y, c.x, c.y) < 380 ** 2)) continue;
-        const threshold = this.arc[k] > DESERT_FROM ? LAKE_THRESHOLD_DESERT : this.arc[k] > LAKES_FROM ? LAKE_THRESHOLD_LAKES : LAKE_THRESHOLD;
+        const threshold = this.arc[k] > this.zoneFrom(6) ? LAKE_THRESHOLD_DESERT : this.arc[k] > this.zoneFrom(5) ? LAKE_THRESHOLD_LAKES : LAKE_THRESHOLD;
         if (this.lakeNoise(p.x, p.y) > threshold && this.pathDist(p.x, p.y) >= 130) this.water[k] = 1;
       }
     }
 
-    // Grottes : deux par zone, dans le tronçon de la zone, sur les côtés du couloir, l'ouverture accessible.
+    // Grottes : deux ou trois par zone, dans la bande de la zone, de part et d'autre de la colonne, l'ouverture accessible.
     const free = (x: number, y: number, r: number) => {
       for (let a = 0; a < 8; a++) if (this.blocked(x + Math.cos(a) * r, y + Math.sin(a) * r)) return false;
       return !this.blocked(x, y);
@@ -217,15 +229,15 @@ export class WorldMap {
     const bosses = SPECIES.map((sp, i) => (sp.boss ? i : -1)).filter((i) => i >= 0).sort((x, y) => SPECIES[x].zone - SPECIES[y].zone || x - y);
     for (const boss of bosses) {
       const z = SPECIES[boss].zone;
-      const lo = (z - 1) * ZONE_LEN + (z === 1 ? 2300 : 700), hi = z * ZONE_LEN - 700;
+      const lo = z === 1 ? VILLAGE_ARC + VILLAGE_R + 600 : this.zoneFrom(z) + 300, hi = this.zoneTo(z) - 300;
       // Écart entre grottes assoupli si la zone est trop encombrée (lacs, camp) : jamais de géant manquant.
-      // Le premier passage est inchangé : les cartes qui y arrivent restent identiques.
-      for (const gap of [1000, 750, 500, 350]) {
+      // Dernier recours (petite île, zone criblée de lacs) : tout près de la voie centrale, toujours au sec.
+      for (const [gap, near] of [[1000, false], [750, false], [500, false], [350, false], [250, false], [220, true]] as const) {
         if (this.caves.some((c) => c.boss === boss)) break;
-        for (let tries = 0; tries < 800; tries++) {
+        for (let tries = 0; tries < 1500; tries++) {
           const s = lo + rand() * (hi - lo);
           const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
-          const off = (rand() < 0.5 ? -1 : 1) * (300 + rand() * Math.max(0, this.halfWidth(s) - 520));
+          const off = (rand() < 0.5 ? -1 : 1) * (near ? 160 + rand() * 260 : 300 + rand() * Math.max(0, this.halfWidth(s) - 700));
           const x = sx + n.x * off, y = sy + n.y * off;
           if (this.zoneAt(x, y) !== z || !free(x, y, 120) || !free(x, y + 70, 40)) continue;
           if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < gap ** 2)) continue;
@@ -240,7 +252,7 @@ export class WorldMap {
       }
     }
 
-    // Filons d'or : éparpillés le long du couloir, hors de l'eau, du village, des camps et des chemins.
+    // Filons d'or : éparpillés sur l'île, hors de l'eau, du village, des camps et des chemins.
     for (let tries = 0; tries < 8000 && this.ores.length < 120; tries++) {
       const s = 500 + rand() * (this.length - 500);
       const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
@@ -286,14 +298,14 @@ export class WorldMap {
     return { x: -(b.y - a.y) / l, y: (b.x - a.x) / l };
   }
 
-  /** Demi-largeur du couloir à l'abscisse s : de 600 à 900 px, jusqu'à 250 px de plus dans la zone des lacs. */
+  /** Demi-largeur de l'île à l'abscisse s (avant le bruit de la côte) : de larges renflements et des étranglements. */
   halfWidth(s: number) {
-    const lakes = clamp((s - LAKES_FROM + 400) / 1200, 0, 1) * 250;
-    return clamp(700 + (fbm(s / 1600, 0.5, this.seed + 91, 2) - 0.5) * 700, 600, 900) + lakes;
+    const taper = Math.min(1, 0.55 + (0.45 * Math.min(s, this.length - s)) / 1800); // les deux bouts s'affinent
+    return clamp(1550 + (fbm(s / 2600, 0.5, this.seed + 91, 2) - 0.5) * 1700, HALF_W[0], HALF_W[1]) * taper;
   }
 
-  /** Distance et abscisse de la colonne pour chaque case, puis forêt (3) hors du couloir. */
-  private stampCorridor() {
+  /** Distance et abscisse de la colonne pour chaque case, côte bruitée, puis mer : peu profonde (1), profonde (3). */
+  private stampIsland() {
     const cells = Math.ceil(STAMP_R / MAP_CELL);
     for (let k = 1; k < this.spine.length; k++) {
       const a = this.spine[k - 1], b = this.spine[k];
@@ -316,11 +328,45 @@ export class WorldMap {
     }
     for (let j = 0; j < N; j++) {
       for (let i = 0; i < N; i++) {
-        const c = j * N + i, px = -WORLD_HALF + (i + 0.5) * MAP_CELL, py = -WORLD_HALF + (j + 0.5) * MAP_CELL;
-        const edge = this.halfWidth(this.arc[c]) + (fbm(px / 260, py / 260, this.seed + 93, 2) - 0.5) * 240;
-        if (this.cdist[c] > edge) this.water[c] = 3;
+        const c = j * N + i;
+        if (this.cdist[c] > 1e8) {
+          this.water[c] = 3; // loin de tout : le large
+          continue;
+        }
+        const px = -WORLD_HALF + (i + 0.5) * MAP_CELL, py = -WORLD_HALF + (j + 0.5) * MAP_CELL;
+        const edge = this.halfWidth(this.arc[c]) + (fbm(px / 700, py / 700, this.seed + 93, 3) - 0.5) * COAST_NOISE + (fbm(px / 160, py / 160, this.seed + 94, 2) - 0.5) * 160;
+        const d = (this.shore[c] = this.cdist[c] - edge);
+        if (d > SEA_SHALLOW) this.water[c] = 3;
+        else if (d > 0) this.water[c] = 1;
       }
     }
+  }
+
+  /** Distance à la côte (négative dans l'île, positive en mer). */
+  shoreAt(x: number, y: number) {
+    if (x <= -WORLD_HALF || y <= -WORLD_HALF || x >= WORLD_HALF || y >= WORLD_HALF) return 1e9;
+    return this.shore[this.cellOf(x, y)];
+  }
+
+  /** En mer (peu profonde ou profonde), pas dans un lac. */
+  isSea(x: number, y: number) {
+    return !this.caveAt(x, y) && this.shoreAt(x, y) > 0;
+  }
+
+  /** Relief (affichage seulement) : 0 au bord de l'eau, jusqu'à 1 au sommet des collines. */
+  height(x: number, y: number) {
+    const sh = this.shoreAt(x, y);
+    if (sh >= 0) return 0;
+    const k = Math.min(1, -sh / 1100);
+    return (0.35 + fbm(x / 1900, y / 1900, this.seed + 300, 4) * 0.65 + (fbm(x / 520, y / 520, this.seed + 301, 2) - 0.5) * 0.18) * k * (2 - k);
+  }
+
+  /** Début et fin (abscisses le long de la colonne) de la zone z ; la zone 1 commence à la plage. */
+  zoneFrom(z: number) {
+    return z <= 1 ? 0 : ZONE1_EXTRA + (z - 1) * this.zoneLen;
+  }
+  zoneTo(z: number) {
+    return ZONE1_EXTRA + z * this.zoneLen;
   }
 
   private cellOf(x: number, y: number) {
@@ -335,7 +381,7 @@ export class WorldMap {
     return this.arc[this.cellOf(x, y)];
   }
 
-  /** Forêt profonde hors du couloir (ou hors du monde) : infranchissable, dessinée en sous-bois sombre. */
+  /** Mer profonde autour de l'île (ou hors du monde) : infranchissable. (Le nom vient de l'ancienne forêt du couloir.) */
   isForest(x: number, y: number) {
     if (x <= -WORLD_HALF || y <= -WORLD_HALF || x >= WORLD_HALF || y >= WORLD_HALF) return !this.caveAt(x, y);
     return this.water[this.cellOf(x, y)] === 3;
@@ -436,7 +482,7 @@ export class WorldMap {
         const h = hash2(gx, gy, this.seed + 3);
         const x = (gx + 0.2 + hash2(gx, gy, this.seed + 4) * 0.6) * DECO_CELL;
         const y = (gy + 0.2 + hash2(gx, gy, this.seed + 5) * 0.6) * DECO_CELL;
-        if (Math.abs(x) > WORLD_HALF - 20 || Math.abs(y) > WORLD_HALF - 20 || this.isForest(x, y)) continue;
+        if (Math.abs(x) > WORLD_HALF - 20 || Math.abs(y) > WORLD_HALF - 20 || this.isForest(x, y) || this.shoreAt(x, y) > -BEACH - 40) continue; // ni en mer ni sur la plage
         if (this.inVillage(x, y, 80) || Math.hypot(x - this.spawn.x, y - this.spawn.y) < 230) continue;
         if (this.sites.some((c) => Math.hypot(x - c.x, y - c.y) < 300)) continue;
         if (this.isWater(x, y) || this.isWater(x + 24, y) || this.isWater(x - 24, y) || this.isWater(x, y + 24)) continue;
@@ -444,7 +490,7 @@ export class WorldMap {
         if (this.ores.some((o) => Math.hypot(x - o.x, y - o.y) < 50)) continue;
         const z = this.zoneAt(x, y);
         const f = fbm(x / 700, y / 700, this.seed + 55, 3);
-        const c = this.cellOf(x, y), edge = this.cdist[c] > this.halfWidth(this.arc[c]) - 170; // lisière : plus dense
+        const edge = this.shoreAt(x, y) > -600; // près de la côte : plus dense
         const forest = (f > 0.56 ? 4.5 : f > 0.48 ? 1.2 : 0.15) * (edge ? 3 : 1);
         const treeP = [0, 0.1, 0.2, 0.09, 0.05, 0.07, 0.025][z] * forest; // désert : de rares cactus
         if (h >= treeP) continue; // les rochers ronds d'autrefois ont disparu : la pierre vient des rochers à casser
@@ -480,7 +526,7 @@ export class WorldMap {
 
   /**
    * Bois mort et rochers à casser, à la suite des filons (hasard à part : le reste de la carte ne change pas).
-   * Quelques-uns entre le camp de départ et le village, pour construire avant même de passer la porte.
+   * Quelques-uns entre la plage et le village, pour construire avant même de passer la porte.
    */
   private buildHarvest() {
     const rand = rng(this.seed ^ 0x5707e);
@@ -493,7 +539,7 @@ export class WorldMap {
       for (let tries = 0; tries < 8000 && total < 70; tries++) {
         // les 4 premiers entre le camp et le village, les autres tout le long du couloir
         const first = early < 4 && tries < 2000;
-        const s = first ? 650 + rand() * (VILLAGE_ARC - VILLAGE_R - 750) : 650 + rand() * (this.length - 900);
+        const s = first ? rand() * Math.max(200, VILLAGE_ARC - VILLAGE_R) : 650 + rand() * (this.length - 900);
         const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
         const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 90);
         const x = sx + n.x * off, y = sy + n.y * off;
@@ -512,18 +558,30 @@ export class WorldMap {
   /** Tanières de suricates dans la Mer de sable (hasard à part), loin des chemins, de l'eau et les unes des autres. */
   private buildDens() {
     const rand = rng(this.seed ^ 0xde75);
-    const lo = 5 * ZONE_LEN + 400, hi = this.length - 400;
+    const lo = this.zoneFrom(6) + 400, hi = this.length - 400;
     for (let tries = 0; tries < 3000 && this.dens.length < DENS && hi > lo; tries++) {
       const s = lo + rand() * (hi - lo);
       const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
       const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 140);
       const x = sx + n.x * off, y = sy + n.y * off;
       if (this.zoneAt(x, y) !== 6 || this.blocked(x, y) || this.blocked(x + 40, y) || this.blocked(x - 40, y) || this.blocked(x, y + 30)) continue;
-      if (this.pathDist(x, y) < 90 || this.dens.some((d) => dist2(x, y, d.x, d.y) < 900 ** 2)) continue;
+      if (this.pathDist(x, y) < 90 || this.dens.some((d) => dist2(x, y, d.x, d.y) < 700 ** 2)) continue;
       if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 400 ** 2) || this.ores.some((o) => dist2(x, y, o.x, o.y) < 120 ** 2)) continue;
       if (this.bushes.some((b) => dist2(x, y, b.x, b.y) < 100 ** 2)) continue;
       this.dens.push({ x, y });
     }
+  }
+
+  /** Palissade construite (solide) ou non (on passe). Seules ses cases encore libres changent. */
+  setPalisade(up: boolean) {
+    for (const c of this.palisadeCells) if (this.water[c] === 0 || this.water[c] === 2) this.water[c] = up ? 2 : 0;
+  }
+
+  /** Où se construit un bâtiment du village (un emplacement à défricher est celui de son bâtiment ; la palissade : au feu). */
+  buildingPos(b: BuildingId): Pt {
+    if (b === 'stone') return this.stones[0];
+    if (b === 'palisade') return this.village;
+    return this[(b.startsWith('plot_') ? b.slice(5) : b) as 'forge' | 'den' | 'market'];
   }
 
   /** Tanière la plus proche d'un point (-1 s'il n'y en a pas). */
@@ -611,12 +669,21 @@ export class WorldMap {
       else this.solidDisc(d.x, d.y, s * 0.85);
     }
     for (const o of this.ores) this.solidOre(o);
-    // palissade du village, avec ses 4 portes
+    // palissade du village, avec ses 4 portes : ses cases ne deviennent solides qu'une fois construite (setPalisade)
     const v = this.village;
+    const marked = new Set<number>();
     for (let a = 0; a < Math.PI * 2; a += 0.02) {
       const nearGate = [0, 1, 2, 3, 4].some((g) => Math.abs(a - (g * Math.PI) / 2) < 0.1);
-      if (!nearGate) this.solidDisc(v.x + Math.cos(a) * VILLAGE_R, v.y + Math.sin(a) * VILLAGE_R, 13);
+      if (nearGate) continue;
+      const px = v.x + Math.cos(a) * VILLAGE_R, py = v.y + Math.sin(a) * VILLAGE_R, r = 13;
+      for (let j = Math.floor((py - r + WORLD_HALF) / MAP_CELL); j <= Math.floor((py + r + WORLD_HALF) / MAP_CELL); j++) {
+        for (let i = Math.floor((px - r + WORLD_HALF) / MAP_CELL); i <= Math.floor((px + r + WORLD_HALF) / MAP_CELL); i++) {
+          const cx = -WORLD_HALF + (i + 0.5) * MAP_CELL, cy = -WORLD_HALF + (j + 0.5) * MAP_CELL, c = j * N + i;
+          if ((cx - px) ** 2 + (cy - py) ** 2 <= r * r && this.water[c] === 0 && !marked.has(c)) marked.add(c);
+        }
+      }
     }
+    this.palisadeCells = [...marked];
     // bâtiments (construits ou non, leur emplacement est clos) : hutte, marché, forge (et son enclume), tanière, feu de camp
     for (const [hx, hy] of [[MARKET_OFFSET.x, MARKET_OFFSET.y], [HALL_OFFSET.x, HALL_OFFSET.y]]) this.solidRect(v.x + hx - 52, v.y + hy - 6, v.x + hx + 52, v.y + hy + 40);
     this.solidRect(v.x + FORGE_OFFSET.x - 74, v.y + FORGE_OFFSET.y - 30, v.x + FORGE_OFFSET.x + 2, v.y + FORGE_OFFSET.y + 38);
@@ -625,10 +692,8 @@ export class WorldMap {
     this.solidDisc(v.x, v.y, 20);
     this.solidRect(v.x + STORE_OFFSET.x - 36, v.y + STORE_OFFSET.y - 14, v.x + STORE_OFFSET.x + 36, v.y + STORE_OFFSET.y + 14); // entrepôt
     this.solidRect(v.x + BOARD_OFFSET.x - 18, v.y + BOARD_OFFSET.y - 2, v.x + BOARD_OFFSET.x + 18, v.y + BOARD_OFFSET.y + 4); // panneau
-    // camp de départ : tentes et cercle de pierres
-    const sp = this.spawn;
-    for (const t of this.tents) this.solidRect(sp.x + t.x - 36, sp.y + t.y - 6, sp.x + t.x + 36, sp.y + t.y + 26);
-    this.solidDisc(sp.x, sp.y, 26);
+    // plage d'arrivée : la barque échouée
+    this.solidDisc(this.spawn.x + this.wreck.boat.x, this.spawn.y + this.wreck.boat.y, 30);
     // emplacements de camp : cercle de pierres du feu ; Pierres de passage
     for (const c of this.sites) this.solidDisc(c.x, c.y, 26);
     for (const st of this.stones) this.solidDisc(st.x, st.y, 18);
@@ -679,7 +744,7 @@ export class WorldMap {
   /** Position continue le long des zones : 1,5 = milieu de la zone 1, 2,0 = frontière entre les zones 1 et 2. */
   private zonePos(x: number, y: number) {
     const warp = (fbm(x / 1400, y / 1400, this.seed + 31, 2) - 0.5) * 1000;
-    return 1 + (this.arcAt(x, y) + warp) / ZONE_LEN;
+    return 1 + (this.arcAt(x, y) + warp - ZONE1_EXTRA) / this.zoneLen;
   }
 
   /**
@@ -689,7 +754,7 @@ export class WorldMap {
   zoneMix(x: number, y: number) {
     const cave = this.caveAt(x, y);
     if (cave) return { z0: cave.zone, z1: cave.zone, t: 0 };
-    const p = this.zonePos(x, y), k = Math.round(p), half = ZONE_BLEND / 2 / ZONE_LEN, d = p - k;
+    const p = this.zonePos(x, y), k = Math.round(p), half = ZONE_BLEND / 2 / this.zoneLen, d = p - k;
     if (k <= 1 || k > ZONES || Math.abs(d) >= half) {
       const z = clamp(Math.floor(p), 1, ZONES);
       return { z0: z, z1: z, t: 0 };

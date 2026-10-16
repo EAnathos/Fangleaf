@@ -11,7 +11,7 @@ import { armorColor, drawUnit } from './sprites.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { sound } from './audio.ts';
 import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
-import { forestColor, groundColor } from './world.ts';
+import { landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 
 export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'settings' | 'chat' | 'board' | null;
@@ -59,9 +59,15 @@ type Funds = { gold: number; wood: number; stone: number };
 const canPay = (f: Funds, c: Cost) => f.gold >= c.gold && f.wood >= c.wood && f.stone >= c.stone;
 /** Point d'interaction (touche E) à portée : bâtiments (ou leur chantier), Pierres de passage, emplacements de camp, grottes. */
 export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView): Spot | undefined => {
-  const building = (b: BuildingId, pos: { x: number; y: number }, open: Spot): Spot =>
-    v.buildings.includes(b) ? open : { panel: 'buy', pos, buy: { b }, label: `E — Construire : ${BUILDINGS[b].name} · ${costText(buildingCost(b))}` };
+  const offer = (b: BuildingId, pos: { x: number; y: number }, verb: string): Spot => ({ panel: 'buy', pos, buy: { b }, label: `E — ${verb} : ${BUILDINGS[b].name} · ${costText(buildingCost(b))}` });
+  // un emplacement à défricher passe avant le bâtiment
+  const building = (b: BuildingId, pos: { x: number; y: number }, open: Spot): Spot => {
+    const needs = BUILDINGS[b].needs;
+    if (needs && !v.buildings.includes(needs)) return offer(needs, pos, 'Défricher');
+    return v.buildings.includes(b) ? open : offer(b, pos, 'Construire');
+  };
   const spots: Spot[] = [
+    ...(v.buildings.includes('palisade') ? [] : [{ ...offer('palisade', map.village, 'Monter'), reach: 110 }]),
     { panel: 'hall', pos: map.hall, label: `E — Hôtel de ville · niv. ${v.hall}` },
     { deposit: true, pos: map.store, label: 'E — Entrepôt : déposer ton bois et ta pierre' },
     building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Forge' }),
@@ -780,8 +786,9 @@ export class Hud {
     $('hall-cost').hidden = maxed;
     if (!maxed) this.costChips('hall-cost', funds, cost);
     const btn = $<HTMLButtonElement>('hall-up');
-    btn.disabled = maxed || !canPay(funds, cost);
-    btn.textContent = maxed ? 'Niveau maximum' : !canPay(funds, cost) ? 'Il manque des ressources' : `Passer au niveau ${this.hall + 1}`;
+    const camp = this.hall > 0 || this.buildings.includes('palisade'); // le camp d'abord : la palissade
+    btn.disabled = maxed || !camp || !canPay(funds, cost);
+    btn.textContent = maxed ? 'Niveau maximum' : !camp ? 'Construis d\'abord la palissade' : !canPay(funds, cost) ? 'Il manque des ressources' : `Passer au niveau ${this.hall + 1}`;
   }
 
   /** Marché : vendre les monstres ordinaires de sa meute, acheter ceux des espèces déjà croisées. */
@@ -1108,7 +1115,7 @@ export class Hud {
     for (let j = 0; j < S; j++) {
       for (let i = 0; i < S; i++) {
         const x = -WORLD_HALF + (i + 0.5) * k, y = -WORLD_HALF + (j + 0.5) * k;
-        const col = this.map.isForest(x, y) ? forestColor(this.map, x, y) : this.map.isWater(x, y) ? [46, 101, 116] : groundColor(this.map, x, y);
+        const col = this.map.isSea(x, y) ? seaColor(this.map, x, y) : this.map.isWater(x, y) ? [46, 101, 116] : landColor(this.map, x, y);
         const o = (j * S + i) * 4;
         img.data[o] = col[0] * 0.8;
         img.data[o + 1] = col[1] * 0.8;
@@ -1238,7 +1245,7 @@ export class Hud {
     ctx.drawImage(this.miniBg, 0, 0);
     this.fog.draw(ctx, 0, 0, S, S, 0.92);
 
-    // Camp de départ et village (étoile dorée).
+    // Plage d'arrivée et village (étoile dorée).
     const { spawn, village } = this.map;
     ctx.strokeStyle = '#EEE7D7';
     ctx.lineWidth = 1.5;

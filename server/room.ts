@@ -278,6 +278,11 @@ export class Room {
     this.unlocked = indexes(saved.unlocked, this.map.caves.length);
     this.buildings = BUILDING_IDS.filter((b) => saved.buildings?.includes(b));
     this.hall = clamp(Math.floor(Number(saved.hall) || 0), 0, HALL_MAX);
+    // Village d'avant l'île (déjà lancé) : son camp est considéré comme installé (palissade, emplacements défrichés).
+    if ((this.hall > 0 || this.buildings.length) && !this.buildings.includes('palisade')) {
+      for (const b of ['palisade', 'plot_forge', 'plot_den', 'plot_market'] as const) if (!this.buildings.includes(b)) this.buildings.push(b);
+    }
+    this.map.setPalisade(this.buildings.includes('palisade'));
     this.beaten = indexes(saved.beaten, SPECIES.length).filter((s) => isBoss(s));
     this.stock.wood = Math.max(0, Math.floor(Number(saved.wood) || 0));
     this.stock.stone = Math.max(0, Math.floor(Number(saved.stone) || 0));
@@ -301,7 +306,7 @@ export class Room {
   addPlayer(name: string, send: (m: ServerMsg) => void, account?: { userId: string; profile: Profile | null }): Player {
     const used = new Set([...this.players.values()].map((p) => p.color));
     const color = PLAYER_COLORS.find((c) => !used.has(c)) ?? PLAYER_COLORS[0];
-    // Première fois : on arrive au camp de départ et il faut trouver le village.
+    // Première fois : on échoue sur la plage et il faut trouver le village.
     // Une fois le village découvert, on y apparaît directement.
     const found = !!account?.profile?.village_found;
     const from = found ? { x: this.map.village.x, y: this.map.village.y + 40 } : this.map.spawn;
@@ -552,7 +557,7 @@ export class Room {
   }
 
   private posOf(b: BuildingId) {
-    return b === 'stone' ? this.map.stones[0] : this.map[b];
+    return this.map.buildingPos(b);
   }
 
   private saveVillage() {
@@ -562,15 +567,33 @@ export class Room {
   /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
   onBuild(p: Player, b: BuildingId) {
     if (!BUILDING_IDS.includes(b) || this.buildings.includes(b) || !this.near(p, this.posOf(b))) return;
+    const needs = BUILDINGS[b].needs;
+    if (needs && !this.buildings.includes(needs)) return; // emplacement à défricher d'abord
     if (this.hall < BUILDINGS[b].hall || !this.pay(p, buildingCost(b))) return;
     this.buildings.push(b);
+    if (b === 'palisade') {
+      this.map.setPalisade(true);
+      // qui se tenait pile sur la ligne des pieux est poussé à côté
+      for (const q of this.players.values()) {
+        if (!this.map.blocked(q.x, q.y)) continue;
+        const f = this.map.freeNear(q.x, q.y);
+        this.moveTo(q, f.x, f.y);
+      }
+      for (const u of this.units.values()) {
+        if (!this.map.blocked(u.x, u.y)) continue;
+        const f = this.map.freeNear(u.x, u.y);
+        [u.x, u.y] = [f.x, f.y];
+      }
+    }
     this.saveVillage();
     this.events.push({ e: 'built', b, by: p.id });
   }
 
   /** Améliorer l'Hôtel de ville, devant elle : un niveau de plus pour tout le village (or, bois, pierre). */
   onHall(p: Player) {
-    if (this.hall >= HALL_MAX || !this.near(p, this.map.hall) || !this.pay(p, HALL[this.hall])) return;
+    if (this.hall >= HALL_MAX || !this.near(p, this.map.hall)) return;
+    if (this.hall === 0 && !this.buildings.includes('palisade')) return; // le camp d'abord : la palissade
+    if (!this.pay(p, HALL[this.hall])) return;
     this.hall++;
     this.saveVillage();
     this.events.push({ e: 'hall', lvl: this.hall, by: p.id });
@@ -1151,7 +1174,6 @@ export class Room {
     if (!this.zoneOpen(sp.zone)) return false; // zone encore sous la brume : pas de monstre
     const fog = this.fogArc();
     // On vise le tronçon du couloir de la zone, puis on vérifie la zone réelle (frontières déformées par le bruit).
-    const zl = map.length / ZONES;
     for (let attempt = 0; attempt < 40; attempt++) {
       let cx: number, cy: number;
       if (sp.shy && map.dens.length) {
@@ -1166,7 +1188,7 @@ export class Room {
         [cx, cy] = [pool[k], pool[k + 1]];
       } else {
         // abscisse le long du couloir : le tronçon de la zone (un peu débordant), jamais au-delà du bout,
-        const lo = Math.max(900, (sp.zone - 1.1) * zl), hi = Math.min(map.length - 250, (sp.zone + 0.1) * zl); // ni derrière le camp de départ
+        const lo = Math.max(300, map.zoneFrom(sp.zone) - 0.1 * map.zoneLen), hi = Math.min(map.length - 250, map.zoneTo(sp.zone) + 0.1 * map.zoneLen); // ni sur la plage d'arrivée
         const at = lo + Math.random() * (hi - lo);
         const c = map.spineAt(at), nv = map.normalAt(at);
         const off = (Math.random() - 0.5) * 2 * (map.halfWidth(at) - 60);

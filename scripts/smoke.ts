@@ -79,7 +79,7 @@ async function main() {
 
   const map = new WorldMap(host.seed);
   let x = host.me()!.x, y = host.me()!.y;
-  check(Math.hypot(x - map.spawn.x, y - map.spawn.y) < 150 && !map.inVillage(x, y), 'arrivée au camp de départ, loin du village');
+  check(Math.hypot(x - map.spawn.x, y - map.spawn.y) < 150 && !map.inVillage(x, y), 'arrivée sur la plage, loin du village');
   // Pas de 16 px vers une cible (320 px/s, juste sous la vitesse tolérée par le serveur), en glissant le long de l'eau comme le client.
   // On suit toujours un itinéraire calculé : en ligne droite, le bot resterait coincé contre un arbre ou une palissade.
   let route: { x: number; y: number }[] = [], routeGoal = { x: NaN, y: NaN };
@@ -119,14 +119,14 @@ async function main() {
     }
     if (best) stepTo(best[0], best[1], 50);
     else {
-      // rien en vue : allers-retours entre le camp et la porte du village
+      // rien en vue : allers-retours entre la plage et la porte du village
       const at = map.spineAt(Math.floor((Date.now() - t0) / 15000) % 2 ? 700 : map.gates[0] - 150);
       stepTo(at.x, at.y);
     }
     await sleep(50);
   }
   console.log(`  (chasse : ${((Date.now() - t0) / 1000).toFixed(1)} s)`);
-  check(sawUnits > 0, `des monstres sont visibles en avançant dans le couloir (${sawUnits})`);
+  check(sawUnits > 0, `des monstres sont visibles en avançant dans l'île (${sawUnits})`);
   const me = host.me()!;
   console.log(`  → or ${me.gold}, meute ${me.army.length}, essences ${me.essences.join('/')}, PV ${me.hp}/${me.maxHp}, mort=${me.dead}`);
   check(me.gold > 0, 'des kills ont rapporté de l\'or');
@@ -176,6 +176,8 @@ async function main() {
   await sleep(150);
   check((host.last?.stock[0] ?? 0) >= 100 && host.me()!.wood === 0, `sac vidé à l'entrepôt (réserve : ${host.last?.stock.join(' bois, ')} pierre)`);
   await reach(map.forge.x + 20, map.forge.y + 75, 60);
+  host.send({ t: 'build', b: 'plot_forge' }); // le camp d'abord : défricher l'emplacement
+  await sleep(150);
   host.send({ t: 'build', b: 'forge' });
   await sleep(150);
   const at = host.me()!;

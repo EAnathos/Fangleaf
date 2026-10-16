@@ -1,7 +1,7 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
-import { WorldMap } from '../shared/worldmap.ts';
+import { SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { BEACH, WorldMap } from '../shared/worldmap.ts';
 import { DAY_MS, sky } from '../shared/weather.ts';
 import { Room } from '../server/room.ts';
 import { SnapshotState } from '../shared/snapshot.ts';
@@ -245,7 +245,7 @@ const noop = () => {};
     let lw = 0, ln = 0, dw = 0, dn = 0;
     for (let x = -WORLD_HALF + 20; x < WORLD_HALF; x += 80) {
       for (let y = -WORLD_HALF + 20; y < WORLD_HALF; y += 80) {
-        if (m.isForest(x, y)) continue;
+        if (m.isSea(x, y)) continue; // la mer ne compte pas : seulement les lacs de l'île
         const z = m.zoneAt(x, y);
         if (z === 5) ln++, lw += +m.isWater(x, y);
         else if (z === 6) dn++, dw += +m.isWater(x, y);
@@ -253,18 +253,24 @@ const noop = () => {};
       }
     }
     check(d >= 800 && !m.inVillage(m.spawn.x, m.spawn.y) && pathOk && water / n > 0.04 && water / n < 0.2 && lw / ln > 0.15 && dw / dn < 0.06,
-      `graine ${seed} : village à ${Math.round(d)} px du camp, chemin libre, ${Math.round((100 * water) / n)} % de lacs (zone 5 : ${Math.round((100 * lw) / ln)} %, désert : ${Math.round((100 * dw) / dn)} % d'oasis)`);
-    const edge = WORLD_HALF - 1000;
-    check(m.spawn.y < -edge || m.spawn.x > edge || m.spawn.y > edge, `graine ${seed} : camp de départ au bord haut, droit ou bas (${Math.round(m.spawn.x)}, ${Math.round(m.spawn.y)})`);
+      `graine ${seed} : village à ${Math.round(d)} px de la plage, chemin libre, ${Math.round((100 * water) / n)} % de lacs (zone 5 : ${Math.round((100 * lw) / ln)} %, désert : ${Math.round((100 * dw) / dn)} % d'oasis)`);
+    const sh = m.shoreAt(m.spawn.x, m.spawn.y), seaNear = [0, 1, 2, 3, 4, 5, 6, 7].some((k) => m.isSea(m.spawn.x + Math.cos(k * 0.785) * 450, m.spawn.y + Math.sin(k * 0.785) * 450));
+    check(sh < 0 && sh > -BEACH * 2 && seaNear && !m.blocked(m.spawn.x, m.spawn.y), `graine ${seed} : arrivée sur la plage, la mer à deux pas (${Math.round(-sh)} px de l'eau)`);
+    let edgeSea = true;
+    for (let k = -WORLD_HALF; k < WORLD_HALF; k += 200) for (const [x, y] of [[k, -WORLD_HALF + 100], [k, WORLD_HALF - 100], [-WORLD_HALF + 100, k], [WORLD_HALF - 100, k]]) if (!m.isForest(x, y)) edgeSea = false;
+    check(edgeSea, `graine ${seed} : une île, la mer profonde tout autour`);
     const site = m.sites[0], stone = m.stones[1];
     const reach = m.findPath(m.village.x, m.village.y + 40, stone.x, stone.y + 50, 500000);
-    const zones = [1, 3, 5, 7, 9, 11].map((k) => k / 12).map((f) => { const q = m.spineAt(f * m.length); return m.zoneAt(q.x, q.y); }).join('');
+    const zones = [1, 2, 3, 4, 5, 6].map((z) => { const q = m.spineAt((m.zoneFrom(z) + m.zoneTo(z)) / 2); return m.zoneAt(q.x, q.y); }).join('');
     const end = m.spineAt(m.length - 250);
     const reachEnd = m.findPath(stone.x, stone.y + 50, end.x, end.y, 600000);
     check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '123456' && m.caves.length === 15,
-      `graine ${seed} : couloir de ${m.length} px, zones ${zones}, camp au bout de la zone 4, bout de la Mer de sable atteignable, 15 grottes`);
-    check(m.isForest(m.spineAt(5000).x + m.normalAt(5000).x * 1200, m.spineAt(5000).y + m.normalAt(5000).y * 1200) && m.blocked(m.spineAt(5000).x + m.normalAt(5000).x * 1200, m.spineAt(5000).y + m.normalAt(5000).y * 1200),
-      `graine ${seed} : forêt infranchissable de part et d'autre du couloir`);
+      `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de la Mer de sable atteignable, 15 grottes`);
+    const mid = m.length / 2, c = m.spineAt(mid), nv = m.normalAt(mid), far = m.halfWidth(mid) + 1700;
+    let shallow = false;
+    for (let x = -WORLD_HALF + 50; x < WORLD_HALF && !shallow; x += 120) for (let y = -WORLD_HALF + 50; y < WORLD_HALF && !shallow; y += 120) shallow = m.isSea(x, y) && m.isWater(x, y);
+    check([-1, 1].every((k) => m.isForest(c.x + nv.x * far * k, c.y + nv.y * far * k) && m.blocked(c.x + nv.x * far * k, c.y + nv.y * far * k)) && shallow,
+      `graine ${seed} : mer profonde infranchissable de part et d'autre, mer peu profonde le long de la côte (le serpent y nage)`);
   }
   const a = new WorldMap(99), b = new WorldMap(99);
   check(a.village.x === b.village.x && a.sites[0].x === b.sites[0].x && a.isWater(500, 500) === b.isWater(500, 500) && a.zoneAt(2000, -1500) === b.zoneAt(2000, -1500), 'carte déterministe');
@@ -440,7 +446,9 @@ const noop = () => {};
   const tree = m.decor.find((d) => d.kind === 0)!;
   check(m.blocked(tree.x, tree.y + m.decorSize(tree) * 0.15), `les arbres bloquent (${m.decor.filter((d) => d.kind === 0).length} arbres)`);
   const v = m.village;
-  check(m.blocked(v.x + Math.cos(0.7) * 360, v.y + Math.sin(0.7) * 360), 'la palissade bloque');
+  check(!m.blocked(v.x + Math.cos(0.7) * 360, v.y + Math.sin(0.7) * 360), 'palissade pas encore construite : on passe');
+  m.setPalisade(true);
+  check(m.blocked(v.x + Math.cos(0.7) * 360, v.y + Math.sin(0.7) * 360), 'construite, la palissade bloque');
   check([0, 1, 2, 3].every((g) => !m.blocked(v.x + Math.cos((g * Math.PI) / 2) * 360, v.y + Math.sin((g * Math.PI) / 2) * 360)), 'les 4 portes laissent passer');
   check(!m.blocked(m.forge.x, m.forge.y + 70) && !m.blocked(m.den.x, m.den.y + 70), 'on peut approcher de la forge et de la tanière');
   check(m.blocked(m.forge.x - 40, m.forge.y) && m.blocked(v.x - 180, v.y - 140), 'la forge et les huttes sont solides');
@@ -807,7 +815,7 @@ const noop = () => {};
   r.time = q.respawnAt + 1;
   r.updateRespawns();
   check(Math.hypot(q.x - site.x, q.y - site.y) < 200, 'mort au bout du couloir : réapparition au camp avancé');
-  const mid = r.map.spineAt(8000);
+  const mid = r.map.spineAt(r.map.zoneFrom(3));
   q.x = mid.x;
   q.y = mid.y;
   r.killPlayer(q);
@@ -817,7 +825,7 @@ const noop = () => {};
   // un village rouvert retrouve ses camps
   const again: any = new Room('TEST2', r.seed, { camps: [0, 0, 7, -1], buildings: ['forge', 'forge', 'nope' as never], unlocked: [1, 1, 999] });
   check(again.camps.join() === '0', 'camps rechargés (doublons et index invalides ignorés)');
-  check(again.buildings.join() === 'forge' && again.unlocked.join() === '1', 'bâtiments et grottes rechargés (doublons et valeurs invalides ignorés)');
+  check(again.buildings.join() === 'forge,palisade,plot_forge,plot_den,plot_market' && again.unlocked.join() === '1', 'bâtiments et grottes rechargés (doublons et valeurs invalides ignorés) ; village d\'avant l\'île : son camp est installé');
 }
 
 {
@@ -826,7 +834,7 @@ const noop = () => {};
   let saved: { buildings: string[]; unlocked: number[] } = { buildings: [], unlocked: [] };
   r.onVillage = (v: typeof saved) => (saved = v);
   const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
-  check(r.buildings.length === 0 && r.unlocked.length === 0, 'nouveau village : aucun bâtiment, grottes fermées');
+  check(r.buildings.length === 0 && r.unlocked.length === 0, 'nouveau village : rien que le feu de camp (ni palissade ni bâtiment), grottes fermées');
   check(BUILDINGS.forge.cost === 10 && BUILDINGS.den.cost === 20 && BUILDINGS.market.cost === 50 && BUILDINGS.stone.cost === 200, 'prix : Forge 10, Tanière 20, Marché 50, Pierre de passage 200');
   [p.x, p.y] = [r.map.forge.x, r.map.forge.y + 60];
   p.gold = 500;
@@ -846,8 +854,13 @@ const noop = () => {};
   check(!r.buildings.includes('forge') && p.gold === 500, 'pas assez de bois en réserve : rien de construit');
   r.stock.wood = 5;
   r.onBuild(p, 'forge');
+  check(!r.buildings.includes('forge') && r.stock.wood === 5, 'emplacement pas défriché : pas de forge');
+  Object.assign(r.stock, { wood: 5 + BUILDINGS.plot_forge.wood, stone: BUILDINGS.plot_forge.stone });
+  r.onBuild(p, 'plot_forge');
+  check(r.buildings.join() === 'plot_forge' && r.stock.wood === 5 && r.stock.stone === 0, `emplacement de la forge défriché (${costText(buildingCost('plot_forge'))})`);
   r.onBuild(p, 'forge');
-  check(r.buildings.join() === 'forge' && p.gold === 490 && r.stock.wood === 0 && saved.buildings.join() === 'forge', 'forge construite une seule fois, 10 or et 5 bois, sauvegardée pour le village');
+  r.onBuild(p, 'forge');
+  check(r.buildings.join() === 'plot_forge,forge' && p.gold === 490 && r.stock.wood === 0 && saved.buildings.join() === 'plot_forge,forge', 'forge construite une seule fois, 10 or et 5 bois, sauvegardée pour le village');
   [q.x, q.y] = [p.x, p.y];
   q.gold = 100;
   r.onUpgrade(q, 'weapon');
@@ -1173,7 +1186,7 @@ const noop = () => {};
   const s = SPECIES.findIndex((sp) => sp.passive);
   // un buisson dans un coin dégagé (le lièvre doit pouvoir y aller puis s'enfuir)
   const open = (x: number, y: number) => [0, 1, 2, 3, 4, 5, 6, 7].every((k) => !r.map.blocked(x + Math.cos(k) * 160, y + Math.sin(k) * 160)) && !r.map.blocked(x, y);
-  const bush = r.map.bushes.find((b: { x: number; y: number }) => open(b.x + 120, b.y) && r.map.clearLine(b.x + 120, b.y, b.x, b.y + 14))!;
+  const bush = r.map.bushes.find((b: { x: number; y: number; zone: number }) => b.zone <= 3 && open(b.x + 120, b.y) && r.map.clearLine(b.x + 120, b.y, b.x, b.y + 14))!; // loin du désert (et de ses tempêtes)
   check(r.map.bushes.length > 40, `${r.map.bushes.length} buissons à fruits sur la carte`);
   for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id); // seuls le lièvre et le dompteur
   const hare = r.createUnit(s, false, bush.x + 120, bush.y);
@@ -1255,6 +1268,13 @@ const noop = () => {};
   r.onHall(p);
   check(r.hall === 0, 'pas assez de pierre : pas d\'amélioration');
   r.stock.stone++;
+  r.onHall(p);
+  check(r.hall === 0, 'pas de palissade : pas d\'Hôtel de ville (le camp d\'abord)');
+  [p.x, p.y] = [map.village.x + 60, map.village.y + 60];
+  r.stock.wood += BUILDINGS.palisade.wood;
+  r.onBuild(p, 'palisade');
+  check(r.buildings.includes('palisade') && map.blocked(map.village.x + Math.cos(0.7) * 360, map.village.y + Math.sin(0.7) * 360), `palissade montée (${costText(buildingCost('palisade'))}) : elle bloque`);
+  [p.x, p.y] = [map.hall.x, map.hall.y + 60];
   r.onHall(p);
   check(r.hall === 1 && p.gold === 0 && r.stock.wood === 0 && r.stock.stone === 0 && saved.hall === 1, `niveau 1 pour ${HALL[0].gold} or, ${HALL[0].wood} bois, ${HALL[0].stone} pierre, sauvegardé`);
   check(walk(before, after), 'niveau 1 : la porte du village s\'ouvre');
@@ -1370,7 +1390,7 @@ const noop = () => {};
   r.hazards.length = 0;
   Object.assign(p, { dead: false, hp: 9999 }); // le ver a pu l'abattre : on le remet debout pour la suite
   // Suricates : ils vivent autour de leur tanière ; un dompteur sans fruit approche, et la colonie court s'y cacher.
-  check(r.map.dens.length >= 4 && r.map.dens.every((d: { x: number; y: number }) => r.map.zoneAt(d.x, d.y) === 6), `${r.map.dens.length} tanières de suricates dans la Mer de sable`);
+  check(r.map.dens.length >= 3 && r.map.dens.every((d: { x: number; y: number }) => r.map.zoneAt(d.x, d.y) === 6), `${r.map.dens.length} tanières de suricates dans la Mer de sable`);
   const den = r.map.dens[0];
   const cats = [0, 1, 2].map((k) => r.createUnit(key('meerkat'), false, den.x + 40 + k * 20, den.y + 20));
   [p.x, p.y] = [den.x + 200, den.y];
