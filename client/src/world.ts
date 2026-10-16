@@ -32,6 +32,19 @@ const TREE_REF = 42;
 const TREE_VARIANTS = 6;
 const TREE_BOX = { l: TREE_REF * 1.3 + 6, t: TREE_REF * 1.95 + 6, w: (TREE_REF * 1.3 + 6) * 2, h: TREE_REF * 2.55 + 12 }; // autour du pied
 
+/**
+ * Couleur du sol d'un point (hors sous-bois) : celle de sa zone, ou près d'une frontière un fondu entre les deux
+ * zones, au bord irrégulier (un peu de bruit sur le mélange).
+ */
+export function groundColor(map: WorldMap, x: number, y: number) {
+  if (map.inVillage(x, y, 30)) return ZONE_GROUND[0];
+  const m = map.zoneMix(x, y);
+  if (!m.t) return ZONE_GROUND[m.z0];
+  const t = Math.min(1, Math.max(0, m.t + (fbm(x / 240, y / 240, map.seed + 73, 2) - 0.5) * 0.45));
+  const a = ZONE_GROUND[m.z0], b = ZONE_GROUND[m.z1];
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
 const rgb = (c: number[], k: number) => `rgb(${(c[0] * k) | 0},${(c[1] * k) | 0},${(c[2] * k) | 0})`;
 
 export class World {
@@ -48,9 +61,9 @@ export class World {
     this.camp = this.drawCamp();
   }
 
-  /** Zone d'un point pour l'affichage (0 si dans le village). */
+  /** Zone d'un point pour l'affichage (0 si dans le village) : près d'une frontière, l'une ou l'autre par plaques. */
   zone(x: number, y: number) {
-    return this.map.inVillage(x, y, 30) ? 0 : this.map.zoneAt(x, y);
+    return this.map.inVillage(x, y, 30) ? 0 : this.map.styleZone(x, y);
   }
 
   /** Chemin du camp au village, puis piste du village au bout du couloir (calculés par la carte partagée). */
@@ -96,7 +109,7 @@ export class World {
         const forest = map.isForest(px, py);
         const meadow = fbm(px / 420, py / 420, this.seed + 3, 2);
         const v = 0.93 + meadow * 0.12 + hash2(tx / TILE, ty / TILE, this.seed) * 0.015;
-        let col = forest ? FOREST_GROUND : ZONE_GROUND[this.zone(px, py)];
+        const col = forest ? FOREST_GROUND : groundColor(map, px, py);
         ctx.fillStyle = rgb(col, v);
         ctx.fillRect(tx, ty, TILE, TILE);
       }
@@ -160,10 +173,10 @@ export class World {
         // hors du couloir : forêt infranchissable, dessinée seulement (la grille la bloque déjà)
         const x = (gx + 0.2 + hash2(gx, gy, this.seed + 4) * 0.6) * DECO_CELL;
         const y = (gy + 0.2 + hash2(gx, gy, this.seed + 5) * 0.6) * DECO_CELL;
-        if (map.isForest(x, y) && hash2(gx, gy, this.seed + 3) < 0.9) big.push([x, y, map.zoneAt(x, y)]);
+        if (map.isForest(x, y) && hash2(gx, gy, this.seed + 3) < 0.9) big.push([x, y, map.styleZone(x, y)]);
         // deuxième rangée décalée : un mur de feuillage sans trou
         const x2 = (gx + 0.7 + (hash2(gx, gy, this.seed + 6) - 0.5) * 0.3) * DECO_CELL, y2 = (gy + 0.7 + (hash2(gx, gy, this.seed + 7) - 0.5) * 0.3) * DECO_CELL;
-        if (map.isForest(x2, y2) && map.isForest(x2, y2 + 30)) big.push([x2, y2, map.zoneAt(x2, y2)]);
+        if (map.isForest(x2, y2) && map.isForest(x2, y2 + 30)) big.push([x2, y2, map.styleZone(x2, y2)]);
       }
     }
     big.sort((a, b) => a[1] - b[1]);

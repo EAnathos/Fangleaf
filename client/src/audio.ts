@@ -92,19 +92,19 @@ class Sound {
 
   // ───────────────────────── Ambiances ─────────────────────────
 
-  /** Change d'ambiance (fondu de 2 s) ; sans effet si c'est déjà celle-ci. */
+  /** Change d'ambiance (fondu enchaîné d'environ 4 s) ; sans effet si c'est déjà celle-ci. */
   ambience(name: Ambience) {
     this.wanted = name;
     if (!this.ctx || name === this.currentName) return;
     const old = this.current, t = this.ctx.currentTime;
     if (old) {
-      old.gain.gain.setTargetAtTime(0, t, 0.6);
-      setTimeout(() => old.stop(), 3000);
+      old.gain.gain.setTargetAtTime(0, t, 1.2);
+      setTimeout(() => old.stop(), 6000);
     }
     this.currentName = name;
     this.current = this.build(name);
     this.current.gain.gain.setValueAtTime(0, t);
-    this.current.gain.gain.setTargetAtTime(1, t, 0.7);
+    this.current.gain.gain.setTargetAtTime(1, t, 1.3); // fondu enchaîné d'environ 4 s : on passe d'un lieu à l'autre en douceur
   }
 
   private build(name: Ambience): Running {

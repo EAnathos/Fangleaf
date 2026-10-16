@@ -22,6 +22,7 @@ const LAKE_THRESHOLD_LAKES = 0.54; // zone 5 (Lacs brumeux) : bien plus d'eau
 const SPINE_STEP = 100;
 const ZONE_LEN = PATH_LEN / ZONES;
 const LAKES_FROM = 4 * ZONE_LEN; // début de la zone des lacs
+const ZONE_BLEND = 900; // largeur de la transition (affichage) entre deux zones
 const STAMP_R = 1300; // au-delà, forêt profonde : on ne calcule plus la distance au couloir
 const LANE = 230; // voie centrale jamais inondée
 const CAVE_GAP = 4000; // > VIEW_R + 2 × CAVE_RX + la demi-largeur de l'écran
@@ -640,8 +641,36 @@ export class WorldMap {
   zoneAt(x: number, y: number) {
     const cave = this.caveAt(x, y);
     if (cave) return cave.zone;
+    return clamp(Math.floor(this.zonePos(x, y)), 1, ZONES);
+  }
+
+  /** Position continue le long des zones : 1,5 = milieu de la zone 1, 2,0 = frontière entre les zones 1 et 2. */
+  private zonePos(x: number, y: number) {
     const warp = (fbm(x / 1400, y / 1400, this.seed + 31, 2) - 0.5) * 1000;
-    return clamp(1 + Math.floor((this.arcAt(x, y) + warp) / ZONE_LEN), 1, ZONES);
+    return 1 + (this.arcAt(x, y) + warp) / ZONE_LEN;
+  }
+
+  /**
+   * Affichage seulement (les règles suivent zoneAt) : près d'une frontière, les deux zones voisines se mélangent sur
+   * une bande de ZONE_BLEND px. z0 → z1, t de 0 (tout z0) à 1 (tout z1) en traversant la bande ; ailleurs t = 0.
+   */
+  zoneMix(x: number, y: number) {
+    const cave = this.caveAt(x, y);
+    if (cave) return { z0: cave.zone, z1: cave.zone, t: 0 };
+    const p = this.zonePos(x, y), k = Math.round(p), half = ZONE_BLEND / 2 / ZONE_LEN, d = p - k;
+    if (k <= 1 || k > ZONES || Math.abs(d) >= half) {
+      const z = clamp(Math.floor(p), 1, ZONES);
+      return { z0: z, z1: z, t: 0 };
+    }
+    const u = (d + half) / (2 * half);
+    return { z0: k - 1, z1: k, t: u * u * (3 - 2 * u) };
+  }
+
+  /** Zone dont un élément du décor (arbre, buisson, herbe) prend le style : dans la bande de transition, par plaques. */
+  styleZone(x: number, y: number) {
+    const m = this.zoneMix(x, y);
+    if (!m.t) return m.z0;
+    return fbm(x / 300, y / 300, this.seed + 71, 2) * 0.7 + hash2(x | 0, y | 0, this.seed + 72) * 0.3 < m.t ? m.z1 : m.z0;
   }
 
   /** Où l'on réapparaît après une mort en (x, y) : le camp établi le plus avancé qui n'est pas plus loin sur le couloir (-1 : village). */

@@ -11,7 +11,7 @@ import { armorColor, drawUnit } from './sprites.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { sound } from './audio.ts';
 import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
-import { FOREST_GROUND, ZONE_GROUND } from './world.ts';
+import { FOREST_GROUND, groundColor } from './world.ts';
 import type { Fog } from './fog.ts';
 
 export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'settings' | 'chat' | 'board' | null;
@@ -1085,7 +1085,7 @@ export class Hud {
     for (let j = 0; j < S; j++) {
       for (let i = 0; i < S; i++) {
         const x = -WORLD_HALF + (i + 0.5) * k, y = -WORLD_HALF + (j + 0.5) * k;
-        const col = this.map.isForest(x, y) ? FOREST_GROUND : this.map.isWater(x, y) ? [46, 101, 116] : ZONE_GROUND[this.map.inVillage(x, y) ? 0 : this.map.zoneAt(x, y)];
+        const col = this.map.isForest(x, y) ? FOREST_GROUND : this.map.isWater(x, y) ? [46, 101, 116] : groundColor(this.map, x, y);
         const o = (j * S + i) * 4;
         img.data[o] = col[0] * 0.8;
         img.data[o + 1] = col[1] * 0.8;

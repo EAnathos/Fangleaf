@@ -1130,11 +1130,11 @@ export class Game {
       const next = fade + Math.sign(target - fade) * Math.min(Math.abs(target - fade), 0.08); // fondu en quelques images
       if (next === 1) this.fades.delete(d);
       else this.fades.set(d, next);
-      list.push({ y: d.y + s * 0.5, draw: () => this.world.tree(ctx, d.x, d.y, d.zone, next, false) });
+      list.push({ y: d.y + s * 0.5, draw: () => this.world.tree(ctx, d.x, d.y, this.map.styleZone(d.x, d.y), next, false) });
     }
     const bare = new Set(this.net.latest?.bare ?? []);
     for (const b of this.map.bushes) {
-      if (inView(b.x, b.y, 60)) list.push({ y: b.y, draw: () => drawBush(ctx, b.x, b.y, !bare.has(b.id), b.id, b.zone) });
+      if (inView(b.x, b.y, 60)) list.push({ y: b.y, draw: () => drawBush(ctx, b.x, b.y, !bare.has(b.id), b.id, this.map.styleZone(b.x, b.y)) });
     }
     for (const [id, x, y, opened] of this.net.latest?.chests ?? []) {
       if (!inView(x, y, 80)) continue;
