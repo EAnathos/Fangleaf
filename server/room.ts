@@ -7,7 +7,7 @@ import {
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
-  armorMaxHp, armorReduction, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
+  armorMaxHp, armorReduction, alphaPerk, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
@@ -838,6 +838,7 @@ export class Room {
     this.updateShots();
     this.separate();
     this.regen();
+    this.alphaHeals();
     this.broadcast();
     this.events = [];
   }
@@ -1970,7 +1971,7 @@ export class Room {
         amount -= share;
         if (amount <= 0) return;
       }
-      const dmg = Math.max(1, Math.round(amount * (1 - armorReduction(t.armor))));
+      const dmg = Math.max(1, Math.round(amount * (1 - armorReduction(t.armor) - this.guardOf(t))));
       t.hp -= dmg;
       this.events.push({ e: 'hit', a: by.id, b: t.id, dmg });
       if (t.hp <= 0) this.killPlayer(t);
@@ -1985,6 +1986,43 @@ export class Room {
     t.lastHitAt = this.time;
     this.events.push({ e: 'hit', a: by.id, b: t.id, dmg: Math.round(amount * 100) / 100 }); // 2 décimales
     if (t.hp <= 0) this.killUnit(t, by);
+  }
+
+  /** Alpha équipé et debout de cette espèce à pouvoir (escargot, lièvre), s'il y en a un. */
+  private perkAlpha(p: Player, kind: 'guard' | 'heal') {
+    for (const id of p.army) {
+      const u = this.units.get(id);
+      if (!u?.alpha || u.reviveAt || u.hp <= 0) continue;
+      const perk = alphaPerk(u.s, u.level);
+      if (perk?.kind === kind) return { u, value: perk.value };
+    }
+    return null;
+  }
+
+  /** Alpha escargot sur le terrain : part des dégâts reçus par son dompteur qu'il lui évite. */
+  private guardOf(p: Player) {
+    return this.perkAlpha(p, 'guard')?.value ?? 0;
+  }
+
+  /** Alpha lièvre sur le terrain : de temps en temps, il soigne un peu son dompteur et la meute autour de lui. */
+  private alphaHeals() {
+    if (this.tick % (ALPHA_HEAL_S * TICK_HZ) !== 0) return;
+    for (const p of this.players.values()) {
+      if (p.dead) continue;
+      const h = this.perkAlpha(p, 'heal');
+      if (!h) continue;
+      const near = (x: number, y: number) => dist2(x, y, h.u.x, h.u.y) <= ALPHA_HEAL_R ** 2;
+      const max = maxHpOf(p);
+      if (p.hp < max && near(p.x, p.y)) {
+        const n = Math.max(1, Math.min(max - Math.ceil(p.hp), Math.round(max * h.value)));
+        p.hp = Math.min(max, p.hp + n);
+        this.events.push({ e: 'heal', id: p.id, n });
+      }
+      for (const id of p.army) {
+        const u = this.units.get(id);
+        if (u && !u.reviveAt && u.hp > 0 && u.hp < u.maxHp && near(u.x, u.y)) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * h.value);
+      }
+    }
   }
 
   private killPlayer(p: Player) {

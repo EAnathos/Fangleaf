@@ -312,3 +312,65 @@ export function insideProp(ctx: Ctx, zone: number, px: number, py: number, a: nu
     ctx.stroke();
   }
 }
+
+// ───────────────────────── Toiles (antre de la Mère Tisseuse) ─────────────────────────
+
+/**
+ * Toile d'araignée : rayons partant de (x, y) entre les angles a0 et a1 (toile d'angle, accrochée à une paroi),
+ * ou tout autour (a1 − a0 = 2π), reliés par des fils qui ploient un peu entre deux rayons.
+ */
+export function drawWeb(ctx: Ctx, x: number, y: number, r: number, a0: number, a1: number, seed: number, alpha = 0.55) {
+  const full = a1 - a0 >= TAU - 0.01;
+  const n = full ? 9 : 6, rings = 5;
+  const spokes = Array.from({ length: n + (full ? 0 : 1) }, (_, i) => a0 + ((a1 - a0) * (i + (full ? 0.5 * Math.sin(seed + i) * 0.3 : 0))) / n);
+  const len = (i: number) => r * (0.82 + 0.18 * Math.abs(Math.sin(seed * 3.1 + i * 1.7)));
+  ctx.save();
+  ctx.strokeStyle = `rgba(238,231,215,${alpha})`;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  spokes.forEach((a, i) => {
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(a) * len(i), y + Math.sin(a) * len(i));
+  });
+  ctx.stroke();
+  ctx.lineWidth = 1.1;
+  for (let k = 1; k <= rings; k++) {
+    const f = k / (rings + 0.6);
+    ctx.beginPath();
+    const last = full ? spokes.length : spokes.length - 1;
+    for (let i = 0; i < last; i++) {
+      const j = (i + 1) % spokes.length;
+      const ax = x + Math.cos(spokes[i]) * len(i) * f, ay = y + Math.sin(spokes[i]) * len(i) * f;
+      const bx = x + Math.cos(spokes[j]) * len(j) * f, by = y + Math.sin(spokes[j]) * len(j) * f;
+      const mid = (spokes[i] + spokes[j] + (j < i ? TAU : 0)) / 2, sag = 0.86; // le fil ploie vers le centre
+      const cx = x + Math.cos(mid) * ((len(i) + len(j)) / 2) * f * sag, cy = y + Math.sin(mid) * ((len(i) + len(j)) / 2) * f * sag;
+      if (i === 0) ctx.moveTo(ax, ay);
+      ctx.quadraticCurveTo(cx, cy, bx, by);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Cocon de soie (proie emmaillotée) accroché au plafond par un fil. */
+export function drawCocoon(ctx: Ctx, x: number, y: number, s: number) {
+  ctx.strokeStyle = 'rgba(238,231,215,0.5)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x, y - s * 3.2);
+  ctx.lineTo(x, y - s);
+  ctx.stroke();
+  ctx.fillStyle = '#D8D0BE';
+  ctx.beginPath();
+  ctx.ellipse(x, y, s * 0.62, s, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(140,130,110,0.7)';
+  ctx.lineWidth = 1;
+  for (let k = -2; k <= 2; k++) {
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.6, y + k * s * 0.32 - s * 0.12);
+    ctx.lineTo(x + s * 0.6, y + k * s * 0.32 + s * 0.12);
+    ctx.stroke();
+  }
+}

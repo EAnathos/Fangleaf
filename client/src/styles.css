@@ -82,7 +82,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; background: var(--night); padding: 6px; border-radius: 12px; }
 .tabs button { height: 44px; border: none; border-radius: 8px; background: transparent; color: var(--muted); font-weight: 600; font-size: 15px; }
 .tabs button[aria-selected="true"] { background: var(--line); color: var(--text); }
+.tabs.auto { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
 .hint { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.village-list { display: flex; flex-direction: column; gap: 8px; }
+.village-pick { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 14px; min-height: 60px; padding: 10px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--night); color: var(--text); text-align: left; cursor: pointer; }
+.village-pick:hover { border-color: var(--ally); }
+.village-pick[aria-checked="true"] { border-color: var(--amber); background: rgba(240, 182, 74, 0.1); }
+.village-pick b { font: 700 22px var(--display); letter-spacing: 3px; color: var(--amber); }
+.village-pick .who { font-size: 14px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.village-pick .when { font-size: 13px; color: var(--muted); text-align: right; white-space: nowrap; }
 .error { margin: 0; color: #FF9B78; font-size: 14px; }
 .error:empty { display: none; }
 
@@ -213,6 +221,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .stat-row.dmg svg { color: var(--amber); }
 .stat-row.revive svg { color: var(--alpha); }
 .stat-row.mount svg { color: #8FE3D6; }
+.stat-row.guard svg { color: #C9CFC2; }
+.stat-row.heal svg { color: var(--hp); }
 .alpha-card .col { flex: 1; min-width: 0; }
 .alpha-card .title { font: 700 18px var(--display); }
 .alpha-card .stats { font-size: 14px; color: var(--text-2); }
@@ -334,6 +344,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* Paramètres. */
 .modal.settings { width: min(560px, calc(100vw - 32px)); }
 .modal.settings > * { flex-shrink: 0; }
+.set-page { gap: 12px; min-height: 240px; }
+.set-page p.small { margin-top: -4px; }
 .seg { gap: 8px; }
 .seg-btn { flex: 1; height: 44px; border-radius: 10px; border: 2px solid var(--line); background: var(--night); font-weight: 600; }
 .seg-btn[aria-checked="true"] { border-color: var(--amber); color: var(--amber); background: rgba(240, 182, 74, 0.12); }

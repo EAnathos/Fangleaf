@@ -1,6 +1,9 @@
 // Effets visuels éphémères : particules, textes flottants, coups, anneaux.
 
+import { particleRate } from './settings.ts';
+
 const TAU = Math.PI * 2;
+const MAX_FLOATERS = 140; // grosse mêlée : les plus anciens chiffres s'effacent
 
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number }
 interface Floater { x: number; y: number; text: string; color: string; life: number; max: number; size: number }
@@ -18,6 +21,7 @@ export class Fx {
   private shots: Shot[] = [];
 
   burst(x: number, y: number, color: string, n = 12, speed = 120) {
+    n = Math.round(n * particleRate()); // qualité réglée dans les paramètres
     for (let i = 0; i < n; i++) {
       const a = Math.random() * TAU, s = speed * (0.4 + Math.random() * 0.8);
       const max = 0.4 + Math.random() * 0.4;
@@ -27,6 +31,7 @@ export class Fx {
 
   text(x: number, y: number, text: string, color: string, size = 15, life = 1.1) {
     this.floaters.push({ x: x + (Math.random() - 0.5) * 12, y, text, color, life, max: life, size });
+    if (this.floaters.length > MAX_FLOATERS) this.floaters.shift();
   }
 
   slash(x: number, y: number, ang: number) {

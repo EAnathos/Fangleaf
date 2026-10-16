@@ -10,7 +10,7 @@ import { Fog } from './fog.ts';
 import { Fx } from './fx.ts';
 import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
-import { actionOf, keyLabel, matches, settings, touchOnly } from './settings.ts';
+import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
 import { drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool } from './sprites.ts';
 import { World } from './world.ts';
@@ -87,6 +87,7 @@ export class Game {
     this.hud.onAlphaEquip = (s, equip) => net.send({ t: 'alphaEquip', s, equip });
     this.hud.onAlphaCreate = (s) => net.send({ t: 'alphaCreate', s });
     this.hud.onHelp = (on) => this.setHelp(on);
+    this.hud.onQuality = () => this.resize();
     this.hud.toast(touchOnly ? 'Glisse pour bouger · attaque auto · touche un bouton pour interagir'
       : `ZQSD / flèches pour bouger · ${settings.attack === 'click' ? 'clic gauche pour attaquer' : 'attaque auto'} · ${keyLabel('interact')} près d'un bâtiment · touches et attaque : Échap › Paramètres`);
     if (!villageFound) this.hud.toast('Suis le chemin de terre jusqu\'au village (étoile dorée : clique sur la minicarte).');
@@ -101,8 +102,13 @@ export class Game {
     requestAnimationFrame(() => this.frame());
   }
 
+  /** Pixels par point d'écran : ceux de l'appareil, plafonnés selon la qualité choisie. */
+  private get dpr() {
+    return Math.min(maxDpr(), devicePixelRatio || 1);
+  }
+
   private resize() {
-    const dpr = Math.min(2, devicePixelRatio || 1);
+    const dpr = this.dpr;
     this.canvas.width = innerWidth * dpr;
     this.canvas.height = innerHeight * dpr;
     this.scale = clamp(Math.min(innerWidth / 1350, innerHeight / 800), 0.62, 1.25) * dpr;
@@ -440,6 +446,17 @@ export class Game {
     return u ? { x: u[3], y: u[4] } : undefined;
   }
 
+  /** Camp d'un attaquant : soi, sa meute, un coéquipier ou sa meute (couleur du coéquipier), ou un sauvage. */
+  private sideOf(id: number, players: PlayerState[]): { kind: 'me' | 'ally' | 'wild'; color: string; pack: boolean } {
+    if (id === this.myId) return { kind: 'me', color: '#EEE7D7', pack: false };
+    const p = players.find((q) => q.id === id);
+    if (p) return { kind: 'ally', color: p.color, pack: false };
+    const owner = this.net.latest?.units.find((u) => u[0] === id)?.[6] ?? 0;
+    if (owner === this.myId) return { kind: 'me', color: '#8FE3D6', pack: true }; // sa meute : turquoise clair
+    const o = players.find((q) => q.id === owner);
+    return o ? { kind: 'ally', color: o.color, pack: true } : { kind: 'wild', color: '', pack: false };
+  }
+
   /** Bruitage d'un événement : plein volume s'il nous concerne, atténué avec la distance sinon. */
   private sfxFor(e: GameEvent, players: PlayerState[]) {
     const near = (x: number, y: number) => Math.max(0, 1 - Math.hypot(x - this.me.x, y - this.me.y) / 900);
@@ -519,9 +536,18 @@ export class Game {
         if (e.a === this.myId && a && b) {
           // (attaque au clic : le coup est déjà dessiné quand on clique)
           if (ranged !== 'archer' && ranged !== 'mage' && (touchOnly || settings.attack !== 'click')) this.fx.slash(a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x));
-          this.fx.text(b.x, b.y - 24, fmtDmg(e.dmg), '#EEE7D7', 14, 0.7);
         }
-        if (e.b === this.myId) this.fx.text(this.me.x, this.me.y - 30, `-${fmtDmg(e.dmg)}`, '#FF8A65', 15, 0.8);
+        const show = settings.display.damage;
+        if (show === 'off') break;
+        if (e.b === this.myId) {
+          this.fx.text(this.me.x, this.me.y - 30, `-${fmtDmg(e.dmg)}`, '#FF8A65', 15, 0.8);
+          break;
+        }
+        // Dégâts infligés : les siens et ceux de sa meute, et (réglage « tous ») ceux des coéquipiers et de leurs meutes.
+        const side = this.sideOf(e.a, players);
+        if (!b || side.kind === 'wild' || (show === 'mine' && side.kind === 'ally')) break;
+        if (side.kind === 'me' && !side.pack) this.fx.text(b.x, b.y - 24, fmtDmg(e.dmg), '#EEE7D7', 14, 0.7);
+        else this.fx.text(b.x, b.y - 22, fmtDmg(e.dmg), side.color, side.pack ? 11 : 12, 0.6);
         break;
       }
       case 'die':
@@ -682,6 +708,11 @@ export class Game {
         if (u) this.fx.ring(u.x, u.y, '#B48CFF', 20, 110, 1.0);
         break;
       }
+      case 'heal': {
+        const p = this.posOf(e.id, players);
+        if (p) this.fx.text(p.x, p.y - 34, `+${e.n}`, '#7FCB5B', e.id === this.myId ? 15 : 12, 0.9);
+        break;
+      }
       case 'revive': {
         const u = this.posOf(e.id, players);
         if (u) this.fx.ring(u.x, u.y, '#B48CFF', 60, 10, 0.8);
@@ -809,7 +840,7 @@ export class Game {
     this.aimTimer -= dt;
     if (aim.down && !dead && !this.hud.panel && this.aimTimer <= 0) {
       this.aimTimer = 0.15;
-      const dpr = Math.min(2, devicePixelRatio || 1);
+      const dpr = this.dpr;
       const x = this.me.x + (aim.x * dpr - this.canvas.width / 2) / this.scale, y = this.me.y + (aim.y * dpr - this.canvas.height / 2) / this.scale;
       this.net.send({ t: 'attack', x, y });
       // guerrier : le coup part vers le pointeur, qu'il touche ou non (au rythme de son arme)
@@ -835,6 +866,7 @@ export class Game {
     this.wasDead = dead;
 
     this.fx.update(dt);
+    if ((this.pruneTimer -= dt) <= 0) this.prune();
     const view = this.net.sample(dt);
     this.hud.caves = this.net.latest?.caves ?? [];
     this.hud.camps = this.net.latest?.camps ?? [];
@@ -863,10 +895,29 @@ export class Game {
     requestAnimationFrame(() => this.frame());
   }
 
+  /**
+   * Toutes les 10 s, oublie ce qui concerne des unités disparues (mortes, hors de vue) : sans ça, ces tables
+   * grossissent pendant toute la partie, une entrée par monstre jamais croisé.
+   */
+  private prune() {
+    this.pruneTimer = 10;
+    const alive = new Set((this.net.latest?.units ?? []).map((u) => u[0]));
+    for (const [id] of this.net.latest?.dozers ?? []) alive.add(id);
+    for (const p of this.net.latest?.players ?? []) {
+      alive.add(p.id);
+      if (p.mount) alive.add(p.mount.id);
+    }
+    for (const m of [this.faces, this.charges] as Map<number, unknown>[]) for (const id of m.keys()) if (!alive.has(id)) m.delete(id);
+    for (const [id, until] of this.flashes) if (until < this.time) this.flashes.delete(id);
+    const chests = new Set((this.net.latest?.chests ?? []).map((c) => c[0]));
+    for (const m of [this.chestSeen, this.chestOpen]) for (const id of m.keys()) if (!chests.has(id)) m.delete(id);
+  }
+  private pruneTimer = 10;
+
   private render(units: UnitTuple[], players: PlayerState[]) {
     const { ctx, canvas, scale } = this;
     this.shake = Math.max(0, this.shake - 1 / 60);
-    const jolt = this.shake > 0 ? this.shake * 24 : 0; // secousse quand une attaque frappe près de soi
+    const jolt = this.shake > 0 && settings.display.shake ? this.shake * 24 : 0; // secousse quand une attaque frappe près de soi (désactivable)
     const camX = this.me.x + (Math.random() - 0.5) * jolt, camY = this.me.y + (Math.random() - 0.5) * jolt;
     const hw = canvas.width / 2 / scale, hh = canvas.height / 2 / scale;
 
@@ -1088,7 +1139,7 @@ export class Game {
     // Joystick tactile / souris.
     if (stick.active) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      const dpr = Math.min(2, devicePixelRatio || 1);
+      const dpr = this.dpr;
       ctx.strokeStyle = 'rgba(238,231,215,0.35)';
       ctx.lineWidth = 3 * dpr;
       ctx.beginPath();

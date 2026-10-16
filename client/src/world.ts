@@ -4,7 +4,8 @@
 import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, BOARD_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
 import { caveEdge, MAP_CELL, type Cave, type WorldMap } from '../../shared/worldmap.ts';
-import { drawEntrance, INSIDE, insideProp } from './caves.ts';
+import { settings } from './settings.ts';
+import { drawCocoon, drawEntrance, drawWeb, INSIDE, insideProp } from './caves.ts';
 
 const CHUNK = 512;
 const TILE = MAP_CELL;
@@ -63,7 +64,9 @@ export class World {
     }
     // Cache LRU : on oublie le morceau affiché il y a le plus longtemps (jamais un morceau à l'écran).
     // 40 morceaux de 1 Mo suffisent largement (une dizaine à l'écran au plus) et ménagent la mémoire des mobiles.
-    while (this.chunks.size > 40) this.chunks.delete(this.chunks.keys().next().value!);
+    // (moins en qualité basse ou moyenne : 16 ou 28 morceaux)
+    const keep = ({ low: 16, medium: 28, high: 40 } as const)[settings.display.quality];
+    while (this.chunks.size > keep) this.chunks.delete(this.chunks.keys().next().value!);
   }
 
   private chunk(cx: number, cy: number) {
@@ -939,6 +942,12 @@ export class World {
   drawCaveEntrance(ctx: CanvasRenderingContext2D, c: Cave, t: number, bossHere: boolean) {
     const { x, y } = c.entrance;
     drawEntrance(ctx, x, y, c.zone, t, bossHere);
+    if (SPECIES[c.boss].key === 'weaver') {
+      // l'antre de la Tisseuse se reconnaît de loin : toiles tendues aux coins de l'entrée
+      drawWeb(ctx, x - 92, y - 46, 70, -0.2, 1.4, c.id, 0.6);
+      drawWeb(ctx, x + 92, y - 50, 64, Math.PI - 1.4, Math.PI + 0.2, c.id + 1, 0.6);
+      drawWeb(ctx, x + 2, y - 76, 40, 0.3, Math.PI - 0.3, c.id + 2, 0.45);
+    }
     ctx.font = '700 15px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
@@ -953,6 +962,7 @@ export class World {
   caveInterior(c: Cave) {
     let cv = this.caveCanvas.get(c.id);
     if (cv) return cv;
+    this.caveCanvas.clear(); // ~6 Mo chacun : on ne garde que la grotte où l'on est
     cv = document.createElement('canvas');
     cv.width = this.caveW;
     cv.height = this.caveH;
@@ -1003,6 +1013,7 @@ export class World {
       if (py > CAVE_RY - 220 && Math.abs(px) < 150) continue; // pas devant la sortie
       insideProp(ctx, c.zone, px, py, a, i);
     }
+    if (SPECIES[c.boss].key === 'weaver') this.weaverWebs(ctx, c);
     // sortie : rai de lumière du jour
     const ex = c.exit.x - c.inside.x, ey = c.exit.y - c.inside.y;
     const light = ctx.createRadialGradient(ex, ey + 30, 10, ex, ey + 30, 120);
@@ -1018,6 +1029,35 @@ export class World {
     ctx.fillText('Sortie', ex, ey + 54);
     this.caveCanvas.set(c.id, cv);
     return cv;
+  }
+
+  /** Antre de la Mère Tisseuse : grandes toiles d'angle sur les parois, toiles au sol et cocons de proies. */
+  private weaverWebs(ctx: CanvasRenderingContext2D, c: Cave) {
+    const h = (i: number, k: number) => hash2(i, c.id + k, this.seed + 91);
+    // toiles d'angle accrochées à la paroi, ouvertes vers le centre de la grotte
+    for (let i = 0; i < 11; i++) {
+      const a = (i / 11) * TAU + h(i, 1) * 0.3, k = 0.97 * caveEdge(c, a);
+      const px = Math.cos(a) * CAVE_RX * k, py = Math.sin(a) * CAVE_RY * k;
+      if (py > CAVE_RY - 240 && Math.abs(px) < 170) continue; // la sortie reste dégagée
+      const inward = Math.atan2(-py, -px), spread = 0.9 + h(i, 2) * 0.5;
+      drawWeb(ctx, px, py, 110 + h(i, 3) * 70, inward - spread, inward + spread, i * 2.3 + c.id);
+    }
+    // toiles posées au sol, à l'écart du centre (là où dort la Tisseuse)
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * TAU + h(i, 4) * 0.6, d = 0.45 + h(i, 5) * 0.25;
+      const px = Math.cos(a) * CAVE_RX * d, py = Math.sin(a) * CAVE_RY * d;
+      if (py > CAVE_RY - 260 && Math.abs(px) < 170) continue;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.scale(1, 0.55); // à plat sur le sol
+      drawWeb(ctx, 0, 0, 60 + h(i, 6) * 40, 0, TAU, i * 1.9 + c.id, 0.32);
+      ctx.restore();
+    }
+    // cocons pendus le long de la paroi du fond
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + (i - 2) * 0.32 + h(i, 7) * 0.1, k = 0.82 * caveEdge(c, a);
+      drawCocoon(ctx, Math.cos(a) * CAVE_RX * k, Math.sin(a) * CAVE_RY * k + 20, 11 + h(i, 8) * 6);
+    }
   }
 
   /** Feu de camp animé au centre du village. */

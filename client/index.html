@@ -38,14 +38,17 @@
       <label class="field">Nom du dompteur
         <input id="name" maxlength="16" autocomplete="nickname" required>
       </label>
-      <div id="village-tabs" class="tabs" role="tablist">
-        <button type="button" role="tab" id="tab-create" aria-selected="true">Créer un village</button>
+      <div id="village-tabs" class="tabs auto" role="tablist">
+        <button type="button" role="tab" id="tab-mine" aria-selected="false" hidden>Mes villages</button>
+        <button type="button" role="tab" id="tab-create" aria-selected="true">Créer</button>
         <button type="button" role="tab" id="tab-join" aria-selected="false">Rejoindre</button>
       </div>
+      <div id="mine-list" class="village-list" role="radiogroup" aria-label="Mes villages" hidden></div>
       <label class="field" id="code-field" hidden>Code du village
         <input id="code" class="code-input" maxlength="6" autocomplete="off" spellcheck="false" placeholder="MOSS42">
       </label>
       <p id="create-hint" class="hint">Tu fondes un village à 3 places. Invite tes amis avec le bouton « Inviter » une fois en jeu.</p>
+      <p id="mine-hint" class="hint" hidden></p>
       <button id="go" class="cta" type="submit">Fonder le village</button>
       </div>
       <p id="lobby-error" class="error" role="alert"></p>
@@ -181,14 +184,37 @@
           <h2 id="settings-title">Paramètres</h2>
           <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
         </div>
-        <section class="col">
-          <h3 class="market-head">Son</h3>
+        <div class="tabs auto" role="tablist" aria-label="Rubriques des paramètres">
+          <button type="button" role="tab" id="set-tab-display" aria-selected="true" aria-controls="set-display">Affichage</button>
+          <button type="button" role="tab" id="set-tab-sound" aria-selected="false" aria-controls="set-sound">Son</button>
+          <button type="button" role="tab" id="set-tab-keys" aria-selected="false" aria-controls="set-keys">Touches</button>
+          <button type="button" role="tab" id="set-tab-village" aria-selected="false" aria-controls="set-village">Village</button>
+        </div>
+        <section id="set-display" class="col set-page" role="tabpanel">
+          <h3 class="market-head">Qualité</h3>
+          <div class="row seg" role="radiogroup" aria-label="Qualité" data-setting="quality">
+            <button class="seg-btn" role="radio" data-value="low">Basse</button>
+            <button class="seg-btn" role="radio" data-value="medium">Moyenne</button>
+            <button class="seg-btn" role="radio" data-value="high">Haute</button>
+          </div>
+          <p class="small muted">Basse : image moins fine et moins de particules, pour les machines modestes.</p>
+          <h3 class="market-head">Chiffres des dégâts</h3>
+          <div class="row seg" role="radiogroup" aria-label="Chiffres des dégâts" data-setting="damage">
+            <button class="seg-btn" role="radio" data-value="all">Tous</button>
+            <button class="seg-btn" role="radio" data-value="mine">Les miens</button>
+            <button class="seg-btn" role="radio" data-value="off">Aucun</button>
+          </div>
+          <p class="small muted">Tous : aussi ceux de ta meute, de tes coéquipiers et de leurs meutes. Les miens : toi et ta meute.</p>
+          <label class="vol-row mute"><input id="set-shake" type="checkbox"><span>Secousses de l'écran</span></label>
+          <label class="vol-row mute"><input id="set-ping" type="checkbox"><span>Afficher la latence (ms)</span></label>
+        </section>
+        <section id="set-sound" class="col set-page" role="tabpanel" hidden>
           <label class="vol-row"><span>Général</span><input id="vol-master" type="range" min="0" max="100"></label>
           <label class="vol-row"><span>Ambiance</span><input id="vol-music" type="range" min="0" max="100"></label>
           <label class="vol-row"><span>Bruitages</span><input id="vol-sfx" type="range" min="0" max="100"></label>
           <label class="vol-row mute"><input id="vol-mute" type="checkbox"><span>Couper le son</span></label>
         </section>
-        <section id="set-pc" class="col">
+        <section id="set-keys" class="col set-page" role="tabpanel" hidden>
           <h3 class="market-head">Attaque</h3>
           <div class="row seg" role="radiogroup" aria-label="Attaque">
             <button id="atk-auto" class="seg-btn" role="radio">Automatique</button>
@@ -198,7 +224,7 @@
           <div id="keymap" class="keymap"></div>
           <button id="keys-reset" class="btn">Touches par défaut</button>
         </section>
-        <section class="col">
+        <section id="set-village" class="col set-page" role="tabpanel" hidden>
           <h3 class="market-head">Membres du village</h3>
           <div id="members" class="stones"></div>
           <div id="banned-box" class="col" hidden>
@@ -332,6 +358,12 @@
           <p class="small muted">Les Alphas ne comptent pas dans la limite de meute, ressuscitent après leur mort (plus ils sont forts, plus c'est long) et restent avec toi si tu tombes. Ils sont sauvegardés pour ce village.</p>
         </div>
         <div id="den-bestiary" class="col den-page" role="tabpanel" hidden>
+          <div class="row seg" role="radiogroup" aria-label="Forme affichée" id="bestiary-forms">
+            <button class="seg-btn" role="radio" data-form="wild" aria-checked="true">Sauvage</button>
+            <button class="seg-btn" role="radio" data-form="alpha" aria-checked="false">Alpha</button>
+            <button class="seg-btn" role="radio" data-form="legend" aria-checked="false">Légendaire</button>
+            <button class="seg-btn" role="radio" data-form="boss" aria-checked="false">Géant</button>
+          </div>
           <p id="bestiary-count" class="collection"></p>
           <div id="bestiary" class="bestiary"></div>
         </div>

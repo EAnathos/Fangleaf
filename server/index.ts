@@ -5,9 +5,9 @@ import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { TICK_HZ } from '../shared/config.ts';
+import { MAX_VILLAGES, TICK_HZ } from '../shared/config.ts';
 import type { ClientMsg, ServerMsg } from '../shared/protocol.ts';
-import { createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, loadMembers, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
+import { countVillages, createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, loadMembers, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
 import { makeCode, Room, type Player } from './room.ts';
 
 try {
@@ -96,7 +96,9 @@ wss.on('connection', (ws: WebSocket) => {
 
     // Village : un nouveau, un village déjà ouvert, ou un village enregistré qu'on rouvre (même carte).
     let r: Room;
+    const tooMany = `Tu as déjà ${MAX_VILLAGES} villages : quittes-en un (Menu › Effacer ma progression ici, ou Supprimer le village) pour en ${msg.t === 'create' ? 'fonder' : 'rejoindre'} un autre.`;
     if (msg.t === 'create') {
+      if (user && (await countVillages(user.userId)) >= MAX_VILLAGES) return send({ t: 'error', msg: tooMany });
       let code = makeCode();
       while (rooms.has(code) || (await findVillage(code)) !== null) code = makeCode();
       r = new Room(code);
@@ -125,6 +127,7 @@ wss.on('connection', (ws: WebSocket) => {
 
     // Progression propre à ce compte DANS ce village : ailleurs, on repart de zéro.
     const profile = user ? await loadProgress(user.userId, r.code) : null;
+    if (user && !profile && msg.t === 'join' && (await countVillages(user.userId)) >= MAX_VILLAGES) return send({ t: 'error', msg: tooMany });
     if (ws.readyState !== ws.OPEN) return;
     if (user && activeUsers.has(user.userId)) return send({ t: 'error', msg: 'Ce compte est déjà en jeu.' });
     rooms.set(r.code, r);

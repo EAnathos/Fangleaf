@@ -1617,5 +1617,43 @@ const noop = () => {};
   check(boss.maxHp === base * 2, 'un dompteur s\'en va : on revient au total pour deux');
 }
 
+{
+  // Alpha escargot : il protège son dompteur ; Alpha lièvre : il le soigne un peu, et sa meute proche.
+  const r = room();
+  const p = r.addPlayer('a', noop);
+  p.x = r.map.spawn.x;
+  p.y = r.map.spawn.y;
+  const foe = r.createUnit(0, false, p.x + 400, p.y);
+  p.hp = 1000;
+  r.damage(p, 100, foe);
+  const bare = 1000 - p.hp;
+  const snailS = SPECIES.findIndex((s) => s.key === 'snail'), hareS = SPECIES.findIndex((s) => s.key === 'hare');
+  const snail = r.spawnAlpha(p, snailS, 10, false);
+  p.hp = 1000;
+  r.damage(p, 100, foe);
+  check(bare === 100 && 1000 - p.hp === 82, `escargot niv. 10 : 100 dégâts → ${1000 - p.hp} (au lieu de ${bare})`);
+  snail.reviveAt = r.time + 30;
+  p.hp = 1000;
+  r.damage(p, 100, foe);
+  check(1000 - p.hp === 100, 'escargot en train de ressusciter : plus de protection');
+  const hare = r.spawnAlpha(p, hareS, 0, false);
+  [hare.x, hare.y] = [p.x + 50, p.y];
+  const ally = r.createUnit(0, false, p.x - 60, p.y);
+  r.makeTamed(ally, p);
+  ally.hp = 1;
+  const max = Math.round(armorMaxHp(0));
+  p.hp = 10;
+  const evs: { e: string; n?: number }[] = [];
+  for (let i = 0; i < 20 * 3; i++) {
+    r.tick++;
+    r.events = [];
+    r.alphaHeals();
+    evs.push(...r.events.filter((e: { e: string }) => e.e === 'heal'));
+  }
+  check(evs.length === 1 && p.hp === 10 + Math.round(max * 0.03) && ally.hp > 1, `lièvre : +${evs[0]?.n} PV en 3 s pour son dompteur (${max} PV max), et la meute proche est soignée`);
+}
+
+check(caveUnlockCost(1) === 150 && caveUnlockCost(3) === 450 && caveUnlockCost(4) === 1500 && caveUnlockCost(5) === 3000, 'grottes des dernières zones bien plus chères (1500 et 3000 or)');
+
 console.log(failed ? `\nÉCHEC (TEST_SEED=${TEST_SEED})` : '\nOK');
 process.exit(failed ? 1 : 0);

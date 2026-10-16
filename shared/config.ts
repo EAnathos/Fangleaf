@@ -4,6 +4,7 @@ export const TICK_HZ = 20;
 export const DT = 1 / TICK_HZ;
 
 export const MAX_PLAYERS = 3;
+export const MAX_VILLAGES = 3; // villages par compte (on choisit le sien au lobby)
 export const WORLD_HALF = 6000; // carte de -6000 à 6000 : un long couloir sinueux dans la forêt (voir worldmap.ts)
 export const VILLAGE_R = 360;
 export const VIEW_R = 1250; // rayon d'intérêt : unités envoyées à chaque joueur
@@ -52,6 +53,12 @@ export const zoneBosses = (z: number) => SPECIES.map((sp, i) => (sp.boss && sp.z
 export const gateHall = (k: number) => (k === 0 ? 1 : k + 1);
 /** Porte k ouverte : Hôtel de ville au niveau requis et, après la première, géants de la zone k tous vaincus. */
 export const gateOpen = (k: number, hall: number, beaten: number[]) => hall >= gateHall(k) && (k === 0 || zoneBosses(k).every((b) => beaten.includes(b)));
+/** Zones découvertes par le village : la Lisière, puis chaque zone dont la porte est ouverte. */
+export const zonesOpen = (hall: number, beaten: number[]) => {
+  let z = 1;
+  while (z < ZONES && gateOpen(z, hall, beaten)) z++;
+  return z;
+};
 
 // Récolte : filons d'or (or et un peu de pierre), rochers (pierre) et bois mort (bois).
 export type Resource = 'gold' | 'wood' | 'stone';
@@ -61,8 +68,9 @@ export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[];
 // Marché : prix d'un monstre ordinaire (apprivoisé) selon l'or qu'il rapporte à la chasse.
 export const monsterBuyPrice = (species: number) => SPECIES[species].gold * 12;
 export const monsterSellPrice = (species: number) => SPECIES[species].gold * 4;
-// Grottes : fermées au départ, débloquées pour tout le village contre de l'or (150 × niveau de la zone).
-export const caveUnlockCost = (zone: number) => 150 * zone;
+// Grottes : fermées au départ, débloquées pour tout le village contre de l'or, bien plus cher dans les dernières zones.
+const CAVE_UNLOCK = [150, 300, 450, 1500, 3000];
+export const caveUnlockCost = (zone: number) => CAVE_UNLOCK[zone - 1] ?? 150 * zone;
 // Camps : un emplacement au bout de la zone 4, établi par n'importe quel membre du village contre de l'or.
 export const CAMP_COST = 2000;
 export const CAMP_R = 260; // feu qui soigne, monstres tenus à l'écart
@@ -166,6 +174,22 @@ export const MOUNT_REACH = 240; // distance max pour enfourcher sa monture
 export const mountSpeedOf = (species: number) => MOUNTS[SPECIES_KEYS[species]] ?? 1;
 
 export const ALPHA_LVL_MAX = 10;
+/**
+ * Pouvoirs de certains Alphas, tant qu'ils sont sur le terrain et debout :
+ * l'escargot protège son dompteur (dégâts reçus réduits, en plus de l'armure),
+ * le lièvre soigne un peu son dompteur et la meute autour de lui, toutes les ALPHA_HEAL_S secondes.
+ */
+export const ALPHA_PERKS: Record<string, { kind: 'guard' | 'heal'; base: number; per: number }> = {
+  snail: { kind: 'guard', base: 0.08, per: 0.01 }, // −8 % de dégâts reçus, +1 % par niveau
+  hare: { kind: 'heal', base: 0.03, per: 0.003 }, // 3 % des PV max, +0,3 % par niveau
+};
+export const ALPHA_HEAL_S = 3;
+export const ALPHA_HEAL_R = 260; // le lièvre soigne ce qui est à cette distance de lui
+/** Pouvoir de l'Alpha de cette espèce à ce niveau (part de dégâts évités ou de PV rendus), ou null. */
+export const alphaPerk = (species: number, lvl: number) => {
+  const k = ALPHA_PERKS[SPECIES[species]?.key];
+  return k ? { kind: k.kind, value: k.base + k.per * lvl } : null;
+};
 export const ALPHA_EQUIP_MAX = 5; // Alphas équipés (sur le terrain) en même temps ; les autres se reposent à la Tanière
 
 // Grottes : un mini-boss par grotte, qui réapparaît après un délai ; il peut lâcher son âme.

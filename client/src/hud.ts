@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
@@ -93,6 +93,8 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const pct = (n: number) => `${Math.round(n * 100)} %`;
+/** 0.033 → « 3,3 % » (une décimale au plus). */
+const pctLabel = (n: number) => `${(Math.round(n * 1000) / 10).toLocaleString('fr-FR')} %`;
 /** 30 → « 30 s », 90 → « 1 min 30 », 120 → « 2 min ». */
 const duration = (sec: number) => (sec < 60 ? `${sec} s` : `${Math.floor(sec / 60)} min${sec % 60 ? ` ${String(sec % 60).padStart(2, '0')}` : ''}`);
 
@@ -101,6 +103,7 @@ export class Hud {
   private miniBg: HTMLCanvasElement;
   private last = { party: '', den: '', cls: '', travel: '', bestiary: '', market: '', hall: '', members: '' };
   private denTab: 'alphas' | 'bestiary' = 'alphas';
+  private form: BestiaryForm = 'wild'; // forme montrée par le bestiaire
   private beasts: Portrait[] = [];
   private portraits: Portrait[] = []; // Alphas de la Tanière
   private wares: Portrait[] = []; // monstres du Marché
@@ -230,6 +233,13 @@ export class Hud {
         this.last.bestiary = '';
       };
     }
+    // Bestiaire : forme sauvage, Alpha, légendaire ou géant de chaque espèce.
+    const forms = $('bestiary-forms').querySelectorAll<HTMLButtonElement>('button');
+    forms.forEach((b) => (b.onclick = () => {
+      this.form = b.dataset.form as BestiaryForm;
+      forms.forEach((o) => o.setAttribute('aria-checked', String(o === b)));
+      this.last.bestiary = '';
+    }));
     $('weapon-buy').onclick = () => this.onUpgrade('weapon');
     $('armor-buy').onclick = () => this.onUpgrade('armor');
     $('alphas').addEventListener('click', (e) => {
@@ -332,7 +342,7 @@ export class Hud {
     hold.classList.toggle('on', me.holding);
     hold.textContent = me.holding ? 'Ranger le fruit' : 'Tendre un fruit';
     $('self-army').textContent = `Meute ${me.army.filter((a) => !a.alpha).length}/${ARMY_CAP}`;
-    $('ping').textContent = ping ? `${ping} ms` : '';
+    $('ping').textContent = ping && settings.display.ping ? `${ping} ms` : '';
     $('invite').hidden = players.length >= MAX_PLAYERS; // village complet : plus personne à inviter
     // au doigt, « Tendre un fruit » seulement près d'un gibier passif (ou si on en tend déjà un)
     const prey = units.some((u) => !u[6] && SPECIES[u[1]].passive && Math.hypot(u[3] - myPos.x, u[4] - myPos.y) < LURE_R);
@@ -512,7 +522,40 @@ export class Hud {
     $('chat-input').addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.setPanel(null);
     });
-    $('set-pc').hidden = touchOnly;
+    // Rubriques : affichage, son, touches (PC seulement), village.
+    const tabs = ['display', 'sound', 'keys', 'village'] as const;
+    $('set-tab-keys').hidden = touchOnly;
+    for (const tab of tabs) {
+      $(`set-tab-${tab}`).onclick = () => {
+        this.capturing = null;
+        for (const t of tabs) {
+          $(`set-tab-${t}`).setAttribute('aria-selected', String(t === tab));
+          $(`set-${t}`).hidden = t !== tab;
+        }
+      };
+    }
+    // Affichage : qualité, chiffres des dégâts, secousses, latence (appliqués tout de suite).
+    const seg = (name: 'quality' | 'damage') => {
+      const group = document.querySelector<HTMLElement>(`[data-setting="${name}"]`)!;
+      const paint = () => group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === settings.display[name])));
+      group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => {
+        (settings.display[name] as string) = b.dataset.value!;
+        saveSettings();
+        paint();
+        if (name === 'quality') this.onQuality();
+      }));
+      paint();
+    };
+    seg('quality');
+    seg('damage');
+    for (const k of ['shake', 'ping'] as const) {
+      const box = $<HTMLInputElement>(`set-${k}`);
+      box.checked = settings.display[k];
+      box.onchange = () => {
+        settings.display[k] = box.checked;
+        saveSettings();
+      };
+    }
     // Son : volumes et coupure (gardés dans ce navigateur), appliqués tout de suite
     for (const k of ['master', 'music', 'sfx'] as const) {
       const input = $<HTMLInputElement>(`vol-${k}`);
@@ -583,6 +626,7 @@ export class Hud {
   }
   private founder = false;
   private keymap = () => {};
+  onQuality = () => {};
 
   /** Membres en ligne (le fondateur peut les expulser) et comptes bannis (il peut les réintégrer). */
   private updateMembers(me: PlayerState, players: PlayerState[]) {
@@ -839,15 +883,24 @@ export class Hud {
     buy('armor-buy', aMax, armorCost(a));
   }
 
-  /** Bestiaire de la Tanière : les espèces déjà croisées, les autres en silhouette (les géants n'y figurent pas). */
+  /**
+   * Bestiaire de la Tanière, sous la forme choisie : sauvage, Alpha (niv. 0), légendaire (espèces qui ont un géant)
+   * ou géant. Les espèces déjà croisées sont décrites, les autres en silhouette ; un géant se dévoile une fois vaincu par le village.
+   */
   private updateBestiary(me: PlayerState) {
-    const all = SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss);
-    const seen = new Set(me.seen);
-    const key = all.filter((s) => seen.has(s)).join(',');
+    const form = this.form;
+    const all = form === 'boss' ? SPECIES_BY_ZONE.filter((s) => SPECIES[s].boss)
+      : SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss && (form !== 'legend' || bossOf(s) >= 0));
+    const seen = new Set(form === 'boss' ? this.beaten : me.seen);
+    const key = `${form}|${all.filter((s) => seen.has(s)).join(',')}`;
     if (key !== this.last.bestiary) {
       this.last.bestiary = key;
       const n = all.filter((s) => seen.has(s)).length;
-      $('bestiary-count').innerHTML = `<b>${n}/${all.length}</b> espèces croisées · les autres t'attendent plus loin sur le chemin.`;
+      $('bestiary-count').innerHTML = form === 'boss'
+        ? `<b>${n}/${all.length}</b> géants vaincus par le village · chacun attend au fond de sa grotte.`
+        : form === 'legend'
+          ? `<b>${n}/${all.length}</b> espèces croisées · l'âme de leur géant (${LEGEND_SOULS} âmes) rend leur Alpha légendaire.`
+          : `<b>${n}/${all.length}</b> espèces croisées · les autres t'attendent plus loin sur le chemin.`;
       this.beasts = [];
       const zones = [...new Set(all.map((s) => SPECIES[s].zone))];
       $('bestiary').replaceChildren(
@@ -858,19 +911,18 @@ export class Hud {
           const row = document.createElement('div');
           row.className = 'bestiary-row';
           for (const s of all.filter((i) => SPECIES[i].zone === z)) {
-            const sp = SPECIES[s], known = seen.has(s);
+            const known = seen.has(s), card = beastCard(s, form);
             const el = document.createElement('div');
-            el.className = `beast${known ? '' : ' unknown'}`;
+            el.className = `beast ${form}${known ? '' : ' unknown'}`;
             el.innerHTML = '<canvas></canvas><b></b><span class="tag"></span><span class="stats"></span><span class="desc"></span>';
-            el.querySelector('b')!.textContent = known ? sp.name : '???';
-            const traits = [sp.passive ? 'Passif' : sp.ranged ? 'Tireur' : 'Mêlée', sp.swim ? 'aquatique' : '', MOUNTS[sp.key] ? 'monture en Alpha' : ''].filter(Boolean).join(' · ');
-            el.querySelector('.tag')!.textContent = known ? traits : '';
-            el.querySelector('.stats')!.textContent = known ? `${sp.hp} PV · ${sp.dmg} dégâts` : '';
-            el.querySelector('.desc')!.textContent = known ? SPECIES_DESC[sp.key] ?? '' : 'Pas encore croisé.';
+            el.querySelector('b')!.textContent = known ? card.name : '???';
+            el.querySelector('.tag')!.textContent = known ? card.tag : '';
+            el.querySelector('.stats')!.textContent = known ? card.stats : '';
+            el.querySelector('.desc')!.textContent = known ? card.desc : form === 'boss' ? 'Pas encore vaincu.' : 'Pas encore croisé.';
             const canvas = el.querySelector('canvas')!;
             canvas.setAttribute('role', 'img');
-            canvas.setAttribute('aria-label', known ? sp.name : 'Espèce inconnue');
-            this.beasts.push({ canvas, s, seen: known });
+            canvas.setAttribute('aria-label', known ? card.name : 'Espèce inconnue');
+            this.beasts.push({ canvas, s, seen: known, alpha: form === 'alpha' || form === 'legend', legend: form === 'legend' });
             row.append(el);
           }
           return [title, row];
@@ -942,6 +994,13 @@ export class Hud {
           ['revive', 'Résurrection', `${alphaReviveS(s)} s`],
         ];
         if (MOUNTS[sp.key]) rows.push(['mount', 'Monture', `vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}`]);
+        const perk = alphaPerk(s, lvl), perkNext = alphaPerk(s, lvl + 1);
+        if (perk && perkNext) {
+          const grow1 = (v: number, w: number, f: (n: number) => string) => (a && !maxed ? `${f(v)} → <span class="up">${f(w)}</span>` : f(v));
+          rows.push(perk.kind === 'guard'
+            ? ['guard', 'Protège', grow1(perk.value, perkNext.value, (n) => `−${pctLabel(n)} dégâts`)]
+            : ['heal', 'Soigne', grow1(perk.value, perkNext.value, (n) => `${pctLabel(n)} PV / ${ALPHA_HEAL_S} s`)]);
+        }
         el.querySelector('.stat-rows')!.innerHTML = rows
           .map(([icon, label, value]) => `<div class="stat-row ${icon}">${ICONS[icon]}<span>${label}</span><b>${value}</b></div>`)
           .join('');
@@ -1170,6 +1229,32 @@ export class Hud {
 
 }
 
+type BestiaryForm = 'wild' | 'alpha' | 'legend' | 'boss';
+
+/** Texte d'une carte du bestiaire : nom, traits, statistiques et description selon la forme. */
+function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; stats: string; desc: string } {
+  const sp = SPECIES[s];
+  if (form === 'boss') {
+    const moves = (BOSS_MOVES[sp.key] ?? []).map((m) => MOVE_NAMES[m.kind]);
+    return {
+      name: sp.title ?? sp.name, tag: sp.name, stats: `${sp.hp} PV · ${sp.dmg} dégâts`,
+      desc: `${moves.length ? `${moves.join(', ')}. ` : ''}« ${BOSS_LINES[sp.key]?.intro ?? '…'} »`,
+    };
+  }
+  // apprivoisé, le gibier passif se bat comme les autres : « Passif » ne vaut que pour la forme sauvage
+  const traits = [sp.passive && form === 'wild' ? 'Passif' : sp.ranged ? 'Tireur' : 'Mêlée', sp.swim ? 'aquatique' : '', MOUNTS[sp.key] ? 'monture en Alpha' : ''].filter(Boolean).join(' · ');
+  if (form === 'wild') return { name: sp.name, tag: traits, stats: `${sp.hp} PV · ${sp.dmg} dégâts`, desc: SPECIES_DESC[sp.key] ?? '' };
+  const legend = form === 'legend', st = alphaStats(s, 0, 0, legend), boss = bossOf(s), perk = alphaPerk(s, 0);
+  const powers = [
+    MOUNTS[sp.key] ? `Se chevauche (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}).` : '',
+    perk?.kind === 'guard' ? `Protège son dompteur : −${pctLabel(perk.value)} de dégâts reçus (plus en le renforçant).` : '',
+    perk?.kind === 'heal' ? `Soigne son dompteur et sa meute proche : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s (plus en le renforçant).` : '',
+    legend && boss >= 0 ? `Âme de ${SPECIES[boss].title ?? SPECIES[boss].name} : il hérite de ses attaques (${(BOSS_MOVES[SPECIES[boss].key] ?? []).map((m) => MOVE_NAMES[m.kind].toLowerCase()).join(', ')}).` : '',
+    !legend ? `Éveil : ${ALPHA_CREATE_COST} essences, puis ${duration(alphaAwakenS(s))}.` : '',
+  ].filter(Boolean).join(' ');
+  return { name: legend ? `${sp.name} légendaire` : `Alpha ${sp.name}`, tag: legend ? `Aura dorée · ×${String(LEGEND_MULT.hp).replace('.', ',')} PV et dégâts` : traits, stats: `niv. 0 · ${st.hp} PV · ${st.dmg} dégâts`, desc: powers };
+}
+
 type Portrait = { canvas: HTMLCanvasElement; s: number; seen: boolean; alpha?: boolean; legend?: boolean; tame?: boolean };
 
 /** Petites icônes des statistiques (couleur via currentColor). */
@@ -1177,6 +1262,8 @@ const ICONS = {
   hp: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 14.2S1.8 10.4 1.8 6a3.2 3.2 0 0 1 6.2-1.2A3.2 3.2 0 0 1 14.2 6c0 4.4-6.2 8.2-6.2 8.2z"/></svg>',
   dmg: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M14 2 6.5 9.5M4 7.5l4.5 4.5M5.5 10.5 2 14"/></svg>',
   revive: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M13.5 8.5A5.5 5.5 0 1 1 11.8 4M13 1.8V5H9.8"/></svg>',
+  guard: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5 13.5 3.5v4c0 3.4-2.4 5.9-5.5 7-3.1-1.1-5.5-3.6-5.5-7v-4z"/></svg>',
+  heal: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.3 2h3.4v4.3H14v3.4H9.7V14H6.3V9.7H2V6.3h4.3z"/></svg>',
   mount: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 3.5 7.5 8 3 12.5M8.5 3.5 13 8l-4.5 4.5"/></svg>',
 };
 

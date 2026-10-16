@@ -81,6 +81,9 @@ class Sound {
     if (!this.ctx) return;
     const t = this.ctx.currentTime, s = this.settings;
     this.master!.gain.setTargetAtTime(s.muted ? 0 : s.master, t, 0.05);
+    // son coupé : le moteur audio est mis en pause (plus aucun calcul d'ambiance), repris au retour du son
+    if (s.muted && this.ctx.state === 'running') setTimeout(() => this.settings.muted && void this.ctx?.suspend(), 200);
+    else if (!s.muted && this.ctx.state === 'suspended') void this.ctx.resume();
     this.music!.gain.setTargetAtTime(s.music, t, 0.05);
     this.sfxBus!.gain.setTargetAtTime(s.sfx, t, 0.05);
   }

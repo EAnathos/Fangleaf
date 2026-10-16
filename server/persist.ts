@@ -116,6 +116,14 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   return data as Profile | null;
 }
 
+/** Nombre de villages où ce compte a une progression. */
+export async function countVillages(userId: string): Promise<number> {
+  if (!db) return 0;
+  const { count, error } = await db.from('progress').select('village_code', { count: 'exact', head: true }).eq('user_id', userId);
+  if (error) throw new Error(`Lecture des villages impossible : ${error.message}`);
+  return count ?? 0;
+}
+
 /** Membres enregistrés d'un village (pour les montrer endormis au village tant qu'ils sont déconnectés). */
 export async function loadMembers(code: string): Promise<{ userId: string; profile: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats'> }[]> {
   if (!db) return [];

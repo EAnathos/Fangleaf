@@ -138,6 +138,7 @@ export type GameEvent =
   | { e: 'class'; id: number; cls: ClassId }
   | { e: 'awaken'; id: number; by: number; s: number } // Alpha éveillé à la tanière
   | { e: 'revive'; id: number }
+  | { e: 'heal'; id: number; n: number } // un Alpha lièvre soigne son dompteur
   | { e: 'pdie'; id: number; gold: number } // gold : or perdu dans la chute
   | { e: 'previve'; id: number; by: number } // dompteur relevé sur place par un coéquipier
   | { e: 'upgrade'; id: number; what: 'weapon' | 'armor'; lvl: number }

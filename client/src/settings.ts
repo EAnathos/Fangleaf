@@ -1,5 +1,5 @@
-// Réglages du joueur sur PC (gardés dans ce navigateur) : touches et façon d'attaquer.
-// Au doigt, rien ne change : on glisse pour se déplacer et l'attaque reste automatique.
+// Réglages du joueur (gardés dans ce navigateur) : affichage, et sur PC touches et façon d'attaquer.
+// Au doigt, rien ne change pour les touches : on glisse pour se déplacer et l'attaque reste automatique.
 
 export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'map' | 'revive' | 'chat';
 /**
@@ -11,9 +11,18 @@ export interface Binding {
   key?: string;
   label: string;
 }
+export type Quality = 'low' | 'medium' | 'high';
+export type DamageNumbers = 'all' | 'mine' | 'off';
+export interface Display {
+  quality: Quality; // basse : image moins fine et moins de particules (machines modestes)
+  damage: DamageNumbers; // chiffres des dégâts : tous (meute, coéquipiers), les siens (soi et sa meute), aucun
+  shake: boolean; // secousses de l'écran
+  ping: boolean; // latence affichée sous la minicarte
+}
 export interface Settings {
   keys: Record<Action, Binding>;
   attack: 'auto' | 'click'; // automatique (par défaut), ou au clic gauche vers le pointeur
+  display: Display;
 }
 
 export const ACTIONS: { id: Action; name: string }[] = [
@@ -43,7 +52,13 @@ const DEFAULTS: Settings = {
     chat: { key: 'c', label: 'C' },
   },
   attack: 'auto',
+  display: { quality: 'high', damage: 'all', shake: true, ping: true },
 };
+
+/** Netteté maximale de l'image (pixels par point d'écran) selon la qualité. */
+export const maxDpr = () => ({ low: 1, medium: 1.5, high: 2 })[settings.display.quality];
+/** Part des particules gardées selon la qualité. */
+export const particleRate = () => ({ low: 0.35, medium: 0.7, high: 1 })[settings.display.quality];
 
 const STORE = 'fangleaf.settings.v1';
 
@@ -55,7 +70,14 @@ function load(): Settings {
     const saved = JSON.parse(localStorage.getItem(STORE) ?? 'null') as Partial<Settings> | null;
     const keys = { ...DEFAULTS.keys, ...(saved?.keys ?? {}) };
     if (keys.chat.key === 'Enter' && !keys.chat.code) keys.chat = DEFAULTS.keys.chat; // ancienne touche par défaut du chat : C désormais
-    return { keys, attack: saved?.attack === 'click' ? 'click' : 'auto' };
+    const d = saved?.display ?? DEFAULTS.display, D = DEFAULTS.display;
+    const display: Display = {
+      quality: (['low', 'medium', 'high'] as const).find((q) => q === d.quality) ?? D.quality,
+      damage: (['all', 'mine', 'off'] as const).find((q) => q === d.damage) ?? D.damage,
+      shake: typeof d.shake === 'boolean' ? d.shake : D.shake,
+      ping: typeof d.ping === 'boolean' ? d.ping : D.ping,
+    };
+    return { keys, attack: saved?.attack === 'click' ? 'click' : 'auto', display };
   } catch {
     return structuredClone(DEFAULTS);
   }
