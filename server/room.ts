@@ -1029,10 +1029,7 @@ export class Room {
   }
 
   private placeNear(u: Unit, p: Player) {
-    const a = Math.random() * Math.PI * 2;
-    const at = this.map.freeNear(p.x + Math.cos(a) * 50, p.y + Math.sin(a) * 50);
-    u.x = at.x;
-    u.y = at.y;
+    this.placeAround(u, p.x, p.y);
   }
 
   private wildCount(s: number) {
@@ -1687,6 +1684,8 @@ export class Room {
    */
   private navTo(u: Unit, tx: number, ty: number, speed: number, stop: number) {
     if (this.swims(u)) return this.move(u, tx, ty, speed, stop); // dans l'eau : il longe la rive, sans détour par la terre
+    // serpent de la meute : à la nage tout droit dès que l'eau est en jeu, sinon par les chemins comme les autres
+    if (this.amphibious(u) && (this.map.isWater(u.x, u.y) || this.map.isWater(tx, ty))) return this.move(u, tx, ty, speed, stop);
     if (this.map.clearLine(u.x, u.y, tx, ty)) {
       u.path = null;
       return this.move(u, tx, ty, speed, stop);
@@ -1709,8 +1708,32 @@ export class Room {
     return !u.owner && !!SPECIES[u.s].swim;
   }
 
+  /** Monstre marin de la meute (serpent apprivoisé) : il va à terre comme dans l'eau. */
+  private amphibious(u: Unit) {
+    return !!u.owner && !!SPECIES[u.s].swim;
+  }
+
   private blockedFor(u: Unit, x: number, y: number) {
-    return this.swims(u) ? !this.map.isWater(x, y) : this.map.blocked(x, y);
+    if (this.swims(u)) return !this.map.isWater(x, y);
+    return this.map.blocked(x, y) && !(this.amphibious(u) && this.map.isWater(x, y));
+  }
+
+  /** Dompteur sur l'eau : point de la berge le plus proche de lui (calculé une fois par tick), sinon null. */
+  private bankOf(o: Player) {
+    if (!this.swimming(o) || !this.map.isWater(o.x, o.y)) return null;
+    const c = this.banks.get(o.id);
+    if (c?.tick === this.tick) return c.at;
+    const at = this.map.landNear(o.x, o.y, 900);
+    this.banks.set(o.id, { tick: this.tick, at });
+    return at;
+  }
+  private banks = new Map<number, { tick: number; at: { x: number; y: number } | null }>();
+
+  /** Pose une unité près d'un point, sur la terre ferme (ou dans l'eau pour un serpent de la meute). */
+  private placeAround(u: Unit, x: number, y: number) {
+    const a = Math.random() * Math.PI * 2;
+    const at = this.map.freeNear(x + Math.cos(a) * 50, y + Math.sin(a) * 50);
+    [u.x, u.y] = [at.x, at.y];
   }
 
   /** Portée d'aggro : un tireur repère de plus loin. */
@@ -1925,15 +1948,18 @@ export class Room {
   private followerAI(u: Unit) {
     const o = this.players.get(u.owner);
     if (!o) return;
-    // Trop loin, ou coincé derrière un arbre ou la palissade depuis un moment : il rejoint son dompteur.
-    if (dist2(u.x, u.y, o.x, o.y) > 900 ** 2 || (u.stuck > 2.5 && !o.dead)) {
-      this.placeNear(u, o);
+    // Dompteur sur l'eau (serpent) : un monstre terrestre ne l'y suit pas, il l'attend sur la berge la plus proche de lui.
+    const bank = this.amphibious(u) ? null : this.bankOf(o);
+    const hx = bank?.x ?? o.x, hy = bank?.y ?? o.y;
+    // Trop loin, ou coincé derrière un arbre ou la palissade depuis un moment : il rejoint son dompteur (ou la berge).
+    if (dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead)) {
+      this.placeAround(u, hx, hy);
       u.stuck = 0;
     }
 
     // Trop loin du dompteur : on lâche le combat et on revient, sans se laisser distraire.
     if (!o.dead) {
-      const d2o = dist2(u.x, u.y, o.x, o.y);
+      const d2o = dist2(u.x, u.y, hx, hy);
       if (!u.recalling && d2o > RECALL_R ** 2) {
         u.recalling = true;
         u.target = 0;
@@ -1942,7 +1968,7 @@ export class Room {
       if (u.recalling) {
         if (d2o < RECALL_DONE_R ** 2) u.recalling = false;
         else {
-          this.navTo(u, o.x, o.y, Math.max(u.speed, PLAYER_SPEED * 1.7), 40);
+          this.navTo(u, hx, hy, Math.max(u.speed, PLAYER_SPEED * 1.7), 40);
           return;
         }
       }
@@ -1990,12 +2016,12 @@ export class Room {
     const i = o.army.indexOf(u.id);
     const ang = i * 2.39996;
     const rad = 48 + 20 * Math.sqrt(i);
-    const sx = o.x + Math.cos(ang) * rad, sy = o.y + Math.sin(ang) * rad;
+    const sx = hx + Math.cos(ang) * rad, sy = hy + Math.sin(ang) * rad;
     const far = dist2(u.x, u.y, sx, sy) > 70 ** 2;
     const om = o.mount ? this.units.get(o.mount) : undefined;
     const ownerSpeed = PLAYER_SPEED * (om ? mountSpeedOf(om.s) : 1); // la meute suit aussi un dompteur à cheval
     // Place libre dans la formation (pas au milieu d'un arbre), puis on y va en contournant les obstacles.
-    const slot = this.map.blocked(sx, sy) ? { x: o.x, y: o.y } : { x: sx, y: sy };
+    const slot = this.blockedFor(u, sx, sy) ? { x: hx, y: hy } : { x: sx, y: sy };
     this.navTo(u, slot.x, slot.y, far ? Math.max(u.speed, ownerSpeed * 1.15) : Math.max(u.speed, 90), 3);
   }
 

@@ -1724,6 +1724,39 @@ const noop = () => {};
   const at = { x: p.x, y: p.y };
   r.onMount(p, wolf.id);
   check(p.mount === wolf.id && p.x === at.x, 'une monture terrestre se monte toujours sur place');
+
+  // Dompteur sur l'eau : sa meute terrestre l'attend sur la berge, un serpent de la meute le suit dans l'eau.
+  r.onMount(p, 0);
+  [p.x, p.y] = [shore!.x, shore!.y];
+  const sp2 = r.spawnAlpha(p, serpentS, 0, false);
+  [sp2.x, sp2.y] = [p.x, p.y];
+  r.onMount(p, sp2.id);
+  const pack = [0, 4, 1].map((s) => {
+    const u = r.createUnit(s, false, p.x, p.y);
+    r.makeTamed(u, p);
+    r.placeNear(u, p);
+    return u;
+  });
+  const swimmer = r.createUnit(serpentS, false, p.x, p.y);
+  r.makeTamed(swimmer, p);
+  // il s'éloigne de la rive en nageant
+  let swim = { x: p.x, y: p.y };
+  for (let k = 0; k < 40; k++) {
+    const w = m.waterNear(swim.x + 25, swim.y, 0) ?? m.waterNear(swim.x - 25, swim.y, 0);
+    if (w && m.isWater(w.x, w.y)) swim = w;
+  }
+  [p.x, p.y] = [swim.x, swim.y];
+  let wet = 0;
+  for (let i = 0; i < 20 * 8; i++) {
+    r.step();
+    [p.x, p.y] = [swim.x, swim.y];
+    p.hp = 1e6;
+    wet += pack.filter((u) => m.isWater(u.x, u.y)).length;
+  }
+  const bank = m.landNear(p.x, p.y, 900)!;
+  const onBank = pack.every((u) => Math.hypot(u.x - bank.x, u.y - bank.y) < 260);
+  check(wet === 0 && onBank, `meute terrestre restée sur la berge (jamais dans l'eau, à ${Math.round(Math.max(...pack.map((u) => Math.hypot(u.x - bank.x, u.y - bank.y))))} px de la berge la plus proche)`);
+  check(m.isWater(swimmer.x, swimmer.y) && Math.hypot(swimmer.x - p.x, swimmer.y - p.y) < 160, 'le serpent de la meute suit son dompteur dans l\'eau');
 }
 
 check(caveUnlockCost(1) === 150 && caveUnlockCost(3) === 450 && caveUnlockCost(4) === 1500 && caveUnlockCost(5) === 3000, 'grottes des dernières zones bien plus chères (1500 et 3000 or)');
