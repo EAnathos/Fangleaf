@@ -18,6 +18,7 @@ export interface Display {
   damage: DamageNumbers; // chiffres des dégâts : tous (meute, coéquipiers), les siens (soi et sa meute), aucun
   shake: boolean; // secousses de l'écran
   ping: boolean; // latence affichée sous la minicarte
+  weather: boolean; // pluie (la nuit reste : elle fait partie du monde)
 }
 export interface Settings {
   keys: Record<Action, Binding>;
@@ -52,7 +53,7 @@ const DEFAULTS: Settings = {
     chat: { key: 'c', label: 'C' },
   },
   attack: 'auto',
-  display: { quality: 'high', damage: 'all', shake: true, ping: true },
+  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true },
 };
 
 /** Netteté maximale de l'image (pixels par point d'écran) selon la qualité. */
@@ -76,6 +77,7 @@ function load(): Settings {
       damage: (['all', 'mine', 'off'] as const).find((q) => q === d.damage) ?? D.damage,
       shake: typeof d.shake === 'boolean' ? d.shake : D.shake,
       ping: typeof d.ping === 'boolean' ? d.ping : D.ping,
+      weather: typeof d.weather === 'boolean' ? d.weather : D.weather,
     };
     return { keys, attack: saved?.attack === 'click' ? 'click' : 'auto', display };
   } catch {

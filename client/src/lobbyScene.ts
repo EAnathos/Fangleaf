@@ -22,7 +22,7 @@ const ACTORS: Actor[] = [
   { x: -132, y: -18, species: 1, wild: false, face: 1, seed: 1 },
   { x: -108, y: 34, species: 0, wild: false, face: 1, seed: 2 },
   { x: -168, y: 22, species: 0, wild: false, face: 1, seed: 3 },
-  { x: -214, y: -14, species: 2, alpha: true, wild: false, face: 1, seed: 4 }, // l'Alpha du dompteur
+  { x: -214, y: -14, species: 3, alpha: true, wild: false, face: 1, seed: 4 }, // l'Alpha du dompteur : un Golem de mousse
   // Les sauvages (à droite).
   { x: 150, y: 30, species: 5, wild: true, face: -1, seed: 5 }, // Araignée
   { x: 226, y: -2, species: 2, wild: true, face: -1, seed: 6 }, // Sanglier

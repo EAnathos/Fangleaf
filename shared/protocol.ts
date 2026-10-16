@@ -1,6 +1,6 @@
 // Messages échangés sur le WebSocket (JSON).
 
-import type { BuildingId, ClassId } from './config.ts';
+import type { BuildingId, ClassId, Gear } from './config.ts';
 
 /** Statistiques d'un dompteur dans son village (tableau du village). */
 export interface Stats {
@@ -19,7 +19,7 @@ export type ClientMsg =
   | { t: 'create'; name: string; token?: string } // token : session Supabase (optionnel)
   | { t: 'join'; code: string; name: string; token?: string }
   | { t: 'pos'; x: number; y: number; fx: number; fy: number }
-  | { t: 'upgrade'; what: 'weapon' | 'armor' }
+  | { t: 'upgrade'; what: Gear }
   | { t: 'alphaUp'; s: number } // renforcer l'Alpha de cette espèce (équipé ou au repos)
   | { t: 'alphaEquip'; s: number; equip: boolean } // l'emmener sur le terrain, ou le ranger à la Tanière
   | { t: 'alphaCreate'; s: number }
@@ -62,6 +62,8 @@ export interface PlayerState {
   maxHp: number;
   weapon: number;
   armor: number;
+  torch: number; // 0 : pas de torche
+  boots: number;
   cls: ClassId | null; // classe (null : pas encore choisie)
   gold: number;
   fruits: number; // baies dans son sac
@@ -147,7 +149,7 @@ export type GameEvent =
   | { e: 'heal'; id: number; n: number } // un Alpha lièvre soigne son dompteur
   | { e: 'pdie'; id: number; gold: number } // gold : or perdu dans la chute
   | { e: 'previve'; id: number; by: number } // dompteur relevé sur place par un coéquipier
-  | { e: 'upgrade'; id: number; what: 'weapon' | 'armor'; lvl: number }
+  | { e: 'upgrade'; id: number; what: Gear; lvl: number }
   | { e: 'alphaUp'; id: number; by: number; s: number; lvl: number }
   | { e: 'mount'; by: number; id: number; on: boolean }
   | { e: 'scatter'; id: number; n: number } // la meute se disperse à la mort du dompteur
@@ -195,6 +197,6 @@ export type ServerMsg =
   | { t: 'closed'; msg: string } // village supprimé (ou progression effacée) : retour au lobby
   | { t: 'error'; msg: string }
   | { t: 'teleport'; x: number; y: number }
-  | { t: 'pong'; ts: number }
+  | { t: 'pong'; ts: number; now?: number } // now : heure du serveur (ms), pour le ciel commun
   | { t: 'board'; rows: BoardRow[] } // tableau du village (membres en ligne et déconnectés)
   | Snapshot;

@@ -164,6 +164,22 @@ export const WEAPON_NAMES = [
 export const weaponDmg = (lvl: number) => Math.round((10 + 4 * lvl) * 0.75); // −25 % sur les dégâts du héros
 export const weaponCost = (lvl: number) => Math.round(25 * Math.pow(1.6, lvl));
 
+// Torche : on n'y voit rien la nuit sans elle. Achetée au niveau 1, puis de plus en plus de lumière.
+export const TORCH_MAX = 5;
+export const TORCH_NAMES = ['Aucune', 'Torche', 'Torche de résine', 'Lanterne', 'Lanterne de cuivre', 'Lanterne runique'];
+export const torchRadius = (lvl: number) => (lvl > 0 ? 150 + 55 * (lvl - 1) : 0); // rayon du halo, la nuit
+export const torchCost = (lvl: number) => Math.round(30 * Math.pow(1.8, lvl));
+
+// Bottes : +2 % de vitesse à pied par niveau.
+export const BOOTS_MAX = 10;
+export const BOOTS_NAMES = [
+  'Pieds nus', 'Sandales', 'Bottes de toile', 'Bottes de cuir', 'Bottes cloutées', 'Bottes de course',
+  'Bottes de ranger', 'Bottes de lièvre', 'Bottes-vent', 'Bottes de loup', 'Fangleaf',
+];
+export const bootsSpeed = (lvl: number) => 1 + 0.02 * lvl;
+export const bootsCost = (lvl: number) => Math.round(22 * Math.pow(1.6, lvl));
+export type Gear = 'weapon' | 'armor' | 'torch' | 'boots';
+
 // Tanière : il n'y a pas d'Alpha sauvage. On éveille l'Alpha d'une espèce avec ses essences
 // (1 essence par monstre de l'espèce vaincu), puis on le renforce, de plus en plus cher.
 // Montures : certains Alphas éveillés se chevauchent. Vitesse multipliée, et la monture encaisse

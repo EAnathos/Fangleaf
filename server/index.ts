@@ -150,7 +150,7 @@ wss.on('connection', (ws: WebSocket) => {
     } catch {
       return;
     }
-    if (msg.t === 'ping') return send({ t: 'pong', ts: msg.ts });
+    if (msg.t === 'ping') return send({ t: 'pong', ts: msg.ts, now: Date.now() });
 
     if (!player) {
       if ((msg.t === 'create' || msg.t === 'join') && !joining) {

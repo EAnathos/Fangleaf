@@ -16,6 +16,8 @@ export interface Profile {
   fruits: number; // baies dans le sac
   weapon: number;
   armor: number;
+  torch?: number; // 0 : pas de torche (absent dans les sauvegardes d'avant la migration 015)
+  boots?: number;
   essences: number[];
   alphas: { s: number; lvl: number; wakeAt?: number; legend?: boolean; rest?: boolean }[]; // rest : rangé à la Tanière // wakeAt : éveil en cours (horodatage ms)
   village_found: boolean; // village déjà découvert : on y apparaît directement
@@ -108,7 +110,7 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   if (!db) return null;
   const { data, error } = await db
     .from('progress')
-    .select('name, gold, wood, stone, fruits, weapon, armor, essences, alphas, village_found, class, pack, seen, stats')
+    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, essences, alphas, village_found, class, pack, seen, stats')
     .eq('user_id', userId)
     .eq('village_code', code)
     .maybeSingle();

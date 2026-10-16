@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
-  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, ARMY_CAP, BUILDING_REACH, DT,
+  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
@@ -116,6 +116,8 @@ export interface Player {
   hp: number;
   weapon: number;
   armor: number;
+  torch: number;
+  boots: number;
   gold: number;
   wood: number;
   stone: number;
@@ -289,7 +291,7 @@ export class Room {
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, stats: { bosses: 0, tamed: 0, given: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, stats: { bosses: 0, tamed: 0, given: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
     };
@@ -302,6 +304,8 @@ export class Room {
       p.stats = statsOf(prof.stats);
       p.weapon = clamp(prof.weapon, 0, WEAPON_MAX);
       p.armor = clamp(prof.armor, 0, ARMOR_MAX);
+      p.torch = clamp(Math.floor(prof.torch ?? 0), 0, TORCH_MAX);
+      p.boots = clamp(Math.floor(prof.boots ?? 0), 0, BOOTS_MAX);
       p.cls = CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as ClassId) : null;
       p.essences = SPECIES.map((_, i) => prof.essences[i] ?? 0);
       // Bestiaire : ce qui a été vu, plus (pour les anciennes sauvegardes) tout ce qu'on a déjà chassé ou possédé.
@@ -454,7 +458,7 @@ export class Room {
     const mounted = p.mount ? this.units.get(p.mount) : undefined;
     const slow = p.slowUntil > this.time ? WEB_SLOW : 1;
     const swimming = !!mounted && swimMount(mounted.s); // sur le serpent : seulement l'eau
-    const allowed = PLAYER_SPEED * slow * (mounted ? mountSpeedOf(mounted.s) : 1) * 1.35 * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12;
+    const allowed = PLAYER_SPEED * slow * (mounted ? mountSpeedOf(mounted.s) : bootsSpeed(p.boots)) * 1.35 * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12;
     p.lastPosMs = now;
     let dx = x - p.x, dy = y - p.y;
     const d = Math.hypot(dx, dy);
@@ -493,7 +497,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen], stats: { ...p.stats } };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen], stats: { ...p.stats } };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -595,7 +599,7 @@ export class Room {
     this.events.push({ e: 'trade', to: p.id, s, gold, sold: false });
   }
 
-  onUpgrade(p: Player, what: 'weapon' | 'armor') {
+  onUpgrade(p: Player, what: Gear) {
     if (!this.at(p, 'forge')) return;
     if (what === 'weapon') {
       const cost = weaponCost(p.weapon);
@@ -609,9 +613,14 @@ export class Room {
       const ratio = p.hp / maxHpOf(p);
       p.armor++;
       p.hp = Math.round(maxHpOf(p) * ratio);
+    } else if (what === 'torch' || what === 'boots') {
+      const lvl = p[what], cost = what === 'torch' ? torchCost(lvl) : bootsCost(lvl);
+      if (lvl >= (what === 'torch' ? TORCH_MAX : BOOTS_MAX) || p.gold < cost) return;
+      p.gold -= cost;
+      p[what]++;
     } else return;
     p.dirty = true;
-    this.events.push({ e: 'upgrade', id: p.id, what, lvl: what === 'weapon' ? p.weapon : p.armor });
+    this.events.push({ e: 'upgrade', id: p.id, what, lvl: p[what] });
   }
 
   /** Choisir sa classe à la forge : la première fois gratuitement, ensuite contre un peu d'or. */
@@ -2021,7 +2030,7 @@ export class Room {
     const sx = hx + Math.cos(ang) * rad, sy = hy + Math.sin(ang) * rad;
     const far = dist2(u.x, u.y, sx, sy) > 70 ** 2;
     const om = o.mount ? this.units.get(o.mount) : undefined;
-    const ownerSpeed = PLAYER_SPEED * (om ? mountSpeedOf(om.s) : 1); // la meute suit aussi un dompteur à cheval
+    const ownerSpeed = PLAYER_SPEED * (om ? mountSpeedOf(om.s) : bootsSpeed(o.boots)); // la meute suit aussi un dompteur à cheval
     // Place libre dans la formation (pas au milieu d'un arbre), puis on y va en contournant les obstacles.
     const slot = this.blockedFor(u, sx, sy) ? { x: hx, y: hy } : { x: sx, y: sy };
     this.navTo(u, slot.x, slot.y, far ? Math.max(u.speed, ownerSpeed * 1.15) : Math.max(u.speed, 90), 3, !!bank);
@@ -2365,7 +2374,7 @@ export class Room {
     for (const p of this.players.values()) {
       const st: PlayerState = {
         id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: Math.round(p.fx * 100) / 100, fy: Math.round(p.fy * 100) / 100,
-        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
+        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
         essences: p.essences, saved: !!p.userId, dead: p.dead,
         respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
         revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),

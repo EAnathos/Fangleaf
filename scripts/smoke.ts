@@ -183,6 +183,10 @@ async function main() {
   host.send({ t: 'upgrade', what: 'armor' });
   await sleep(150);
   check(host.me()!.armor === 1, `armure améliorée (niv. ${host.me()!.armor}, or ${host.me()!.gold})`);
+  host.send({ t: 'upgrade', what: 'torch' });
+  host.send({ t: 'upgrade', what: 'boots' });
+  await sleep(150);
+  check(host.me()!.torch === 1 && host.me()!.boots === 1, `torche achetée et bottes améliorées (torche ${host.me()!.torch}, bottes ${host.me()!.boots}, or ${host.me()!.gold})`);
 
   // Anti-téléportation.
   const before = host.me()!;

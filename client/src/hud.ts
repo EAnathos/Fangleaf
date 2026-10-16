@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, SWIM_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, SWIM_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
@@ -114,7 +114,7 @@ export class Hud {
   private portraits: Portrait[] = []; // Alphas de la Tanière
   private wares: Portrait[] = []; // monstres du Marché
   panel: Panel = null;
-  onUpgrade = (_what: 'weapon' | 'armor') => {};
+  onUpgrade = (_what: Gear) => {};
   onAlphaUp = (_species: number) => {};
   onAlphaEquip = (_species: number, _equip: boolean) => {};
   onAlphaCreate = (_species: number) => {};
@@ -250,6 +250,8 @@ export class Hud {
     }));
     $('weapon-buy').onclick = () => this.onUpgrade('weapon');
     $('armor-buy').onclick = () => this.onUpgrade('armor');
+    $('torch-buy').onclick = () => this.onUpgrade('torch');
+    $('boots-buy').onclick = () => this.onUpgrade('boots');
     $('alphas').addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button.buy');
       if (btn?.dataset.up) this.onAlphaUp(Number(btn.dataset.up));
@@ -563,7 +565,7 @@ export class Hud {
     };
     seg('quality');
     seg('damage');
-    for (const k of ['shake', 'ping'] as const) {
+    for (const k of ['shake', 'ping', 'weather'] as const) {
       const box = $<HTMLInputElement>(`set-${k}`);
       box.checked = settings.display[k];
       box.onchange = () => {
@@ -866,10 +868,10 @@ export class Hud {
     }
     const weaponNames = classOf(me.cls).weapons;
     const next = (a: string, b: string, maxed: boolean) => (maxed ? a : `${a} → <span class="up">${b}</span>`);
-    const buy = (id: string, maxed: boolean, cost: number) => {
+    const buy = (id: string, maxed: boolean, cost: number, verb = 'Améliorer') => {
       const btn = $<HTMLButtonElement>(id);
       btn.disabled = maxed || me.gold < cost;
-      btn.textContent = maxed ? 'Niveau maximum' : me.gold < cost ? `Il manque ${cost - me.gold} or` : `Améliorer · ${cost} or`;
+      btn.textContent = maxed ? 'Niveau maximum' : me.gold < cost ? `Il manque ${cost - me.gold} or` : `${verb} · ${cost} or`;
     };
 
     const w = me.weapon, wMax = w >= WEAPON_MAX;
@@ -896,6 +898,26 @@ export class Hud {
     $('armor-icon').querySelector('.studs')!.toggleAttribute('hidden', a !== 2);
     $('armor-shape').setAttribute('fill', armorColor(a));
     buy('armor-buy', aMax, armorCost(a));
+
+    // Torche : rien au niveau 0 (on n'éclaire pas la nuit), torche puis lanterne.
+    const tl = me.torch, tMax = tl >= TORCH_MAX;
+    $('torch-name').textContent = tl ? `${TORCH_NAMES[tl]} · niv. ${tl}` : 'Aucune';
+    $('torch-r').innerHTML = next(tl ? `${torchRadius(tl)} px` : 'aucune', `${torchRadius(tl + 1)} px`, tMax);
+    const tIcon = $('torch-icon'), lantern = tl >= 3;
+    for (const g of tIcon.querySelectorAll<SVGGElement>('g[data-look]')) g.toggleAttribute('hidden', g.dataset.look !== (lantern ? 'lantern' : 'torch'));
+    tIcon.querySelectorAll('.frame').forEach((el) => el.setAttribute('fill', tl === 4 ? '#B87333' : tl >= 5 ? '#6E7570' : '#4A4E52'));
+    tIcon.querySelector('.glow')!.setAttribute('fill', tl >= 5 ? '#BDF2FF' : '#F7D774');
+    tIcon.style.opacity = tl ? '1' : '0.45';
+    buy('torch-buy', tMax, torchCost(tl), tl ? 'Améliorer' : 'Acheter');
+
+    // Bottes : +2 % de vitesse à pied par niveau.
+    const b = me.boots, bMax = b >= BOOTS_MAX;
+    $('boots-name').textContent = `${BOOTS_NAMES[b]} · niv. ${b}`;
+    const sp = (l: number) => `+${Math.round((bootsSpeed(l) - 1) * 100)} %`;
+    $('boots-speed').innerHTML = next(sp(b), sp(b + 1), bMax);
+    $('boots-shape').setAttribute('fill', b ? armorColor(b) : '#8B5E3C');
+    $('boots-icon').style.opacity = b ? '1' : '0.45';
+    buy('boots-buy', bMax, bootsCost(b), b ? 'Améliorer' : 'Acheter');
   }
 
   /**

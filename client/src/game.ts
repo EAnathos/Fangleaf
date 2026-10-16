@@ -1,8 +1,8 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, VILLAGE_R, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
-import type { GameEvent, HazardTuple, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
+import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
 import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST } from './anim.ts';
@@ -13,8 +13,10 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { GLOW, SkyFx } from './sky.ts';
 import { World } from './world.ts';
+import { sky as skyAt } from '../../shared/weather.ts';
 import { WorldMap } from '../../shared/worldmap.ts';
 
 /** Dégâts affichés arrondis à 2 décimales, à la française : 6,4 · 12 · 4,85. */
@@ -24,12 +26,19 @@ const MIST_FADE_S = 2.5; // une brume qui se lève met ce temps à se dissiper
 const SPRITE_FPS = 20; // animation des monstres (images par seconde)
 const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
 
+const GEAR_NAMES = { weapon: 'Arme améliorée', armor: 'Armure améliorée', torch: 'Torche améliorée', boots: 'Bottes améliorées' };
+
+// En local seulement : ?ciel=nuit, ?ciel=pluie ou ?ciel=orage (nuit et pluie) pour voir le ciel sans attendre.
+const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
+
 export class Game {
   private ctx: CanvasRenderingContext2D;
   private world: World;
   private map: WorldMap;
   private hud: Hud;
   private fx = new Fx();
+  private skyFx = new SkyFx(); // nuit et pluie
+  private dt = 0;
   me = { x: 0, y: 0, fx: 1, fy: 0, moving: false };
   private flashes = new Map<number, number>();
   private charges = new Map<number, number>(); // tireur → début de la charge de son tir
@@ -777,7 +786,7 @@ export class Game {
       }
       case 'upgrade':
         if (e.id === this.myId) {
-          this.hud.toast(`${e.what === 'weapon' ? 'Arme' : 'Armure'} améliorée — niveau ${e.lvl}`, 'good');
+          this.hud.toast(e.what === 'torch' && e.lvl === 1 ? 'Torche achetée : tu y verras plus clair la nuit' : `${GEAR_NAMES[e.what]} — niveau ${e.lvl}`, 'good');
           this.fx.ring(this.me.x, this.me.y, '#F0B64A', 10, 60);
         }
         break;
@@ -849,6 +858,7 @@ export class Game {
     const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
     this.time += dt;
+    this.dt = dt;
 
     const st = this.self();
     const dead = !!st?.dead;
@@ -858,7 +868,7 @@ export class Game {
     if (this.me.moving) {
       // Même règle que le serveur : pas d'eau, on glisse le long des berges.
       const swimming = !!st?.mount && swimMount(st.mount.species); // sur le serpent : seulement l'eau
-      const speed = PLAYER_SPEED * (st?.mount ? mountSpeedOf(st.mount.species) : 1) * (st?.slowed ? WEB_SLOW : 1);
+      const speed = PLAYER_SPEED * (st?.mount ? mountSpeedOf(st.mount.species) : bootsSpeed(st?.boots ?? 0)) * (st?.slowed ? WEB_SLOW : 1);
       // (bords du monde et intérieurs de grotte : gérés par blocked())
       const nx = this.me.x + dx * speed * dt, ny = this.me.y + dy * speed * dt;
       // Même règle que le serveur pour les portes fermées : on ne les franchit pas en avançant.
@@ -1058,6 +1068,36 @@ export class Game {
   }
   private sprites = new Map<number, { c: HTMLCanvasElement; key: string; frame: number; used: number }>();
 
+  /** Sources de lumière de la nuit : feux, Pierres éveillées, dompteurs, créatures lumineuses, tirs. */
+  private collectLights(units: UnitTuple[], players: PlayerState[], shots: ShotTuple[], camps: number[]) {
+    const L = this.skyFx, t = this.time, fire = '255,178,92';
+    const flick = (k: number) => 0.9 + Math.sin(t * 9 + k) * 0.05 + Math.sin(t * 23 + k * 3) * 0.05;
+    L.begin();
+    const { village, spawn } = this.map;
+    L.light(village.x, village.y, 420, fire, flick(0));
+    L.light(spawn.x, spawn.y, 300, fire, flick(1));
+    this.map.sites.forEach((c, i) => camps.includes(i) && L.light(c.x, c.y, 280, fire, flick(i + 2)));
+    this.map.stones.forEach((st, k) => {
+      const active = k === 0 ? this.hud.buildings.includes('stone') : camps.includes(k - 1);
+      if (active) L.light(st.x, st.y - 20, 170, '92,200,184', 0.7);
+    });
+    for (const p of players) {
+      if (p.dead) continue;
+      const isMe = p.id === this.myId, x = isMe ? this.me.x : p.x, y = isMe ? this.me.y : p.y;
+      // sans torche, on n'éclaire pas : il faut l'acheter à la forge
+      if (p.torch) L.light(x, y - 16, torchRadius(p.torch), p.torch >= 5 ? '200,235,255' : '255,206,150', 0.85 * (0.94 + Math.sin(t * 13 + x) * 0.06));
+      if (p.cls === 'mage') L.light(x + 16, y - 14, 90, '180,140,255', 0.6);
+    }
+    for (const [, s, flags, x, y] of units) {
+      const alpha = (flags & UNIT_FLAG_ALPHA) !== 0, glow = GLOW[SPECIES[s].key];
+      if (glow) {
+        const r = alpha ? alphaStats(s, 0, 1, (flags & UNIT_FLAG_LEGEND) !== 0).r : SPECIES[s].r;
+        L.light(x, y - r * 0.5, r * glow[0], glow[1], glow[2] * (0.92 + Math.sin(t * 3 + x) * 0.08));
+      } else if (alpha) L.light(x, y - 10, 60, '180,140,255', 0.35); // yeux des Alphas
+    }
+    for (const sh of shots) L.light(sh[2], sh[3], 70, '255,224,170', 0.5);
+  }
+
   private render(units: UnitTuple[], players: PlayerState[]) {
     const { ctx, canvas, scale } = this;
     this.shake = Math.max(0, this.shake - 1 / 60);
@@ -1069,6 +1109,9 @@ export class Game {
     ctx.fillStyle = '#10181A';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(scale, 0, 0, scale, canvas.width / 2 - camX * scale, canvas.height / 2 - camY * scale);
+
+    const sky = skyAt(this.map.seed, this.net.serverNow());
+    if (SKY_TEST) Object.assign(sky, SKY_TEST);
 
     // Dans une grotte, on ne voit que la grotte (pas la forêt qui borde le monde).
     if (!this.map.caveAt(camX, camY)) this.world.draw(ctx, camX - hw, camY - hh, camX + hw, camY + hh);
@@ -1290,6 +1333,7 @@ export class Game {
             ctx, x + back, y - lift, p.color, fx, fy, p.armor, p.name, this.time,
             isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool, p.weapon,
           );
+          if (p.torch && sky.light < 0.85) drawTorch(ctx, x + back - (fx < -0.1 ? -15 : 15), y - lift - 2, p.torch, this.time); // de l'autre main
           if (p.slowed) drawWebbed(ctx, x, y - lift, this.time);
           if (!isMe && p.hp < p.maxHp) hpBar(ctx, x, y + 26, 34, (100 * p.hp) / p.maxHp, '#7FCB5B');
         },
@@ -1308,6 +1352,13 @@ export class Game {
     }
     this.fog.draw(ctx, -WORLD_HALF, -WORLD_HALF, WORLD_HALF * 2, WORLD_HALF * 2, 0.88);
     this.fx.draw(ctx);
+    // Nuit et pluie, communes à tout le village (pas sous terre : les grottes ont leur propre pénombre).
+    if (!here) {
+      this.collectLights(units, players, shots, camps);
+      this.skyFx.shade(ctx, scale, camX, camY, sky);
+      this.skyFx.rain(ctx, scale, camX, camY, sky, this.dt, this.dpr);
+    }
+    sound.rain(here || !settings.display.weather ? 0 : sky.rain);
 
     // Joystick tactile / souris.
     if (stick.active) {

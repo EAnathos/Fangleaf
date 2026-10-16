@@ -42,6 +42,9 @@ class Sound {
   private ctx?: AudioContext;
   private master?: GainNode;
   private music?: GainNode;
+  private place?: GainNode; // ambiance du lieu, baissée sous la pluie
+  private rainSound?: { gain: GainNode; stop: () => void };
+  private rainLevel = 0;
   private sfxBus?: GainNode;
   private noise?: AudioBuffer;
   private current?: Running;
@@ -65,6 +68,8 @@ class Sound {
     this.music = ctx.createGain();
     this.sfxBus = ctx.createGain();
     this.music.connect(this.master);
+    this.place = ctx.createGain();
+    this.place.connect(this.music);
     this.sfxBus.connect(this.master);
     this.master.connect(ctx.destination);
     // 2 s de bruit blanc, réutilisées par le vent, l'eau, le feu et les impacts
@@ -107,9 +112,43 @@ class Sound {
     this.current.gain.gain.setTargetAtTime(1, t, 1.3); // fondu enchaîné d'environ 4 s : on passe d'un lieu à l'autre en douceur
   }
 
+  /** Pluie (0 à 1) : bruissement continu par-dessus l'ambiance du lieu, qui se fait plus discrète. */
+  rain(level: number) {
+    if (!this.ctx || level === this.rainLevel || (level > 0 && Math.abs(level - this.rainLevel) < 0.01)) return;
+    this.rainLevel = level;
+    const ctx = this.ctx, t = ctx.currentTime;
+    if (level > 0 && !this.rainSound) {
+      const gain = ctx.createGain(), stops: (() => void)[] = [];
+      gain.gain.value = 0;
+      gain.connect(this.music!);
+      // crépitement (aigus) et rumeur (graves), sur le même bruit blanc
+      for (const [type, freq, q, vol] of [['bandpass', 3200, 0.5, 0.5], ['lowpass', 420, 0.7, 0.8]] as const) {
+        const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        src.buffer = this.noise!;
+        src.loop = true;
+        src.playbackRate.value = type === 'lowpass' ? 0.7 : 1;
+        f.type = type;
+        f.frequency.value = freq;
+        f.Q.value = q;
+        g.gain.value = vol;
+        src.connect(f).connect(g).connect(gain);
+        src.start(t, Math.random() * 2);
+        stops.push(() => src.stop());
+      }
+      this.rainSound = { gain, stop: () => stops.forEach((s) => s()) };
+    }
+    if (this.rainSound) this.rainSound.gain.gain.setTargetAtTime(level * 0.22, t, 0.8);
+    this.place!.gain.setTargetAtTime(1 - level * 0.4, t, 0.8);
+    if (level === 0 && this.rainSound) {
+      const r = this.rainSound;
+      this.rainSound = undefined;
+      setTimeout(() => r.stop(), 4000);
+    }
+  }
+
   private build(name: Ambience): Running {
     const ctx = this.ctx!, out = ctx.createGain();
-    out.connect(this.music!);
+    out.connect(this.place!);
     const stops: (() => void)[] = [];
     const timers: number[] = [];
     // nappe : quelques sinus/triangles légèrement désaccordés, filtrés, qui respirent lentement

@@ -53,7 +53,9 @@ export interface UnitLook {
 }
 
 /** Décalage de la couronne (Alpha, géant) vers la tête, en rayons, pour les espèces dont la tête est loin devant. */
-const CROWN_X: Record<string, number> = { bear: 0.8, boar: 0.85 };
+const CROWN_X: Record<string, number> = { bear: 0.8, boar: 0.9 };
+/** … et vers le bas, en rayons, pour celles dont la tête est plus basse que le haut du corps. */
+const CROWN_Y: Record<string, number> = { boar: 0.45 };
 
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
@@ -122,7 +124,8 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
     ctx.fill();
     ctx.stroke();
   } else if (u.alpha) {
-    const cx = (CROWN_X[key] ?? 0) * r; // posée sur la tête quand elle est loin devant (ours)
+    const cx = (CROWN_X[key] ?? 0) * r; // posée sur la tête quand elle est loin devant (ours, sanglier)
+    ctx.translate(0, (CROWN_Y[key] ?? 0) * r);
     ctx.fillStyle = u.legend ? '#F0B64A' : '#B48CFF';
     ctx.beginPath();
     ctx.moveTo(cx - r * 0.35, -r * 0.82);
@@ -1922,4 +1925,45 @@ export function drawWebbed(ctx: Ctx, x: number, y: number, t: number) {
   }
   ctx.ellipse(x, y - 4, 14, 11, 0, 0, TAU);
   ctx.stroke();
+}
+
+/** Torche (niv. 1-2) ou lanterne (niv. 3 et plus) tenue de l'autre main, la nuit ; pied du manche en (x, y). */
+export function drawTorch(ctx: Ctx, x: number, y: number, lvl: number, t: number) {
+  const flick = Math.sin(t * 13 + x) * 0.8 + Math.sin(t * 29) * 0.5;
+  if (lvl <= 2) {
+    ctx.strokeStyle = '#5B3F2C';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y - 16);
+    ctx.stroke();
+    ctx.fillStyle = lvl === 2 ? '#3A2A1E' : '#7A5A3A'; // résine : tête plus sombre
+    ctx.fillRect(x - 2.5, y - 19, 5, 4);
+    ctx.fillStyle = 'rgba(232,105,63,0.9)';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 23 - flick * 0.4, 4, 6.5 + flick, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#F7D774';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 22, 2, 3.5 + flick * 0.5, 0, 0, TAU);
+    ctx.fill();
+    return;
+  }
+  // lanterne à anse : cuivre au niveau 4, runique (lueur bleutée) au niveau 5
+  const frame = lvl === 4 ? '#B87333' : lvl >= 5 ? '#6E7570' : '#4A4E52', glow = lvl >= 5 ? '#BDF2FF' : '#F7D774';
+  ctx.strokeStyle = frame;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.arc(x, y - 17, 4, Math.PI, TAU);
+  ctx.stroke();
+  ctx.fillStyle = frame;
+  ctx.fillRect(x - 5, y - 15, 10, 2.5);
+  ctx.fillRect(x - 5, y - 4, 10, 2.5);
+  ctx.fillStyle = glow;
+  ctx.globalAlpha = 0.85 + flick * 0.05;
+  ctx.fillRect(x - 4, y - 12.5, 8, 8.5);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = frame;
+  ctx.fillRect(x - 0.6, y - 12.5, 1.2, 8.5);
 }

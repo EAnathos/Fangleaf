@@ -17,6 +17,7 @@ export class Net {
   private state = new SnapshotState(); // reconstitue l'état complet à partir des snapshots différentiels
   private renderTick = 0;
   ping = 0;
+  private clock = 0; // écart entre l'heure du serveur et la nôtre (ms)
   onMessage: (m: ServerMsg) => void = () => {};
   onClose: () => void = () => {};
 
@@ -26,12 +27,20 @@ export class Net {
     this.ws.onmessage = (ev) => {
       let m = JSON.parse(ev.data) as ServerMsg;
       if (m.t === 's') this.push((m = this.state.apply(m)));
-      else if (m.t === 'pong') this.ping = Math.round(performance.now() - m.ts);
+      else if (m.t === 'pong') {
+        this.ping = Math.round(performance.now() - m.ts);
+        if (m.now) this.clock = m.now + this.ping / 2 - Date.now();
+      }
       this.onMessage(m);
     };
     this.ws.onclose = () => this.onClose();
     const ping = setInterval(() => this.send({ t: 'ping', ts: performance.now() }), 2000);
     this.ws.addEventListener('close', () => clearInterval(ping));
+  }
+
+  /** Heure du serveur (ms), à la latence près : le ciel est le même pour tout le village. */
+  serverNow() {
+    return Date.now() + this.clock;
   }
 
   ready() {
