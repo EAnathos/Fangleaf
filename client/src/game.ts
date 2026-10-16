@@ -3,7 +3,7 @@
 import { alphaStats, sleeperBlocks, SHORE_R, swimMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
-import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
+import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
 import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST } from './anim.ts';
 import { type Ambience, sound } from './audio.ts';
@@ -1093,7 +1093,7 @@ export class Game {
       if (glow) {
         const r = alpha ? alphaStats(s, 0, 1, (flags & UNIT_FLAG_LEGEND) !== 0).r : SPECIES[s].r;
         L.light(x, y - r * 0.5, r * glow[0], glow[1], glow[2] * (0.92 + Math.sin(t * 3 + x) * 0.08));
-      } else if (alpha) L.light(x, y - 10, 60, '180,140,255', 0.35); // yeux des Alphas
+      }
     }
     for (const sh of shots) L.light(sh[2], sh[3], 70, '255,224,170', 0.5);
   }
@@ -1227,7 +1227,7 @@ export class Game {
         const charge = ranged && c0 !== undefined && this.time - c0 < ranged.windup + 0.15 ? Math.min(1, (this.time - c0) / ranged.windup) : 0;
         return {
           x, y, r, species: s, alpha, wild: owner === 0, ownerColor: owner ? colorOf.get(owner) : undefined,
-          face: f.face, t: this.time, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, legend,
+          face: f.face, t: flags & UNIT_FLAG_ASLEEP ? 0 : this.time, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, legend,
           charge, inWater: !!SPECIES[s].swim && this.map.isWater(x, y), moving: this.time - f.movedAt < 0.2,
         };
       };
@@ -1243,6 +1243,7 @@ export class Game {
         draw: () => {
           this.drawUnitCached(ctx, id, look(), pose);
           if (boss && flags & UNIT_FLAG_DORMANT) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
+          if (flags & UNIT_FLAG_ASLEEP) this.snore(x + r * 0.6, y - r * 1.2, 12, id); // sanglier qui dort la nuit
           if (boss) {
             // Mini-boss : nom et grande barre de vie, toujours visibles.
             ctx.font = '700 15px "Pixelify Sans", sans-serif';

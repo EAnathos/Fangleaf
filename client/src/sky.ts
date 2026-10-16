@@ -7,7 +7,7 @@ import type { Sky } from '../../shared/weather.ts';
 import { particleRate, settings } from './settings.ts';
 
 const LIGHT_RES = 4; // la carte de lumière est 4 fois moins fine que l'écran : ses halos sont flous de toute façon
-const NIGHT = [58, 70, 122]; // ce qui reste des couleurs en pleine nuit (pas trop noir : la nuit doit rester jouable)
+const NIGHT = [30, 38, 80]; // ce qui reste des couleurs en pleine nuit : sombre, la torche fait la différence
 const DUSK = [255, 176, 128];
 const MAX_DROPS = 520;
 const MAX_SPLASH = 70;
@@ -18,10 +18,6 @@ export const GLOW: Record<string, [number, string, number]> = {
   old_flame: [5, '60,100,255', 1],
   sporelin: [4.5, '255,170,120', 0.4],
   spore_giant: [3, '255,170,120', 0.55],
-  slime: [4, '150,220,110', 0.3],
-  slime_queen: [2.5, '150,220,110', 0.4],
-  watcher: [4, '143,227,214', 0.45],
-  rune_eye: [3, '143,227,214', 0.6],
   firefly: [7, '220,240,110', 0.7],
 };
 

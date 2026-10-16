@@ -11,7 +11,7 @@ import {
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
-import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
+import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { sky } from '../shared/weather.ts';
@@ -60,6 +60,7 @@ interface Unit {
   windup: number; // tireur : charge son tir (s restantes), immobile
   shotAt: number; // cible visée pendant la charge
   dormant: boolean; // géant qui attend qu'un dompteur vienne lui parler : ni cible ni menace
+  asleep?: boolean; // sauvage endormi pour la nuit (sanglier) : il ne bouge plus jusqu'à ce qu'on le frappe
   idle: boolean; // sauvage loin de tout dompteur : ni réflexion ni bousculade ce tick
   hitters: Set<number>; // géant : dompteurs qui l'ont frappé (eux ou leur meute) pendant ce combat, seuls ayants droit au coffre
 }
@@ -217,6 +218,8 @@ export interface VillageState {
 }
 
 const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * classOf(p.cls).hp);
+
+const WAKE_S = 20; // sanglier réveillé par un coup : il reste debout tant de secondes après le dernier
 
 export class Room {
   readonly seed: number;
@@ -1073,6 +1076,7 @@ export class Room {
       if (this.wildCount(s) >= this.population(s)) continue;
       if (this.spawnPack(s)) this.nextSpawn[s] = this.time + 2.5;
     }
+    this.night = this.isNight();
     // Au lever du jour, les bêtes de nuit sauvages s'en vont, hors de la vue des dompteurs (on ne les voit pas disparaître).
     if (!this.isNight()) {
       for (const u of [...this.units.values()]) {
@@ -1083,6 +1087,7 @@ export class Room {
   }
 
   /** Nuit au village (même ciel que celui qu'affichent les clients). */
+  private night = false; // mis à jour 2 fois par seconde
   private isNight() {
     return sky(this.seed, Date.now()).light < 0.5;
   }
@@ -1893,6 +1898,13 @@ export class Room {
       u.target = 0;
       return;
     }
+    // La nuit, le sanglier sauvage dort : il ne voit personne. Un coup le réveille (pour un bon moment).
+    u.asleep = !!SPECIES[u.s].sleeps && this.night && this.time - u.lastHitAt > WAKE_S;
+    if (u.asleep) {
+      u.target = u.lastAttacker = 0;
+      u.windup = 0;
+      return;
+    }
     if (SPECIES[u.s].passive) return this.grazeAI(u);
     // Priorité au plus proche, dompteurs et monstres de meute confondus (réévalué à chaque tick).
     let t: Ent | undefined = this.nearest(u.x, u.y, this.aggroOf(u), this.isAllyOfPlayers);
@@ -2416,7 +2428,7 @@ export class Room {
       for (const u of this.units.values()) {
         if (u.reviveAt || dist2(u.x, u.y, viewer.x, viewer.y) > vr2) continue;
         units.push([
-          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0), Math.round(u.x), Math.round(u.y),
+          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep ? UNIT_FLAG_ASLEEP : 0), Math.round(u.x), Math.round(u.y),
           Math.round((100 * Math.max(0, u.hp)) / u.maxHp), u.owner,
         ]);
       }

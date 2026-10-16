@@ -1302,6 +1302,26 @@ const noop = () => {};
   Date.now = () => day;
   r.updateSpawns();
   check(flies() === 0, 'au lever du jour, les lucioles sauvages s\'en vont');
+
+  // Sangliers sauvages : ils dorment la nuit (même un dompteur collé à eux), un coup les réveille.
+  Date.now = () => night;
+  r.tick = 0;
+  r.updateSpawns();
+  const boar = [...r.units.values()].find((u: any) => SPECIES[u.s].key === 'boar' && !u.owner);
+  const p = r.addPlayer('nuit', noop);
+  [p.x, p.y] = [boar.x + 30, boar.y];
+  r.time += 30;
+  r.wildAI(boar);
+  check(boar.asleep && boar.target === 0, 'la nuit, le sanglier sauvage dort et ignore le dompteur à côté');
+  r.damage(boar, 1, p, true);
+  r.wildAI(boar);
+  check(!boar.asleep && boar.target === p.id, 'frappé, il se réveille et s\'en prend au dompteur');
+  Date.now = () => day;
+  r.tick = 0;
+  r.updateSpawns();
+  r.time += 60;
+  r.wildAI(boar);
+  check(!boar.asleep, 'le jour, il est réveillé');
   Date.now = realNow;
 }
 
