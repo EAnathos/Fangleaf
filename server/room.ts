@@ -14,6 +14,7 @@ import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, Ser
 import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { WorldMap } from '../shared/worldmap.ts';
+import { sky } from '../shared/weather.ts';
 import { Grid } from './grid.ts';
 import type { Profile } from './persist.ts';
 
@@ -271,7 +272,7 @@ export class Room {
     // Peuple la carte dès la création.
     for (let s = 0; s < SPECIES.length; s++) {
       let guard = 0;
-      while (this.wildCount(s) < SPECIES[s].population && guard++ < 200) this.spawnPack(s);
+      while (this.wildCount(s) < this.population(s) && guard++ < 200) this.spawnPack(s);
     }
   }
 
@@ -1069,9 +1070,26 @@ export class Room {
     });
     for (let s = 0; s < SPECIES.length; s++) {
       if (this.time < this.nextSpawn[s]) continue;
-      if (this.wildCount(s) >= SPECIES[s].population) continue;
+      if (this.wildCount(s) >= this.population(s)) continue;
       if (this.spawnPack(s)) this.nextSpawn[s] = this.time + 2.5;
     }
+    // Au lever du jour, les bêtes de nuit sauvages s'en vont, hors de la vue des dompteurs (on ne les voit pas disparaître).
+    if (!this.isNight()) {
+      for (const u of [...this.units.values()]) {
+        if (u.owner || u.alpha || !SPECIES[u.s].night) continue;
+        if (![...this.players.values()].some((p) => dist2(p.x, p.y, u.x, u.y) < VIEW_R ** 2)) this.units.delete(u.id);
+      }
+    }
+  }
+
+  /** Nuit au village (même ciel que celui qu'affichent les clients). */
+  private isNight() {
+    return sky(this.seed, Date.now()).light < 0.5;
+  }
+
+  /** Population visée d'une espèce sauvage : nulle le jour pour les bêtes de nuit. */
+  private population(s: number) {
+    return SPECIES[s].night && !this.isNight() ? 0 : SPECIES[s].population;
   }
 
   /** Abscisse de la première porte fermée : au-delà, tout est sous la brume (rien n'y apparaît). */

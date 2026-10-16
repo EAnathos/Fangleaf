@@ -22,6 +22,7 @@ export const GLOW: Record<string, [number, string, number]> = {
   slime_queen: [2.5, '150,220,110', 0.4],
   watcher: [4, '143,227,214', 0.45],
   rune_eye: [3, '143,227,214', 0.6],
+  firefly: [7, '220,240,110', 0.7],
 };
 
 interface Light {

@@ -2,6 +2,7 @@
 
 import { SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
+import { DAY_MS, sky } from '../shared/weather.ts';
 import { Room } from '../server/room.ts';
 import { SnapshotState } from '../shared/snapshot.ts';
 
@@ -143,7 +144,7 @@ const noop = () => {};
   check(p.army.length === 1 && r.units.get(p.army[0]).alpha, 'Alpha Loup éveillé, un seul par espèce');
   const a = r.units.get(p.army[0]);
   const hp0 = a.maxHp;
-  check(a.maxHp === Math.round(SPECIES[1].hp * 2.5 * 1.1) && a.dmg === Math.round(SPECIES[1].dmg * 2.5 * 1.1), `Alpha niv. 0 = 2,5× le Loup, +10 % de collection (PV ${a.maxHp}, dégâts ${a.dmg})`);
+  check(a.maxHp === Math.round(SPECIES[1].hp * 2.5 * 1.05) && a.dmg === Math.round(SPECIES[1].dmg * 2.5 * 1.05), `Alpha niv. 0 = 2,5× le Loup, +5 % de collection (PV ${a.maxHp}, dégâts ${a.dmg})`);
   p.essences[1] = alphaUpCost(0);
   r.onAlphaUp(p, a.s);
   check(a.level === 1 && a.maxHp > hp0 && p.essences[1] === 0, `Alpha renforcé (PV ${hp0} → ${a.maxHp})`);
@@ -186,7 +187,7 @@ const noop = () => {};
   // Les 8 espèces apparaissent sur la carte, deux par zone.
   const r = room();
   const seen = new Set([...r.units.values()].map((u: { s: number }) => u.s));
-  check(SPECIES.every((_, i) => seen.has(i)), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement`);
+  check(SPECIES.every((sp, i) => seen.has(i) || sp.night), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement (de jour, sauf les bêtes de nuit)`);
   const zones = new Map<number, number>();
   for (const sp of SPECIES) if (!sp.boss && !sp.passive) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
   check([1, 2, 3].every((z) => zones.get(z) === 2) && zones.get(4) === 3 && zones.get(5) === 3, 'deux espèces hostiles par zone, trois en zones 4 et 5');
@@ -523,7 +524,7 @@ const noop = () => {};
   const field = () => p.army.filter((id: number) => r.units.get(id)?.alpha).length;
   check(field() === 5 && p.resting.length === 2, `7 Alphas éveillés : ${field()} équipés, ${p.resting.length} au repos`);
   const any = r.units.get(p.army.find((id: number) => r.units.get(id)?.alpha));
-  check(any.maxHp === alphaStats(any.s, 0, 7).hp, 'le bonus de collection compte aussi les Alphas au repos (+70 %)');
+  check(any.maxHp === alphaStats(any.s, 0, 7).hp, 'le bonus de collection compte aussi les Alphas au repos (+35 %)');
   const restS = p.resting[0].s;
   r.onAlphaEquip(p, restS, true);
   check(field() === 5, 'impossible d\'en équiper un 6e');
@@ -742,7 +743,7 @@ const noop = () => {};
 }
 
 {
-  // Bonus de collection : +10 % par Alpha éveillé, pour tous (3 Alphas = +30 %).
+  // Bonus de collection : +5 % par Alpha éveillé, pour tous (3 Alphas = +15 %).
   const r = room();
   const p = r.addPlayer('a', noop);
   [p.x, p.y] = [r.map.den.x, r.map.den.y];
@@ -753,8 +754,8 @@ const noop = () => {};
   r.onCheat(p);
   r.step();
   const wolf = p.army.map((id: number) => r.units.get(id)).find((u: { s: number }) => u.s === 1);
-  check(p.army.length === 3 && wolf.maxHp === alphaStats(1, 0, 3).hp && wolf.maxHp === Math.round(SPECIES[1].hp * 2.5 * 1.3),
-    `3 Alphas : +30 % chacun (Alpha Loup ${Math.round(SPECIES[1].hp * 2.5)} → ${wolf.maxHp} PV)`);
+  check(p.army.length === 3 && wolf.maxHp === alphaStats(1, 0, 3).hp && wolf.maxHp === Math.round(SPECIES[1].hp * 2.5 * 1.15),
+    `3 Alphas : +15 % chacun (Alpha Loup ${Math.round(SPECIES[1].hp * 2.5)} → ${wolf.maxHp} PV)`);
 }
 
 {
@@ -1279,6 +1280,29 @@ const noop = () => {};
   check(map.arcAt(p.x, p.y) < map.gates[1], 'revenir en arrière par une porte fermée : toujours possible');
   const again: any = new Room('TEST2', r.seed, { hall: 99, beaten: [g1, g1, 0, 999] });
   check(again.hall === HALL_MAX && again.beaten.join() === String(g1), 'Hôtel de ville et géants rechargés (bornés, doublons et non-géants ignorés)');
+}
+
+{
+  // Lucioles : gibier passif de la zone 2 qui n'apparaît que la nuit, et s'en va au lever du jour (loin des dompteurs).
+  const r = room();
+  const fly = SPECIES.findIndex((sp) => sp.key === 'firefly');
+  check(fly === SPECIES.length - 1 && SPECIES[fly].zone === 2 && !!SPECIES[fly].passive && !!SPECIES[fly].night, 'luciole : passive, zone 2, de nuit, ajoutée en fin de liste (sauvegardes intactes)');
+  const realNow = Date.now, t0 = realNow();
+  let night = t0, day = t0;
+  for (let t = t0; t < t0 + DAY_MS; t += 10_000) {
+    const k = sky(r.seed, t).light;
+    if (k === 0) night = t;
+    if (k === 1) day = t;
+  }
+  Date.now = () => night;
+  r.tick = 0;
+  for (let i = 0; i < 30; i++) r.updateSpawns(), (r.time += 3);
+  const flies = () => [...r.units.values()].filter((u: any) => u.s === fly && !u.owner).length;
+  check(flies() > 0 && [...r.units.values()].every((u: any) => u.s !== fly || r.map.zoneAt(u.x, u.y) === 2), `la nuit, des lucioles apparaissent en zone 2 (${flies()})`);
+  Date.now = () => day;
+  r.updateSpawns();
+  check(flies() === 0, 'au lever du jour, les lucioles sauvages s\'en vont');
+  Date.now = realNow;
 }
 
 {

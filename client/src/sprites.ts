@@ -53,14 +53,14 @@ export interface UnitLook {
 }
 
 /** Décalage de la couronne (Alpha, géant) vers la tête, en rayons, pour les espèces dont la tête est loin devant. */
-const CROWN_X: Record<string, number> = { bear: 0.8, boar: 0.9 };
+const CROWN_X: Record<string, number> = { bear: 0.8, boar: 0.9, firefly: 0.5 };
 /** … et vers le bas, en rayons, pour celles dont la tête est plus basse que le haut du corps. */
-const CROWN_Y: Record<string, number> = { boar: 0.45 };
+const CROWN_Y: Record<string, number> = { boar: 0.45, firefly: 0.1 };
 
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
   const key = u.key ?? SPECIES[u.species].sprite ?? SPECIES[u.species].key;
-  const floating = key === 'wisp';
+  const floating = key === 'wisp' || key === 'firefly';
   // Gluant en marche : il avance par bonds (élan aplati, saut étiré, atterrissage écrasé).
   const hop = key === 'slime' && u.moving ? slimeHop(u) : null;
   const air = (u.air ?? 0) + (hop?.lift ?? 0);
@@ -1100,6 +1100,59 @@ function wisp(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   eyes(ctx, 0.05 * r, 0.1 * r, 0.22 * r, 0.1 * r, '#1A2A44', u.wild);
 }
 
+/** Luciole : gibier de nuit des Bois profonds ; abdomen lumineux qui pulse, ailes qui battent (elle flotte). */
+function firefly(ctx: Ctx, r: number, fill: string, u: UnitLook) {
+  const pulse = 0.65 + Math.sin(u.t * 3.2 + u.seed) * 0.35, flap = Math.sin(u.t * 30 + u.seed) * 0.5 + 0.5;
+  // halo de l'abdomen
+  const g = ctx.createRadialGradient(-0.45 * r, 0.2 * r, 0, -0.45 * r, 0.2 * r, 1.4 * r);
+  g.addColorStop(0, `rgba(228,240,122,${0.55 * pulse})`);
+  g.addColorStop(1, 'rgba(228,240,122,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(-0.45 * r, 0.2 * r, 1.4 * r, 0, TAU);
+  ctx.fill();
+  // ailes arrière (translucides), battement rapide
+  ctx.fillStyle = 'rgba(220,235,255,0.45)';
+  for (const k of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(-0.1 * r, -0.35 * r, 0.62 * r, (0.18 + 0.2 * flap) * r, k * 0.5 - 0.3, 0, TAU);
+    ctx.fill();
+  }
+  // abdomen lumineux
+  ctx.fillStyle = u.flash ? '#FFFFFF' : `rgb(${200 + 28 * pulse | 0},${215 + 25 * pulse | 0},${90 + 40 * pulse | 0})`;
+  ctx.beginPath();
+  ctx.ellipse(-0.45 * r, 0.2 * r, 0.5 * r, 0.36 * r, -0.25, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,230,0.8)';
+  ctx.beginPath();
+  ctx.ellipse(-0.55 * r, 0.24 * r, 0.22 * r, 0.15 * r, -0.25, 0, TAU);
+  ctx.fill();
+  // thorax et tête sombres
+  ctx.fillStyle = u.flash ? '#FFFFFF' : '#3B3326';
+  ctx.beginPath();
+  ctx.ellipse(0.15 * r, 0, 0.36 * r, 0.3 * r, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = u.flash ? '#FFFFFF' : '#C8553D';
+  ctx.beginPath();
+  ctx.arc(0.52 * r, -0.05 * r, 0.24 * r, 0, TAU);
+  ctx.fill();
+  // antennes
+  ctx.strokeStyle = '#3B3326';
+  ctx.lineWidth = Math.max(1, r * 0.08);
+  ctx.beginPath();
+  ctx.moveTo(0.6 * r, -0.22 * r);
+  ctx.quadraticCurveTo(0.75 * r, -0.6 * r, 0.95 * r, -0.62 * r);
+  ctx.moveTo(0.5 * r, -0.24 * r);
+  ctx.quadraticCurveTo(0.55 * r, -0.65 * r, 0.72 * r, -0.75 * r);
+  ctx.stroke();
+  // ailes avant, par-dessus
+  ctx.fillStyle = 'rgba(235,245,255,0.6)';
+  ctx.beginPath();
+  ctx.ellipse(0.0, -0.42 * r, 0.55 * r, (0.14 + 0.18 * (1 - flap)) * r, -0.5, 0, TAU);
+  ctx.fill();
+  eyes(ctx, 0.6 * r, -0.08 * r, 0.12 * r, 0.06 * r, '#1A1A10', false); // gibier paisible : jamais de sourcils froncés
+}
+
 /** Guetteur runique : sentinelle de pierre moussue ; son œil se charge avant le trait runique (zone 4, tireur). */
 function watcher(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   const ch = u.charge ?? 0;
@@ -1558,7 +1611,7 @@ const DRAWERS: Record<string, (ctx: Ctx, r: number, fill: string, u: UnitLook) =
   slime, wolf, boar, golem,
   sporelin, spider, bear, wisp,
   watcher, toad, serpent, crab,
-  hare, snail,
+  hare, snail, firefly,
 };
 
 // ───────────────────────── Buissons à fruits ─────────────────────────

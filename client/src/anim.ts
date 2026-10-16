@@ -159,7 +159,7 @@ export function drawWebGlob(ctx: Ctx, x: number, y: number, z: number, size: num
 /** Arme de chaque monstre au corps à corps (selon son apparence), pour l'effet à l'impact. */
 const IMPACT: Record<string, ImpactKind> = {
   wolf: 'bite', spider: 'bite', serpent: 'bite', bear: 'claw', boar: 'tusk', golem: 'smash', watcher: 'smash',
-  slime: 'splat', sporelin: 'splat', toad: 'splat', wisp: 'burn', crab: 'pinch', hare: 'bump', snail: 'bump',
+  slime: 'splat', sporelin: 'splat', toad: 'splat', wisp: 'burn', crab: 'pinch', hare: 'bump', snail: 'bump', firefly: 'bump',
 };
 export const impactOf = (spriteKey: string): ImpactKind => IMPACT[spriteKey] ?? 'bump';
 

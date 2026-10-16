@@ -981,12 +981,12 @@ export class Hud {
   private buildDen(me: PlayerState) {
     this.portraits = [];
 
-    // Bonus de collection : chaque Alpha éveillé renforce les autres de 10 %.
+    // Bonus de collection : chaque Alpha éveillé renforce les autres de 5 %.
     const equipped = me.army.filter((x) => x.alpha).length;
     const count = equipped + me.resting.length; // le bonus compte tous les Alphas possédés, équipés ou non
     $('collection').innerHTML = (count
       ? `Bonus de collection : <b>+${Math.round((collectionMult(count) - 1) * 100)} %</b> PV et dégâts`
-      : 'Bonus de collection : chaque Alpha éveillé donnera +10 % de PV et de dégâts à tous tes Alphas.')
+      : 'Bonus de collection : chaque Alpha éveillé donnera +5 % de PV et de dégâts à tous tes Alphas.')
       + `<br>Équipés : <b>${equipped}/${ALPHA_EQUIP_MAX}</b> · les autres se reposent ici et comptent quand même pour le bonus.`;
 
     // Une carte par espèce déjà rencontrée (ou dont on a déjà l'Alpha) : éveiller son Alpha, puis le renforcer.

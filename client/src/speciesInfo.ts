@@ -2,6 +2,7 @@
 
 export const SPECIES_DESC: Record<string, string> = {
   hare: 'Gibier des Landes qui grignote les baies des buissons. Il ne se bat pas : frappé, il détale. Tends-lui un fruit (T) pour l\'apprivoiser.',
+  firefly: 'Ne sort qu’à la nuit tombée, dans les Bois profonds. Inoffensive, elle grignote les baies : tends-lui un fruit (T) avant le lever du jour.',
   snail: 'Lent et paisible, il bouffe les baies de la Lisière. Tends-lui un fruit (T) pour essayer de l’apprivoiser.',
   slime: 'Lent et mou : la première proie du dompteur.',
   sporelin: 'Petit champignon sauteur. Fragile mais vif : il arrive en groupe.',

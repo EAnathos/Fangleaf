@@ -246,8 +246,8 @@ export const LEGEND_MULT = { hp: 1.5, dmg: 1.5, size: 1.15 };
 // Il hérite aussi des attaques spéciales de son géant, lancées seul en combat : un peu moins fortes et moins fréquentes.
 export const LEGEND_MOVE_DMG = 0.6;
 export const LEGEND_MOVE_CD = 1.3;
-/** Bonus de collection : +10 % de PV et de dégâts à tous les Alphas par Alpha éveillé (3 Alphas = +30 %). */
-export const COLLECTION_BONUS = 0.1;
+/** Bonus de collection : +5 % de PV et de dégâts à tous les Alphas par Alpha éveillé (3 Alphas = +15 %). */
+export const COLLECTION_BONUS = 0.05;
 export const collectionMult = (alphaCount: number) => 1 + COLLECTION_BONUS * Math.max(0, alphaCount);
 /** PV et dégâts d'un Alpha (niveau, nombre d'Alphas éveillés par son dompteur, légendaire ou non). */
 export function alphaStats(species: number, lvl: number, alphaCount: number, legend = false) {
@@ -327,6 +327,7 @@ export interface Species {
   ranged?: Ranged; // tireur : attaque à distance (projectile esquivable) au lieu du corps à corps
   swim?: boolean; // sauvage, il ne quitte jamais l'eau (apprivoisé, il suit son dompteur sur terre et dans l'eau)
   amphibious?: boolean; // apprivoisé, il suit son dompteur dans l'eau (sauvage, il reste à terre)
+  night?: boolean; // n'apparaît que la nuit (il s'envole au lever du jour)
   passive?: boolean; // sauvage, il n'attaque jamais : il broute les buissons à fruits et s'enfuit quand on le frappe
 }
 
@@ -378,6 +379,8 @@ export const SPECIES: Species[] = [
   // Gibier passif : il broute les buissons à fruits et s'enfuit quand on le frappe (pas de géant). S'apprivoise surtout aux baies.
   { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 30, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 3, population: 20, pack: [1, 3], passive: true },
   { key: 'snail', name: 'Escargot des mousses', color: '#C99A5B', r: 12, hp: 22, dmg: 1, speed: 32, atkCd: 1.4, gold: 2, zone: 1, population: 20, pack: [1, 2], passive: true },
+  // Gibier de nuit : il n'apparaît qu'une fois la nuit tombée, et s'en va au lever du jour.
+  { key: 'firefly', name: 'Luciole', color: '#E4F07A', r: 11, hp: 20, dmg: 1, speed: 70, atkCd: 1.4, gold: 4, zone: 2, population: 24, pack: [3, 5], passive: true, night: true },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);
