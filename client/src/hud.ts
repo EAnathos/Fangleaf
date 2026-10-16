@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, SWIM_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
@@ -11,7 +11,7 @@ import { armorColor, drawUnit } from './sprites.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { sound } from './audio.ts';
 import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
-import { FOREST_GROUND, groundColor } from './world.ts';
+import { forestColor, groundColor } from './world.ts';
 import type { Fog } from './fog.ts';
 
 export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'settings' | 'chat' | 'board' | null;
@@ -1030,13 +1030,15 @@ export class Hud {
           ['dmg', 'Dégâts', grow(now.dmg, nxt.dmg)],
           ['revive', 'Résurrection', `${alphaReviveS(s)} s`],
         ];
-        if (MOUNTS[sp.key]) rows.push(['mount', 'Monture', `vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}${SWIM_MOUNTS.has(sp.key) ? ' · sur l\'eau' : ''}`]);
+        if (MOUNTS[sp.key]) rows.push(['mount', 'Monture', `vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}${SWIM_MOUNTS.has(sp.key) ? ' · sur l\'eau' : FLY_MOUNTS.has(sp.key) ? ' · en vol' : ''}`]);
         const perk = alphaPerk(s, lvl), perkNext = alphaPerk(s, lvl + 1);
         if (perk && perkNext) {
           const grow1 = (v: number, w: number, f: (n: number) => string) => (a && !maxed ? `${f(v)} → <span class="up">${f(w)}</span>` : f(v));
           rows.push(perk.kind === 'guard'
             ? ['guard', 'Protège', grow1(perk.value, perkNext.value, (n) => `−${pctLabel(n)} dégâts`)]
-            : ['heal', 'Soigne', grow1(perk.value, perkNext.value, (n) => `${pctLabel(n)} PV / ${ALPHA_HEAL_S} s`)]);
+            : perk.kind === 'rally'
+              ? ['rally', 'Encourage', grow1(perk.value, perkNext.value, (n) => `+${pctLabel(n)} dégâts`)]
+              : ['heal', 'Soigne', grow1(perk.value, perkNext.value, (n) => `${pctLabel(n)} PV / ${ALPHA_HEAL_S} s`)]);
         }
         el.querySelector('.stat-rows')!.innerHTML = rows
           .map(([icon, label, value]) => `<div class="stat-row ${icon}">${ICONS[icon]}<span>${label}</span><b>${value}</b></div>`)
@@ -1106,7 +1108,7 @@ export class Hud {
     for (let j = 0; j < S; j++) {
       for (let i = 0; i < S; i++) {
         const x = -WORLD_HALF + (i + 0.5) * k, y = -WORLD_HALF + (j + 0.5) * k;
-        const col = this.map.isForest(x, y) ? FOREST_GROUND : this.map.isWater(x, y) ? [46, 101, 116] : groundColor(this.map, x, y);
+        const col = this.map.isForest(x, y) ? forestColor(this.map, x, y) : this.map.isWater(x, y) ? [46, 101, 116] : groundColor(this.map, x, y);
         const o = (j * S + i) * 4;
         img.data[o] = col[0] * 0.8;
         img.data[o + 1] = col[1] * 0.8;
@@ -1285,8 +1287,10 @@ function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; 
   const powers = [
     MOUNTS[sp.key] ? (SWIM_MOUNTS.has(sp.key)
       ? `Se chevauche sur l'eau seulement (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}) : on embarque près de l'eau, on descend au bord d'une rive, et s'il tombe en pleine eau, on se noie.`
+      : FLY_MOUNTS.has(sp.key) ? `Se chevauche et vole (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}) : par-dessus l'eau, les rochers et les arbres.`
       : `Se chevauche (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}).`) : '',
     perk?.kind === 'guard' ? `Protège son dompteur : −${pctLabel(perk.value)} de dégâts reçus (plus en le renforçant).` : '',
+    perk?.kind === 'rally' ? `Encourage son dompteur : +${pctLabel(perk.value)} de dégâts infligés (plus en le renforçant).` : '',
     perk?.kind === 'heal' ? `Soigne son dompteur et sa meute proche : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s (plus en le renforçant).` : '',
     legend && boss >= 0 ? `Âme de ${SPECIES[boss].title ?? SPECIES[boss].name} : il hérite de ses attaques (${(BOSS_MOVES[SPECIES[boss].key] ?? []).map((m) => MOVE_NAMES[m.kind].toLowerCase()).join(', ')}).` : '',
     !legend ? `Éveil : ${ALPHA_CREATE_COST} essences, puis ${duration(alphaAwakenS(s))}.` : '',
@@ -1302,6 +1306,7 @@ const ICONS = {
   dmg: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M14 2 6.5 9.5M4 7.5l4.5 4.5M5.5 10.5 2 14"/></svg>',
   revive: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M13.5 8.5A5.5 5.5 0 1 1 11.8 4M13 1.8V5H9.8"/></svg>',
   guard: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5 13.5 3.5v4c0 3.4-2.4 5.9-5.5 7-3.1-1.1-5.5-3.6-5.5-7v-4z"/></svg>',
+  rally: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5 9.9 5.6l4.4.5-3.3 3 .9 4.4L8 11.3l-3.9 2.2.9-4.4-3.3-3 4.4-.5z"/></svg>',
   heal: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.3 2h3.4v4.3H14v3.4H9.7V14H6.3V9.7H2V6.3h4.3z"/></svg>',
   mount: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 3.5 7.5 8 3 12.5M8.5 3.5 13 8l-4.5 4.5"/></svg>',
 };

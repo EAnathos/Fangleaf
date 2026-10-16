@@ -12,9 +12,10 @@ const TILE = MAP_CELL;
 const DECO_CELL = 96;
 const TAU = Math.PI * 2;
 
-// Couleur du sol : 0 = village, 1 à 4 = zones de danger ; FOREST : sous-bois hors du couloir.
+// Couleur du sol : 0 = village, 1 à 6 = zones de danger ; FOREST : sous-bois hors du couloir (falaises de grès au désert).
 export const FOREST_GROUND = [26, 42, 33];
-export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76]];
+const DUNE_GROUND = [128, 92, 58];
+export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76], [204, 172, 114]];
 const PATH = [110, 97, 66];
 const VILLAGE_GROUND = [79, 101, 63]; // herbe de la place, tondue
 
@@ -58,6 +59,18 @@ export function groundColor(map: WorldMap, x: number, y: number) {
   if (m.t) col = lerp3(col, ZONE_GROUND[m.z1], Math.min(1, Math.max(0, m.t + (fbm(x / 240, y / 240, map.seed + 73, 2) - 0.5) * 0.45)));
   const v = villageMix(map, x, y);
   return v ? lerp3(col, VILLAGE_GROUND, v) : col;
+}
+
+/** Part de Mer de sable en un point (0 ailleurs, 1 en plein désert, en fondu à la frontière). */
+export function desertMix(map: WorldMap, x: number, y: number) {
+  const m = map.zoneMix(x, y);
+  return (m.z0 === 6 ? 1 - m.t : 0) + (m.z1 === 6 ? m.t : 0);
+}
+
+/** Sol hors du couloir : sous-bois sombre, ou grès des falaises dans la Mer de sable (en fondu à la frontière). */
+export function forestColor(map: WorldMap, x: number, y: number) {
+  const desert = desertMix(map, x, y);
+  return desert ? lerp3(FOREST_GROUND, DUNE_GROUND, desert) : FOREST_GROUND;
 }
 
 const rgb = (c: number[], k: number) => `rgb(${(c[0] * k) | 0},${(c[1] * k) | 0},${(c[2] * k) | 0})`;
@@ -140,7 +153,7 @@ export class World {
         const forest = map.isForest(px, py);
         const meadow = fbm(px / 420, py / 420, this.seed + 3, 2);
         const v = 0.93 + meadow * 0.12 + hash2(tx / TILE, ty / TILE, this.seed) * 0.015;
-        const col = forest ? FOREST_GROUND : groundColor(map, px, py);
+        const col = forest ? forestColor(map, px, py) : groundColor(map, px, py);
         ctx.fillStyle = rgb(col, v);
         ctx.fillRect(tx, ty, TILE, TILE);
       }
@@ -192,6 +205,33 @@ export class World {
       ctx.stroke();
     }
 
+    // Tanières de suricates : butte de sable percée de trous.
+    for (const d of map.dens) {
+      if (d.x < ox - 80 || d.x > ox + CHUNK + 80 || d.y < oy - 80 || d.y > oy + CHUNK + 80) continue;
+      ctx.fillStyle = 'rgba(120,88,52,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(d.x + 4, d.y + 6, 62, 26, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#D6B27A';
+      ctx.beginPath();
+      ctx.ellipse(d.x, d.y, 58, 24, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#E3C38E';
+      ctx.beginPath();
+      ctx.ellipse(d.x - 10, d.y - 6, 34, 11, 0, 0, TAU);
+      ctx.fill();
+      for (const [hx, hy, hr] of [[-30, 2, 9], [-4, -8, 10], [22, 4, 9], [40, -6, 7]] as const) {
+        ctx.fillStyle = '#B08A55';
+        ctx.beginPath();
+        ctx.ellipse(d.x + hx, d.y + hy + 2, hr + 3, hr * 0.55 + 2, 0, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = '#2E2016';
+        ctx.beginPath();
+        ctx.ellipse(d.x + hx, d.y + hy + 1, hr, hr * 0.5, 0, 0, TAU);
+        ctx.fill();
+      }
+    }
+
     // Décor : on inclut une marge de cellules pour que les arbres à cheval soient complets.
     const m = 1;
     const gx0 = Math.floor(ox / DECO_CELL) - m, gx1 = Math.floor((ox + CHUNK) / DECO_CELL) + m;
@@ -211,7 +251,7 @@ export class World {
       }
     }
     big.sort((a, b) => a[1] - b[1]);
-    for (const [x, y, z] of big) this.tree(ctx, x, y, z);
+    for (const [x, y, z] of big) this.tree(ctx, x, y, z, 1, true, true);
     this.chunks.set(k, c);
     return c;
   }
@@ -223,6 +263,43 @@ export class World {
       const y = (gy + hash2(gx * 5 + i, gy, this.seed + 13)) * DECO_CELL;
       if (this.map.isForest(x, y) || this.map.isWater(x, y)) continue;
       const z = this.zone(x, y);
+      if (z === 6) {
+        // Mer de sable : rides du vent, cailloux, touffes sèches, de rares ossements
+        if (h < 0.35) {
+          ctx.strokeStyle = 'rgba(150,112,64,0.35)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x - 14, y);
+          ctx.quadraticCurveTo(x, y - 5, x + 14, y);
+          ctx.stroke();
+        } else if (h < 0.5) {
+          ctx.fillStyle = 'rgba(120,90,60,0.45)';
+          ctx.beginPath();
+          ctx.ellipse(x, y, 3.5, 2.5, 0, 0, TAU);
+          ctx.fill();
+        } else if (h < 0.6) {
+          ctx.strokeStyle = 'rgba(150,130,60,0.6)';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          for (const dx of [-5, -2, 2, 5]) {
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + dx * 1.4, y - 7 - Math.abs(dx) * 0.4);
+          }
+          ctx.stroke();
+        } else if (h < 0.62) {
+          ctx.fillStyle = '#EDE3CC';
+          ctx.beginPath();
+          ctx.ellipse(x, y, 5, 3.5, 0.3, 0, TAU);
+          ctx.ellipse(x + 8, y + 1, 4, 1.4, 0.2, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = '#3A2A1C';
+          ctx.beginPath();
+          ctx.arc(x - 1.5, y - 0.5, 1, 0, TAU);
+          ctx.arc(x + 1.5, y - 0.5, 1, 0, TAU);
+          ctx.fill();
+        }
+        continue;
+      }
       if (z === 5 && h < 0.3) {
         // roseaux et massettes des Lacs brumeux
         ctx.strokeStyle = 'rgba(150,190,140,0.55)';
@@ -280,9 +357,19 @@ export class World {
    * Chaque forme (zone, sapin ou feuillu, fruits, une variante sur TREE_VARIANTS) est dessinée une fois dans une image,
    * puis collée à la taille de l'arbre : plus aucun tracé vectoriel à chaque image.
    */
-  tree(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, fade = 1, shade = true) {
+  tree(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, fade = 1, shade = true, wall = false) {
     const s = this.treeSize(x, y), h = hash2(x | 0, y | 0, this.seed + 9);
     const v = Math.floor(hash2(x | 0, y | 0, this.seed + 13) * TREE_VARIANTS);
+    if (z === 6) {
+      // Mer de sable : cactus dans le couloir, falaises de grès au-delà
+      if (shade) this.treeShadow(ctx, x, y);
+      const k = s / TREE_REF, img = this.treeLayer(`${wall ? 'mesa' : 'cactus'}|${v}`, () => (g) => (wall ? this.drawMesa(g, v) : this.drawCactus(g, v)));
+      const a = ctx.globalAlpha;
+      ctx.globalAlpha = a * (wall ? 1 : fade);
+      ctx.drawImage(img, x - TREE_BOX.l * k, y - TREE_BOX.t * k, TREE_BOX.w * k, TREE_BOX.h * k);
+      ctx.globalAlpha = a;
+      return;
+    }
     const pine = (z === 2 && h < 0.55) || (z === 3 && h < 0.35);
     const fruit = !pine && z <= 2 && h > 0.8;
     if (shade) this.treeShadow(ctx, x, y);
@@ -311,6 +398,79 @@ export class World {
     paint()(g);
     this.treeSprites.set(full, c);
     return c;
+  }
+
+  /** Cactus-cierge (Mer de sable) : colonne côtelée, un ou deux bras, pied en (0, 0), taille TREE_REF. */
+  private drawCactus(ctx: CanvasRenderingContext2D, v: number) {
+    const s = TREE_REF, w = s * 0.24;
+    const arm = (side: number, at: number, len: number) => {
+      ctx.beginPath();
+      ctx.moveTo(side * w * 0.6, -at);
+      ctx.lineTo(side * (w + s * 0.28), -at);
+      ctx.lineTo(side * (w + s * 0.28), -at - len);
+      ctx.stroke();
+    };
+    for (const [col, lw] of [['rgba(10,18,14,0.6)', w * 0.95], ['#4E7A3E', w * 0.75]] as const) {
+      ctx.strokeStyle = col;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = lw;
+      if (v % 3 !== 2) arm(-1, s * (0.45 + (v % 2) * 0.15), s * 0.42);
+      if (v % 3 !== 1) arm(1, s * (0.65 + (v % 2) * 0.1), s * 0.38);
+      ctx.lineWidth = lw * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, s * 0.4);
+      ctx.lineTo(0, -s * 1.45);
+      ctx.stroke();
+    }
+    // côtes et reflet
+    ctx.strokeStyle = 'rgba(30,60,30,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (const dx of [-w * 0.35, w * 0.35]) {
+      ctx.moveTo(dx, s * 0.35);
+      ctx.lineTo(dx, -s * 1.42);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(190,230,150,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.2, s * 0.2);
+    ctx.lineTo(-w * 0.2, -s * 1.3);
+    ctx.stroke();
+    if (v % 2 === 0) {
+      // fleur au sommet
+      ctx.fillStyle = '#E86F8A';
+      ctx.beginPath();
+      ctx.arc(0, -s * 1.5, 4, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  /** Falaise de grès (bordure infranchissable de la Mer de sable) : bloc à strates, pied en (0, 0), taille TREE_REF. */
+  private drawMesa(ctx: CanvasRenderingContext2D, v: number) {
+    const s = TREE_REF, w = s * (1.0 + (v % 3) * 0.12), h = s * (1.5 + (v % 2) * 0.35);
+    ctx.fillStyle = 'rgba(10,8,6,0.55)';
+    ctx.beginPath();
+    ctx.moveTo(-w, s * 0.5);
+    ctx.lineTo(-w * 0.88, -h * 0.55);
+    ctx.lineTo(-w * 0.55, -h);
+    ctx.lineTo(w * 0.5, -h * 0.96);
+    ctx.lineTo(w * 0.92, -h * 0.5);
+    ctx.lineTo(w, s * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    const bands = ['#9A6A3E', '#B07A48', '#A06E42', '#C08B55'];
+    for (let k = 0; k < 4; k++) {
+      const y0 = s * 0.48 - (k * (h + s * 0.48)) / 4, y1 = s * 0.48 - ((k + 1) * (h + s * 0.48)) / 4 + 1;
+      const shrink = 1 - k * 0.07;
+      ctx.fillStyle = bands[(k + v) % 4];
+      ctx.fillRect(-w * 0.92 * shrink, y1, w * 1.84 * shrink, y0 - y1);
+    }
+    // sommet plat éclairé
+    ctx.fillStyle = '#D9A86E';
+    ctx.fillRect(-w * 0.62, -h, w * 1.15, s * 0.12);
+    ctx.fillStyle = 'rgba(60,35,18,0.35)';
+    ctx.fillRect(w * 0.35, -h * 0.9, w * 0.5, h * 0.9 + s * 0.45); // face à l'ombre
   }
 
   /** Tronc évasé et ses racines (le même pour tous les arbres), pied en (0, 0). */

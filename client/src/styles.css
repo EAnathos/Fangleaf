@@ -222,6 +222,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .stat-row.revive svg { color: var(--alpha); }
 .stat-row.mount svg { color: #8FE3D6; }
 .stat-row.guard svg { color: #C9CFC2; }
+.stat-row.rally svg { color: #F0B64A; }
 .stat-row.heal svg { color: var(--hp); }
 .alpha-card .col { flex: 1; min-width: 0; }
 .alpha-card .title { font: 700 18px var(--display); }

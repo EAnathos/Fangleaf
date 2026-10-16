@@ -1,9 +1,9 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
-import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
+import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
 import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST } from './anim.ts';
 import { type Ambience, sound } from './audio.ts';
@@ -13,9 +13,9 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
-import { World } from './world.ts';
+import { desertMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
 import { WorldMap } from '../../shared/worldmap.ts';
 
@@ -26,10 +26,12 @@ const MIST_FADE_S = 2.5; // une brume qui se lève met ce temps à se dissiper
 const SPRITE_FPS = 20; // animation des monstres (images par seconde)
 const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
 
+const FLY_HEIGHT = 2.2; // hauteur de vol à dos de vautour (en rayons de l'oiseau)
+
 const GEAR_NAMES = { weapon: 'Arme améliorée', armor: 'Armure améliorée', torch: 'Torche améliorée', boots: 'Bottes améliorées' };
 
-// En local seulement : ?ciel=nuit, ?ciel=pluie ou ?ciel=orage (nuit et pluie) pour voir le ciel sans attendre.
-const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
+// En local seulement : ?ciel=nuit, ?ciel=pluie, ?ciel=orage (nuit et pluie) ou ?ciel=tempete (dans la Mer de sable) pour voir le ciel sans attendre.
+const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1 }, tempete: { storm: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
 
 export class Game {
   private ctx: CanvasRenderingContext2D;
@@ -68,7 +70,7 @@ export class Game {
     this.ctx = canvas.getContext('2d')!;
     this.map = new WorldMap(seed);
     this.world = new World(this.map);
-    this.fog = new Fog(`fangleaf.fog.v4.${seed}`, (x, y) => !this.map.isForest(x, y)); // v4 : carte en couloir
+    this.fog = new Fog(`fangleaf.fog.v5.${seed}`, (x, y) => !this.map.isForest(x, y)); // v5 : carte agrandie (6 zones)
     this.hud = new Hud(code, this.map, this.fog, founder);
     this.hud.onMount = (id) => net.send({ t: 'mount', id });
     this.hud.onCave = (id, enter) => net.send({ t: 'cave', id, enter });
@@ -868,13 +870,14 @@ export class Game {
     if (this.me.moving) {
       // Même règle que le serveur : pas d'eau, on glisse le long des berges.
       const swimming = !!st?.mount && swimMount(st.mount.species); // sur le serpent : seulement l'eau
+      const flying = !!st?.mount && flyMount(st.mount.species); // à dos de vautour : par-dessus l'eau et les obstacles
       const speed = PLAYER_SPEED * (st?.mount ? mountSpeedOf(st.mount.species) : bootsSpeed(st?.boots ?? 0)) * (st?.slowed ? WEB_SLOW : 1);
       // (bords du monde et intérieurs de grotte : gérés par blocked())
       const nx = this.me.x + dx * speed * dt, ny = this.me.y + dy * speed * dt;
       // Même règle que le serveur pour les portes fermées : on ne les franchit pas en avançant.
       let shut = -1;
       const ok = (x: number, y: number) => {
-        if (!this.map.passable(x, y, swimming) || sleeperBlocks(this.hud.sleepers, this.me.x, this.me.y, x, y)) return false;
+        if (!this.map.passable(x, y, swimming, flying) || (!flying && sleeperBlocks(this.hud.sleepers, this.me.x, this.me.y, x, y))) return false;
         const g = this.map.gateCrossed(this.me.x, this.me.y, x, y);
         if (g < 0 || this.gateOpen(g)) return true;
         shut = g;
@@ -1068,6 +1071,18 @@ export class Game {
   }
   private sprites = new Map<number, { c: HTMLCanvasElement; key: string; frame: number; used: number }>();
 
+  private stormOn = false;
+  /** Alerte quand une tempête de sable se lève là où l'on est (et quand elle retombe). */
+  private watchStorm(level: number) {
+    if (!this.stormOn && level >= 0.4) {
+      this.stormOn = true;
+      this.hud.toast('Tempête de sable ! Elle te blesse tant que tu restes dehors : abrite-toi dans une grotte.');
+    } else if (this.stormOn && level < 0.2) {
+      this.stormOn = false;
+      this.hud.toast('La tempête de sable retombe.', 'good');
+    }
+  }
+
   /** Sources de lumière de la nuit : feux, Pierres éveillées, dompteurs, créatures lumineuses, tirs. */
   private collectLights(units: UnitTuple[], players: PlayerState[], shots: ShotTuple[], camps: number[]) {
     const L = this.skyFx, t = this.time, fire = '255,178,92';
@@ -1112,6 +1127,11 @@ export class Game {
 
     const sky = skyAt(this.map.seed, this.net.serverNow());
     if (SKY_TEST) Object.assign(sky, SKY_TEST);
+    // Mer de sable : jamais de pluie, mais des tempêtes de sable
+    const desert = this.map.caveAt(camX, camY) ? 0 : desertMix(this.map, camX, camY);
+    sky.rain *= 1 - desert;
+    const storm = sky.storm * desert;
+    this.watchStorm(storm);
 
     // Dans une grotte, on ne voit que la grotte (pas la forêt qui borde le monde).
     if (!this.map.caveAt(camX, camY)) this.world.draw(ctx, camX - hw, camY - hh, camX + hw, camY + hh);
@@ -1213,6 +1233,19 @@ export class Game {
       const legend = (flags & UNIT_FLAG_LEGEND) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
       const boss = SPECIES[s].boss && owner === 0;
+      if (flags & UNIT_FLAG_HIDDEN) {
+        // hors d'atteinte : vautour qui plane (au-dessus de tout, son ombre au sol), ver sous le sable, suricate à la tanière
+        if (SPECIES[s].flies) {
+          list.push({ y: y - 1000, draw: () => drawSoaringShadow(ctx, x, y, r) });
+          air.push({ y, draw: () => { // en pleine tempête : il monte très haut, à peine visible dans le sable
+            ctx.save();
+            ctx.globalAlpha = 1 - storm * 0.6;
+            drawSoaring(ctx, x, y, r, this.time, id, 4.2 + storm * 3.5);
+            ctx.restore();
+          } });
+        } else list.push({ y, draw: () => drawBurrow(ctx, x, y, r, !!SPECIES[s].burrows, this.time, id) });
+        continue;
+      }
       const f = this.faces.get(id) ?? { x, y, face: 1, movedAt: -9 };
       if (Math.abs(x - f.x) > 0.5) f.face = x > f.x ? 1 : -1;
       if (Math.hypot(x - f.x, y - f.y) > 0.25) f.movedAt = this.time;
@@ -1316,14 +1349,21 @@ export class Game {
           if (p.mount) {
             // Monture dessinée sous le cavalier, tournée dans le sens de la marche.
             const mr = alphaStats(p.mount.species, 0, 1, p.mount.legend).r;
-            this.drawUnitCached(ctx, p.mount.id, {
+            if (flyMount(p.mount.species)) {
+              // à dos de vautour : son ombre au sol, l'oiseau ailes ouvertes, le cavalier sur son dos
+              drawSoaringShadow(ctx, x, y, mr);
+              drawSoaring(ctx, x, y, mr, this.time, p.mount.id, FLY_HEIGHT);
+              lift = mr * (FLY_HEIGHT - 0.3) + Math.sin(this.time * 1.3 + p.mount.id) * mr * 0.3;
+            } else this.drawUnitCached(ctx, p.mount.id, {
               x, y, r: mr, species: p.mount.species, alpha: true, wild: false, ownerColor: p.color, legend: p.mount.legend,
               face: fx < -0.1 ? -1 : 1, t: this.time * (isMe && this.me.moving ? 1.8 : 1), seed: p.mount.id,
               flash: (this.flashes.get(p.mount.id) ?? 0) > this.time, inWater: swimMount(p.mount.species) && this.map.isWater(x, y),
             });
             const swim = swimMount(p.mount.species); // serpent : assis bas sur ses anneaux, derrière son cou dressé
-            lift = mr * (swim ? 0.3 : 0.8);
-            back = mr * (swim ? 0.7 : 0.25) * (fx < -0.1 ? 1 : -1); // assis sur le dos, pas sur la tête
+            if (!flyMount(p.mount.species)) {
+              lift = mr * (swim ? 0.3 : 0.8);
+              back = mr * (swim ? 0.7 : 0.25) * (fx < -0.1 ? 1 : -1); // assis sur le dos, pas sur la tête
+            }
           }
           // Récolte en cours (un coup il y a moins d'une seconde) : l'arme laisse place à l'outil.
           const used = this.tools.get(p.id);
@@ -1358,8 +1398,10 @@ export class Game {
       this.collectLights(units, players, shots, camps);
       this.skyFx.shade(ctx, scale, camX, camY, sky);
       this.skyFx.rain(ctx, scale, camX, camY, sky, this.dt, this.dpr);
+      this.skyFx.sandstorm(ctx, scale, camX, camY, storm, this.dt, this.dpr, sky.light);
     }
     sound.rain(here || !settings.display.weather ? 0 : sky.rain);
+    sound.storm(here ? 0 : storm);
 
     // Joystick tactile / souris.
     if (stick.active) {

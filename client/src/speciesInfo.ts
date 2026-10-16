@@ -2,6 +2,10 @@
 
 export const SPECIES_DESC: Record<string, string> = {
   hare: 'Gibier des Landes qui grignote les baies des buissons. Il ne se bat pas : frappé, il détale. Tends-lui un fruit (T) pour l\'apprivoiser.',
+  meerkat: 'Vit en colonie autour de sa tanière, dans la Mer de sable. Quand un dompteur sans fruit ou un vautour approche, tout le monde court s’y cacher. Avance doucement, un fruit à la main (T).',
+  sandworm: 'File sous le sable, intouchable : on ne voit qu’une bosse qui avance. Un cercle au sol annonce sa sortie : écarte-toi, puis frappe-le avant qu’il replonge.',
+  vulture: 'Tourne au-dessus de toi, hors d’atteinte, puis pique là où tombe son ombre : un cercle au sol l’annonce. Frappe-le pendant qu’il est posé, avant qu’il redécolle.',
+  jackal: 'Ne chasse que la nuit, en grande meute. Décharné, rapide, les yeux comme des braises : ne traverse pas le désert seul une fois le soleil couché.',
   firefly: 'Ne sort qu’à la nuit tombée, dans les Bois profonds. Inoffensive, elle grignote les baies : tends-lui un fruit (T) avant le lever du jour.',
   snail: 'Lent et paisible, il bouffe les baies de la Lisière. Tends-lui un fruit (T) pour essayer de l’apprivoiser.',
   slime: 'Lent et mou : la première proie du dompteur.',
@@ -32,4 +36,7 @@ export const BOSS_LINES: Record<string, { intro: string; cry: string }> = {
   toad_king: { intro: 'Agenouille-toi devant le Roi des mares. Ou au moins, essuie tes pieds.', cry: 'Croâââ de guerre !' },
   mist_hydra: { intro: 'Trois têtes, et aucune n\'est d\'accord pour te laisser passer.', cry: 'Tête la première !' },
   titan_crab: { intro: 'Clac clac. Mon rocher, mon sable, ma grotte. Clac.', cry: 'Pince-moi si je rêve !' },
+  sand_queen: { intro: 'Tu marches sur mon toit. Personne ne marche sur mon toit.', cry: 'Je vais te faire mordre la poussière !' },
+  vulture_king: { intro: 'Je t\'observe depuis trois dunes. Tu as l\'air… appétissant.', cry: 'À table !' },
+  moon_jackal: { intro: 'La lune m\'a prévenu de ta venue. Elle m\'a dit aussi comment ça finirait.', cry: 'Hurlons à la lune !' },
 };

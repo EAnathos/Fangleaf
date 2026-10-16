@@ -7,11 +7,11 @@ import {
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
-  armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
+  armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
-import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
+import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { sky } from '../shared/weather.ts';
@@ -61,6 +61,10 @@ interface Unit {
   shotAt: number; // cible visée pendant la charge
   dormant: boolean; // géant qui attend qu'un dompteur vienne lui parler : ni cible ni menace
   asleep?: boolean; // sauvage endormi pour la nuit (sanglier) : il ne bouge plus jusqu'à ce qu'on le frappe
+  hidden?: boolean; // hors d'atteinte : ni cible ni touché (ver sous le sable, vautour en vol, suricate dans sa tanière)
+  emerging?: boolean; // ver : sa sortie est annoncée au sol
+  surfaceUntil?: number; // ver sorti, vautour posé : exposé jusqu'à ; suricate : reste à la tanière jusqu'à
+  diveAt?: number; // vautour : il pique à ce moment
   idle: boolean; // sauvage loin de tout dompteur : ni réflexion ni bousculade ce tick
   hitters: Set<number>; // géant : dompteurs qui l'ont frappé (eux ou leur meute) pendant ce combat, seuls ayants droit au coffre
 }
@@ -219,6 +223,17 @@ export interface VillageState {
 
 const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * classOf(p.cls).hp);
 
+const WORM_STRIKE_R = 110; // ver : il remonte quand il est à cette distance (sous) sa cible
+const WORM_WARN_S = 0.9; // annonce de sa sortie
+const WORM_EXPOSED_S = 4; // puis il reste dehors (frappable) avant de replonger
+const SHY_R = 260; // suricates : distance d'alerte de la sentinelle
+const VULTURE_SCARE_R = 420; // un vautour à cette distance fait fuir la colonie
+const VULTURE_CIRCLE_S = 3; // vautour : il tourne au-dessus de sa cible, puis pique
+const VULTURE_WARN_S = 1; // annonce du piqué
+const VULTURE_LANDED_S = 3; // posé (frappable) avant de redécoller
+const SHY_HIDE_S = 6; // temps à la tanière après l'alerte
+const STORM_HARM = 0.4; // tempête assez forte pour blesser (et cacher vers, vautours et suricates)
+const STORM_DPS = 0.02; // part des PV max perdue chaque seconde en plein dedans (l'armure en réduit une partie)
 const WAKE_S = 20; // sanglier réveillé par un coup : il reste debout tant de secondes après le dernier
 
 export class Room {
@@ -462,6 +477,7 @@ export class Room {
     const mounted = p.mount ? this.units.get(p.mount) : undefined;
     const slow = p.slowUntil > this.time ? WEB_SLOW : 1;
     const swimming = !!mounted && swimMount(mounted.s); // sur le serpent : seulement l'eau
+    const flying = !!mounted && flyMount(mounted.s); // à dos de vautour : par-dessus l'eau et les obstacles
     const allowed = PLAYER_SPEED * slow * (mounted ? mountSpeedOf(mounted.s) : bootsSpeed(p.boots)) * 1.35 * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12;
     p.lastPosMs = now;
     let dx = x - p.x, dy = y - p.y;
@@ -474,7 +490,7 @@ export class Room {
     const nx = p.x + dx, ny = p.y + dy; // les bords du monde et les grottes sont gérés par blocked()
     const sleeping = this.sleepingBosses(p);
     const ok = (x: number, y: number) => {
-      if (!this.map.passable(x, y, swimming) || sleeperBlocks(sleeping, p.x, p.y, x, y)) return false;
+      if (!this.map.passable(x, y, swimming, flying) || (!flying && sleeperBlocks(sleeping, p.x, p.y, x, y))) return false;
       const g = this.map.gateCrossed(p.x, p.y, x, y);
       return g < 0 || this.gateIsOpen(g);
     };
@@ -810,6 +826,11 @@ export class Room {
       }
       this.moveTo(p, land.x, land.y);
     }
+    if (u && flyMount(u.s) && this.map.blocked(p.x, p.y)) {
+      // il se pose : sur la terre ferme la plus proche (pas dans l'eau ni sur un rocher)
+      const land = this.map.freeNear(p.x, p.y);
+      this.moveTo(p, land.x, land.y);
+    }
     p.mount = 0;
     if (!u) return true;
     if (!u.reviveAt) this.placeNear(u, p);
@@ -862,6 +883,7 @@ export class Room {
       p.dirty = true;
     }
     this.updateSpawns();
+    this.stormDamage();
     this.updateSeen();
 
     // La monture suit exactement son cavalier (elle n'est pas une cible séparée).
@@ -1076,7 +1098,9 @@ export class Room {
       if (this.wildCount(s) >= this.population(s)) continue;
       if (this.spawnPack(s)) this.nextSpawn[s] = this.time + 2.5;
     }
-    this.night = this.isNight();
+    const sky = this.sky();
+    this.night = sky.light < 0.5;
+    this.storm = sky.storm;
     // Au lever du jour, les bêtes de nuit sauvages s'en vont, hors de la vue des dompteurs (on ne les voit pas disparaître).
     if (!this.isNight()) {
       for (const u of [...this.units.values()]) {
@@ -1088,8 +1112,21 @@ export class Room {
 
   /** Nuit au village (même ciel que celui qu'affichent les clients). */
   private night = false; // mis à jour 2 fois par seconde
+  private storm = 0; // tempête de sable (Mer de sable), mise à jour 2 fois par seconde
+  private sky() {
+    return sky(this.seed, Date.now());
+  }
   private isNight() {
-    return sky(this.seed, Date.now()).light < 0.5;
+    return this.sky().light < 0.5;
+  }
+
+  /** Tempête de sable : elle use les dompteurs restés dehors dans la Mer de sable (pas dans une grotte). */
+  private stormDamage() {
+    if (this.storm < STORM_HARM || this.tick % TICK_HZ !== 0) return;
+    for (const p of this.players.values()) {
+      if (p.dead || this.safe(p.x, p.y) || this.map.caveAt(p.x, p.y) || this.map.zoneAt(p.x, p.y) !== 6) continue;
+      this.damage(p, maxHpOf(p) * STORM_DPS * this.storm, p);
+    }
   }
 
   /** Population visée d'une espèce sauvage : nulle le jour pour les bêtes de nuit. */
@@ -1117,7 +1154,11 @@ export class Room {
     const zl = map.length / ZONES;
     for (let attempt = 0; attempt < 40; attempt++) {
       let cx: number, cy: number;
-      if (sp.swim) {
+      if (sp.shy && map.dens.length) {
+        // suricates : une colonie autour d'une tanière
+        const den = map.dens[Math.floor(Math.random() * map.dens.length)];
+        [cx, cy] = [den.x + (Math.random() - 0.5) * 60, den.y + (Math.random() - 0.5) * 60];
+      } else if (sp.swim) {
         // créature aquatique : un point d'eau profonde de sa zone
         const pool = map.deepWater[sp.zone];
         if (!pool.length) return false;
@@ -1193,9 +1234,9 @@ export class Room {
   }
 
   /** Monstre sauvage qu'on combat : ni géant endormi, ni gibier passif (lui ne s'apprivoise qu'aux fruits). */
-  private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !SPECIES[e.s].passive;
+  private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !e.hidden && !SPECIES[e.s].passive;
   /** Monstre sauvage qu'on peut nourrir d'un fruit (gibier passif compris, géants exclus plus bas). */
-  private isFeedable = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant;
+  private isFeedable = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !e.hidden;
   private isAllyOfPlayers = (e: Ent) => (e.kind === 'p' || e.owner !== 0) && !this.safe(e.x, e.y);
 
   /** Attaque au clic (PC) ou automatique. */
@@ -1221,7 +1262,7 @@ export class Room {
     const t = this.nearest(p.x, p.y, reach + 50, this.isWild) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (reach + t.r) ** 2) return this.mine(p);
     p.atkCd = cls.cd;
-    const dmg = weaponDmg(p.weapon) * cls.dmg;
+    const dmg = weaponDmg(p.weapon) * cls.dmg * (1 + this.rallyOf(p)); // Alpha suricate : il l'encourage
     if (p.cls === 'archer' || p.cls === 'mage') this.events.push({ e: 'shot', by: p.id, x: p.x, y: p.y, tx: t.x, ty: t.y, cls: p.cls });
     if (cls.splash) {
       // Mage : l'orbe explose et touche tous les monstres sauvages autour de la cible.
@@ -1244,7 +1285,7 @@ export class Room {
     const cls = classOf(p.cls);
     const reach = PLAYER_R + cls.range;
     const d = Math.hypot(p.aimX - p.x, p.aimY - p.y) || 1, ux = (p.aimX - p.x) / d, uy = (p.aimY - p.y) / d;
-    const dmg = weaponDmg(p.weapon) * cls.dmg;
+    const dmg = weaponDmg(p.weapon) * cls.dmg * (1 + this.rallyOf(p)); // Alpha suricate : il l'encourage
     const prey = (e: Ent) => this.isWild(e) && this.alive(e); // jamais le gibier passif, même au clic
     if (p.cls === 'mage') {
       p.atkCd = cls.cd;
@@ -1905,6 +1946,7 @@ export class Room {
       u.windup = 0;
       return;
     }
+    if (SPECIES[u.s].shy && this.hideAI(u)) return;
     if (SPECIES[u.s].passive) return this.grazeAI(u);
     // Priorité au plus proche, dompteurs et monstres de meute confondus (réévalué à chaque tick).
     let t: Ent | undefined = this.nearest(u.x, u.y, this.aggroOf(u), this.isAllyOfPlayers);
@@ -1917,6 +1959,8 @@ export class Room {
         if (this.alive(a) && this.isAllyOfPlayers(a) && dist2(u.x, u.y, a.x, a.y) <= (this.aggroOf(u) + 260) ** 2) t = a;
       }
     }
+    if (SPECIES[u.s].burrows) return this.wormAI(u, t);
+    if (SPECIES[u.s].flies) return this.vultureAI(u, t);
     u.lastAttacker = 0;
     u.target = t?.id ?? 0;
     if (!t) u.windup = 0; // plus de cible : le tir en préparation est abandonné
@@ -1929,7 +1973,11 @@ export class Room {
       this.tryAttack(u, t);
       return;
     }
-    // Errance autour du point d'origine.
+    this.wander(u);
+  }
+
+  /** Errance autour du point d'origine. */
+  private wander(u: Unit) {
     u.wanderT -= DT;
     if (u.wanderT <= 0) {
       u.wanderT = 2 + Math.random() * 4;
@@ -1938,6 +1986,132 @@ export class Room {
       u.wanderY = u.homeY + Math.sin(a) * d;
     }
     this.move(u, u.wanderX, u.wanderY, u.speed * 0.35, 4);
+  }
+
+  /**
+   * Ver des sables (sauvage) : il file sous le sable, intouchable, vers sa cible ; arrivé dessous, sa sortie est
+   * annoncée par un cercle au sol (on a le temps de s'écarter), puis il jaillit et reste exposé quelques secondes.
+   */
+  private wormAI(u: Unit, t: Ent | undefined) {
+    u.lastAttacker = 0;
+    if (u.emerging) return; // il remonte : il attend sa sortie
+    if (this.storm >= STORM_HARM) {
+      // tempête : il reste sous le sable et s'agite (on voit la bosse filer), sans jamais sortir
+      u.hidden = true;
+      u.target = 0;
+      return this.wander(u);
+    }
+    if (!u.hidden && this.time >= (u.surfaceUntil ?? 0)) {
+      u.hidden = true; // il replonge
+      u.target = 0;
+    }
+    if (!u.hidden) {
+      u.target = t?.id ?? 0;
+      if (t) this.tryAttack(u, t);
+      return;
+    }
+    u.target = 0;
+    if (!t) return this.wander(u);
+    if (dist2(u.x, u.y, t.x, t.y) > WORM_STRIKE_R ** 2) {
+      this.navTo(u, t.x, t.y, u.speed * 1.4, WORM_STRIKE_R * 0.6);
+      return;
+    }
+    u.emerging = true;
+    const tx = t.x, ty = t.y;
+    this.hazard(u, { kind: 0, x: tx, y: ty, r: 80, at: this.time + WORM_WARN_S, dmg: u.dmg * 1.3, onFire: () => {
+      if (!this.units.has(u.id)) return;
+      const to = this.map.freeNear(tx, ty);
+      [u.x, u.y] = [to.x, to.y];
+      u.hidden = u.emerging = false;
+      u.surfaceUntil = this.time + WORM_EXPOSED_S;
+      u.atkCd = 0.6;
+    } });
+  }
+
+  /**
+   * Suricate : un dompteur sans fruit en main, un vautour qui tourne au-dessus, ou un coup, et la colonie entière
+   * court se cacher dans sa tanière (intouchable) ; elle ressort quand la voie est libre. Vrai : il est occupé à fuir.
+   */
+  private hideAI(u: Unit) {
+    const d = this.map.denNear(u.homeX, u.homeY), den = d >= 0 ? this.map.dens[d] : { x: u.homeX, y: u.homeY };
+    const near = (x: number, y: number, r: number) => dist2(x, y, u.x, u.y) < r * r;
+    let threat = this.storm >= STORM_HARM || this.time - u.lastHitAt < 1 || [...this.players.values()].some((p) => !p.dead && !p.holding && near(p.x, p.y, SHY_R));
+    if (!threat) for (const o of this.units.values()) if (!o.owner && SPECIES[o.s].flies && near(o.x, o.y, VULTURE_SCARE_R)) threat = true;
+    if (threat) {
+      // l'alerte gagne toute la colonie de la tanière
+      for (const o of this.units.values()) {
+        if (o.owner || !SPECIES[o.s].shy || dist2(o.homeX, o.homeY, den.x, den.y) > 400 ** 2) continue;
+        o.surfaceUntil = Math.max(o.surfaceUntil ?? 0, this.time + SHY_HIDE_S);
+      }
+    }
+    if (this.time >= (u.surfaceUntil ?? 0)) {
+      u.hidden = false; // la voie est libre : il ressort de la tanière
+      return false;
+    }
+    u.target = u.lastAttacker = 0;
+    if (u.hidden) return true;
+    if (dist2(u.x, u.y, den.x, den.y) < 24 ** 2) {
+      u.hidden = true;
+      [u.x, u.y] = [den.x, den.y];
+    } else this.navTo(u, den.x, den.y, u.speed * 1.5, 12);
+    return true;
+  }
+
+  /**
+   * Vautour (sauvage) : il plane au-dessus de sa cible, hors d'atteinte, puis pique là où tombe son ombre
+   * (cercle annoncé au sol) ; posé, on peut le frapper, jusqu'à ce qu'il redécolle.
+   */
+  private vultureAI(u: Unit, t: Ent | undefined) {
+    u.lastAttacker = 0;
+    if (u.hidden === undefined) u.hidden = true; // il naît en vol
+    if (u.emerging) return this.fly(u, u.wanderX, u.wanderY, u.speed * 2.2); // en piqué vers le point annoncé
+    if (this.storm >= STORM_HARM) {
+      // tempête : il monte très haut au-dessus de son coin et ne pique plus
+      u.hidden = true;
+      u.target = 0;
+      u.diveAt = undefined;
+      const a = this.time * 0.4 + u.id;
+      return this.fly(u, u.homeX + Math.cos(a) * 220, u.homeY + Math.sin(a) * 220, u.speed * 0.6);
+    }
+    if (!u.hidden) {
+      if (this.time >= (u.surfaceUntil ?? 0)) {
+        u.hidden = true; // il redécolle
+        u.diveAt = this.time + VULTURE_CIRCLE_S;
+        u.target = 0;
+        return;
+      }
+      u.target = t?.id ?? 0;
+      if (t) this.tryAttack(u, t);
+      return;
+    }
+    u.target = 0;
+    const a = this.time * (t ? 1.4 : 0.6) + u.id;
+    if (!t) {
+      u.diveAt = undefined;
+      return this.fly(u, u.homeX + Math.cos(a) * 180, u.homeY + Math.sin(a) * 180, u.speed * 0.7); // il plane sur son coin
+    }
+    u.diveAt ??= this.time + VULTURE_CIRCLE_S;
+    if (this.time < u.diveAt) return this.fly(u, t.x + Math.cos(a) * 150, t.y + Math.sin(a) * 150, u.speed * 1.3);
+    u.emerging = true;
+    [u.wanderX, u.wanderY] = [t.x, t.y];
+    const tx = t.x, ty = t.y;
+    this.hazard(u, { kind: 0, x: tx, y: ty, r: 75, at: this.time + VULTURE_WARN_S, dmg: u.dmg * 1.4, onFire: () => {
+      if (!this.units.has(u.id)) return;
+      const to = this.map.freeNear(tx, ty);
+      [u.x, u.y] = [to.x, to.y];
+      u.hidden = u.emerging = false;
+      u.surfaceUntil = this.time + VULTURE_LANDED_S;
+      u.diveAt = undefined;
+      u.atkCd = 0.5;
+    } });
+  }
+
+  /** Vol : droit vers le but, par-dessus l'eau et les obstacles, sans quitter le couloir. */
+  private fly(u: Unit, gx: number, gy: number, speed: number) {
+    const dx = gx - u.x, dy = gy - u.y, d = Math.hypot(dx, dy);
+    if (d < 1) return;
+    const k = Math.min(1, (speed * DT) / d), nx = u.x + dx * k, ny = u.y + dy * k;
+    if (!this.map.isForest(nx, ny)) [u.x, u.y] = [nx, ny];
   }
 
   /** Gibier passif : il n'attaque jamais ; il va manger aux buissons à fruits, et fuit qui le frappe. */
@@ -2068,6 +2242,7 @@ export class Room {
 
   /** melee : coup au corps à corps (le client anime l'attaquant qui se fend vers sa cible). */
   private damage(t: Ent, amount: number, by: Ent, melee = false) {
+    if (t.kind === 'u' && t.hidden) return; // sous le sable : rien ne l'atteint
     const m = melee ? { m: 1 as const } : {};
     if (t.kind === 'p') {
       if (t.dead) return;
@@ -2099,7 +2274,7 @@ export class Room {
   }
 
   /** Alpha équipé et debout de cette espèce à pouvoir (escargot, lièvre), s'il y en a un. */
-  private perkAlpha(p: Player, kind: 'guard' | 'heal') {
+  private perkAlpha(p: Player, kind: 'guard' | 'heal' | 'rally') {
     for (const id of p.army) {
       const u = this.units.get(id);
       if (!u?.alpha || u.reviveAt || u.hp <= 0) continue;
@@ -2107,6 +2282,11 @@ export class Room {
       if (perk?.kind === kind) return { u, value: perk.value };
     }
     return null;
+  }
+
+  /** Alpha suricate sur le terrain : part de dégâts en plus pour son dompteur. */
+  private rallyOf(p: Player) {
+    return this.perkAlpha(p, 'rally')?.value ?? 0;
   }
 
   /** Alpha escargot sur le terrain : part des dégâts reçus par son dompteur qu'il lui évite. */
@@ -2197,6 +2377,10 @@ export class Room {
           // son serpent tombe en pleine eau : il se noie
           this.events.push({ e: 'info', text: `${rider.name} s'est noyé` });
           this.killPlayer(rider);
+        } else if (flyMount(u.s) && !rider.dead && this.map.blocked(rider.x, rider.y)) {
+          // son vautour tombe : il atterrit sur la terre ferme la plus proche
+          const land = this.map.freeNear(rider.x, rider.y);
+          this.moveTo(rider, land.x, land.y);
         }
       }
       if (u.alpha) {
@@ -2288,9 +2472,9 @@ export class Room {
     const before = new Map<Unit, [number, number]>();
     for (const u of this.units.values()) before.set(u, [u.x, u.y]);
     for (const u of this.units.values()) {
-      if (u.reviveAt || u.idle || this.isMount(u)) continue;
+      if (u.reviveAt || u.idle || this.isMount(u) || u.hidden) continue; // sous le sable : il passe sous tout le monde
       this.grid.query(u.x, u.y, u.r + 60, (o) => {
-        if (o === u) return;
+        if (o === u || (o.kind === 'u' && o.hidden)) return;
         if (o.kind === 'u' && (o.id < u.id || o.reviveAt)) return; // chaque paire une seule fois
         if (o.kind === 'p' && o.dead) return;
         const min = u.r + o.r;
@@ -2427,7 +2611,7 @@ export class Room {
       for (const u of this.units.values()) {
         if (u.reviveAt || dist2(u.x, u.y, viewer.x, viewer.y) > vr2) continue;
         units.push([
-          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep ? UNIT_FLAG_ASLEEP : 0), Math.round(u.x), Math.round(u.y),
+          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0), Math.round(u.x), Math.round(u.y),
           Math.round((100 * Math.max(0, u.hp)) / u.maxHp), u.owner,
         ]);
       }

@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { DAY_MS, sky } from '../shared/weather.ts';
 import { Room } from '../server/room.ts';
@@ -242,25 +242,27 @@ const noop = () => {};
       if (m.blocked(m.gate.x + (m.village.x - m.gate.x) * t, m.gate.y + (m.village.y - m.gate.y) * t)) pathOk = false;
     }
     let water = 0, n = 0;
-    let lw = 0, ln = 0;
+    let lw = 0, ln = 0, dw = 0, dn = 0;
     for (let x = -WORLD_HALF + 20; x < WORLD_HALF; x += 80) {
       for (let y = -WORLD_HALF + 20; y < WORLD_HALF; y += 80) {
         if (m.isForest(x, y)) continue;
-        if (m.zoneAt(x, y) === 5) ln++, lw += +m.isWater(x, y);
+        const z = m.zoneAt(x, y);
+        if (z === 5) ln++, lw += +m.isWater(x, y);
+        else if (z === 6) dn++, dw += +m.isWater(x, y);
         else n++, water += +m.isWater(x, y);
       }
     }
-    check(d >= 800 && !m.inVillage(m.spawn.x, m.spawn.y) && pathOk && water / n > 0.04 && water / n < 0.2 && lw / ln > 0.2,
-      `graine ${seed} : village à ${Math.round(d)} px du camp, chemin libre, ${Math.round((100 * water) / n)} % de lacs (zone 5 : ${Math.round((100 * lw) / ln)} %)`);
+    check(d >= 800 && !m.inVillage(m.spawn.x, m.spawn.y) && pathOk && water / n > 0.04 && water / n < 0.2 && lw / ln > 0.15 && dw / dn < 0.06,
+      `graine ${seed} : village à ${Math.round(d)} px du camp, chemin libre, ${Math.round((100 * water) / n)} % de lacs (zone 5 : ${Math.round((100 * lw) / ln)} %, désert : ${Math.round((100 * dw) / dn)} % d'oasis)`);
     const edge = WORLD_HALF - 1000;
     check(m.spawn.y < -edge || m.spawn.x > edge || m.spawn.y > edge, `graine ${seed} : camp de départ au bord haut, droit ou bas (${Math.round(m.spawn.x)}, ${Math.round(m.spawn.y)})`);
     const site = m.sites[0], stone = m.stones[1];
     const reach = m.findPath(m.village.x, m.village.y + 40, stone.x, stone.y + 50, 500000);
-    const zones = [0.1, 0.3, 0.5, 0.7, 0.92].map((f) => { const q = m.spineAt(f * m.length); return m.zoneAt(q.x, q.y); }).join('');
+    const zones = [1, 3, 5, 7, 9, 11].map((k) => k / 12).map((f) => { const q = m.spineAt(f * m.length); return m.zoneAt(q.x, q.y); }).join('');
     const end = m.spineAt(m.length - 250);
     const reachEnd = m.findPath(stone.x, stone.y + 50, end.x, end.y, 600000);
-    check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '12345' && m.caves.length === 12,
-      `graine ${seed} : couloir de ${m.length} px, zones ${zones}, camp au bout de la zone 4, bout des Lacs brumeux atteignable, 12 grottes`);
+    check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '123456' && m.caves.length === 15,
+      `graine ${seed} : couloir de ${m.length} px, zones ${zones}, camp au bout de la zone 4, bout de la Mer de sable atteignable, 15 grottes`);
     check(m.isForest(m.spineAt(5000).x + m.normalAt(5000).x * 1200, m.spineAt(5000).y + m.normalAt(5000).y * 1200) && m.blocked(m.spineAt(5000).x + m.normalAt(5000).x * 1200, m.spineAt(5000).y + m.normalAt(5000).y * 1200),
       `graine ${seed} : forêt infranchissable de part et d'autre du couloir`);
   }
@@ -299,7 +301,7 @@ const noop = () => {};
   const r = room();
   r.units.clear();
   const p = r.addPlayer('a', noop);
-  const o = r.map.ores[0];
+  const o = r.map.ores.find((q: { res: string; zone: number }) => q.res === 'gold' && q.zone <= 3);
   [p.x, p.y] = [o.x + 30, o.y];
   const gold0 = p.gold;
   for (let i = 0; i < 20 * 15 && r.oreHp[o.id] > 0; i++) r.step();
@@ -320,9 +322,9 @@ const noop = () => {};
   const r = room();
   const p = r.addPlayer('a', noop);
   const c = r.map.caves[0];
-  const perZone = [1, 2, 3, 4, 5].map((z) => r.map.caves.filter((cv: { zone: number }) => cv.zone === z).length).join('');
-  check(r.map.caves.length === 12 && perZone === '22233' && r.map.caves.every((cv: { boss: number; zone: number }) => SPECIES[cv.boss].boss && SPECIES[cv.boss].zone === cv.zone),
-    `12 grottes (${perZone} par zone), un géant par espèce`);
+  const perZone = [1, 2, 3, 4, 5, 6].map((z) => r.map.caves.filter((cv: { zone: number }) => cv.zone === z).length).join('');
+  check(r.map.caves.length === 15 && perZone === '222333' && r.map.caves.every((cv: { boss: number; zone: number }) => SPECIES[cv.boss].boss && SPECIES[cv.boss].zone === cv.zone),
+    `15 grottes (${perZone} par zone), un géant par espèce`);
   check(SPECIES.filter((sp) => !sp.boss && !sp.passive).every((sp) => SPECIES.some((b) => b.boss && b.base === sp.key)), 'chaque espèce hostile a son géant (âme → Alpha légendaire)');
   const f = r.createUnit(0, false, 0, 0);
   f.owner = p.id;
@@ -1286,7 +1288,7 @@ const noop = () => {};
   // Lucioles : gibier passif de la zone 2 qui n'apparaît que la nuit, et s'en va au lever du jour (loin des dompteurs).
   const r = room();
   const fly = SPECIES.findIndex((sp) => sp.key === 'firefly');
-  check(fly === SPECIES.length - 1 && SPECIES[fly].zone === 2 && !!SPECIES[fly].passive && !!SPECIES[fly].night, 'luciole : passive, zone 2, de nuit, ajoutée en fin de liste (sauvegardes intactes)');
+  check(fly === SPECIES.findIndex((sp) => sp.key === 'snail') + 1 && SPECIES[fly].zone === 2 && !!SPECIES[fly].passive && !!SPECIES[fly].night, 'luciole : passive, zone 2, de nuit, ajoutée en fin de liste (sauvegardes intactes)');
   const realNow = Date.now, t0 = realNow();
   let night = t0, day = t0;
   for (let t = t0; t < t0 + DAY_MS; t += 10_000) {
@@ -1323,6 +1325,149 @@ const noop = () => {};
   r.wildAI(boar);
   check(!boar.asleep, 'le jour, il est réveillé');
   Date.now = realNow;
+}
+
+{
+  // Ordre des espèces figé : leur index sert dans les sauvegardes (essences, Alphas). On n'ajoute qu'à la fin.
+  const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal';
+  check(SPECIES.map((sp) => sp.key).join(' ') === order, `ordre des ${SPECIES.length} espèces inchangé (sauvegardes intactes)`);
+}
+
+{
+  // Mer de sable (zone 6) : porte après les Lacs brumeux, Hôtel de ville niveau 6 et géants de la zone 5 vaincus.
+  const z5 = zoneBosses(5), z6 = zoneBosses(6);
+  check(gateHall(5) === 6 && HALL_MAX >= 6 && !gateOpen(5, 6, []) && gateOpen(5, 6, z5) && !gateOpen(5, 5, z5) && z6.length === 3,
+    `porte de la Mer de sable : Hôtel de ville niv. 6 et les ${z5.length} géants des Lacs ; ${z6.length} géants dans le désert`);
+
+  const r = room();
+  for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
+  const p = r.addPlayer('dune', noop);
+  const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
+  // Ver des sables : sous le sable, intouchable ; arrivé sous sa cible, sortie annoncée, puis exposé et frappable.
+  const spot = r.map.freeNear(r.map.spineAt(27500).x, r.map.spineAt(27500).y);
+  [p.x, p.y] = [spot.x, spot.y];
+  const worm = r.createUnit(key('sandworm'), false, p.x + 60, p.y);
+  const regrid = () => {
+    r.grid.clear();
+    for (const e of [p, ...r.units.values()]) r.grid.insert(e);
+  };
+  regrid();
+  r.wildAI(worm);
+  r.wildAI(worm);
+  const hp0 = worm.hp;
+  r.damage(worm, 500, p, true);
+  check(worm.hidden && worm.hp === hp0 && !r.isWild(worm), 'ver sous le sable : ni cible ni touché');
+  check(worm.emerging && r.hazards.some((h: any) => h.boss === worm), 'arrivé sous sa cible : sa sortie est annoncée au sol');
+  r.time += 1;
+  r.updateHazards();
+  check(!worm.hidden && r.isWild(worm), 'le ver jaillit : il est exposé, on peut le frapper');
+  r.damage(worm, 500, p, true);
+  check(worm.hp < hp0, `ver exposé touché (${hp0} → ${Math.round(worm.hp)} PV)`);
+  r.time += 5;
+  r.wildAI(worm);
+  check(worm.hidden, 'quelques secondes plus tard, il replonge');
+  r.units.delete(worm.id);
+  r.hazards.length = 0;
+  Object.assign(p, { dead: false, hp: 9999 }); // le ver a pu l'abattre : on le remet debout pour la suite
+  // Suricates : ils vivent autour de leur tanière ; un dompteur sans fruit approche, et la colonie court s'y cacher.
+  check(r.map.dens.length >= 4 && r.map.dens.every((d: { x: number; y: number }) => r.map.zoneAt(d.x, d.y) === 6), `${r.map.dens.length} tanières de suricates dans la Mer de sable`);
+  const den = r.map.dens[0];
+  const cats = [0, 1, 2].map((k) => r.createUnit(key('meerkat'), false, den.x + 40 + k * 20, den.y + 20));
+  [p.x, p.y] = [den.x + 200, den.y];
+  for (let i = 0; i < 60 && !cats.every((c: any) => c.hidden); i++) for (const c of cats) r.wildAI(c);
+  check(cats.every((c: any) => c.hidden && !r.isFeedable(c) && Math.hypot(c.x - den.x, c.y - den.y) < 30), 'un dompteur sans fruit approche : la colonie court se cacher dans sa tanière');
+  r.time += 10;
+  p.fruits = 5;
+  r.onHold(p, true);
+  for (const c of cats) r.wildAI(c);
+  check(cats.every((c: any) => !c.hidden), 'fruit en main, ils ressortent et se laissent approcher');
+  // Vautour : il plane hors d'atteinte, pique là où tombe son ombre (annoncé), puis reste posé, frappable.
+  const v = r.createUnit(key('vulture'), false, p.x + 120, p.y);
+  regrid();
+  r.wildAI(v);
+  const vh = v.hp;
+  r.damage(v, 500, p, true);
+  check(v.hidden && v.hp === vh && !r.isWild(v), 'vautour en vol : hors d\'atteinte');
+  for (const c of cats) r.wildAI(c);
+  check(cats.every((c: any) => c.hidden || Math.hypot(c.x - den.x, c.y - den.y) < 60), 'un vautour approche : les suricates filent à la tanière (même fruit en main)');
+  r.time += 3.1;
+  regrid();
+  r.wildAI(v);
+  check(v.emerging && r.hazards.some((h: any) => h.boss === v), 'il pique : un cercle au sol annonce où il fond');
+  r.time += 1.1;
+  r.updateHazards();
+  r.damage(v, 500, p, true);
+  check(!v.hidden && v.hp < vh, `posé, on peut le frapper (${vh} → ${Math.round(v.hp)} PV)`);
+  r.time += 3.5;
+  r.wildAI(v);
+  check(v.hidden, 'puis il redécolle');
+}
+
+{
+  // Tempête de sable : elle blesse dehors dans la Mer de sable ; vers sous le sable, vautours très haut, suricates cachés.
+  const r = room();
+  for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
+  const realNow = Date.now, t0 = realNow();
+  let storm = 0;
+  for (let t = t0; t < t0 + 6 * 3600_000 && !storm; t += 20_000) if (sky(r.seed, t).storm > 0.9) storm = t;
+  check(storm > 0, 'des tempêtes de sable se lèvent de temps en temps');
+  Date.now = () => storm;
+  r.tick = 0;
+  r.updateSpawns();
+  const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
+  const p = r.addPlayer('tempete', noop);
+  const q = r.map.freeNear(r.map.spineAt(27500).x, r.map.spineAt(27500).y);
+  [p.x, p.y] = [q.x, q.y];
+  p.hp = p.maxHp = 1000;
+  r.tick = 0;
+  r.stormDamage();
+  check(p.hp < 1000, `dehors dans la Mer de sable, la tempête blesse (${1000 - p.hp} PV en 1 s)`);
+  const v = r.map.village;
+  [p.x, p.y, p.hp] = [v.x, v.y, 1000];
+  r.stormDamage();
+  check(p.hp === 1000, 'au village, rien');
+  [p.x, p.y] = [q.x, q.y];
+  const worm = r.createUnit(key('sandworm'), false, p.x + 60, p.y), vul = r.createUnit(key('vulture'), false, p.x + 90, p.y);
+  const cat = r.createUnit(key('meerkat'), false, r.map.dens[0].x + 30, r.map.dens[0].y);
+  r.grid.clear();
+  for (const e of [p, ...r.units.values()]) r.grid.insert(e);
+  for (let i = 0; i < 40; i++) {
+    r.wildAI(worm), r.wildAI(vul), r.wildAI(cat);
+    r.time += 0.25;
+  }
+  check(worm.hidden && !worm.emerging && vul.hidden && !vul.emerging && !r.hazards.length, 'en pleine tempête, le ver reste sous le sable et le vautour très haut : aucun ne frappe');
+  check(cat.hidden, 'les suricates se cachent dans leur tanière');
+  Date.now = realNow;
+
+  // Alpha suricate : il encourage son dompteur (+8 % de dégâts, plus en le renforçant), comme l'escargot le protège.
+  const r2 = room();
+  const p2 = r2.addPlayer('chef', noop);
+  check(r2.rallyOf(p2) === 0, 'sans Alpha suricate : pas de bonus');
+  r2.spawnAlpha(p2, key('meerkat'), 2, false);
+  check(Math.abs(r2.rallyOf(p2) - 0.1) < 1e-9, `Alpha suricate niv. 2 : +${Math.round(r2.rallyOf(p2) * 100)} % de dégâts pour son dompteur`);
+
+  // Vautour : il se chevauche et vole, par-dessus l'eau ; on se pose sur la terre ferme.
+  const r3 = room();
+  const p3 = r3.addPlayer('ciel', noop);
+  let wx = 0, wy = 0;
+  for (let i = 0; i < 4000 && !wx; i++) {
+    const s = r3.map.spineAt(Math.random() * r3.map.length), x = s.x + (Math.random() - 0.5) * 600, y = s.y + (Math.random() - 0.5) * 600;
+    if (r3.map.isWater(x, y) && r3.map.isWater(x + 40, y) && !r3.map.inVillage(x, y, 300)) [wx, wy] = [x, y];
+  }
+  const shore = r3.map.landNear(wx, wy, 600);
+  [p3.x, p3.y] = [shore.x, shore.y];
+  const bird = r3.spawnAlpha(p3, key('vulture'), 0, false);
+  [bird.x, bird.y] = [p3.x + 20, p3.y];
+  r3.onMount(p3, bird.id);
+  check(p3.mount === bird.id && mountSpeedOf(key('vulture')) > 1, `à dos de vautour (vitesse ×${mountSpeedOf(key('vulture'))})`);
+  for (let i = 0; i < 40; i++) {
+    p3.lastPosMs = Date.now() - 400;
+    const d = Math.hypot(wx - p3.x, wy - p3.y), k = Math.min(1, 60 / (d || 1));
+    r3.onPos(p3, p3.x + (wx - p3.x) * k, p3.y + (wy - p3.y) * k, 1, 0);
+  }
+  check(r3.map.isWater(p3.x, p3.y), 'il survole l\'eau');
+  r3.onMount(p3, 0);
+  check(!p3.mount && !r3.map.blocked(p3.x, p3.y), 'en descendant au-dessus de l\'eau, on se pose sur la terre ferme');
 }
 
 {
@@ -1445,11 +1590,12 @@ const noop = () => {};
   const r = room();
   for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
   const moves: string[] = [];
-  let friendlyFire = 0, bearId = 0;
+  let friendlyFire = 0, bearId = 0, foeId = 0, foeHits = 0;
   const p = r.addPlayer('a', (m: { t: string; ev?: { e: string; id?: number; kind?: string; a?: number; b?: number }[] }) => {
     for (const e of m.ev ?? []) {
       if (e.e === 'move') moves.push(e.kind!);
       if (e.e === 'hit' && e.a === bearId && e.b === p.id) friendlyFire++;
+      if (e.e === 'hit' && e.b === foeId) foeHits++;
     }
   });
   [p.x, p.y] = [r.map.spawn.x, r.map.spawn.y + 80];
@@ -1459,15 +1605,16 @@ const noop = () => {};
   [bear.x, bear.y] = [p.x + 40, p.y];
   const foe = r.createUnit(3, false, p.x + 120, p.y);
   foe.hp = foe.maxHp = 99999;
+  foeId = foe.id;
   p.atkCd = 9999;
   for (let i = 0; i < 20 * 12; i++) {
     r.step();
     p.atkCd = 9999;
     p.hp = Math.max(p.hp, 9000);
   }
-  const lost = 99999 - foe.hp;
   check(moves.includes('slam'), `Ours légendaire : ${[...new Set(moves)].join(', ') || 'aucune'} attaque spéciale lancée`);
-  check(lost > 0 && friendlyFire === 0, `elle frappe le sauvage (−${Math.round(lost)} PV) sans toucher son dompteur`);
+  // (on compte les coups : le sauvage récupère vite ses PV quand on ne le frappe plus)
+  check(foeHits > 0 && friendlyFire === 0, `elle frappe le sauvage (${foeHits} coups) sans toucher son dompteur`);
 }
 
 {

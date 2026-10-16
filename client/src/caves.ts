@@ -1,4 +1,4 @@
-// Grottes selon le biome (zone 1 à 5) : leur entrée sur la carte et les décors de leur intérieur.
+// Grottes selon le biome (zone 1 à 6) : leur entrée sur la carte et les décors de leur intérieur.
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -218,6 +218,27 @@ export function drawEntrance(ctx: Ctx, x: number, y: number, zone: number, t: nu
       ctx.arc(x + 9, y - 10, 3, 0, TAU);
       ctx.fill();
     }
+  } else if (zone === 6) {
+    // Mer de sable : falaise de grès à strates, deux colonnes taillées, dune au pied, braseros
+    ctx.fillStyle = '#D9B47E';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 44, 120, 22, 0, 0, TAU);
+    ctx.fill();
+    poly(ctx, x, y, [[-112, 40], [-104, -30], [-80, -78], [-30, -96], [30, -98], [82, -76], [106, -28], [112, 40]], '#A06E42');
+    ctx.fillStyle = '#B98450';
+    ctx.fillRect(x - 100, y - 40, 200, 14);
+    ctx.fillRect(x - 86, y - 72, 172, 12);
+    for (const sx of [-1, 1]) {
+      ctx.fillStyle = '#C99A62';
+      ctx.fillRect(x + sx * 56 - 11, y - 64, 22, 102);
+      ctx.fillStyle = '#E0B87F';
+      ctx.fillRect(x + sx * 56 - 15, y - 70, 30, 9);
+      ctx.fillStyle = 'rgba(80,50,25,0.35)';
+      ctx.fillRect(x + sx * 56 + 4, y - 61, 7, 99);
+    }
+    mouth(ctx, x, y, 38, 70, boss, t);
+    torch(ctx, x - 86, y + 18, t, '#E8693F', '#F7D774');
+    torch(ctx, x + 86, y + 18, t, '#E8693F', '#F7D774');
   } else {
     // Lacs brumeux : roche noire luisante, mare devant l'entrée, roseaux, lanternes bleues
     ctx.fillStyle = '#2E6574';
@@ -258,6 +279,7 @@ export const INSIDE = [
   { floor: '#6A5238', wall: '#4A3826', prop: 'bones' },
   { floor: '#3A4A42', wall: '#2A3430', prop: 'runes' },
   { floor: '#2E4448', wall: '#1E2C30', prop: 'water' },
+  { floor: '#8A6A42', wall: '#5E4428', prop: 'bones' }, // Mer de sable : grès et ossements
 ];
 
 /** Décor du biome posé le long de la paroi d'un intérieur (i : rang du décor, a : angle). */

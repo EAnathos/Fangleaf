@@ -4,7 +4,7 @@
 //   et serpente sur PATH_LEN px ; autour, une forêt infranchissable.
 // - Camp de départ au début du couloir, village (la base) un peu plus loin : il faut le trouver.
 // - Zones de danger : ZONES tronçons successifs le long du couloir, frontières déformées par du bruit ;
-//   la dernière (Lacs brumeux) est criblée de lacs, où nagent les Serpents des brumes.
+//   la zone 5 (Lacs brumeux) est criblée de lacs, où nagent les Serpents des brumes ; la 6 (Mer de sable) n'a que de rares oasis.
 // - Au bout de la zone 4 : un emplacement de camp, que le village peut établir contre de l'or
 //   (feu qui soigne, point de réapparition, Pierre de passage pour voyager entre camps).
 // - Lacs infranchissables dans le couloir, en laissant toujours libre une voie centrale.
@@ -19,9 +19,12 @@ export const MAP_CELL = 16; // résolution de la grille d'obstacles
 const N = (WORLD_HALF * 2) / MAP_CELL;
 const LAKE_THRESHOLD = 0.64;
 const LAKE_THRESHOLD_LAKES = 0.54; // zone 5 (Lacs brumeux) : bien plus d'eau
+const LAKE_THRESHOLD_DESERT = 0.8; // zone 6 (Mer de sable) : de rares oasis
 const SPINE_STEP = 100;
 const ZONE_LEN = PATH_LEN / ZONES;
 const LAKES_FROM = 4 * ZONE_LEN; // début de la zone des lacs
+const DESERT_FROM = 5 * ZONE_LEN; // début de la Mer de sable
+const DENS = 7; // tanières de suricates
 const ZONE_BLEND = 900; // largeur de la transition (affichage) entre deux zones
 const STAMP_R = 1300; // au-delà, forêt profonde : on ne calcule plus la distance au couloir
 const LANE = 230; // voie centrale jamais inondée
@@ -146,6 +149,7 @@ export class WorldMap {
   readonly ores: Ore[] = [];
   readonly decor: Decor[] = [];
   readonly bushes: Bush[] = []; // buissons à fruits (décor franchissable : le gibier vient y manger)
+  readonly dens: Pt[] = []; // tanières de suricates (Mer de sable) : buttes percées de trous, franchissables
   readonly path: [number, number][] = []; // chemin de terre du camp à la porte du village
   readonly trails: [number, number][][] = []; // piste du village au bout du couloir, coupée à la traversée des camps
   private buckets = new Map<number, number[]>(); // décor par case de 256 px
@@ -200,7 +204,7 @@ export class WorldMap {
         if (dist2(p.x, p.y, village.x, village.y) < (VILLAGE_R + 160) ** 2) continue;
         if (dist2(p.x, p.y, this.spawn.x, this.spawn.y) < 320 ** 2) continue;
         if (this.sites.some((c) => dist2(p.x, p.y, c.x, c.y) < 380 ** 2)) continue;
-        const threshold = this.arc[k] > LAKES_FROM ? LAKE_THRESHOLD_LAKES : LAKE_THRESHOLD;
+        const threshold = this.arc[k] > DESERT_FROM ? LAKE_THRESHOLD_DESERT : this.arc[k] > LAKES_FROM ? LAKE_THRESHOLD_LAKES : LAKE_THRESHOLD;
         if (this.lakeNoise(p.x, p.y) > threshold && this.pathDist(p.x, p.y) >= 130) this.water[k] = 1;
       }
     }
@@ -254,6 +258,7 @@ export class WorldMap {
     this.buildSolids();
     this.buildBushes();
     this.buildHarvest();
+    this.buildDens();
     // Eau profonde (pas une berge) par zone : là où peuvent apparaître les créatures aquatiques.
     for (let z = 0; z <= ZONES; z++) this.deepWater.push([]);
     for (let j = 2; j < N - 2; j += 2) {
@@ -441,7 +446,7 @@ export class WorldMap {
         const f = fbm(x / 700, y / 700, this.seed + 55, 3);
         const c = this.cellOf(x, y), edge = this.cdist[c] > this.halfWidth(this.arc[c]) - 170; // lisière : plus dense
         const forest = (f > 0.56 ? 4.5 : f > 0.48 ? 1.2 : 0.15) * (edge ? 3 : 1);
-        const treeP = [0, 0.1, 0.2, 0.09, 0.05, 0.07][z] * forest;
+        const treeP = [0, 0.1, 0.2, 0.09, 0.05, 0.07, 0.025][z] * forest; // désert : de rares cactus
         if (h >= treeP) continue; // les rochers ronds d'autrefois ont disparu : la pierre vient des rochers à casser
         if (this.pathDist(x, y) < 30) continue;
         const d: Decor = { kind: 0, x, y, zone: z };
@@ -502,6 +507,33 @@ export class WorldMap {
         if (s < VILLAGE_ARC) early++;
       }
     }
+  }
+
+  /** Tanières de suricates dans la Mer de sable (hasard à part), loin des chemins, de l'eau et les unes des autres. */
+  private buildDens() {
+    const rand = rng(this.seed ^ 0xde75);
+    const lo = 5 * ZONE_LEN + 400, hi = this.length - 400;
+    for (let tries = 0; tries < 3000 && this.dens.length < DENS && hi > lo; tries++) {
+      const s = lo + rand() * (hi - lo);
+      const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
+      const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 140);
+      const x = sx + n.x * off, y = sy + n.y * off;
+      if (this.zoneAt(x, y) !== 6 || this.blocked(x, y) || this.blocked(x + 40, y) || this.blocked(x - 40, y) || this.blocked(x, y + 30)) continue;
+      if (this.pathDist(x, y) < 90 || this.dens.some((d) => dist2(x, y, d.x, d.y) < 900 ** 2)) continue;
+      if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 400 ** 2) || this.ores.some((o) => dist2(x, y, o.x, o.y) < 120 ** 2)) continue;
+      if (this.bushes.some((b) => dist2(x, y, b.x, b.y) < 100 ** 2)) continue;
+      this.dens.push({ x, y });
+    }
+  }
+
+  /** Tanière la plus proche d'un point (-1 s'il n'y en a pas). */
+  denNear(x: number, y: number) {
+    let best = -1, bd = Infinity;
+    this.dens.forEach((d, i) => {
+      const k = dist2(x, y, d.x, d.y);
+      if (k < bd) [bd, best] = [k, i];
+    });
+    return best;
   }
 
   /** Porte (index) que franchit en avançant le déplacement de a vers b, ou -1. */
@@ -832,7 +864,8 @@ export class WorldMap {
   }
 
   /** Où l'on peut aller : à pied, tout sauf l'eau et les obstacles ; sur une monture nageuse, seulement l'eau. */
-  passable(x: number, y: number, swimming: boolean) {
+  passable(x: number, y: number, swimming: boolean, flying = false) {
+    if (flying) return this.caveAt(x, y) ? !this.blocked(x, y) : !this.isForest(x, y); // en vol : tout sauf la forêt du bord
     return swimming ? this.isWater(x, y) : !this.blocked(x, y);
   }
 }

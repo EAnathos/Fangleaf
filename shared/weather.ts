@@ -13,17 +13,36 @@ const RAIN_SLOT = 6 * 60_000; // le temps est tiré au sort par tranches de 6 mi
 const RAIN_CHANCE = 0.1; // … une sur dix est pluvieuse : une averse toutes les heures environ
 const RAIN_FADE = 50_000; // la pluie arrive et s'en va en 50 s
 
+// Tempêtes de sable (Mer de sable seulement) : tirées au sort à part, un peu plus souvent que la pluie.
+const STORM_SLOT = 5 * 60_000;
+const STORM_CHANCE = 0.14; // environ une toutes les 35 min
+const STORM_FADE = 40_000; // elle se lève et retombe en 40 s
+
 const smooth = (u: number) => u * u * (3 - 2 * u);
 
 export interface Sky {
   light: number; // 1 = plein jour, 0 = nuit noire
   dusk: number; // 0 à 1 : teinte chaude du crépuscule et de l'aube (au milieu de la transition)
   rain: number; // 0 = sec, 1 = grosse averse
+  storm: number; // tempête de sable (Mer de sable seulement) : 0 = calme, 1 = en plein dedans
 }
 
 /** Force de la pluie d'une tranche (0 si elle est sèche). */
 function slotRain(seed: number, k: number) {
   return hash2(k, 7, seed + 91) < RAIN_CHANCE ? 0.6 + hash2(k, 8, seed + 92) * 0.4 : 0;
+}
+
+/** Force d'une tempête de sable dans une tranche (0 : calme). */
+function slotStorm(seed: number, k: number) {
+  return hash2(k, 11, seed + 93) < STORM_CHANCE ? 0.75 + hash2(k, 12, seed + 94) * 0.25 : 0;
+}
+
+/** Valeur d'un tirage par tranches, en fondu enchaîné d'une tranche à l'autre (centré sur la frontière). */
+function slotted(now: number, len: number, fade: number, at: (k: number) => number) {
+  const k = Math.floor(now / len), u = now - k * len, cur = at(k);
+  if (u < fade / 2) return at(k - 1) + (cur - at(k - 1)) * smooth(u / fade + 0.5);
+  if (u > len - fade / 2) return cur + (at(k + 1) - cur) * smooth((u - len) / fade + 0.5);
+  return cur;
 }
 
 export function sky(seed: number, now: number): Sky {
@@ -35,10 +54,7 @@ export function sky(seed: number, now: number): Sky {
   else if (p >= 1 - TWILIGHT) light = smooth((p - (1 - TWILIGHT)) / TWILIGHT);
   const dusk = light > 0 && light < 1 ? 1 - Math.abs(light * 2 - 1) : 0;
 
-  // pluie : fondu enchaîné d'une tranche à l'autre, centré sur la frontière
-  const k = Math.floor(now / RAIN_SLOT), u = now - k * RAIN_SLOT, cur = slotRain(seed, k);
-  let rain = cur;
-  if (u < RAIN_FADE / 2) rain = slotRain(seed, k - 1) + (cur - slotRain(seed, k - 1)) * smooth(u / RAIN_FADE + 0.5);
-  else if (u > RAIN_SLOT - RAIN_FADE / 2) rain = cur + (slotRain(seed, k + 1) - cur) * smooth((u - RAIN_SLOT) / RAIN_FADE + 0.5);
-  return { light, dusk, rain: clamp(rain, 0, 1) };
+  const rain = slotted(now, RAIN_SLOT, RAIN_FADE, (k) => slotRain(seed, k));
+  const storm = slotted(now, STORM_SLOT, STORM_FADE, (k) => slotStorm(seed, k));
+  return { light, dusk, rain: clamp(rain, 0, 1), storm: clamp(storm, 0, 1) };
 }

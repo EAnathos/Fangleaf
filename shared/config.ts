@@ -5,7 +5,7 @@ export const DT = 1 / TICK_HZ;
 
 export const MAX_PLAYERS = 3;
 export const MAX_VILLAGES = 3; // villages par compte (on choisit le sien au lobby)
-export const WORLD_HALF = 6000; // carte de -6000 à 6000 : un long couloir sinueux dans la forêt (voir worldmap.ts)
+export const WORLD_HALF = 7200; // carte de -7200 à 7200 : un long couloir sinueux dans la forêt (voir worldmap.ts)
 export const VILLAGE_R = 360;
 export const VIEW_R = 1250; // rayon d'intérêt : unités envoyées à chaque joueur
 
@@ -45,6 +45,7 @@ export const HALL: (Cost & { unlock: string })[] = [
   { gold: 500, wood: 160, stone: 140, unlock: 'Porte des Landes (zone 3)' },
   { gold: 1500, wood: 350, stone: 300, unlock: 'Porte des Ruines moussues (zone 4)' },
   { gold: 3000, wood: 600, stone: 550, unlock: 'Porte des Lacs brumeux (zone 5)' },
+  { gold: 6000, wood: 1000, stone: 900, unlock: 'Porte de la Mer de sable (zone 6)' },
 ];
 export const HALL_MAX = HALL.length;
 /** Géants d'une zone (index d'espèce) : il faut tous les vaincre pour ouvrir la porte de la zone suivante. */
@@ -69,7 +70,7 @@ export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[];
 export const monsterBuyPrice = (species: number) => SPECIES[species].gold * 12;
 export const monsterSellPrice = (species: number) => SPECIES[species].gold * 4;
 // Grottes : fermées au départ, débloquées pour tout le village contre de l'or, bien plus cher dans les dernières zones.
-const CAVE_UNLOCK = [150, 300, 450, 1500, 3000];
+const CAVE_UNLOCK = [150, 300, 450, 1500, 3000, 6000];
 export const caveUnlockCost = (zone: number) => CAVE_UNLOCK[zone - 1] ?? 150 * zone;
 // Camps : un emplacement au bout de la zone 4, établi par n'importe quel membre du village contre de l'or.
 export const CAMP_COST = 2000;
@@ -184,12 +185,15 @@ export type Gear = 'weapon' | 'armor' | 'torch' | 'boots';
 // (1 essence par monstre de l'espèce vaincu), puis on le renforce, de plus en plus cher.
 // Montures : certains Alphas éveillés se chevauchent. Vitesse multipliée, et la monture encaisse
 // une partie des coups (elle peut tomber : on est désarçonné, elle ressuscite comme tout Alpha).
-export const MOUNTS: Record<string, number> = { wolf: 1.6, boar: 1.4, bear: 1.25, snail: 0.6, serpent: 1.5 }; // l'escargot se monte, mais ralentit
+export const MOUNTS: Record<string, number> = { wolf: 1.6, boar: 1.4, bear: 1.25, snail: 0.6, serpent: 1.5, vulture: 1.5 }; // l'escargot se monte, mais ralentit
 /**
  * Montures nageuses (le serpent) : on ne va qu'en eau avec elles. On embarque près de l'eau (à SHORE_R au plus) :
  * on est posé sur l'eau. On ne descend que près d'une rive (posé sur la terre ferme). Si la monture tombe sur l'eau, on se noie.
  */
 export const SWIM_MOUNTS = new Set(['serpent']);
+/** Montures volantes (le vautour) : on survole l'eau, les rochers et les arbres, pas la forêt qui borde le couloir. */
+export const FLY_MOUNTS = new Set(['vulture']);
+export const flyMount = (species: number) => FLY_MOUNTS.has(SPECIES_KEYS[species]);
 export const SHORE_R = 140;
 export const swimMount = (species: number) => SWIM_MOUNTS.has(SPECIES_KEYS[species]);
 export const MOUNT_SHARE = 0.75; // part des dégâts reçus par la monture
@@ -199,10 +203,11 @@ export const mountSpeedOf = (species: number) => MOUNTS[SPECIES_KEYS[species]] ?
 export const ALPHA_LVL_MAX = 10;
 /**
  * Pouvoirs de certains Alphas, tant qu'ils sont sur le terrain et debout :
- * l'escargot protège son dompteur (dégâts reçus réduits, en plus de l'armure),
+ * l'escargot protège son dompteur (dégâts reçus réduits, en plus de l'armure), le suricate l'encourage (dégâts infligés accrus),
  * le lièvre soigne un peu son dompteur et la meute autour de lui, toutes les ALPHA_HEAL_S secondes.
  */
-export const ALPHA_PERKS: Record<string, { kind: 'guard' | 'heal'; base: number; per: number }> = {
+export const ALPHA_PERKS: Record<string, { kind: 'guard' | 'heal' | 'rally'; base: number; per: number }> = {
+  meerkat: { kind: 'rally', base: 0.08, per: 0.01 }, // +8 % de dégâts infligés par son dompteur, +1 % par niveau
   snail: { kind: 'guard', base: 0.08, per: 0.01 }, // −8 % de dégâts reçus, +1 % par niveau
   hare: { kind: 'heal', base: 0.03, per: 0.003 }, // 3 % des PV max, +0,3 % par niveau
 };
@@ -290,6 +295,9 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   toad_king: [{ kind: 'mortar', cd: 5, n: 5 }, { kind: 'leap', cd: 7 }],
   mist_hydra: [{ kind: 'volley', cd: 3.5, n: 3, shot: 'jet' }, { kind: 'slam', cd: 8 }],
   titan_crab: [{ kind: 'charge', cd: 5 }, { kind: 'slam', cd: 7, power: 3 }, { kind: 'enrage', below: 0.3 }],
+  sand_queen: [{ kind: 'blink', cd: 5 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'slam', cd: 8 }], // elle plonge et resurgit sous sa cible
+  vulture_king: [{ kind: 'leap', cd: 5 }, { kind: 'mortar', cd: 7, n: 4 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // piqués, pluie d'ossements, ses vautours
+  moon_jackal: [{ kind: 'charge', cd: 4 }, { kind: 'summon', cd: 9, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
 };
 /** Coup ordinaire d'un géant : une seule cible (deux pour la reine des Gluants et l'ours), dégâts multipliés. */
 const BOSS_MELEE: Record<string, { targets: number; mult: number }> = { slime_queen: { targets: 2, mult: 1.3 }, colossus: { targets: 2, mult: 1.3 } };
@@ -329,6 +337,9 @@ export interface Species {
   amphibious?: boolean; // apprivoisé, il suit son dompteur dans l'eau (sauvage, il reste à terre)
   night?: boolean; // n'apparaît que la nuit (il s'envole au lever du jour)
   sleeps?: boolean; // sauvage, il dort la nuit : ni aggro ni errance, jusqu'à ce qu'on le frappe
+  burrows?: boolean; // sauvage, il file sous le sable (intouchable) et surgit sous sa cible (cercle annoncé), puis reste exposé
+  flies?: boolean; // sauvage, il tourne au-dessus de sa cible (hors d'atteinte), pique là où tombe son ombre (cercle annoncé), puis reste un moment au sol
+  shy?: boolean; // gibier craintif : un dompteur sans fruit en main ou un vautour approche, et la colonie court se cacher dans sa tanière
   passive?: boolean; // sauvage, il n'attaque jamais : il broute les buissons à fruits et s'enfuit quand on le frappe
 }
 
@@ -382,6 +393,15 @@ export const SPECIES: Species[] = [
   { key: 'snail', name: 'Escargot des mousses', color: '#C99A5B', r: 12, hp: 22, dmg: 1, speed: 32, atkCd: 1.4, gold: 2, zone: 1, population: 20, pack: [1, 2], passive: true },
   // Gibier de nuit : il n'apparaît qu'une fois la nuit tombée, et s'en va au lever du jour.
   { key: 'firefly', name: 'Luciole', color: '#E4F07A', r: 11, hp: 20, dmg: 1, speed: 70, atkCd: 1.4, gold: 4, zone: 2, population: 24, pack: [3, 5], passive: true, night: true },
+  // Zone 6 (Mer de sable) : suricates craintifs autour de leurs tanières, vers fouisseurs, vautours ; chacals fantômes la nuit.
+  { key: 'meerkat', name: 'Suricate', color: '#C9A06A', r: 12, hp: 60, dmg: 3, speed: 125, atkCd: 1.2, gold: 8, zone: 6, population: 26, pack: [3, 6], passive: true, shy: true },
+  { key: 'sandworm', name: 'Ver des sables', color: '#B98A5A', r: 26, hp: 2600, dmg: 120, speed: 115, atkCd: 1.6, gold: 100, zone: 6, population: 16, pack: [1, 1], burrows: true },
+  { key: 'vulture', name: 'Vautour', color: '#4A3A30', r: 21, hp: 1700, dmg: 110, speed: 150, atkCd: 1.1, gold: 90, zone: 6, population: 18, pack: [1, 2], flies: true },
+  { key: 'jackal', name: 'Chacal fantôme', color: '#CDBB98', r: 18, hp: 1400, dmg: 90, speed: 175, atkCd: 0.9, gold: 80, zone: 6, population: 24, pack: [4, 6], night: true },
+  // Géants de la Mer de sable : une grotte chacun.
+  { key: 'sand_queen', name: 'Reine des sables', color: '#A87A4A', r: 66, hp: 62000, dmg: 230, speed: 190, atkCd: 1.4, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Dunebouche, la Reine des Sables', sprite: 'sandworm', base: 'sandworm' },
+  { key: 'vulture_king', name: 'Roi-Vautour', color: '#3A2C24', r: 60, hp: 54000, dmg: 215, speed: 200, atkCd: 1.2, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Charognard, le Roi des Cieux', sprite: 'vulture', base: 'vulture' },
+  { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 50000, dmg: 205, speed: 220, atkCd: 0.9, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Anubeth, le Chacal de la Lune', sprite: 'jackal', base: 'jackal' },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);
@@ -390,9 +410,9 @@ export const SPECIES_KEYS = SPECIES.map((s) => s.key);
 export const SPECIES_BY_ZONE = SPECIES.map((_, i) => i).sort((a, b) => SPECIES[a].zone - SPECIES[b].zone || a - b);
 
 // Le monde est un long couloir (voir worldmap.ts) découpé en ZONES zones successives de PATH_LEN / ZONES.
-export const PATH_LEN = 25000;
-export const ZONES = 5;
-export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux'];
+export const PATH_LEN = 30000;
+export const ZONES = 6;
+export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable'];
 export const SPAWN_SAFE_R = 420; // pas de monstre qui apparaît près du camp de départ
 
 // Buissons à fruits : le gibier passif vient y manger ; les fruits repoussent ensuite.

@@ -125,6 +125,7 @@ export const UNIT_FLAG_MOUNTED = 2; // Alpha chevauché : dessiné sous son domp
 export const UNIT_FLAG_LEGEND = 4; // Alpha légendaire
 export const UNIT_FLAG_DORMANT = 8; // géant qui attend qu'on vienne lui parler (ni cible ni menace)
 export const UNIT_FLAG_ASLEEP = 16; // bête sauvage qui dort la nuit (sanglier) : on peut la surprendre
+export const UNIT_FLAG_HIDDEN = 32; // sous le sable (ver qui file, suricate au terrier) : intouchable, on ne voit qu'une bosse ou un trou
 
 export type GameEvent =
   | { e: 'hit'; a: number; b: number; dmg: number; m?: 1 } // m : coup au corps à corps

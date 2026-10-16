@@ -28,7 +28,7 @@ function load(): AudioSettings {
   }
 }
 
-export type Ambience = 'village' | 'camp' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5' | 'cave' | 'boss'; // boss : grotte, géant réveillé
+export type Ambience = 'village' | 'camp' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5' | 'zone6' | 'cave' | 'boss'; // boss : grotte, géant réveillé
 export type { Sfx } from './sfx.ts';
 
 /** Une ambiance en cours : son volume (pour le fondu) et de quoi tout arrêter. */
@@ -45,6 +45,8 @@ class Sound {
   private place?: GainNode; // ambiance du lieu, baissée sous la pluie
   private rainSound?: { gain: GainNode; stop: () => void };
   private rainLevel = 0;
+  private stormSound?: { gain: GainNode; stop: () => void };
+  private stormLevel = 0;
   private sfxBus?: GainNode;
   private noise?: AudioBuffer;
   private current?: Running;
@@ -143,6 +145,43 @@ class Sound {
       const r = this.rainSound;
       this.rainSound = undefined;
       setTimeout(() => r.stop(), 4000);
+    }
+  }
+
+  /** Tempête de sable (0 à 1) : souffle grave et sifflement du vent, par-dessus l'ambiance qui s'efface presque. */
+  storm(level: number) {
+    if (!this.ctx || level === this.stormLevel || (level > 0 && Math.abs(level - this.stormLevel) < 0.01)) return;
+    this.stormLevel = level;
+    const ctx = this.ctx, t = ctx.currentTime;
+    if (level > 0 && !this.stormSound) {
+      const gain = ctx.createGain(), stops: (() => void)[] = [];
+      gain.gain.value = 0;
+      gain.connect(this.music!);
+      for (const [type, freq, q, vol, rate] of [['bandpass', 420, 0.6, 0.9, 0.6], ['bandpass', 2400, 3, 0.25, 1]] as const) {
+        const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), lfo = ctx.createOscillator(), depth = ctx.createGain();
+        src.buffer = this.noise!;
+        src.loop = true;
+        src.playbackRate.value = rate;
+        f.type = type;
+        f.frequency.value = freq;
+        f.Q.value = q;
+        g.gain.value = vol;
+        lfo.frequency.value = 0.15 + Math.random() * 0.1; // rafales
+        depth.gain.value = freq * 0.35;
+        lfo.connect(depth).connect(f.frequency);
+        src.connect(f).connect(g).connect(gain);
+        src.start(t, Math.random() * 2);
+        lfo.start(t);
+        stops.push(() => src.stop(), () => lfo.stop());
+      }
+      this.stormSound = { gain, stop: () => stops.forEach((s) => s()) };
+    }
+    if (this.stormSound) this.stormSound.gain.gain.setTargetAtTime(level * 0.3, t, 1);
+    this.place!.gain.setTargetAtTime(1 - Math.max(level * 0.7, this.rainLevel * 0.4), t, 1);
+    if (level === 0 && this.stormSound) {
+      const s = this.stormSound;
+      this.stormSound = undefined;
+      setTimeout(() => s.stop(), 5000);
     }
   }
 
@@ -268,6 +307,13 @@ class Sound {
       pad([164.8, 220, 246.9], 'sine', 800, 0.03);
       bed('lowpass', 380, 0.7, 0.05, 120); // clapotis des lacs
       every(1.5, 4, drop);
+    } else if (name === 'zone6') {
+      pad([146.8, 196, 233.1], 'sine', 700, 0.025);
+      bed('bandpass', 1100, 0.5, 0.05, 700); // vent qui siffle sur les dunes
+      every(4, 9, () => tone(2600, 1700, 0.5, 0.03, 'sine')); // cri lointain d'un rapace
+      every(2, 5, () => {
+        for (let k = 0; k < 3; k++) tone(5200, 5000, 0.03, 0.015, 'square', k * 0.05); // sable qui crépite
+      });
     } else {
       pad([55, 82.4], 'sawtooth', 220, name === 'boss' ? 0.02 : 0.03); // grotte : grondement sourd (combat : sous la musique)
       bed('lowpass', 250, 0.7, 0.025);
