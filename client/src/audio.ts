@@ -3,6 +3,10 @@
 //   feu, et petits événements au hasard (oiseaux, chouette, grillons, carillons, gouttes).
 // - Bruitages courts déclenchés par les événements du jeu (coups, tirs, récolte, apprivoisement, coffre…).
 // Le navigateur n'autorise le son qu'après un geste du joueur : tout démarre au premier clic ou à la première touche.
+// Les recettes des bruitages sont dans sfx.ts, les musiques des lieux dans music.ts.
+
+import { SFX, type Sfx, type Synth } from './sfx.ts';
+import { MUSIC, playScore } from './music.ts';
 
 export interface AudioSettings {
   master: number; // 0 à 1
@@ -24,10 +28,8 @@ function load(): AudioSettings {
   }
 }
 
-export type Ambience = 'village' | 'camp' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5' | 'cave';
-export type Sfx =
-  | 'hit' | 'hurt' | 'swing' | 'arrow' | 'orb' | 'pick' | 'chop' | 'coin' | 'chest' | 'tame' | 'essence'
-  | 'roar' | 'boom' | 'death' | 'fanfare' | 'blip' | 'pop' | 'thunk' | 'chime';
+export type Ambience = 'village' | 'camp' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5' | 'cave' | 'boss'; // boss : grotte, géant réveillé
+export type { Sfx } from './sfx.ts';
 
 /** Une ambiance en cours : son volume (pour le fondu) et de quoi tout arrêter. */
 interface Running {
@@ -228,10 +230,13 @@ class Sound {
       bed('lowpass', 380, 0.7, 0.05, 120); // clapotis des lacs
       every(1.5, 4, drop);
     } else {
-      pad([55, 82.4], 'sawtooth', 220, 0.03); // grotte : grondement sourd
+      pad([55, 82.4], 'sawtooth', 220, name === 'boss' ? 0.02 : 0.03); // grotte : grondement sourd (combat : sous la musique)
       bed('lowpass', 250, 0.7, 0.025);
       every(1, 3, drop);
     }
+    // musique du lieu, par-dessus l'ambiance
+    const score = MUSIC[name]?.score;
+    if (score) stops.push(playScore(ctx, out, this.noise!, score));
     return {
       gain: out,
       stop: () => {
@@ -251,112 +256,106 @@ class Sound {
   /** Joue un bruitage (vol : 0 à 1, pour les sons lointains). Limité en rafale pour ne pas saturer. */
   play(name: Sfx, vol = 1) {
     if (!this.ctx || this.settings.muted || vol <= 0.02) return;
-    const now = this.ctx.currentTime, gap = name === 'hit' || name === 'coin' || name === 'blip' ? 0.06 : 0.03;
+    const now = this.ctx.currentTime, gap = name === 'blip' ? 0.06 : 0.03;
     if (now - (this.last.get(name) ?? -1) < gap) return;
     this.last.set(name, now);
     const ctx = this.ctx, out = ctx.createGain();
     out.gain.value = vol;
     out.connect(this.sfxBus!);
-    const tone = (freq: number, to: number, dur: number, v: number, type: OscillatorType = 'sine', delay = 0) => {
-      const t = now + delay, o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = type;
-      o.frequency.setValueAtTime(freq, t);
-      o.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + dur);
+    const env = (g: GainNode, t: number, v: number, dur: number) => {
       g.gain.setValueAtTime(0.0001, t);
       g.gain.exponentialRampToValueAtTime(v, t + 0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      o.connect(g).connect(out);
-      o.start(t);
-      o.stop(t + dur + 0.05);
     };
-    const hiss = (type: BiquadFilterType, freq: number, dur: number, v: number, to = freq, delay = 0) => {
-      const t = now + delay, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      src.buffer = this.noise!;
-      f.type = type;
-      f.frequency.setValueAtTime(freq, t);
-      f.frequency.exponentialRampToValueAtTime(to, t + dur);
-      g.gain.setValueAtTime(v, t);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      src.connect(f).connect(g).connect(out);
-      src.start(t, Math.random());
-      src.stop(t + dur + 0.05);
+    const synth: Synth = {
+      tone: (freq, to, dur, v, type = 'sine', delay = 0) => {
+        const t = now + delay, o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, t);
+        o.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + dur);
+        env(g, t, v, dur);
+        o.connect(g).connect(out);
+        o.start(t);
+        o.stop(t + dur + 0.05);
+      },
+      hiss: (type, freq, dur, v, to = freq, delay = 0, q = 1) => {
+        const t = now + delay, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        src.buffer = this.noise!;
+        f.type = type;
+        f.Q.value = q;
+        f.frequency.setValueAtTime(freq, t);
+        f.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + dur);
+        g.gain.setValueAtTime(v, t);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        src.connect(f).connect(g).connect(out);
+        src.start(t, Math.random());
+        src.stop(t + dur + 0.05);
+      },
+      bell: (freq, dur, v, ratio = 2, index = 2, delay = 0) => {
+        // synthèse FM : un modulateur fait vibrer la porteuse, de moins en moins (timbre de cloche, de métal)
+        const t = now + delay, car = ctx.createOscillator(), mod = ctx.createOscillator(), depth = ctx.createGain(), g = ctx.createGain();
+        car.frequency.value = freq;
+        mod.frequency.value = freq * ratio;
+        depth.gain.setValueAtTime(freq * index, t);
+        depth.gain.exponentialRampToValueAtTime(Math.max(1, freq * index * 0.05), t + dur);
+        mod.connect(depth).connect(car.frequency);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(v, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        car.connect(g).connect(out);
+        for (const o of [car, mod]) {
+          o.start(t);
+          o.stop(t + dur + 0.05);
+        }
+      },
+      whoosh: (type, f0, f1, f2, dur, v, q = 2, delay = 0, peak = 0.45) => {
+        // souffle qui passe : il enfle jusqu'au milieu (peak : où, de 0 à 1) puis s'éteint, le filtre fait l'aller-retour
+        const t = now + delay, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain(), mid = t + dur * peak;
+        src.buffer = this.noise!;
+        f.type = type;
+        f.Q.value = q;
+        f.frequency.setValueAtTime(f0, t);
+        f.frequency.exponentialRampToValueAtTime(f1, mid);
+        f.frequency.exponentialRampToValueAtTime(Math.max(20, f2), t + dur);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(v, mid);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        src.connect(f).connect(g).connect(out);
+        src.start(t, Math.random());
+        src.stop(t + dur + 0.05);
+      },
+      horn: (freq, dur, v, c0, c1, delay = 0) => {
+        const t = now + delay, o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(freq, t);
+        o.frequency.linearRampToValueAtTime(freq * 0.985, t + dur);
+        f.type = 'lowpass';
+        f.Q.value = 1.5;
+        f.frequency.setValueAtTime(c0, t);
+        f.frequency.exponentialRampToValueAtTime(c1, t + dur * 0.35);
+        f.frequency.exponentialRampToValueAtTime(c0, t + dur);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(v, t + dur * 0.25);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(f).connect(g).connect(out);
+        o.start(t);
+        o.stop(t + dur + 0.05);
+      },
+      thump: (freq, to, dur, v, delay = 0) => {
+        // choc grave : la hauteur chute très vite, le volume aussi
+        const t = now + delay, o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.setValueAtTime(freq, t);
+        o.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + dur * 0.4);
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(v, t + 0.004);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+        o.connect(g).connect(out);
+        o.start(t);
+        o.stop(t + dur + 0.05);
+      },
     };
-    switch (name) {
-      case 'hit': // coup qui porte : choc sourd et claquement
-        tone(180, 70, 0.12, 0.35, 'triangle');
-        hiss('bandpass', 2500, 0.06, 0.25);
-        break;
-      case 'hurt': // on est touché : coup plus grave
-        tone(120, 50, 0.2, 0.4, 'sawtooth');
-        hiss('lowpass', 900, 0.12, 0.25);
-        break;
-      case 'swing':
-        hiss('bandpass', 900, 0.14, 0.25, 3000);
-        break;
-      case 'arrow':
-        hiss('bandpass', 3000, 0.18, 0.2, 1200);
-        tone(900, 500, 0.06, 0.08, 'triangle');
-        break;
-      case 'orb':
-        tone(500, 1100, 0.22, 0.15, 'sine');
-        tone(750, 1650, 0.22, 0.08, 'sine');
-        break;
-      case 'pick': // pioche sur la roche : tintement métallique
-        tone(2200, 2000, 0.12, 0.18, 'triangle');
-        tone(3300, 3100, 0.08, 0.08, 'sine');
-        hiss('highpass', 4000, 0.05, 0.15);
-        break;
-      case 'chop': // hache dans le bois : coup mat
-        tone(260, 120, 0.12, 0.35, 'triangle');
-        hiss('bandpass', 1200, 0.08, 0.2);
-        break;
-      case 'coin':
-        tone(1975.5, 1975.5, 0.12, 0.08);
-        tone(2637, 2637, 0.16, 0.06, 'sine', 0.05);
-        break;
-      case 'chest': // pluie de pièces
-        for (let k = 0; k < 7; k++) tone(1800 + Math.random() * 1400, 1700, 0.15, 0.08, 'sine', k * 0.06);
-        tone(523.3, 523.3, 0.3, 0.1, 'triangle');
-        tone(659.3, 659.3, 0.3, 0.1, 'triangle', 0.1);
-        tone(784, 784, 0.45, 0.1, 'triangle', 0.2);
-        break;
-      case 'tame': // apprivoisé : arpège joyeux
-        [523.3, 659.3, 784, 1046.5].forEach((f, k) => tone(f, f, 0.25, 0.12, 'triangle', k * 0.08));
-        break;
-      case 'essence':
-        [1318.5, 1760, 2093].forEach((f, k) => tone(f, f * 1.01, 0.4, 0.06, 'sine', k * 0.07));
-        break;
-      case 'roar': // un géant se réveille
-        tone(110, 55, 1.0, 0.35, 'sawtooth');
-        tone(82, 45, 1.1, 0.3, 'square');
-        hiss('lowpass', 600, 0.9, 0.3, 200);
-        break;
-      case 'boom':
-        tone(90, 35, 0.5, 0.45, 'sine');
-        hiss('lowpass', 1200, 0.4, 0.35, 150);
-        break;
-      case 'death':
-        [392, 329.6, 261.6, 196].forEach((f, k) => tone(f, f * 0.97, 0.35, 0.12, 'triangle', k * 0.16));
-        break;
-      case 'fanfare': // amélioration, construction, niveau
-        [523.3, 659.3, 784].forEach((f, k) => tone(f, f, 0.18, 0.1, 'square', k * 0.09));
-        tone(1046.5, 1046.5, 0.5, 0.1, 'square', 0.27);
-        break;
-      case 'blip': // message du chat
-        tone(880, 1200, 0.07, 0.07);
-        break;
-      case 'pop': // cueillette
-        tone(600, 1100, 0.07, 0.12);
-        break;
-      case 'thunk': // dépôt à l'entrepôt
-        tone(200, 110, 0.15, 0.3, 'triangle');
-        tone(160, 90, 0.15, 0.25, 'triangle', 0.12);
-        break;
-      case 'chime': // relevé, réveil d'un Alpha
-        [784, 1046.5, 1318.5].forEach((f, k) => tone(f, f, 0.5, 0.07, 'sine', k * 0.1));
-        break;
-    }
-    setTimeout(() => out.disconnect(), 3000);
+    SFX[name].play(synth);
+    setTimeout(() => out.disconnect(), 5000);
   }
 }
 

@@ -252,11 +252,13 @@ export class Game {
       : Math.hypot(x - spawn.x, y - spawn.y) < 260 ? 'camp'
       : site >= 0 ? `site${site}${this.hud.camps.includes(site) ? '+' : ''}`
       : `zone${this.map.zoneAt(x, y)}`;
+    // ambiance sonore du lieu (un emplacement de camp pas encore établi garde celle de sa zone) ; dans une grotte dont
+    // le géant est réveillé, la musique de combat
+    const fight = !!cave && (this.net.latest?.units ?? []).some((u) => SPECIES[u[1]].boss && !u[6] && !(u[2] & UNIT_FLAG_DORMANT) && this.map.caveAt(u[3], u[4])?.id === cave.id);
+    sound.ambience(cave ? (fight ? 'boss' : 'cave') : area === 'village' ? 'village' : area === 'camp' || area.endsWith('+') ? 'camp' : `zone${this.map.zoneAt(x, y)}` as Ambience);
     if (area === this.area) return;
     const first = this.area === '';
     this.area = area;
-    // ambiance sonore du lieu (un emplacement de camp pas encore établi garde celle de sa zone)
-    sound.ambience(cave ? 'cave' : area === 'village' ? 'village' : area === 'camp' || area.endsWith('+') ? 'camp' : `zone${this.map.zoneAt(x, y)}` as Ambience);
     if (area === 'camp') this.hud.banner('Camp de départ', first ? 'Le village t\'attend au bout du chemin' : 'De retour au camp');
     else if (area === 'village') this.hud.banner('Village', '');
     else if (area.startsWith('site')) {
@@ -487,18 +489,12 @@ export class Game {
   }
 
   /** Bruitage d'un événement : plein volume s'il nous concerne, atténué avec la distance sinon. */
-  private sfxFor(e: GameEvent, players: PlayerState[]) {
+  private sfxFor(e: GameEvent) {
     const near = (x: number, y: number) => Math.max(0, 1 - Math.hypot(x - this.me.x, y - this.me.y) / 900);
-    const at = (id: number) => {
-      const p = this.posOf(id, players);
-      return p ? near(p.x, p.y) : 0;
-    };
     const me = this.myId;
     switch (e.e) {
-      case 'hit':
+      case 'hit': // (un coup qui porte n'a pas de son : seul celui qu'on reçoit s'entend)
         if (e.b === me) sound.play('hurt');
-        else if (e.a === me) sound.play('hit');
-        else sound.play('hit', at(e.b) * 0.4);
         break;
       case 'shot':
         sound.play(e.cls === 'archer' ? 'arrow' : 'orb', e.by === me ? 1 : near(e.x, e.y) * 0.6);
@@ -508,18 +504,8 @@ export class Game {
         if (o) sound.play(o.res === 'wood' ? 'chop' : 'pick', e.by === me ? 1 : near(o.x, o.y) * 0.6);
         break;
       }
-      case 'tame':
-        sound.play('tame', e.by === me ? 1 : at(e.id) * 0.6);
-        break;
-      case 'gold':
-        if (e.to === me) sound.play('coin', 0.6);
-        break;
       case 'chest':
         if (e.to === me) sound.play('chest');
-        break;
-      case 'essence':
-      case 'soul':
-        if (e.to === me) sound.play('essence');
         break;
       case 'challenge':
         sound.play('roar');
@@ -555,7 +541,7 @@ export class Game {
   }
 
   private onEvent(e: GameEvent, players: PlayerState[]) {
-    this.sfxFor(e, players);
+    this.sfxFor(e);
     const name = (id: number) => players.find((p) => p.id === id)?.name ?? '?';
     switch (e.e) {
       case 'hit': {
