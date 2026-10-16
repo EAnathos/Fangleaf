@@ -1147,7 +1147,6 @@ export class Hud {
     ctx.arc(m(spawn.x), m(spawn.y), 6 * dpr, 0, Math.PI * 2);
     ctx.stroke();
     this.drawCaves(ctx, m, 8 * dpr);
-    this.drawGates(ctx, m, 3 * dpr);
     this.drawCamps(ctx, m, 7 * dpr);
     this.star(ctx, m(village.x), m(village.y), 11 * dpr, dpr);
     for (const p of players) {
@@ -1194,21 +1193,6 @@ export class Hud {
     }
   }
 
-  /** Portes des zones repérées : trait en travers du couloir, rouge si fermée, vert si ouverte. */
-  private drawGates(ctx: CanvasRenderingContext2D, m: (v: number) => number, w: number) {
-    this.map.gates.forEach((s, k) => {
-      const c = this.map.spineAt(s), n = this.map.normalAt(s), half = this.map.halfWidth(s);
-      if (!this.fog.isExplored(c.x, c.y)) return;
-      ctx.strokeStyle = gateOpen(k, this.hall, this.beaten) ? '#7FCB5B' : '#E8693F';
-      ctx.lineWidth = w;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(m(c.x - n.x * half), m(c.y - n.y * half));
-      ctx.lineTo(m(c.x + n.x * half), m(c.y + n.y * half));
-      ctx.stroke();
-    });
-  }
-
   /** Emplacements de camp repérés : cercle (plein et doré une fois établi). */
   private drawCamps(ctx: CanvasRenderingContext2D, m: (v: number) => number, size: number) {
     this.map.sites.forEach((c, i) => {
@@ -1253,7 +1237,6 @@ export class Hud {
     ctx.arc(m(spawn.x), m(spawn.y), 3, 0, Math.PI * 2);
     ctx.stroke();
     this.drawCaves(ctx, m, 4);
-    this.drawGates(ctx, m, 2);
     this.drawCamps(ctx, m, 3.5);
     this.star(ctx, m(village.x), m(village.y), 6.5, 1);
 

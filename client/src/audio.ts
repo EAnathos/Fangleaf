@@ -28,7 +28,7 @@ function load(): AudioSettings {
   }
 }
 
-export type Ambience = 'village' | 'camp' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5' | 'zone6' | 'cave' | 'boss'; // boss : grotte, géant réveillé
+export type Ambience = 'village' | 'camp' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5' | 'zone6' | 'zone7' | 'cave' | 'boss'; // boss : grotte, géant réveillé
 export type { Sfx } from './sfx.ts';
 
 /** Une ambiance en cours : son volume (pour le fondu) et de quoi tout arrêter. */
@@ -307,6 +307,13 @@ class Sound {
       pad([164.8, 220, 246.9], 'sine', 800, 0.03);
       bed('lowpass', 380, 0.7, 0.05, 120); // clapotis des lacs
       every(1.5, 4, drop);
+    } else if (name === 'zone7') {
+      pad([261.6, 329.6, 392], 'sine', 1200, 0.025);
+      bed('lowpass', 420, 0.6, 0.03, 160); // ressac lointain
+      every(3, 7, bird);
+      every(6, 12, () => {
+        for (const [f, d] of [[1046.5, 0], [1318.5, 0.18], [1568, 0.36]] as const) tone(f, f, 0.9, 0.025, 'sine', d); // carillon
+      });
     } else if (name === 'zone6') {
       pad([146.8, 196, 233.1], 'sine', 700, 0.025);
       bed('bandpass', 1100, 0.5, 0.05, 700); // vent qui siffle sur les dunes

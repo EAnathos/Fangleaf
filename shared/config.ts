@@ -5,7 +5,7 @@ export const DT = 1 / TICK_HZ;
 
 export const MAX_PLAYERS = 3;
 export const MAX_VILLAGES = 3; // villages par compte (on choisit le sien au lobby)
-export const WORLD_HALF = 9600; // carte de -9600 à 9600 : une île au milieu de la mer (voir worldmap.ts)
+export const WORLD_HALF = 10800; // carte de -10800 à 10800 : une île au milieu de la mer (voir worldmap.ts)
 export const VILLAGE_R = 360;
 export const VIEW_R = 1250; // rayon d'intérêt : unités envoyées à chaque joueur
 
@@ -52,6 +52,7 @@ export const HALL: (Cost & { unlock: string })[] = [
   { gold: 1500, wood: 350, stone: 300, unlock: 'Porte des Ruines moussues (zone 4)' },
   { gold: 3000, wood: 600, stone: 550, unlock: 'Porte des Lacs brumeux (zone 5)' },
   { gold: 6000, wood: 1000, stone: 900, unlock: 'Porte de la Mer de sable (zone 6)' },
+  { gold: 10000, wood: 1500, stone: 1400, unlock: 'Porte du Havre paisible (zone 7)' },
 ];
 export const HALL_MAX = HALL.length;
 /** Géants d'une zone (index d'espèce) : il faut tous les vaincre pour ouvrir la porte de la zone suivante. */
@@ -76,7 +77,7 @@ export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[];
 export const monsterBuyPrice = (species: number) => SPECIES[species].gold * 12;
 export const monsterSellPrice = (species: number) => SPECIES[species].gold * 4;
 // Grottes : fermées au départ, débloquées pour tout le village contre de l'or, bien plus cher dans les dernières zones.
-const CAVE_UNLOCK = [150, 300, 450, 1500, 3000, 6000];
+const CAVE_UNLOCK = [150, 300, 450, 1500, 3000, 6000, 6000];
 export const caveUnlockCost = (zone: number) => CAVE_UNLOCK[zone - 1] ?? 150 * zone;
 // Camps : un emplacement au bout de la zone 4, établi par n'importe quel membre du village contre de l'or.
 export const CAMP_COST = 2000;
@@ -416,8 +417,8 @@ export const SPECIES_KEYS = SPECIES.map((s) => s.key);
 export const SPECIES_BY_ZONE = SPECIES.map((_, i) => i).sort((a, b) => SPECIES[a].zone - SPECIES[b].zone || a - b);
 
 // Le monde est une île (voir worldmap.ts) découpée en ZONES zones successives, de plus en plus loin de la plage d'arrivée.
-export const ZONES = 6;
-export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable'];
+export const ZONES = 7; // la dernière (Havre paisible) n'a ni monstre ni grotte : le bout du voyage
+export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable', 'Havre paisible'];
 export const SPAWN_SAFE_R = 420; // pas de monstre qui apparaît près de la plage d'arrivée
 
 // Buissons à fruits : le gibier passif vient y manger ; les fruits repoussent ensuite.

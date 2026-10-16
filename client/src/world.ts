@@ -16,7 +16,9 @@ const TAU = Math.PI * 2;
 export const SEA_DEEP = [24, 64, 92];
 const SEA_SHALLOW_COL = [52, 138, 156];
 const BEACH_SAND = [222, 202, 150];
-export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76], [204, 172, 114]];
+export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76], [204, 172, 114], [86, 132, 72]];
+const STEPPE = [124, 140, 78]; // lisière verte entre le sable du désert et la mer
+const COAST_GREEN = 700; // largeur de cette lisière
 const PATH = [110, 97, 66];
 const VILLAGE_GROUND = [79, 101, 63]; // herbe de la place, tondue
 
@@ -59,8 +61,32 @@ export function groundColor(map: WorldMap, x: number, y: number) {
   const m = map.zoneMix(x, y);
   let col = ZONE_GROUND[m.z0];
   if (m.t) col = lerp3(col, ZONE_GROUND[m.z1], Math.min(1, Math.max(0, m.t + (fbm(x / 240, y / 240, map.seed + 73, 2) - 0.5) * 0.45)));
+  const g = coastGreen(map, x, y);
+  if (g) col = lerp3(col, STEPPE, g);
   const v = villageMix(map, x, y);
   return v ? lerp3(col, VILLAGE_GROUND, v) : col;
+}
+
+/**
+ * Lisière verte de la Mer de sable : au bord de l'eau (mer ou lac), le sable laisse place à une steppe (palmiers),
+ * pour que le désert ne touche jamais l'eau directement. 0 ailleurs, 1 au bord de l'eau, au bord irrégulier.
+ */
+export function coastGreen(map: WorldMap, x: number, y: number) {
+  const m = map.zoneMix(x, y), d = (m.z0 === 6 ? 1 - m.t : 0) + (m.z1 === 6 ? m.t : 0);
+  if (!d) return 0;
+  // distance à l'eau la plus proche : la mer, ou un lac (les lacs des Lacs brumeux voisins s'ouvrent sur l'océan)
+  let near = -map.shoreAt(x, y);
+  for (const r of [160, 320, 520]) {
+    if (r >= near) break;
+    for (let k = 0; k < 8; k++) {
+      if (map.isWater(x + Math.cos(k * 0.785) * r, y + Math.sin(k * 0.785) * r)) {
+        near = r;
+        break;
+      }
+    }
+  }
+  const u = Math.min(1, Math.max(0, 1 - near / COAST_GREEN + (fbm(x / 300, y / 300, map.seed + 76, 2) - 0.5) * 0.5));
+  return d * u * u * (3 - 2 * u);
 }
 
 /** Part de Mer de sable en un point (0 ailleurs, 1 en plein désert, en fondu à la frontière). */
@@ -206,17 +232,6 @@ export class World {
     }
     ctx.stroke();
 
-    // Pistes de terre (du village au bout de l'île) : une courbe lisse, bordée d'un liseré plus sombre.
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'round';
-    for (const pass of PATH_PASSES) {
-      ctx.strokeStyle = rgba(pass);
-      ctx.lineWidth = pass[4];
-      ctx.lineCap = pass[3] === 1 ? 'round' : 'butt';
-      ctx.beginPath();
-      for (const line of map.trails) line.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-      ctx.stroke();
-    }
     // Petit chemin de la plage au village : sable tassé, bordé de petits cailloux.
     // Bouts droits : le raccord avec la route du village, dans le même axe, est invisible.
     ctx.strokeStyle = 'rgba(214,196,150,0.9)';
@@ -360,7 +375,7 @@ export class World {
         continue;
       }
       const z = this.zone(x, y);
-      if (z === 6) {
+      if (z === 6 && coastGreen(this.map, x, y) < 0.45) {
         // Mer de sable : rides du vent, cailloux, touffes sèches, de rares ossements
         if (h < 0.35) {
           ctx.strokeStyle = 'rgba(150,112,64,0.35)';
@@ -420,7 +435,7 @@ export class World {
         ctx.moveTo(x, y); ctx.lineTo(x, y - 9);
         ctx.moveTo(x + 4, y); ctx.lineTo(x + 6, y - 7);
         ctx.stroke();
-      } else if (h < 0.62 && (z === 1 || z === 0)) {
+      } else if (h < (z === 7 ? 0.7 : 0.62) && (z === 1 || z === 0 || z === 7)) {
         ctx.fillStyle = ['#F0B64A', '#EEE7D7', '#D886C9'][Math.floor(h * 100) % 3];
         ctx.beginPath();
         ctx.arc(x, y, 2.5, 0, TAU);
@@ -458,9 +473,10 @@ export class World {
     const s = this.treeSize(x, y), h = hash2(x | 0, y | 0, this.seed + 9);
     const v = Math.floor(hash2(x | 0, y | 0, this.seed + 13) * TREE_VARIANTS);
     if (z === 6) {
-      // Mer de sable : cactus
+      // Mer de sable : cactus, palmiers sur la lisière verte de la côte
       if (shade) this.treeShadow(ctx, x, y);
-      const k = s / TREE_REF, img = this.treeLayer(`cactus|${v}`, () => (g) => this.drawCactus(g, v));
+      const palm = coastGreen(this.map, x, y) > 0.45;
+      const k = s / TREE_REF, img = palm ? this.treeLayer(`palm|${v}`, () => (g) => this.drawPalm(g, v)) : this.treeLayer(`cactus|${v}`, () => (g) => this.drawCactus(g, v));
       const a = ctx.globalAlpha;
       ctx.globalAlpha = a * fade;
       ctx.drawImage(img, x - TREE_BOX.l * k, y - TREE_BOX.t * k, TREE_BOX.w * k, TREE_BOX.h * k);
@@ -468,7 +484,7 @@ export class World {
       return;
     }
     const pine = (z === 2 && h < 0.55) || (z === 3 && h < 0.35);
-    const fruit = !pine && z <= 2 && h > 0.8;
+    const fruit = !pine && (z <= 2 || z === 7) && h > (z === 7 ? 0.55 : 0.8); // le Havre paisible est en fleurs
     if (shade) this.treeShadow(ctx, x, y);
     const k = s / TREE_REF;
     const trunk = this.treeLayer('trunk', () => this.drawTrunk);
@@ -539,6 +555,47 @@ export class World {
       ctx.fillStyle = '#E86F8A';
       ctx.beginPath();
       ctx.arc(0, -s * 1.5, 4, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  /** Palmier (lisière de la Mer de sable) : stipe courbe annelé, couronne de palmes, quelques dattes. Pied en (0, 0). */
+  private drawPalm(ctx: CanvasRenderingContext2D, v: number) {
+    const s = TREE_REF, lean = (v % 2 ? 1 : -1) * s * (0.25 + (v % 3) * 0.08), top = { x: lean, y: -s * 1.6 };
+    ctx.strokeStyle = '#7A5A3A';
+    ctx.lineWidth = s * 0.16;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, s * 0.4);
+    ctx.quadraticCurveTo(lean * 0.1, -s * 0.6, top.x, top.y);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(40,25,15,0.45)'; // anneaux du stipe
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let k = 1; k < 8; k++) {
+      const t = k / 8, px = lean * 0.1 * 2 * t * (1 - t) + top.x * t * t, py = s * 0.4 * (1 - t) * (1 - t) + -s * 0.6 * 2 * t * (1 - t) + top.y * t * t;
+      ctx.moveTo(px - s * 0.08, py);
+      ctx.lineTo(px + s * 0.08, py);
+    }
+    ctx.stroke();
+    // palmes : arcs feuillus qui retombent
+    for (let k = 0; k < 7; k++) {
+      const a = -Math.PI / 2 + (k - 3) * 0.55, len = s * (0.95 + (k % 2) * 0.2);
+      const ex = top.x + Math.cos(a) * len, ey = top.y + Math.sin(a) * len * 0.55 + len * 0.45;
+      const mx = top.x + Math.cos(a) * len * 0.55, my = top.y + Math.sin(a) * len * 0.5 - s * 0.15;
+      for (const [col, w] of [['#1E3A22', 9], [k % 2 ? '#3E7A3C' : '#4E8A44', 6]] as const) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(top.x, top.y);
+        ctx.quadraticCurveTo(mx, my, ex, ey);
+        ctx.stroke();
+      }
+    }
+    ctx.fillStyle = '#B8742E'; // dattes
+    for (const [dx, dy] of [[-4, 4], [3, 6], [0, 9]]) {
+      ctx.beginPath();
+      ctx.arc(top.x + dx, top.y + dy, 3, 0, TAU);
       ctx.fill();
     }
   }
@@ -629,7 +686,7 @@ export class World {
       ctx.stroke();
     } else if (fruit) {
       // quelques fruits ou fleurs sur certains arbres de la Lisière
-      ctx.fillStyle = z === 1 ? '#E8A43C' : '#D886C9';
+      ctx.fillStyle = z === 1 ? '#E8A43C' : z === 7 ? '#F4B6CF' : '#D886C9';
       for (let k = 0; k < 5; k++) {
         ctx.beginPath();
         ctx.arc(x + (hash2(k, 3, v) - 0.5) * s * 1.2, cy + (hash2(k, 7, v) - 0.5) * s * 0.9, 2.5, 0, TAU);
@@ -647,11 +704,11 @@ export class World {
 
     // Herbe du village : celle du sol (groundColor), qui se fond dans le biome autour de la palissade.
 
-    // Routes : même style que le chemin du camp. Celle de la porte du camp rejoint ce chemin ;
+    // Routes : celle de la porte côté plage rejoint le chemin de cailloux ;
     // les trois autres s'estompent doucement dans l'herbe au lieu de s'arrêter net.
     const v = this.map.village;
     const sideOf = (g: { x: number; y: number }) => (Math.round(Math.atan2(g.y - v.y, g.x - v.x) / (Math.PI / 2)) + 4) % 4;
-    const linked = [sideOf(this.map.gate), sideOf(this.map.trailGate)]; // portes où arrivent le chemin et la piste
+    const linked = [sideOf(this.map.gate)]; // porte où arrive le chemin de la plage
     ctx.lineCap = 'round';
     PATH_PASSES.forEach((pass, k) => {
       for (const side of [0, 1, 2, 3]) {

@@ -261,11 +261,11 @@ const noop = () => {};
     check(edgeSea, `graine ${seed} : une île, la mer profonde tout autour`);
     const site = m.sites[0], stone = m.stones[1];
     const reach = m.findPath(m.village.x, m.village.y + 40, stone.x, stone.y + 50, 500000);
-    const zones = [1, 2, 3, 4, 5, 6].map((z) => { const q = m.spineAt((m.zoneFrom(z) + m.zoneTo(z)) / 2); return m.zoneAt(q.x, q.y); }).join('');
+    const zones = [1, 2, 3, 4, 5, 6, 7].map((z) => { const q = m.spineAt((m.zoneFrom(z) + m.zoneTo(z)) / 2); return m.zoneAt(q.x, q.y); }).join('');
     const end = m.spineAt(m.length - 250);
     const reachEnd = m.findPath(stone.x, stone.y + 50, end.x, end.y, 600000);
-    check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '123456' && m.caves.length === 15,
-      `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de la Mer de sable atteignable, 15 grottes`);
+    check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '1234567' && m.caves.length === 15,
+      `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de l'île (Havre paisible) atteignable, 15 grottes`);
     const mid = m.length / 2, c = m.spineAt(mid), nv = m.normalAt(mid), far = m.halfWidth(mid) + 1700;
     let shallow = false;
     for (let x = -WORLD_HALF + 50; x < WORLD_HALF && !shallow; x += 120) for (let y = -WORLD_HALF + 50; y < WORLD_HALF && !shallow; y += 120) shallow = m.isSea(x, y) && m.isWater(x, y);
@@ -1364,7 +1364,7 @@ const noop = () => {};
   const p = r.addPlayer('dune', noop);
   const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
   // Ver des sables : sous le sable, intouchable ; arrivé sous sa cible, sortie annoncée, puis exposé et frappable.
-  const spot = r.map.freeNear(r.map.spineAt(27500).x, r.map.spineAt(27500).y);
+  const spot = r.map.freeNear(r.map.spineAt((r.map.zoneFrom(6) + r.map.zoneTo(6)) / 2).x, r.map.spineAt((r.map.zoneFrom(6) + r.map.zoneTo(6)) / 2).y);
   [p.x, p.y] = [spot.x, spot.y];
   const worm = r.createUnit(key('sandworm'), false, p.x + 60, p.y);
   const regrid = () => {
@@ -1436,7 +1436,7 @@ const noop = () => {};
   r.updateSpawns();
   const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
   const p = r.addPlayer('tempete', noop);
-  const q = r.map.freeNear(r.map.spineAt(27500).x, r.map.spineAt(27500).y);
+  const q = r.map.freeNear(r.map.spineAt((r.map.zoneFrom(6) + r.map.zoneTo(6)) / 2).x, r.map.spineAt((r.map.zoneFrom(6) + r.map.zoneTo(6)) / 2).y);
   [p.x, p.y] = [q.x, q.y];
   p.hp = p.maxHp = 1000;
   r.tick = 0;

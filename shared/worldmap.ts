@@ -6,7 +6,8 @@
 // - Relief : des collines qui montent et descendent (affichage seulement, rien d'infranchissable).
 // - On arrive sur la plage d'un bout de l'île (une épave, des planches) ; un chemin de cailloux mène au village.
 // - Zones de danger : ZONES bandes successives à travers l'île, de plus en plus loin de la plage, frontières bruitées ;
-//   la zone 5 (Lacs brumeux) est criblée de lacs, où nagent les Serpents des brumes ; la 6 (Mer de sable) n'a que de rares oasis.
+//   la zone 5 (Lacs brumeux) est criblée de lacs, parfois ouverts sur la mer, où nagent les Serpents des brumes ; la 6 (Mer de sable)
+//   n'a que de rares oasis et une lisière verte le long de la côte ; la 7 (Havre paisible), au bout, n'a ni monstre ni grotte.
 // - Au bout de la zone 4 : un emplacement de camp, que le village peut établir contre de l'or
 //   (feu qui soigne, point de réapparition, Pierre de passage pour voyager entre camps).
 // - Lacs dans l'île, en laissant toujours libre une voie centrale.
@@ -23,14 +24,14 @@ const LAKE_THRESHOLD = 0.64;
 const LAKE_THRESHOLD_LAKES = 0.54; // zone 5 (Lacs brumeux) : bien plus d'eau
 const LAKE_THRESHOLD_DESERT = 0.8; // zone 6 (Mer de sable) : de rares oasis
 const SPINE_STEP = 100;
-const ISLAND_LEN: [number, number] = [14000, 20000]; // longueur de la colonne : l'île est plus ou moins grande
-const HALF_W: [number, number] = [1000, 2100]; // demi-largeur de l'île (avant le bruit de la côte)
+const ISLAND_LEN: [number, number] = [16000, 23000]; // longueur de la colonne : l'île est plus ou moins grande
+const HALF_W: [number, number] = [1600, 3000]; // demi-largeur de l'île (avant le bruit de la côte)
 const COAST_NOISE = 900; // la côte s'écarte de ± la moitié de ceci
 export const SEA_SHALLOW = 520; // mer peu profonde le long de la côte (le serpent y nage), puis mer profonde
 export const BEACH = 190; // largeur de la plage, côté terre
 const DENS = 7; // tanières de suricates
 const ZONE_BLEND = 900; // largeur de la transition (affichage) entre deux zones
-const STAMP_R = 3700; // au-delà, mer profonde : on ne calcule plus la distance à la colonne
+const STAMP_R = 4300; // au-delà, mer profonde : on ne calcule plus la distance à la colonne
 const LANE = 230; // voie centrale jamais inondée
 const CAVE_GAP = 4000; // > VIEW_R + 2 × CAVE_RX + la demi-largeur de l'écran
 const VILLAGE_ARC = 800; // abscisse du village le long de la colonne
@@ -129,7 +130,6 @@ export class WorldMap {
   readonly spawn: Pt;
   readonly village: Pt;
   readonly gate: Pt; // porte du village côté plage, où arrive le chemin de cailloux
-  trailGate!: Pt; // porte d'où part la piste vers le bout du couloir
   readonly forge: Pt;
   readonly den: Pt;
   readonly market: Pt;
@@ -149,7 +149,6 @@ export class WorldMap {
   readonly bushes: Bush[] = []; // buissons à fruits (décor franchissable : le gibier vient y manger)
   readonly dens: Pt[] = []; // tanières de suricates (Mer de sable) : buttes percées de trous, franchissables
   readonly path: [number, number][] = []; // chemin de terre du camp à la porte du village
-  readonly trails: [number, number][][] = []; // piste du village au bout du couloir, coupée à la traversée des camps
   private buckets = new Map<number, number[]>(); // décor par case de 256 px
   readonly deepWater: number[][] = []; // par zone : x, y à la suite de points en eau profonde
   private segs = new Map<number, number[]>(); // segments de chemin par case de 256 px (ax, ay, bx, by à la suite)
@@ -204,19 +203,21 @@ export class WorldMap {
     }
 
     this.buildPath();
-    this.buildTrail();
     this.indexPaths();
 
     // Lacs : seulement dans l'île, hors de la voie centrale, de la plage, du village et des emplacements de camp.
     for (let j = 0; j < N; j++) {
       for (let i = 0; i < N; i++) {
         const k = j * N + i;
-        if (this.water[k] !== 0 || this.cdist[k] < LANE || this.shore[k] > -BEACH - 120) continue;
+        const lakes5 = this.arc[k] > this.zoneFrom(5) && this.arc[k] < this.zoneTo(5); // Lacs brumeux : les lacs peuvent rejoindre la mer
+        if (this.water[k] !== 0 || this.cdist[k] < LANE || (!lakes5 && this.shore[k] > -BEACH - 120)) continue;
         const p = { x: -WORLD_HALF + (i + 0.5) * MAP_CELL, y: -WORLD_HALF + (j + 0.5) * MAP_CELL };
         if (dist2(p.x, p.y, village.x, village.y) < (VILLAGE_R + 160) ** 2) continue;
         if (dist2(p.x, p.y, this.spawn.x, this.spawn.y) < 320 ** 2) continue;
         if (this.sites.some((c) => dist2(p.x, p.y, c.x, c.y) < 380 ** 2)) continue;
-        const threshold = this.arc[k] > this.zoneFrom(6) ? LAKE_THRESHOLD_DESERT : this.arc[k] > this.zoneFrom(5) ? LAKE_THRESHOLD_LAKES : LAKE_THRESHOLD;
+        const desert = this.arc[k] > this.zoneFrom(6) && this.arc[k] < this.zoneTo(6);
+        // près de la côte des Lacs brumeux, l'eau gagne : bras de mer et lacs ouverts sur l'océan
+        const threshold = desert ? LAKE_THRESHOLD_DESERT : lakes5 ? LAKE_THRESHOLD_LAKES + 0.04 - 0.12 * clamp(1 + this.shore[k] / 450, 0, 1) : LAKE_THRESHOLD;
         if (this.lakeNoise(p.x, p.y) > threshold && this.pathDist(p.x, p.y) >= 130) this.water[k] = 1;
       }
     }
@@ -301,7 +302,7 @@ export class WorldMap {
   /** Demi-largeur de l'île à l'abscisse s (avant le bruit de la côte) : de larges renflements et des étranglements. */
   halfWidth(s: number) {
     const taper = Math.min(1, 0.55 + (0.45 * Math.min(s, this.length - s)) / 1800); // les deux bouts s'affinent
-    return clamp(1550 + (fbm(s / 2600, 0.5, this.seed + 91, 2) - 0.5) * 1700, HALF_W[0], HALF_W[1]) * taper;
+    return clamp(2300 + (fbm(s / 2800, 0.5, this.seed + 91, 2) - 0.5) * 2200, HALF_W[0], HALF_W[1]) * taper;
   }
 
   /** Distance et abscisse de la colonne pour chaque case, côte bruitée, puis mer : peu profonde (1), profonde (3). */
@@ -420,32 +421,9 @@ export class WorldMap {
     return out;
   }
 
-  /** Piste : d'une autre porte du village, le long de la colonne, jusqu'au bout ; elle s'interrompt dans chaque camp. */
-  private buildTrail() {
-    const s0 = 1550 + VILLAGE_R + 420;
-    const join = this.spineAt(s0);
-    const g = (this.trailGate = this.gateToward(join, this.gate));
-    const along = (from: number, to: number) => {
-      const out: [number, number][] = [];
-      for (let s = from; s < to; s += SPINE_STEP / 2) {
-        const p = this.spineAt(s);
-        out.push([p.x, p.y]);
-      }
-      const last = this.spineAt(to);
-      out.push([last.x, last.y]);
-      return out;
-    };
-    const cuts = this.siteArcs.flatMap((s) => [s - 150, s + 150]); // bord du sol de chaque camp
-    const bounds = [s0, ...cuts, this.length - 200];
-    for (let k = 0; k + 1 < bounds.length; k += 2) {
-      const seg = along(bounds[k] + (k ? 0 : SPINE_STEP), bounds[k + 1]);
-      this.trails.push(k ? seg : [...this.approach(join, g, this.village, false).reverse(), ...seg]);
-    }
-  }
-
-  /** Range les segments du chemin et de la piste par case de 256 px (marge de 260 px) pour pathDist. */
+  /** Range les segments du chemin par case de 256 px (marge de 260 px) pour pathDist. */
   private indexPaths() {
-    for (const line of [this.path, ...this.trails]) {
+    for (const line of [this.path]) {
       for (let i = 1; i < line.length; i++) {
         const [ax, ay] = line[i - 1], [bx, by] = line[i];
         for (let gx = Math.floor((Math.min(ax, bx) - 260) / BUCKET); gx <= Math.floor((Math.max(ax, bx) + 260) / BUCKET); gx++) {
@@ -460,7 +438,7 @@ export class WorldMap {
     }
   }
 
-  /** Distance au bord du chemin ou de la piste (négative : dessus), plafonnée à 240 au-delà. */
+  /** Distance au bord du chemin (négative : dessus), plafonnée à 240 au-delà. */
   pathDist(x: number, y: number) {
     const b = this.segs.get(Math.floor(x / BUCKET) * 100000 + Math.floor(y / BUCKET));
     let best = 260;
@@ -558,7 +536,7 @@ export class WorldMap {
   /** Tanières de suricates dans la Mer de sable (hasard à part), loin des chemins, de l'eau et les unes des autres. */
   private buildDens() {
     const rand = rng(this.seed ^ 0xde75);
-    const lo = this.zoneFrom(6) + 400, hi = this.length - 400;
+    const lo = this.zoneFrom(6) + 400, hi = this.zoneTo(6) - 400;
     for (let tries = 0; tries < 3000 && this.dens.length < DENS && hi > lo; tries++) {
       const s = lo + rand() * (hi - lo);
       const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);

@@ -71,7 +71,7 @@ export class Game {
     this.ctx = canvas.getContext('2d')!;
     this.map = new WorldMap(seed);
     this.world = new World(this.map);
-    this.fog = new Fog(`fangleaf.fog.v6.${seed}`, (x, y) => !this.map.isForest(x, y)); // v6 : l'île
+    this.fog = new Fog(`fangleaf.fog.v7.${seed}`, (x, y) => !this.map.isForest(x, y)); // v7 : île élargie, 7 zones
     this.hud = new Hud(code, this.map, this.fog, founder);
     this.hud.onMount = (id) => net.send({ t: 'mount', id });
     this.hud.onCave = (id, enter) => net.send({ t: 'cave', id, enter });
