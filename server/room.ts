@@ -2270,8 +2270,7 @@ export class Room {
     const chance = credit && this.armySize(credit) === 0 ? 0.5 : TAME_CHANCE;
     // Les renforts appelés par un géant ne s'apprivoisent pas.
     if (credit && !u.summoner && !sp.passive && Math.random() < chance) {
-      if (this.armySize(credit) < ARMY_CAP) tame = true;
-      else this.events.push({ e: 'full', to: credit.id });
+      if (this.armySize(credit) < ARMY_CAP) tame = true; // meute pleine : rien (pas de message à chaque monstre tué)
     }
 
     if (tame && credit) {
