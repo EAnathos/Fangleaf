@@ -4,7 +4,7 @@
 import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, BOARD_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
 import { caveEdge, MAP_CELL, type Cave, type WorldMap } from '../../shared/worldmap.ts';
-import { settings } from './settings.ts';
+import { maxDpr, settings } from './settings.ts';
 import { drawCocoon, drawEntrance, drawWeb, INSIDE, insideProp } from './caves.ts';
 
 const CHUNK = 512;
@@ -26,6 +26,11 @@ const PLOTS: Record<Exclude<BuildingId, 'stone'>, { x0: number; y0: number; x1: 
   den: { x0: DEN_OFFSET.x - 84, y0: DEN_OFFSET.y - 50, x1: DEN_OFFSET.x + 84, y1: DEN_OFFSET.y + 34 },
   market: { x0: MARKET_OFFSET.x - 58, y0: MARKET_OFFSET.y - 12, x1: MARKET_OFFSET.x + 58, y1: MARKET_OFFSET.y + 46 },
 };
+
+// Arbres : formes pré-dessinées à la taille de référence (le plus grand arbre), puis réduites à la taille de chacun.
+const TREE_REF = 42;
+const TREE_VARIANTS = 6;
+const TREE_BOX = { l: TREE_REF * 1.3 + 6, t: TREE_REF * 1.95 + 6, w: (TREE_REF * 1.3 + 6) * 2, h: TREE_REF * 2.55 + 12 }; // autour du pied
 
 const rgb = (c: number[], k: number) => `rgb(${(c[0] * k) | 0},${(c[1] * k) | 0},${(c[2] * k) | 0})`;
 
@@ -228,30 +233,66 @@ export class World {
   /**
    * Arbre : tronc à racines puis feuillage ; fade < 1 rend le feuillage transparent (quelqu'un passe dessous).
    * Feuillus en touffes, sapins étagés dans les Bois profonds et les Landes, saules pleureurs aux Lacs brumeux.
+   * Chaque forme (zone, sapin ou feuillu, fruits, une variante sur TREE_VARIANTS) est dessinée une fois dans une image,
+   * puis collée à la taille de l'arbre : plus aucun tracé vectoriel à chaque image.
    */
   tree(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, fade = 1, shade = true) {
     const s = this.treeSize(x, y), h = hash2(x | 0, y | 0, this.seed + 9);
+    const v = Math.floor(hash2(x | 0, y | 0, this.seed + 13) * TREE_VARIANTS);
+    const pine = (z === 2 && h < 0.55) || (z === 3 && h < 0.35);
+    const fruit = !pine && z <= 2 && h > 0.8;
+    if (shade) this.treeShadow(ctx, x, y);
+    const k = s / TREE_REF;
+    const trunk = this.treeLayer('trunk', () => this.drawTrunk);
+    ctx.drawImage(trunk, x - TREE_BOX.l * k, y - TREE_BOX.t * k, TREE_BOX.w * k, TREE_BOX.h * k);
+    const leaves = this.treeLayer(`${z}|${pine ? 1 : 0}|${fruit ? 1 : 0}|${v}`, () => (g) => this.drawLeaves(g, z, pine, fruit, v));
+    const a = ctx.globalAlpha;
+    ctx.globalAlpha = a * fade;
+    ctx.drawImage(leaves, x - TREE_BOX.l * k, y - TREE_BOX.t * k, TREE_BOX.w * k, TREE_BOX.h * k);
+    ctx.globalAlpha = a;
+  }
+
+  private treeSprites = new Map<string, HTMLCanvasElement>();
+  /** Image d'une forme d'arbre (taille TREE_REF, centrée sur le pied), à la finesse de la qualité choisie. */
+  private treeLayer(key: string, paint: () => (g: CanvasRenderingContext2D) => void) {
+    const res = 1.25 * maxDpr(); // le zoom maximal du jeu, en pixels de l'appareil
+    const full = `${key}|${res}`;
+    let c = this.treeSprites.get(full);
+    if (c) return c;
+    c = document.createElement('canvas');
+    c.width = Math.ceil(TREE_BOX.w * res);
+    c.height = Math.ceil(TREE_BOX.h * res);
+    const g = c.getContext('2d')!;
+    g.setTransform(res, 0, 0, res, TREE_BOX.l * res, TREE_BOX.t * res);
+    paint()(g);
+    this.treeSprites.set(full, c);
+    return c;
+  }
+
+  /** Tronc évasé et ses racines (le même pour tous les arbres), pied en (0, 0). */
+  private drawTrunk = (ctx: CanvasRenderingContext2D) => {
+    const s = TREE_REF;
+    ctx.fillStyle = '#4A3424';
+    ctx.beginPath();
+    ctx.moveTo(-5, -s * 0.5);
+    ctx.lineTo(-6, s * 0.38);
+    ctx.quadraticCurveTo(-12, s * 0.5, -15, s * 0.52);
+    ctx.lineTo(15, s * 0.52);
+    ctx.quadraticCurveTo(11, s * 0.48, 6, s * 0.38);
+    ctx.lineTo(5, -s * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,230,200,0.12)';
+    ctx.fillRect(-3, 0, 2, s * 0.4);
+  };
+
+  /** Feuillage d'une forme d'arbre, pied en (0, 0), à la taille TREE_REF. */
+  private drawLeaves(ctx: CanvasRenderingContext2D, z: number, pine: boolean, fruit: boolean, v: number) {
+    const s = TREE_REF, x = 0, y = 0;
     const dark = z === 5 ? '#23403F' : z === 4 ? '#1E3634' : z === 3 ? '#2E3A22' : '#1C3324';
     const mid = z === 5 ? '#36605A' : z === 4 ? '#2B4A45' : z === 3 ? '#425230' : '#28472F';
     const light = z === 5 ? '#5A8A80' : z === 4 ? '#3C625A' : z === 3 ? '#5A6B3C' : '#386240';
     const ink = 'rgba(10,18,14,0.55)';
-    if (shade) this.treeShadow(ctx, x, y);
-    // tronc évasé et ses racines
-    ctx.fillStyle = '#4A3424';
-    ctx.beginPath();
-    ctx.moveTo(x - 5, y - s * 0.5);
-    ctx.lineTo(x - 6, y + s * 0.38);
-    ctx.quadraticCurveTo(x - 12, y + s * 0.5, x - 15, y + s * 0.52);
-    ctx.lineTo(x + 15, y + s * 0.52);
-    ctx.quadraticCurveTo(x + 11, y + s * 0.48, x + 6, y + s * 0.38);
-    ctx.lineTo(x + 5, y - s * 0.5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = 'rgba(255,230,200,0.12)';
-    ctx.fillRect(x - 3, y, 2, s * 0.4);
-    ctx.save();
-    ctx.globalAlpha *= fade;
-    const pine = (z === 2 && h < 0.55) || (z === 3 && h < 0.35);
     if (pine) {
       // sapin : trois étages, le bas de chacun dentelé
       for (let k = 0; k < 3; k++) {
@@ -267,15 +308,14 @@ export class World {
           ctx.fill();
         }
       }
-      ctx.restore();
       return;
     }
     // feuillu : touffes en couronne, ombrées en bas, éclaircies en haut à gauche
     const cy = y - s * 0.62, n = 7; // assez haut pour laisser voir le tronc
     const lumps: [number, number, number][] = [];
     for (let k = 0; k < n; k++) {
-      const a = (k / n) * TAU + h * 3, d = s * (0.42 + hash2(k, x | 0, this.seed) * 0.12);
-      lumps.push([x + Math.cos(a) * d, cy + Math.sin(a) * d * 0.7, s * (0.38 + hash2(y | 0, k, this.seed) * 0.14)]);
+      const a = (k / n) * TAU + v * 0.9, d = s * (0.42 + hash2(k, v, 77) * 0.12);
+      lumps.push([x + Math.cos(a) * d, cy + Math.sin(a) * d * 0.7, s * (0.38 + hash2(v, k, 78) * 0.14)]);
     }
     lumps.push([x, cy, s * 0.62]);
     const blob = (dx: number, dy: number, grow: number) => {
@@ -313,16 +353,15 @@ export class World {
         ctx.quadraticCurveTo(px + 3, py + s * 0.4, px - 2, py + s * 0.75);
       }
       ctx.stroke();
-    } else if (z <= 2 && h > 0.8) {
+    } else if (fruit) {
       // quelques fruits ou fleurs sur certains arbres de la Lisière
       ctx.fillStyle = z === 1 ? '#E8A43C' : '#D886C9';
       for (let k = 0; k < 5; k++) {
         ctx.beginPath();
-        ctx.arc(x + (hash2(k, 3, x | 0) - 0.5) * s * 1.2, cy + (hash2(k, 7, y | 0) - 0.5) * s * 0.9, 2.5, 0, TAU);
+        ctx.arc(x + (hash2(k, 3, v) - 0.5) * s * 1.2, cy + (hash2(k, 7, v) - 0.5) * s * 0.9, 2.5, 0, TAU);
         ctx.fill();
       }
     }
-    ctx.restore();
   }
 
   private drawVillage() {

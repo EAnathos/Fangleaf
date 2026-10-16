@@ -55,6 +55,16 @@ export class Net {
     return this.snaps[this.snaps.length - 1];
   }
 
+  private out: UnitTuple[] = [];
+  private pool = new Map<number, UnitTuple>(); // unité → son tableau interpolé, réutilisé
+  private index = new WeakMap<Snapshot, Map<number, UnitTuple>>();
+  /** Unités d'un snapshot par id (calculé une fois par snapshot). */
+  byId(s: Snapshot) {
+    let m = this.index.get(s);
+    if (!m) this.index.set(s, (m = new Map(s.units.map((u) => [u[0], u]))));
+    return m;
+  }
+
   private push(s: Snapshot) {
     this.snaps.push(s);
     if (this.snaps.length > 30) this.snaps.shift();
@@ -81,13 +91,29 @@ export class Net {
     const span = b.tick - a.tick;
     const t = span > 0 ? Math.min(1, Math.max(0, (this.renderTick - a.tick) / span)) : 1;
 
-    const prev = new Map<number, UnitTuple>();
-    for (const u of a.units) prev.set(u[0], u);
-    const units = b.units.map((u): UnitTuple => {
+    // Unités interpolées : les tableaux de sortie sont réutilisés d'une image à l'autre (pas de déchets à ramasser).
+    const prev = this.byId(a);
+    const units = this.out;
+    units.length = 0;
+    const pool = this.pool;
+    for (const u of b.units) {
       const p = prev.get(u[0]);
-      if (!p || p[6] !== u[6]) return u; // nouvelle unité ou changement de camp : pas d'interpolation
-      return [u[0], u[1], u[2], p[3] + (u[3] - p[3]) * t, p[4] + (u[4] - p[4]) * t, u[5], u[6]];
-    });
+      if (!p || p[6] !== u[6]) { // nouvelle unité ou changement de camp : pas d'interpolation
+        units.push(u);
+        continue;
+      }
+      let o = pool.get(u[0]);
+      if (!o) pool.set(u[0], (o = [0, 0, 0, 0, 0, 0, 0]));
+      o[0] = u[0];
+      o[1] = u[1];
+      o[2] = u[2];
+      o[3] = p[3] + (u[3] - p[3]) * t;
+      o[4] = p[4] + (u[4] - p[4]) * t;
+      o[5] = u[5];
+      o[6] = u[6];
+      units.push(o);
+    }
+    if (pool.size > units.length * 2 + 64) for (const id of pool.keys()) if (!this.byId(b).has(id)) pool.delete(id);
     const prevP = new Map(a.players.map((p) => [p.id, p]));
     const players = b.players.map((p) => {
       const q = prevP.get(p.id);

@@ -92,6 +92,12 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
 };
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+// Le HUD est mis à jour à chaque image : on n'écrit dans la page que ce qui a changé (sinon le navigateur
+// recalcule styles et mise en page 60 fois par seconde pour rien).
+const setText = (el: HTMLElement, v: string) => void (el.textContent !== v && (el.textContent = v));
+const setHidden = (el: HTMLElement, v: boolean) => void (el.hidden !== v && (el.hidden = v));
+const setClass = (el: HTMLElement, v: string) => void (el.className !== v && (el.className = v));
+const setStyle = (el: HTMLElement, k: 'width' | 'color', v: string) => void (el.style[k] !== v && (el.style[k] = v));
 const pct = (n: number) => `${Math.round(n * 100)} %`;
 /** 0.033 → « 3,3 % » (une décimale au plus). */
 const pctLabel = (n: number) => `${(Math.round(n * 1000) / 10).toLocaleString('fr-FR')} %`;
@@ -152,6 +158,8 @@ export class Hud {
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
   private spotAt = 0; // Pierre ou emplacement devant lequel on se tient (panneaux voyage et camp)
   private bigBg?: HTMLCanvasElement;
+  private miniAt = 0; // dernier dessin de la minicarte
+  private bigAt = 0; // et de la grande carte
   private mountId = 0;
 
   /** founder : fondateur du village (peut le supprimer) ; sinon on n'efface que sa propre progression. */
@@ -326,27 +334,27 @@ export class Hud {
 
   update(me: PlayerState, players: PlayerState[], units: UnitTuple[], myPos: { x: number; y: number }, ping: number) {
     // Soi.
-    $('self-name').textContent = me.name;
-    $('self-name').style.color = me.color;
+    setText($('self-name'), me.name);
+    setStyle($('self-name'), 'color', me.color);
     const hpRatio = me.hp / me.maxHp;
     const fill = $('self-hp');
-    fill.style.width = `${Math.max(0, hpRatio) * 100}%`;
+    setStyle(fill, 'width', `${Math.round(Math.max(0, hpRatio) * 1000) / 10}%`); // arrondi : comparable à ce que le navigateur garde
     fill.classList.toggle('low', hpRatio < 0.3);
-    $('self-hptext').textContent = `PV ${me.hp}/${me.maxHp}`;
-    $('self-gold').textContent = `Or ${me.gold}`;
-    $('self-wood').textContent = `Bois ${me.wood}`;
-    $('self-stone').textContent = `Pierre ${me.stone}`;
-    $('self-fruits').textContent = `Baies ${me.fruits}`;
+    setText($('self-hptext'), `PV ${me.hp}/${me.maxHp}`);
+    setText($('self-gold'), `Or ${me.gold}`);
+    setText($('self-wood'), `Bois ${me.wood}`);
+    setText($('self-stone'), `Pierre ${me.stone}`);
+    setText($('self-fruits'), `Baies ${me.fruits}`);
     // au doigt seulement (sur PC : touche T) : tendre ou ranger un fruit
     const hold = $('hold-btn');
     hold.classList.toggle('on', me.holding);
-    hold.textContent = me.holding ? 'Ranger le fruit' : 'Tendre un fruit';
-    $('self-army').textContent = `Meute ${me.army.filter((a) => !a.alpha).length}/${ARMY_CAP}`;
-    $('ping').textContent = ping && settings.display.ping ? `${ping} ms` : '';
-    $('invite').hidden = players.length >= MAX_PLAYERS; // village complet : plus personne à inviter
+    setText(hold, me.holding ? 'Ranger le fruit' : 'Tendre un fruit');
+    setText($('self-army'), `Meute ${me.army.filter((a) => !a.alpha).length}/${ARMY_CAP}`);
+    setText($('ping'), ping && settings.display.ping ? `${ping} ms` : '');
+    setHidden($('invite'), players.length >= MAX_PLAYERS); // village complet : plus personne à inviter
     // au doigt, « Tendre un fruit » seulement près d'un gibier passif (ou si on en tend déjà un)
     const prey = units.some((u) => !u[6] && SPECIES[u[1]].passive && Math.hypot(u[3] - myPos.x, u[4] - myPos.y) < LURE_R);
-    $('hold-btn').hidden = me.holding ? false : !me.fruits || !prey;
+    setHidden($('hold-btn'), me.holding ? false : !me.fruits || !prey);
 
     // Groupe.
     const others = players.filter((p) => p.id !== me.id);
@@ -354,7 +362,7 @@ export class Hud {
     if (partyKey !== this.last.party) {
       this.last.party = partyKey;
       const party = $('party');
-      party.hidden = others.length === 0;
+      setHidden(party, others.length === 0);
       party.replaceChildren(
         ...others.map((p) => {
           const wrap = document.createElement('div');
@@ -362,8 +370,8 @@ export class Hud {
           const status = p.dead ? 'À terre' : this.map.inVillage(p.x, p.y) ? 'Au village' : `Meute ${p.pack}`;
           wrap.innerHTML = `<div class="row"><b></b><span class="muted"></span></div><div class="bar thin"><div class="fill"></div></div>`;
           const b = wrap.querySelector('b')!;
-          b.textContent = p.name;
-          b.style.color = p.color;
+          setText(b, p.name);
+          setStyle(b, 'color', p.color);
           wrap.querySelector('.muted')!.textContent = status;
           (wrap.querySelector('.fill') as HTMLElement).style.width = `${(p.hp / p.maxHp) * 100}%`;
           return wrap;
@@ -374,11 +382,11 @@ export class Hud {
     // Bâtiments.
     const b = me.dead ? undefined : buildingNear(this.map, myPos.x, myPos.y, this);
     const prompt = $('build-prompt');
-    prompt.hidden = !b || !!this.panel;
+    setHidden(prompt, !b || !!this.panel);
     if (b) {
       // au doigt, pas de touche à rappeler ; sur PC, la touche réglée pour « interagir »
-      prompt.textContent = b.label.replace(/^E — /, touchOnly ? '' : `${keyLabel('interact')} — `);
-      prompt.className = `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`;
+      setText(prompt, b.label.replace(/^E — /, touchOnly ? '' : `${keyLabel('interact')} — `));
+      setClass(prompt, `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`);
       prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
     }
     const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board'].includes(this.panel);
@@ -400,34 +408,42 @@ export class Hud {
     if (this.panel === 'den' && this.denTab === 'bestiary') this.updateBestiary(me);
 
     // Mort.
-    $('death').hidden = !me.dead;
-    $('death-timer').textContent = String(me.respawnIn);
+    setHidden($('death'), !me.dead);
+    setText($('death-timer'), String(me.respawnIn));
     const help = $('death-help');
-    help.hidden = !me.dead || others.length === 0;
+    setHidden(help, !me.dead || others.length === 0);
     if (me.dead) {
       const c = this.map.respawnSite(me.x, me.y, this.camps);
-      $('death-where').textContent = c < 0 ? 'Retour au village' : `Retour au ${campName(c)}`;
+      setText($('death-where'), c < 0 ? 'Retour au village' : `Retour au ${campName(c)}`);
       const by = others.find((p) => p.id === me.reviveBy);
-      help.textContent = by ? `${by.name} te relève… ${me.revive} %` : 'Un coéquipier peut te relever : R maintenu 5 s près de toi.';
+      setText(help, by ? `${by.name} te relève… ${me.revive} %` : 'Un coéquipier peut te relever : R maintenu 5 s près de toi.');
     }
 
     // Relever un coéquipier à terre (R maintenu, ou bouton maintenu au doigt).
     const downed = me.dead ? undefined : others.find((p) => p.dead && p.respawnIn > 0 && Math.hypot(p.x - myPos.x, p.y - myPos.y) < REVIVE_R);
     const revive = $('revive-prompt');
-    revive.hidden = !downed;
-    if (downed) revive.textContent = downed.reviveBy === me.id ? `Tu relèves ${downed.name}… ${downed.revive} %` : `Maintiens R : relever ${downed.name}`;
+    setHidden(revive, !downed);
+    if (downed) setText(revive, downed.reviveBy === me.id ? `Tu relèves ${downed.name}… ${downed.revive} %` : `Maintiens R : relever ${downed.name}`);
     else if (this.helpHeld) this.releaseHelp();
 
     // Monture.
     this.mountId = me.mount?.id ?? 0;
-    $('mount-row').hidden = !me.mount;
+    setHidden($('mount-row'), !me.mount);
     if (me.mount) {
-      $('mount-name').textContent = `Sur l'Alpha ${SPECIES[me.mount.species].name}`;
-      $('mount-hp').style.width = `${me.mount.hp}%`;
+      setText($('mount-name'), `Sur l'Alpha ${SPECIES[me.mount.species].name}`);
+      setStyle($('mount-hp'), 'width', `${me.mount.hp}%`);
     }
 
-    this.drawMinimap(me, players, units, myPos);
-    if (this.panel === 'map') this.drawBigMap(me, players, myPos);
+    // minicarte à 10 images par seconde, grande carte à 20 : bien assez pour des points qui se déplacent
+    const now = performance.now();
+    if (now - this.miniAt >= 100) {
+      this.miniAt = now;
+      this.drawMinimap(me, players, units, myPos);
+    }
+    if (this.panel === 'map' && now - this.bigAt >= 50) {
+      this.bigAt = now;
+      this.drawBigMap(me, players, myPos);
+    }
   }
 
   private releaseHelp() {

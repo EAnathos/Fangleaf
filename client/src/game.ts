@@ -12,7 +12,7 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool } from './sprites.ts';
+import { drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { World } from './world.ts';
 import { WorldMap } from '../../shared/worldmap.ts';
 
@@ -20,6 +20,7 @@ import { WorldMap } from '../../shared/worldmap.ts';
 /** Nom propre d'un géant (sinon le nom de son espèce). */
 const bossName = (s: number) => SPECIES[s].title ?? SPECIES[s].name;
 const MIST_FADE_S = 2.5; // une brume qui se lève met ce temps à se dissiper
+const SPRITE_FPS = 20; // animation des monstres (images par seconde)
 const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
 
 export class Game {
@@ -281,7 +282,8 @@ export class Game {
       g.fillStyle = grad;
       g.fillRect(0, 0, 128, 128);
     }
-    const STEP = 64, feather = 140;
+    // nuages espacés (STEP) mais plus grands : à peu près la même couverture, 3 à 4 fois moins d'images collées
+    const STEP = settings.display.quality === 'low' ? 150 : 120, feather = 140;
     // densité : 0 avant la lisière, 1 un peu après ; idem (en s'estompant) pour une brume qui se lève
     const density = (a: number) => {
       let d = Math.min(1, Math.max(0, (a - (fogArc - feather)) / (feather * 1.6)));
@@ -293,12 +295,12 @@ export class Game {
     for (let gx = Math.floor((camX - hw - 120) / STEP); gx <= (camX + hw + 120) / STEP; gx++) {
       for (let gy = Math.floor((camY - hh - 120) / STEP); gy <= (camY + hh + 120) / STEP; gy++) {
         const h = hash2(gx, gy, 41);
-        const x = gx * STEP + (h - 0.5) * 40, y = gy * STEP + (hash2(gy, gx, 43) - 0.5) * 40;
+        const x = gx * STEP + (h - 0.5) * STEP * 0.6, y = gy * STEP + (hash2(gy, gx, 43) - 0.5) * STEP * 0.6;
         if (Math.abs(x) >= WORLD_HALF || Math.abs(y) >= WORLD_HALF) continue;
         const d = density(map.arcAt(x, y));
         if (d <= 0) continue;
-        const size = 150 + h * 90, drift = Math.sin(this.time * 0.25 + h * 9) * 14;
-        ctx.globalAlpha = d * 0.85;
+        const size = (150 + h * 90) * (STEP / 64) * 0.78, drift = Math.sin(this.time * 0.25 + h * 9) * 14;
+        ctx.globalAlpha = Math.min(1, d);
         ctx.drawImage(this.puff, x + drift - size / 2, y - size / 2 + Math.cos(this.time * 0.2 + h * 7) * 8, size, size);
       }
     }
@@ -442,7 +444,7 @@ export class Game {
     if (id === this.myId) return this.me;
     const p = players.find((q) => q.id === id);
     if (p) return p;
-    const u = this.net.latest?.units.find((q) => q[0] === id);
+    const u = this.net.latest && this.net.byId(this.net.latest).get(id);
     return u ? { x: u[3], y: u[4] } : undefined;
   }
 
@@ -451,7 +453,7 @@ export class Game {
     if (id === this.myId) return { kind: 'me', color: '#EEE7D7', pack: false };
     const p = players.find((q) => q.id === id);
     if (p) return { kind: 'ally', color: p.color, pack: false };
-    const owner = this.net.latest?.units.find((u) => u[0] === id)?.[6] ?? 0;
+    const owner = (this.net.latest && this.net.byId(this.net.latest).get(id)?.[6]) ?? 0;
     if (owner === this.myId) return { kind: 'me', color: '#8FE3D6', pack: true }; // sa meute : turquoise clair
     const o = players.find((q) => q.id === owner);
     return o ? { kind: 'ally', color: o.color, pack: true } : { kind: 'wild', color: '', pack: false };
@@ -909,10 +911,41 @@ export class Game {
     }
     for (const m of [this.faces, this.charges] as Map<number, unknown>[]) for (const id of m.keys()) if (!alive.has(id)) m.delete(id);
     for (const [id, until] of this.flashes) if (until < this.time) this.flashes.delete(id);
+    for (const [id, sp] of this.sprites) if (this.time - sp.used > 2) this.sprites.delete(id);
     const chests = new Set((this.net.latest?.chests ?? []).map((c) => c[0]));
     for (const m of [this.chestSeen, this.chestOpen]) for (const id of m.keys()) if (!chests.has(id)) m.delete(id);
   }
   private pruneTimer = 10;
+
+  /**
+   * Monstre dessiné dans sa propre image, redessinée seulement SPRITE_FPS fois par seconde (ou quand son apparence
+   * change : flash, sens, charge…) et recollée à sa position à chaque image : le tracé vectoriel coûte 3 fois moins.
+   * Les monstres sont décalés dans le temps pour ne pas tous se redessiner pendant la même image.
+   */
+  private drawUnitCached(ctx: CanvasRenderingContext2D, id: number, look: UnitLook) {
+    const r = look.r, res = this.scale;
+    const l = r * 2.6, t = r * 2.9, w = r * 5.2, h = r * 4.8; // de quoi contenir aura, couronne, pattes et bond
+    const key = `${look.species}|${look.alpha}|${look.legend}|${look.wild}|${look.ownerColor}|${look.face}|${look.flash}|${r}|${look.inWater}|${Math.round((look.charge ?? 0) * 8)}|${res}`;
+    const fps = settings.display.quality === 'low' ? 12 : SPRITE_FPS;
+    const frame = Math.floor(look.t * fps + (id % 7) / 7);
+    let e = this.sprites.get(id);
+    if (!e || e.key !== key || e.frame !== frame) {
+      const cw = Math.ceil(w * res), ch = Math.ceil(h * res);
+      if (!e) this.sprites.set(id, (e = { c: document.createElement('canvas'), key, frame, used: 0 }));
+      if (e.c.width !== cw || e.c.height !== ch) [e.c.width, e.c.height] = [cw, ch];
+      const g = e.c.getContext('2d')!;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, cw, ch);
+      g.setTransform(res, 0, 0, res, l * res, t * res);
+      drawUnit(g, { ...look, x: 0, y: 0 });
+      e.key = key;
+      e.frame = frame;
+    }
+    e.used = this.time;
+    ctx.drawImage(e.c, look.x - l, look.y - t, w, h);
+  }
+  private drawList: { y: number; draw: () => void }[] = [];
+  private sprites = new Map<number, { c: HTMLCanvasElement; key: string; frame: number; used: number }>();
 
   private render(units: UnitTuple[], players: PlayerState[]) {
     const { ctx, canvas, scale } = this;
@@ -958,8 +991,8 @@ export class Game {
     const late = Math.min(0.12, this.time - this.shotsAt);
 
     // Tri par profondeur : unités, joueurs, filons et entrées de grotte ensemble.
-    type Drawable = { y: number; draw: () => void };
-    const list: Drawable[] = [];
+    const list = this.drawList; // réutilisée d'une image à l'autre
+    list.length = 0;
     for (const c of this.map.caves) {
       if (!inView(c.entrance.x, c.entrance.y, 160)) continue;
       list.push({ y: c.entrance.y + 20, draw: () => this.world.drawCaveEntrance(ctx, c, this.time, !this.hud.caves[c.id]) });
@@ -1012,6 +1045,7 @@ export class Game {
     for (const u of units) {
       const [id, s, flags, x, y, hp, owner] = u;
       if (flags & UNIT_FLAG_MOUNTED) continue; // dessinée sous son cavalier
+      if (!inView(x, y, 220)) continue; // le serveur envoie plus large que l'écran : inutile de dessiner le reste
       const alpha = (flags & UNIT_FLAG_ALPHA) !== 0;
       const legend = (flags & UNIT_FLAG_LEGEND) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
@@ -1025,7 +1059,7 @@ export class Game {
         draw: () => {
           const ranged = SPECIES[s].ranged, c0 = this.charges.get(id);
           const charge = ranged && c0 !== undefined && this.time - c0 < ranged.windup + 0.15 ? Math.min(1, (this.time - c0) / ranged.windup) : 0;
-          drawUnit(ctx, {
+          this.drawUnitCached(ctx, id, {
             x, y, r, species: s, alpha, wild: owner === 0, ownerColor: owner ? colorOf.get(owner) : undefined,
             face: f.face, t: this.time, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, legend,
             charge, inWater: !!SPECIES[s].swim && this.map.isWater(x, y),
@@ -1063,7 +1097,7 @@ export class Game {
       f.x = x;
       this.faces.set(id, f);
       list.push({ y, draw: () => {
-        drawUnit(ctx, { x, y, r, species: s, alpha, legend, wild: false, ownerColor: sleepers[k]?.[1], face: f.face, t: asleep ? 0 : this.time, seed: id * 1.7, flash: false });
+        this.drawUnitCached(ctx, id, { x, y, r, species: s, alpha, legend, wild: false, ownerColor: sleepers[k]?.[1], face: f.face, t: asleep ? 0 : this.time, seed: id * 1.7, flash: false });
         if (asleep) this.snore(x + r * 0.5, y - r * 1.2, 12, id);
       } });
     }
@@ -1103,7 +1137,7 @@ export class Game {
           if (p.mount) {
             // Monture dessinée sous le cavalier, tournée dans le sens de la marche.
             const mr = alphaStats(p.mount.species, 0, 1, p.mount.legend).r;
-            drawUnit(ctx, {
+            this.drawUnitCached(ctx, p.mount.id, {
               x, y, r: mr, species: p.mount.species, alpha: true, wild: false, ownerColor: p.color, legend: p.mount.legend,
               face: fx < -0.1 ? -1 : 1, t: this.time * (isMe && this.me.moving ? 1.8 : 1), seed: p.mount.id,
               flash: (this.flashes.get(p.mount.id) ?? 0) > this.time,

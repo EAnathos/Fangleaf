@@ -328,6 +328,7 @@ export class Room {
         this.placeNear(u, p);
       }
     }
+    p.hp = maxHpOf(p); // on arrive toujours avec tous ses PV (classe comprise : 75 pour un guerrier débutant)
     this.sleepers.delete(p.userId ?? ''); // il se réveille : il n'est plus endormi au village
     this.players.set(p.id, p);
     this.scaleBosses();
@@ -2264,6 +2265,25 @@ export class Room {
     return m ? { id: m.id, species: m.s, hp: Math.round((100 * Math.max(0, m.hp)) / m.maxHp), legend: m.legend } : null;
   }
 
+  /**
+   * Qui doit recevoir un événement : null pour tout le village (annonces, chat, bâtiments…), l'id d'un dompteur
+   * pour un événement qui ne concerne que lui (or ramassé, essence…), ou un lieu : seuls ceux qui le voient le reçoivent
+   * (coups, morts, tirs, explosions…). Dans une grosse mêlée à l'autre bout de la carte, plus rien n'est envoyé pour rien.
+   */
+  private eventSpot(e: GameEvent): { x: number; y: number } | number | null {
+    const ent = (id: number) => this.players.get(id) ?? this.units.get(id);
+    switch (e.e) {
+      case 'hit': return ent(e.b) ?? ent(e.a) ?? null;
+      case 'die': case 'shot': case 'boom': return e;
+      case 'move': case 'charge': case 'feed': case 'revive': case 'heal': return ent(e.id) ?? null;
+      case 'mine': return this.map.ores[e.id] ?? null;
+      case 'eat': case 'pick': return this.map.bushes[e.bush] ?? null;
+      case 'gold': case 'essence': case 'soul': case 'res': case 'chest': case 'full': case 'seen': case 'trade': return e.to;
+      case 'mount': return e.by;
+      default: return null;
+    }
+  }
+
   private broadcast() {
     // Chacun reçoit son état complet ; des autres, seulement ce qui s'affiche (pas leurs essences, bestiaire, Alphas…).
     const full = new Map<number, PlayerState>(), light = new Map<number, PlayerState>();
@@ -2287,6 +2307,7 @@ export class Room {
       light.set(p.id, { ...st, essences: [], army: [], resting: [], seen: [], awakening: [] });
     }
     const vr2 = VIEW_R * VIEW_R;
+    const spots = this.events.map((e) => this.eventSpot(e)), er2 = (VIEW_R + 300) ** 2;
     const caves = this.caveBoss.map((id, i) => (id ? 0 : Math.max(1, Math.ceil(this.caveBack[i] - this.time))));
     for (const viewer of this.players.values()) {
       const units: UnitTuple[] = [];
@@ -2330,11 +2351,16 @@ export class Room {
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
       }
       const players = [...this.players.values()].map((p) => (p === viewer ? full : light).get(p.id)!);
+      // événements : ceux de tout le village, ceux qui lui sont destinés, et ceux qui ont lieu près de lui
+      const ev = this.events.filter((_, i) => {
+        const at = spots[i];
+        return at === null || (typeof at === 'number' ? at === viewer.id : dist2(at.x, at.y, viewer.x, viewer.y) <= er2);
+      });
       // envoi différentiel : seulement ce qui a changé depuis le dernier snapshot de ce spectateur
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev: this.events });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev });
     }
   }
 }

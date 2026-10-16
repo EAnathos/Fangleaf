@@ -147,8 +147,15 @@ export class Fx {
       ctx.save();
       ctx.translate(e.x - 10, y);
       ctx.scale(Math.max(0.2, Math.abs(spin)) * pop * 1.15, pop * 1.15);
-      ctx.shadowColor = '#B48CFF';
-      ctx.shadowBlur = 10;
+      // lueur : un losange plus grand et translucide (pas de shadowBlur, très lent sous Firefox)
+      ctx.fillStyle = 'rgba(180,140,255,0.35)';
+      ctx.beginPath();
+      ctx.moveTo(0, -17);
+      ctx.lineTo(12, 0);
+      ctx.lineTo(0, 17);
+      ctx.lineTo(-12, 0);
+      ctx.closePath();
+      ctx.fill();
       ctx.fillStyle = e.color;
       ctx.strokeStyle = '#EEE7D7';
       ctx.lineWidth = 2;
@@ -171,11 +178,12 @@ export class Fx {
     }
     ctx.globalAlpha = 1;
     ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+    let size = 0;
     for (const f of this.floaters) {
       ctx.globalAlpha = Math.min(1, (f.life / f.max) * 2);
-      ctx.font = `700 ${f.size}px "Pixelify Sans", sans-serif`;
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+      if (f.size !== size) ctx.font = `700 ${(size = f.size)}px "Pixelify Sans", sans-serif`; // changer de police coûte cher
       ctx.strokeText(f.text, f.x, f.y);
       ctx.fillStyle = f.color;
       ctx.fillText(f.text, f.x, f.y);

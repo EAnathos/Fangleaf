@@ -1653,6 +1653,33 @@ const noop = () => {};
   check(evs.length === 1 && p.hp === 10 + Math.round(max * 0.03) && ally.hp > 1, `lièvre : +${evs[0]?.n} PV en 3 s pour son dompteur (${max} PV max), et la meute proche est soignée`);
 }
 
+{
+  // Événements : un coup porté loin d'un dompteur ne lui est pas envoyé ; les annonces et ce qui lui est destiné, si.
+  const r = room();
+  const got = new Map<number, { e: string; to?: number }[]>();
+  const spy = (id: () => number) => (m: { t: string; ev?: { e: string }[] }) => m.t === 's' && got.set(id(), [...(got.get(id()) ?? []), ...(m.ev ?? [])]);
+  let ida = 0, idb = 0;
+  const a = r.addPlayer('a', spy(() => ida));
+  const b = r.addPlayer('b', spy(() => idb));
+  [ida, idb] = [a.id, b.id];
+  [a.x, a.y] = [r.map.spawn.x, r.map.spawn.y];
+  [b.x, b.y] = [r.map.village.x + 4000, r.map.village.y];
+  const foe = r.createUnit(0, false, a.x + 30, a.y);
+  r.events = [];
+  r.damage(foe, 1, a);
+  r.events.push({ e: 'gold', to: a.id, n: 2, x: a.x, y: a.y }, { e: 'info', text: 'annonce' });
+  r.broadcast();
+  const ea = (got.get(a.id) ?? []).map((e) => e.e).join(), eb = (got.get(b.id) ?? []).map((e) => e.e).join();
+  check(ea.includes('hit') && ea.includes('gold') && eb === 'info', `événements filtrés : proche « ${ea} », loin « ${eb} »`);
+}
+
+{
+  // Arrivée au village : tous ses PV, classe comprise (nouveau dompteur : 75/75, pas 60/75).
+  const r = room();
+  const p = r.addPlayer('a', noop);
+  check(p.hp === Math.round(armorMaxHp(0) * 1.25), `nouveau dompteur : ${p.hp} PV à l'arrivée, le maximum`);
+}
+
 check(caveUnlockCost(1) === 150 && caveUnlockCost(3) === 450 && caveUnlockCost(4) === 1500 && caveUnlockCost(5) === 3000, 'grottes des dernières zones bien plus chères (1500 et 3000 or)');
 
 console.log(failed ? `\nÉCHEC (TEST_SEED=${TEST_SEED})` : '\nOK');
