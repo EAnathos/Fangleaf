@@ -1769,6 +1769,27 @@ const noop = () => {};
     'serpent, crabe et crapaud de la meute suivent leur dompteur dans l\'eau');
 }
 
+{
+  // Animations : chaque zone d'attaque dit au client d'où elle vient (style, lanceur, durée), les coups au corps à corps sont marqués.
+  const r = room();
+  const got: { ev: { e: string; m?: number }[]; hazards: number[][] }[] = [];
+  const p = r.addPlayer('a', (m: { t: string }) => m.t === 's' && got.push(m as never));
+  const boss = r.units.get(r.caveBoss.find((id: number) => r.units.get(id) && SPECIES[r.units.get(id).s].key === 'colossus'));
+  [p.x, p.y] = [boss.x + 30, boss.y];
+  r.castMove(boss, { kind: 'slam', cd: 6 }, p);
+  r.broadcast();
+  const h = got.at(-1)!.hazards[0];
+  check(!!h && h[8] === 2 && h[9] === boss.id && h[10] === 110, `onde de choc annoncée avec son style, son lanceur et sa durée (${h?.slice(8).join(', ')})`);
+  const wolf = r.createUnit(1, false, p.x + 20, p.y);
+  r.events = [];
+  r.tryAttack(Object.assign(wolf, { atkCd: 0 }), p);
+  const hit = r.events.find((e: { e: string }) => e.e === 'hit');
+  r.events = [];
+  r.damage(p, 3, wolf);
+  const plain = r.events.find((e: { e: string }) => e.e === 'hit');
+  check(hit?.m === 1 && plain && !plain.m, 'coup au corps à corps marqué (m : 1), dégâts d\'une zone non');
+}
+
 check(caveUnlockCost(1) === 150 && caveUnlockCost(3) === 450 && caveUnlockCost(4) === 1500 && caveUnlockCost(5) === 3000, 'grottes des dernières zones bien plus chères (1500 et 3000 or)');
 
 console.log(failed ? `\nÉCHEC (TEST_SEED=${TEST_SEED})` : '\nOK');

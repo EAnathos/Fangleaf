@@ -47,6 +47,9 @@ export interface UnitLook {
   color?: string;
   charge?: number; // tireur : avancement de la charge du tir (0 à 1)
   inWater?: boolean; // serpent : nage (seuls la tête et les anneaux dépassent)
+  moving?: boolean; // il se déplace (les gluants avancent par bonds)
+  air?: number; // hauteur au-dessus du sol (bond d'un géant) : le corps monte, l'ombre reste au sol et rétrécit
+  squash?: number; // écrasement vertical (> 1 : étiré, < 1 : aplati), pour l'élan et l'atterrissage
 }
 
 /** Décalage de la couronne (Alpha, géant) vers la tête, en rayons, pour les espèces dont la tête est loin devant. */
@@ -56,11 +59,16 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
   const key = u.key ?? SPECIES[u.species].sprite ?? SPECIES[u.species].key;
   const floating = key === 'wisp';
-  const bob = floating ? Math.sin(u.t * 2.5 + u.seed) * r * 0.18 - r * 0.55 : Math.sin(u.t * 6 + u.seed) * r * 0.06;
-  const y = u.y + bob;
+  // Gluant en marche : il avance par bonds (élan aplati, saut étiré, atterrissage écrasé).
+  const hop = key === 'slime' && u.moving ? slimeHop(u) : null;
+  const air = (u.air ?? 0) + (hop?.lift ?? 0);
+  const bob = floating ? Math.sin(u.t * 2.5 + u.seed) * r * 0.18 - r * 0.55 : hop ? 0 : Math.sin(u.t * 6 + u.seed) * r * 0.06;
+  const y = u.y + bob - air;
+  const squash = (u.squash ?? 1) * (hop?.squash ?? 1);
 
+  const lifted = Math.max(0.35, 1 - air / (r * 6)); // l'ombre rétrécit quand il monte
   if (floating) shadow(ctx, x, u.y, r * (0.75 - Math.sin(u.t * 2.5 + u.seed) * 0.08));
-  else if (!u.inWater) shadow(ctx, x, u.y, r);
+  else if (!u.inWater) shadow(ctx, x, u.y, r * lifted);
 
   if (u.legend) {
     // Halo doré qui pulse sous l'Alpha légendaire.
@@ -90,8 +98,9 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
   }
 
   ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(u.face, 1);
+  ctx.translate(x, y + r * 0.75); // écrasement depuis les pieds : il reste posé au sol
+  ctx.scale(u.face / Math.sqrt(squash), squash);
+  ctx.translate(0, -r * 0.75);
   const base = u.color ?? SPECIES[u.species].color;
   const fill = u.flash ? '#FFFFFF' : base;
   (DRAWERS[key] ?? golem)(ctx, r, fill, u);
@@ -125,6 +134,18 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
     ctx.fill();
   }
   ctx.restore();
+}
+
+/**
+ * Bond d'un gluant qui avance : environ deux sauts par seconde. Il s'aplatit pour prendre son élan, s'étire en l'air,
+ * puis s'écrase en retombant.
+ */
+function slimeHop(u: UnitLook) {
+  const ph = (u.t * 2.1 + u.seed * 0.37) % 1;
+  if (ph < 0.18) return { lift: 0, squash: 1 - 0.28 * Math.sin((ph / 0.18) * Math.PI) }; // élan
+  if (ph > 0.86) return { lift: 0, squash: 1 - 0.32 * Math.sin(((ph - 0.86) / 0.14) * Math.PI) }; // atterrissage
+  const k = (ph - 0.18) / 0.68;
+  return { lift: Math.sin(k * Math.PI) * u.r * 0.85, squash: 1 + 0.18 * Math.cos(k * Math.PI) }; // étiré en montant, rond au sommet
 }
 
 /** Contour sombre du corps (chemin courant) pour détacher le sprite du sol. */
@@ -1368,11 +1389,13 @@ function crab(ctx: Ctx, r: number, fill: string, u: UnitLook) {
  * Projectile de tireur. Trait runique : orbe turquoise ; jet : trait d'eau ; cloche : boule qui monte puis
  * retombe sur un cercle annoncé au sol (dessiné dès le départ pour pouvoir l'esquiver).
  */
-export function drawShot(ctx: Ctx, kind: number, x: number, y: number, a: number, b: number, prog: number, t: number) {
+/** owner : couleur du dompteur d'un tireur de la meute (ou d'un légendaire) ; absente : un sauvage, en rouge. */
+export function drawShot(ctx: Ctx, kind: number, x: number, y: number, a: number, b: number, prog: number, t: number, owner?: string) {
+  const col = owner ? rgbOf(owner) : '232,105,63';
   if (kind === 1) {
     const p = prog / 100, splash = 52;
-    ctx.fillStyle = `rgba(232,105,63,${0.12 + p * 0.22})`;
-    ctx.strokeStyle = 'rgba(232,105,63,0.85)';
+    ctx.fillStyle = `rgba(${col},${0.12 + p * 0.22})`;
+    ctx.strokeStyle = `rgba(${col},0.85)`;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.ellipse(a, b, splash, splash * 0.45, 0, 0, TAU);
@@ -1392,6 +1415,13 @@ export function drawShot(ctx: Ctx, kind: number, x: number, y: number, a: number
     return;
   }
   const ang = Math.atan2(b, a);
+  if (owner) {
+    // tir allié : halo à la couleur de son dompteur
+    ctx.fillStyle = `rgba(${col},0.35)`;
+    ctx.beginPath();
+    ctx.arc(x, y, 17, 0, TAU);
+    ctx.fill();
+  }
   if (kind === 0) {
     ctx.fillStyle = 'rgba(143,227,214,0.35)';
     ctx.beginPath();
@@ -1807,10 +1837,14 @@ function drawDeadwood(ctx: Ctx, x: number, y: number, zone: number, hpPct: numbe
 // ───────────────────────── Attaques spéciales au sol ─────────────────────────
 
 /** Zone d'attaque d'un mini-boss : annonce (bord + remplissage qui progresse), puis effet. */
-export function drawHazard(ctx: Ctx, h: number[], t: number) {
+/** « #5CC8B8 » → « 92,200,184 » (pour composer des rgba). */
+const rgbOf = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0).join(',');
+
+/** owner : couleur du dompteur dont l'Alpha légendaire a lancé l'attaque (absente : un sauvage). */
+export function drawHazard(ctx: Ctx, h: number[], t: number, owner?: string) {
   const [kind, x, y, r, x2, y2, prog, ally] = h;
-  // rouge : attaque d'un géant (à esquiver) ; doré : attaque d'un Alpha légendaire (elle ne touche que les sauvages)
-  const ember = ally ? '240,182,74' : '232,105,63';
+  // rouge : attaque d'un géant (à esquiver) ; couleur du dompteur : attaque de son Alpha légendaire (elle ne touche que les sauvages)
+  const ember = ally ? rgbOf(owner ?? '#F0B64A') : '232,105,63';
   const k = prog / 100;
   const active = prog >= 100;
   if (kind === 1) {

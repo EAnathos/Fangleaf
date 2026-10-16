@@ -11,7 +11,7 @@ import {
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
-import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
+import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Grid } from './grid.ts';
@@ -99,6 +99,7 @@ interface Hazard {
   fired: boolean;
   nextTick: number;
   onFire?: () => void;
+  style?: HazardStyle; // l'attaque qui l'a posée, pour l'animer côté client (bond, rocher, onde de choc…)
 }
 
 export interface Player {
@@ -1480,7 +1481,7 @@ export class Room {
         // (point d'arrivée fixé au lancement : il atterrit dans la zone rouge, pas sur la cible qui s'en est écartée)
         const at = this.time + 1, lx = t.x, ly = t.y;
         u.castUntil = at;
-        this.hazard(u, { kind: 0, x: lx, y: ly, r: 115, at, dmg: d * 1.8, onFire: () => {
+        this.hazard(u, { kind: 0, style: 'leap', x: lx, y: ly, r: 115, at, dmg: d * 1.8, onFire: () => {
           if (!this.map.blocked(lx, ly) && this.units.has(u.id)) [u.x, u.y] = [lx, ly];
         } });
         break;
@@ -1489,7 +1490,7 @@ export class Room {
         // Nuages sous les dompteurs proches : ils restent 5 s et rongent ceux qui y restent.
         // (un Alpha légendaire n'en pose qu'un, sur sa cible)
         for (const p of u.owner ? [t] : this.alliesNear(u.x, u.y, 650).filter((e) => e.kind === 'p').slice(0, 3)) {
-          this.hazard(u, { kind: 2, x: p.x, y: p.y, r: 95, at: this.time + 0.9, until: this.time + 5.9, dmg: d * 0.6 });
+          this.hazard(u, { kind: 2, style: 'spores', x: p.x, y: p.y, r: 95, at: this.time + 0.9, until: this.time + 5.9, dmg: d * 0.6 });
         }
         break;
       case 'summon':
@@ -1503,23 +1504,23 @@ export class Room {
         const x2 = u.x + Math.cos(ang) * len, y2 = u.y + Math.sin(ang) * len;
         const at = this.time + 0.85;
         u.castUntil = at + 0.15;
-        this.hazard(u, { kind: 1, x: u.x, y: u.y, x2, y2, r: 38, at, dmg: d * 1.6, onFire: () => {
+        this.hazard(u, { kind: 1, style: 'charge', x: u.x, y: u.y, x2, y2, r: 38, at, dmg: d * 1.6, onFire: () => {
           if (this.units.has(u.id)) [u.x, u.y] = [x2, y2];
         } });
         break;
       }
       case 'web':
-        this.hazard(u, { kind: 3, x: t.x, y: t.y, r: 105, at: this.time + 0.7, dmg: d * 0.5 });
+        this.hazard(u, { kind: 3, style: 'web', x: t.x, y: t.y, r: 105, at: this.time + 0.7, dmg: d * 0.5 });
         break;
       case 'slam': {
         const at = this.time + 1.1;
         u.castUntil = at;
-        this.hazard(u, { kind: 0, x: u.x, y: u.y, r: 175, at, dmg: d * (m.power ?? 1.5) });
+        this.hazard(u, { kind: 0, style: 'slam', x: u.x, y: u.y, r: 175, at, dmg: d * (m.power ?? 1.5) });
         break;
       }
       case 'rocks':
         for (const e of this.targetsNear(u, u.x, u.y, 700).slice(0, 3)) {
-          this.hazard(u, { kind: 0, x: e.x, y: e.y, r: 80, at: this.time + 1.2, dmg: d * 1.4 });
+          this.hazard(u, { kind: 0, style: 'rock', x: e.x, y: e.y, r: 80, at: this.time + 1.2, dmg: d * 1.4 });
         }
         break;
       case 'volley': {
@@ -1546,7 +1547,7 @@ export class Room {
         const to = this.map.freeNear(t.x + Math.cos(a) * 70, t.y + Math.sin(a) * 70);
         const at = this.time + 0.9;
         u.castUntil = at;
-        this.hazard(u, { kind: 0, x: to.x, y: to.y, r: 130, at, dmg: d * 1.3, onFire: () => {
+        this.hazard(u, { kind: 0, style: 'blink', x: to.x, y: to.y, r: 130, at, dmg: d * 1.3, onFire: () => {
           if (this.units.has(u.id)) [u.x, u.y] = [to.x, to.y];
         } });
         break;
@@ -1559,7 +1560,7 @@ export class Room {
       if (!h.fired && this.time >= h.at) {
         h.fired = true;
         h.onFire?.();
-        this.events.push({ e: 'boom', x: Math.round(h.x2 === h.x && h.y2 === h.y ? h.x : h.x2), y: Math.round(h.y2), r: h.r, kind: ['circle', 'line', 'cloud', 'web'][h.kind] });
+        this.events.push({ e: 'boom', x: Math.round(h.x2 === h.x && h.y2 === h.y ? h.x : h.x2), y: Math.round(h.y2), r: h.r, kind: h.style && h.style !== 'charge' && h.style !== 'spores' && h.style !== 'web' ? h.style : ['circle', 'line', 'cloud', 'web'][h.kind], ...(h.boss.owner ? { by: h.boss.owner } : {}) });
         if (h.kind === 2) continue; // les nuages frappent dans la durée
         const hit = h.kind === 1 ? this.alliesOnLine(h) : this.targetsNear(h.boss, h.x, h.y, h.r);
         for (const e of hit) {
@@ -1654,7 +1655,7 @@ export class Room {
     const t = this.nearest(u.x, u.y, u.r + 70, this.isWild) as Unit | undefined;
     if (!t || dist2(u.x, u.y, t.x, t.y) > (u.r + t.r + 14) ** 2) return;
     u.atkCd = u.atkCdBase;
-    this.damage(t, u.dmg, u);
+    this.damage(t, u.dmg, u, true);
   }
 
   private move(u: Unit, tx: number, ty: number, speed: number, stop: number) {
@@ -1804,7 +1805,7 @@ export class Room {
       if (SHOT_KINDS[s.kind] === 'arc') {
         if (this.time - s.start < ARC_FLIGHT_S) return true;
         for (const e of this.shotTargets(s, s.tx, s.ty, s.splash)) this.damage(e, s.dmg, s.by);
-        this.events.push({ e: 'boom', x: Math.round(s.tx), y: Math.round(s.ty), r: s.splash, kind: 'splash' });
+        this.events.push({ e: 'boom', x: Math.round(s.tx), y: Math.round(s.ty), r: s.splash, kind: 'splash', ...(s.by.owner ? { by: s.by.owner } : {}) });
         return false;
       }
       // trait, jet : avance par petits pas pour ne traverser personne ; passe au-dessus de l'eau, pas des obstacles
@@ -1834,7 +1835,7 @@ export class Room {
     u.atkCd -= DT;
     if (arrived && u.atkCd <= 0 && dist2(u.x, u.y, t.x, t.y) <= (range + 4) ** 2) {
       u.atkCd = u.atkCdBase;
-      this.damage(t, u.dmg, u);
+      this.damage(t, u.dmg, u, true);
     }
   }
 
@@ -1848,7 +1849,7 @@ export class Room {
     // sa cible d'abord, puis les plus proches : les attaques de zone restent pour ses compétences
     const melee = bossMelee(SPECIES[u.s].key);
     near.sort((a, b) => Number(b.id === u.target) - Number(a.id === u.target) || dist2(u.x, u.y, a.x, a.y) - dist2(u.x, u.y, b.x, b.y));
-    for (const e of near.slice(0, melee.targets)) this.damage(e, u.dmg * melee.mult, u);
+    for (const e of near.slice(0, melee.targets)) this.damage(e, u.dmg * melee.mult, u, true);
   }
 
   private wildAI(u: Unit) {
@@ -2026,7 +2027,9 @@ export class Room {
     this.navTo(u, slot.x, slot.y, far ? Math.max(u.speed, ownerSpeed * 1.15) : Math.max(u.speed, 90), 3, !!bank);
   }
 
-  private damage(t: Ent, amount: number, by: Ent) {
+  /** melee : coup au corps à corps (le client anime l'attaquant qui se fend vers sa cible). */
+  private damage(t: Ent, amount: number, by: Ent, melee = false) {
+    const m = melee ? { m: 1 as const } : {};
     if (t.kind === 'p') {
       if (t.dead) return;
       const mount = t.mount ? this.units.get(t.mount) : undefined;
@@ -2034,14 +2037,14 @@ export class Room {
         // La monture encaisse l'essentiel du coup.
         const share = Math.round(amount * MOUNT_SHARE);
         mount.hp -= share;
-        this.events.push({ e: 'hit', a: by.id, b: mount.id, dmg: share });
+        this.events.push({ e: 'hit', a: by.id, b: mount.id, dmg: share, ...m });
         if (mount.hp <= 0) this.killUnit(mount, by);
         amount -= share;
         if (amount <= 0) return;
       }
       const dmg = Math.max(1, Math.round(amount * (1 - armorReduction(t.armor) - this.guardOf(t))));
       t.hp -= dmg;
-      this.events.push({ e: 'hit', a: by.id, b: t.id, dmg });
+      this.events.push({ e: 'hit', a: by.id, b: t.id, dmg, ...m });
       if (t.hp <= 0) this.killPlayer(t);
       return;
     }
@@ -2052,7 +2055,7 @@ export class Room {
     }
     t.lastAttacker = by.id;
     t.lastHitAt = this.time;
-    this.events.push({ e: 'hit', a: by.id, b: t.id, dmg: Math.round(amount * 100) / 100 }); // 2 décimales
+    this.events.push({ e: 'hit', a: by.id, b: t.id, dmg: Math.round(amount * 100) / 100, ...m }); // 2 décimales
     if (t.hp <= 0) this.killUnit(t, by);
   }
 
@@ -2413,14 +2416,15 @@ export class Room {
       for (const h of this.hazards) {
         if (dist2(h.x, h.y, viewer.x, viewer.y) > vr2) continue;
         const prog = h.fired ? 100 : Math.min(99, Math.round((100 * (this.time - h.start)) / (h.at - h.start)));
-        hazards.push([h.kind, Math.round(h.x), Math.round(h.y), h.r, Math.round(h.x2), Math.round(h.y2), prog, h.boss.owner ? 1 : 0]);
+        hazards.push([h.kind, Math.round(h.x), Math.round(h.y), h.r, Math.round(h.x2), Math.round(h.y2), prog, h.boss.owner,
+          h.style ? HAZARD_STYLES.indexOf(h.style) : -1, h.boss.id, Math.round((h.at - h.start) * 100)]);
       }
       const shots: ShotTuple[] = [];
       for (const sh of this.shots) {
         if (dist2(sh.x, sh.y, viewer.x, viewer.y) > vr2) continue;
         shots.push(SHOT_KINDS[sh.kind] === 'arc'
-          ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S))]
-          : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0]);
+          ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S)), sh.by.owner]
+          : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0, sh.by.owner]);
       }
       const players = [...this.players.values()].map((p) => (p === viewer ? full : light).get(p.id)!);
       // événements : ceux de tout le village, ceux qui lui sont destinés, et ceux qui ont lieu près de lui

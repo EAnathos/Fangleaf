@@ -2,9 +2,10 @@
 
 import { alphaStats, sleeperBlocks, SHORE_R, swimMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
-import type { GameEvent, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
-import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
+import type { GameEvent, HazardTuple, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
+import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
+import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST } from './anim.ts';
 import { type Ambience, sound } from './audio.ts';
 import { Fog } from './fog.ts';
 import { Fx } from './fx.ts';
@@ -39,7 +40,7 @@ export class Game {
   private gateToast = -99; // dernier rappel « porte fermée » // arbre → opacité de son feuillage (1 : opaque)
   private tools = new Map<number, { kind: Tool['kind']; at: number; tx: number; ty: number }>(); // dompteur → dernier coup d'outil (récolte)
   private shotsAt = 0; // réception du dernier snapshot (les projectiles droits sont extrapolés depuis)
-  private faces = new Map<number, { x: number; face: number }>();
+  private faces = new Map<number, { x: number; y: number; face: number; movedAt: number }>();
   private lastFrame = performance.now();
   private time = 0;
   private scale = 1;
@@ -459,6 +460,21 @@ export class Game {
     return u ? { x: u[3], y: u[4] } : undefined;
   }
 
+  /** Coup au corps à corps d'un monstre : il se fend vers sa cible, et l'effet de son arme éclate sur elle. */
+  private meleeHit(id: number, a: { x: number; y: number }, b: { x: number; y: number }, target: number, players: PlayerState[]) {
+    const u = this.net.latest && this.net.byId(this.net.latest).get(id);
+    if (!u || u[2] & UNIT_FLAG_MOUNTED) return; // une monture frappe sous son cavalier : pas de fente
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    this.lunges.set(id, { at: this.time, ang });
+    const sp = SPECIES[u[1]], alpha = (u[2] & UNIT_FLAG_ALPHA) !== 0;
+    const r = alpha ? alphaStats(u[1], 0, 1, (u[2] & UNIT_FLAG_LEGEND) !== 0).r : sp.r;
+    const tr = players.some((p) => p.id === target) ? 16 : SPECIES[this.net.byId(this.net.latest!).get(target)?.[1] ?? 0]?.r ?? 16;
+    // sur le flanc de la cible tourné vers l'attaquant, à mi-hauteur
+    const ix = b.x - Math.cos(ang) * tr * 1.1, iy = b.y - Math.sin(ang) * tr * 0.8 - tr * 0.5;
+    this.fx.impact(impactOf(sp.sprite ?? sp.key), ix, iy, ang, Math.min(80, Math.max(16, r * 1.3)), sp.color);
+    if (sp.boss && Math.hypot(this.me.x - b.x, this.me.y - b.y) < 120) this.shake = Math.max(this.shake, 0.12);
+  }
+
   /** Camp d'un attaquant : soi, sa meute, un coéquipier ou sa meute (couleur du coéquipier), ou un sauvage. */
   private sideOf(id: number, players: PlayerState[]): { kind: 'me' | 'ally' | 'wild'; color: string; pack: boolean } {
     if (id === this.myId) return { kind: 'me', color: '#EEE7D7', pack: false };
@@ -545,6 +561,7 @@ export class Game {
       case 'hit': {
         this.flashes.set(e.b, this.time + 0.1);
         const a = this.posOf(e.a, players), b = this.posOf(e.b, players);
+        if (e.m && a && b && !players.some((p) => p.id === e.a)) this.meleeHit(e.a, a, b, e.b, players);
         const ranged = players.find((q) => q.id === e.a)?.cls;
         if (e.a === this.myId && a && b) {
           // (attaque au clic : le coup est déjà dessiné quand on clique)
@@ -659,9 +676,38 @@ export class Game {
         this.charges.set(e.id, this.time);
         break;
       case 'boom': {
-        const col = e.kind === 'cloud' ? '#A0BE5A' : e.kind === 'web' ? '#EEE7D7' : e.kind === 'splash' ? '#B9D86A' : e.kind === 'orb' ? '#B48CFF' : '#E8693F';
+        // une attaque d'Alpha légendaire (ou d'un tireur de la meute) éclate à la couleur de son dompteur
+        const mine = e.by ? players.find((p) => p.id === e.by)?.color : undefined;
+        const col = e.kind === 'cloud' ? '#A0BE5A' : e.kind === 'web' ? '#EEE7D7' : e.kind === 'orb' ? '#B48CFF' : mine ?? (e.kind === 'splash' ? '#B9D86A' : '#E8693F');
         if (e.kind === 'orb') { // orbe du mage : pas de secousse, juste l'éclat violet
           this.fx.ring(e.x, e.y, col, e.r * 0.3, e.r, 0.35);
+          break;
+        }
+        const near = Math.hypot(this.me.x - e.x, this.me.y - e.y) < e.r + 160;
+        if (e.kind === 'rock') {
+          // le rocher éclate : éclats qui rebondissent, poussière, petites fissures
+          this.fx.debris(e.x, e.y, ['#8A8F8A', '#6E736E', '#A4A8A2'], 16, 210, 10);
+          this.fx.dust(e.x, e.y, e.r * 0.8, 9);
+          this.fx.crack(e.x, e.y, e.r * 0.7, 1.4);
+          this.fx.ring(e.x, e.y, 'rgba(220,210,190,0.8)', e.r * 0.2, e.r, 0.35);
+          if (near) this.shake = Math.max(this.shake, 0.22);
+          break;
+        }
+        if (e.kind === 'leap' || e.kind === 'slam') {
+          // le géant retombe de tout son poids : sol fissuré, onde de poussière, mottes de terre
+          this.fx.crack(e.x, e.y, e.r * (e.kind === 'slam' ? 0.95 : 0.75), 2);
+          this.fx.dust(e.x, e.y, e.r * 0.9, 14);
+          this.fx.debris(e.x, e.y, ['#7A6248', '#5E4A36', '#8A8F8A'], 14, 240, 9);
+          this.fx.ring(e.x, e.y, 'rgba(240,220,180,0.9)', e.r * 0.2, e.r * 1.05, 0.5);
+          this.fx.ring(e.x, e.y, col, e.r * 0.1, e.r * 0.8, 0.7);
+          if (near) this.shake = Math.max(this.shake, e.kind === 'slam' ? 0.4 : 0.35);
+          break;
+        }
+        if (e.kind === 'blink') {
+          this.fx.ring(e.x, e.y, '#BFE3FF', 10, e.r, 0.5);
+          this.fx.burst(e.x, e.y, '#6FB7FF', 24, 200);
+          this.fx.burst(e.x, e.y, '#FFFFFF', 10, 120);
+          if (near) this.shake = Math.max(this.shake, 0.2);
           break;
         }
         this.fx.ring(e.x, e.y, col, e.r * 0.3, e.r, 0.45);
@@ -924,6 +970,7 @@ export class Game {
     }
     for (const m of [this.faces, this.charges] as Map<number, unknown>[]) for (const id of m.keys()) if (!alive.has(id)) m.delete(id);
     for (const [id, until] of this.flashes) if (until < this.time) this.flashes.delete(id);
+    for (const [id, l] of this.lunges) if (this.time - l.at > 1) this.lunges.delete(id);
     for (const [id, sp] of this.sprites) if (this.time - sp.used > 2) this.sprites.delete(id);
     const chests = new Set((this.net.latest?.chests ?? []).map((c) => c[0]));
     for (const m of [this.chestSeen, this.chestOpen]) for (const id of m.keys()) if (!chests.has(id)) m.delete(id);
@@ -935,10 +982,10 @@ export class Game {
    * change : flash, sens, charge…) et recollée à sa position à chaque image : le tracé vectoriel coûte 3 fois moins.
    * Les monstres sont décalés dans le temps pour ne pas tous se redessiner pendant la même image.
    */
-  private drawUnitCached(ctx: CanvasRenderingContext2D, id: number, look: UnitLook) {
+  private drawUnitCached(ctx: CanvasRenderingContext2D, id: number, look: UnitLook, pose: Pose = REST) {
     const r = look.r, res = this.scale;
     const l = r * 2.6, t = r * 2.9, w = r * 5.2, h = r * 4.8; // de quoi contenir aura, couronne, pattes et bond
-    const key = `${look.species}|${look.alpha}|${look.legend}|${look.wild}|${look.ownerColor}|${look.face}|${look.flash}|${r}|${look.inWater}|${Math.round((look.charge ?? 0) * 8)}|${res}`;
+    const key = `${look.species}|${look.alpha}|${look.legend}|${look.wild}|${look.ownerColor}|${look.face}|${look.flash}|${r}|${look.inWater}|${Math.round((look.charge ?? 0) * 8)}|${look.moving}|${res}`;
     const fps = settings.display.quality === 'low' ? 12 : SPRITE_FPS;
     const frame = Math.floor(look.t * fps + (id % 7) / 7);
     let e = this.sprites.get(id);
@@ -955,9 +1002,74 @@ export class Game {
       e.frame = frame;
     }
     e.used = this.time;
-    ctx.drawImage(e.c, look.x - l, look.y - t, w, h);
+    if (pose === REST) return ctx.drawImage(e.c, look.x - l, look.y - t, w, h);
+    // pose d'attaque (fente, élan, écrasement) : l'image est déformée depuis les pieds, sans être redessinée
+    ctx.save();
+    ctx.globalAlpha *= pose.alpha;
+    const fx = look.x + pose.dx, fy = look.y + pose.dy + r * 0.75;
+    ctx.translate(fx, fy - pose.air);
+    ctx.scale(1 / Math.sqrt(pose.squash), pose.squash);
+    ctx.drawImage(e.c, -l, -t - r * 0.75, w, h);
+    ctx.restore();
   }
   private drawList: { y: number; draw: () => void }[] = [];
+  private lunges = new Map<number, { at: number; ang: number }>(); // monstre → dernier coup au corps à corps
+  private fired = new Map<string, number>(); // zone d'attaque → moment de son impact (vu par ce client)
+
+  /**
+   * Attaques spéciales en cours, par lanceur : leur avancement est extrapolé entre deux snapshots (animation fluide),
+   * et l'impact de chacune est daté ici, pour l'écrasement à l'arrivée et le sillon d'une charge.
+   */
+  private trackCasts(hazards: HazardTuple[], late: number) {
+    const casts = new Map<number, Cast>(), seen = new Set<string>();
+    for (const h of hazards) {
+      const style = HAZARD_STYLES[h[8]];
+      if (!style) continue;
+      const key = `${h[0]}|${h[1]}|${h[2]}|${h[9]}`;
+      seen.add(key);
+      let since = 0;
+      if (h[6] >= 100) {
+        let at = this.fired.get(key);
+        if (at === undefined) {
+          this.fired.set(key, (at = this.time));
+          if (style === 'charge') this.chargeTrail(h[1], h[2], h[4], h[5], h[3]);
+        }
+        since = Math.max(0.001, this.time - at);
+      }
+      const k = since ? 1 : Math.min(0.999, h[6] / 100 + late / Math.max(0.05, h[10] / 100));
+      // un géant qui lance plusieurs rochers à la fois : une seule pose
+      if (!casts.has(h[9]) || style !== 'rock') casts.set(h[9], { style, k, since, x: h[1], y: h[2], x2: h[4], y2: h[5] });
+    }
+    for (const key of this.fired.keys()) if (!seen.has(key)) this.fired.delete(key);
+    return casts;
+  }
+
+  /** La charge vient de passer : sillon au sol, poussière tout le long, et quelques mottes de terre. */
+  private chargeTrail(x: number, y: number, x2: number, y2: number, w: number) {
+    this.fx.streak(x, y, x2, y2, w * 1.1);
+    const n = Math.max(2, Math.round(Math.hypot(x2 - x, y2 - y) / 60));
+    for (let i = 0; i <= n; i++) this.fx.dust(x + ((x2 - x) * i) / n, y + ((y2 - y) * i) / n, w * 0.9, 3);
+    this.fx.debris(x2, y2, ['#7A6248', '#5E4A36'], 8, 140, 5);
+  }
+
+  /** Rochers et boules de toile lancés en cloche, du géant jusqu'à leur zone d'impact. */
+  private drawThrown(ctx: CanvasRenderingContext2D, hazards: HazardTuple[], units: UnitTuple[], late: number) {
+    for (const h of hazards) {
+      const style = HAZARD_STYLES[h[8]];
+      if ((style !== 'rock' && style !== 'web') || h[6] >= 100) continue;
+      const src = this.net.latest && this.net.byId(this.net.latest).get(h[9]);
+      const from = units.find((u) => u[0] === h[9]) ?? src;
+      const k = Math.min(0.999, h[6] / 100 + late / Math.max(0.05, h[10] / 100));
+      const sr = from ? SPECIES[from[1]].r : 40;
+      const x0 = from ? from[3] : h[1], y0 = from ? from[4] - sr * 0.6 : h[2] - 300;
+      const dist = Math.hypot(h[1] - x0, h[2] - y0);
+      const at = lobbed(x0, y0, h[1], h[2], k, 160 + dist * 0.45);
+      if (style === 'rock') {
+        const mossy = !!from && SPECIES[from[1]].key === 'moss_heart';
+        drawRock(ctx, at.x, at.y, at.z, 26 + (h[3] / 80) * 8, k * 9 + h[1] * 0.01, h[1] + h[2], mossy);
+      } else drawWebGlob(ctx, at.x, at.y, at.z, 9, this.time);
+    }
+  }
   private sprites = new Map<number, { c: HTMLCanvasElement; key: string; frame: number; used: number }>();
 
   private render(units: UnitTuple[], players: PlayerState[]) {
@@ -997,11 +1109,16 @@ export class Game {
     const camps = this.net.latest?.camps ?? [];
     this.map.sites.forEach((c, i) => inView(c.x, c.y, 260) && this.world.drawSite(ctx, i, camps.includes(i), this.time));
 
-    // Attaques spéciales des mini-boss, au sol sous les créatures.
-    for (const h of this.net.latest?.hazards ?? []) if (inView(h[1], h[2], 500)) drawHazard(ctx, h, this.time);
     // Projectiles des tireurs (dessinés après les créatures) : les tirs droits sont extrapolés entre deux snapshots.
     const shots = this.net.latest?.shots ?? [];
     const late = Math.min(0.12, this.time - this.shotsAt);
+    // Attaques spéciales des mini-boss, au sol sous les créatures, et ce qu'elles font faire à leur lanceur.
+    const hazards = this.net.latest?.hazards ?? [];
+    const casts = this.trackCasts(hazards, late);
+    const colorOf = new Map(players.map((p) => [p.id, p.color]));
+    for (const h of hazards) if (inView(h[1], h[2], 500)) drawHazard(ctx, h, this.time, colorOf.get(h[7]));
+    this.fx.drawGround(ctx); // fissures et sillons au sol
+    const air: { y: number; draw: () => void }[] = []; // ce qui passe au-dessus de tout : géant en plein bond, rochers lancés
 
     // Tri par profondeur : unités, joueurs, filons et entrées de grotte ensemble.
     const list = this.drawList; // réutilisée d'une image à l'autre
@@ -1053,7 +1170,6 @@ export class Game {
       if (hp <= 0) continue;
       list.push({ y: o.y, draw: () => drawOre(ctx, o.x, o.y, o.zone, hp, this.time, o.id, o.res) });
     }
-    const colorOf = new Map(players.map((p) => [p.id, p.color]));
 
     for (const u of units) {
       const [id, s, flags, x, y, hp, owner] = u;
@@ -1063,20 +1179,35 @@ export class Game {
       const legend = (flags & UNIT_FLAG_LEGEND) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
       const boss = SPECIES[s].boss && owner === 0;
-      const f = this.faces.get(id) ?? { x, face: 1 };
+      const f = this.faces.get(id) ?? { x, y, face: 1, movedAt: -9 };
       if (Math.abs(x - f.x) > 0.5) f.face = x > f.x ? 1 : -1;
-      f.x = x;
+      if (Math.hypot(x - f.x, y - f.y) > 0.25) f.movedAt = this.time;
+      [f.x, f.y] = [x, y];
       this.faces.set(id, f);
+      const cast = casts.get(id), lunge = this.lunges.get(id);
+      if (lunge && this.time - lunge.at < 0.6 && Math.abs(Math.cos(lunge.ang)) > 0.2) f.face = Math.cos(lunge.ang) > 0 ? 1 : -1; // il frappe face à sa cible
+      const pose = cast ? castPose(cast, r, x, y, this.time) : (lunge && lungePose(this.time - lunge.at, r, lunge.ang)) || REST;
+      const ghost = cast ? ghostOf(cast) : 0;
+      const look = (): UnitLook => {
+        const ranged = SPECIES[s].ranged, c0 = this.charges.get(id);
+        const charge = ranged && c0 !== undefined && this.time - c0 < ranged.windup + 0.15 ? Math.min(1, (this.time - c0) / ranged.windup) : 0;
+        return {
+          x, y, r, species: s, alpha, wild: owner === 0, ownerColor: owner ? colorOf.get(owner) : undefined,
+          face: f.face, t: this.time, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, legend,
+          charge, inWater: !!SPECIES[s].swim && this.map.isWater(x, y), moving: this.time - f.movedAt < 0.2,
+        };
+      };
+      // clignement : sa silhouette se forme déjà au point d'arrivée
+      if (ghost && cast) list.push({ y: cast.y, draw: () => this.drawUnitCached(ctx, id, { ...look(), x: cast.x, y: cast.y }, { ...REST, alpha: ghost }) });
+      if (pose.air > r * 0.6) {
+        // en plein bond : au-dessus de tout, l'ombre reste au sol (et rétrécit)
+        air.push({ y: y + pose.dy, draw: () => drawUnit(ctx, { ...look(), x: x + pose.dx, y: y + pose.dy, air: pose.air, squash: pose.squash }) });
+        continue;
+      }
       list.push({
         y,
         draw: () => {
-          const ranged = SPECIES[s].ranged, c0 = this.charges.get(id);
-          const charge = ranged && c0 !== undefined && this.time - c0 < ranged.windup + 0.15 ? Math.min(1, (this.time - c0) / ranged.windup) : 0;
-          this.drawUnitCached(ctx, id, {
-            x, y, r, species: s, alpha, wild: owner === 0, ownerColor: owner ? colorOf.get(owner) : undefined,
-            face: f.face, t: this.time, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, legend,
-            charge, inWater: !!SPECIES[s].swim && this.map.isWater(x, y),
-          });
+          this.drawUnitCached(ctx, id, look(), pose);
           if (boss && flags & UNIT_FLAG_DORMANT) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
           if (boss) {
             // Mini-boss : nom et grande barre de vie, toujours visibles.
@@ -1105,7 +1236,7 @@ export class Game {
       if (!inView(x, y, 80)) continue;
       const alpha = (flags & UNIT_FLAG_ALPHA) !== 0, legend = (flags & UNIT_FLAG_LEGEND) !== 0, asleep = (flags & UNIT_FLAG_DORMANT) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
-      const f = this.faces.get(id) ?? { x, face: 1 };
+      const f = this.faces.get(id) ?? { x, y, face: 1, movedAt: -9 };
       if (Math.abs(x - f.x) > 0.5) f.face = x > f.x ? 1 : -1;
       f.x = x;
       this.faces.set(id, f);
@@ -1175,11 +1306,14 @@ export class Game {
     }
     list.sort((a, b) => a.y - b.y);
     for (const d of list) d.draw();
+    this.drawThrown(ctx, hazards, units, late);
+    air.sort((a, b) => a.y - b.y);
+    for (const d of air) d.draw();
     if (!here) this.drawMist(camX, camY, hw, hh);
     this.drawBubbles(players);
-    for (const [, kind, x, y, a, b, c] of shots) {
-      if (kind === 1) drawShot(ctx, kind, x, y, a, b, Math.min(100, c + (late * 100) / ARC_FLIGHT_S), this.time);
-      else drawShot(ctx, kind, x + a * late, y + b * late, a, b, 0, this.time);
+    for (const [, kind, x, y, a, b, c, owner] of shots) {
+      if (kind === 1) drawShot(ctx, kind, x, y, a, b, Math.min(100, c + (late * 100) / ARC_FLIGHT_S), this.time, colorOf.get(owner));
+      else drawShot(ctx, kind, x + a * late, y + b * late, a, b, 0, this.time, colorOf.get(owner));
     }
     this.fog.draw(ctx, -WORLD_HALF, -WORLD_HALF, WORLD_HALF * 2, WORLD_HALF * 2, 0.88);
     this.fx.draw(ctx);

@@ -97,15 +97,21 @@ export interface ArmySlot {
 /** Unité compacte : [id, espèce, flags, x, y, pv%, idDuDompteur (0 = sauvage)] */
 export type UnitTuple = [number, number, number, number, number, number, number];
 /**
- * Attaque spéciale au sol : [type, x, y, rayon, x2, y2, avancement %, alliée] — type 0 cercle, 1 ligne (x2,y2 = bout,
- * rayon = demi-largeur), 2 nuage, 3 toile. avancement 100 = actif. alliée 1 : lancée par un Alpha légendaire.
+ * Attaque spéciale au sol : [type, x, y, rayon, x2, y2, avancement %, dompteur, style, lanceur, durée] — type 0 cercle,
+ * 1 ligne (x2,y2 = bout, rayon = demi-largeur), 2 nuage, 3 toile. avancement 100 = actif. dompteur : id du dompteur
+ * dont l'Alpha légendaire l'a lancée (dessinée à sa couleur), 0 pour un sauvage. style : index dans HAZARD_STYLES (-1 : aucun), pour l'animer ; lanceur : id de l'unité ;
+ * durée : temps d'annonce avant l'impact, en centièmes de seconde.
  */
-export type HazardTuple = [number, number, number, number, number, number, number, number];
+export type HazardTuple = [number, number, number, number, number, number, number, number, number, number, number];
+/** Attaque d'où vient une zone annoncée au sol (le client l'anime : bond, rocher lancé, onde de choc…). */
+export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores'] as const;
+export type HazardStyle = (typeof HAZARD_STYLES)[number];
 /**
- * Projectile de tireur : [id, type, x, y, a, b, c] — type 0 trait (bolt), 1 en cloche (arc), 2 jet.
+ * Projectile de tireur : [id, type, x, y, a, b, c, dompteur] — type 0 trait (bolt), 1 en cloche (arc), 2 jet.
  * Trait et jet : (x, y) position, (a, b) vitesse px/s. Cloche : (x, y) départ, (a, b) point d'impact, c avancement %.
+ * dompteur : id du dompteur du tireur (meute, légendaire : dessiné à sa couleur), 0 pour un sauvage.
  */
-export type ShotTuple = [number, number, number, number, number, number, number];
+export type ShotTuple = [number, number, number, number, number, number, number, number];
 
 /** Dompteur déconnecté, endormi au village : [nom, couleur, armure, classe ('' sans), x, y]. */
 export type SleeperTuple = [string, string, number, string, number, number];
@@ -118,7 +124,7 @@ export const UNIT_FLAG_LEGEND = 4; // Alpha légendaire
 export const UNIT_FLAG_DORMANT = 8; // géant qui attend qu'on vienne lui parler (ni cible ni menace)
 
 export type GameEvent =
-  | { e: 'hit'; a: number; b: number; dmg: number }
+  | { e: 'hit'; a: number; b: number; dmg: number; m?: 1 } // m : coup au corps à corps
   | { e: 'die'; x: number; y: number; s: number; alpha: boolean }
   | { e: 'tame'; id: number; by: number; s: number }
   | { e: 'gold'; to: number; n: number; x: number; y: number }
@@ -132,7 +138,7 @@ export type GameEvent =
   | { e: 'eat'; id: number; bush: number } // du gibier mange les fruits d'un buisson
   | { e: 'pick'; by: number; bush: number; n: number } // baies cueillies
   | { e: 'feed'; by: number; id: number } // un fruit donné, sans apprivoiser cette fois
-  | { e: 'boom'; x: number; y: number; r: number; kind: string } // une attaque spéciale frappe
+  | { e: 'boom'; x: number; y: number; r: number; kind: string; by?: number } // une attaque spéciale frappe (by : dompteur de l'Alpha qui l'a lancée)
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire
   | { e: 'shot'; by: number; x: number; y: number; tx: number; ty: number; cls: ClassId } // flèche ou orbe
   | { e: 'class'; id: number; cls: ClassId }
