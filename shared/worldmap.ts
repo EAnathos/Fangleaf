@@ -32,7 +32,7 @@ export const BEACH = 190; // largeur de la plage, côté terre
 const DENS = 7; // tanières de suricates
 const ZONE_BLEND = 900; // largeur de la transition (affichage) entre deux zones
 const STAMP_R = 4300; // au-delà, mer profonde : on ne calcule plus la distance à la colonne
-const LANE = 230; // voie centrale jamais inondée
+const LANE = 280; // voie centrale jamais inondée (bord bruité)
 const CAVE_GAP = 4000; // > VIEW_R + 2 × CAVE_RX + la demi-largeur de l'écran
 const VILLAGE_ARC = 800; // abscisse du village le long de la colonne
 const ZONE1_EXTRA = VILLAGE_ARC + VILLAGE_R; // la zone 1 commence par la plage et le village : elle est plus longue
@@ -209,15 +209,20 @@ export class WorldMap {
     for (let j = 0; j < N; j++) {
       for (let i = 0; i < N; i++) {
         const k = j * N + i;
-        const lakes5 = this.arc[k] > this.zoneFrom(5) && this.arc[k] < this.zoneTo(5); // Lacs brumeux : les lacs peuvent rejoindre la mer
-        if (this.water[k] !== 0 || this.cdist[k] < LANE || (!lakes5 && this.shore[k] > -BEACH - 120)) continue;
+        if (this.water[k] !== 0 || this.shore[k] > 1e8) continue;
         const p = { x: -WORLD_HALF + (i + 0.5) * MAP_CELL, y: -WORLD_HALF + (j + 0.5) * MAP_CELL };
+        // part de Lacs brumeux et de désert, en fondu à travers les frontières bruitées des zones (pas de bord au cordeau)
+        const m = this.zoneMix(p.x, p.y), w = (z: number) => (m.z0 === z ? 1 - m.t : 0) + (m.z1 === z ? m.t : 0);
+        const w5 = w(5), w6 = w(6);
+        if (w5 < 0.5 && this.shore[k] > -BEACH - 120) continue; // plage au sec (sauf aux Lacs brumeux : les lacs y rejoignent la mer)
+        // voie centrale au sec, au bord très irrégulier (jamais moins d'une centaine de px de chaque côté de la colonne)
+        if (this.cdist[k] < LANE + (fbm(p.x / 500, p.y / 500, this.seed + 95, 2) - 0.5) * 700) continue;
         if (dist2(p.x, p.y, village.x, village.y) < (VILLAGE_R + 160) ** 2) continue;
         if (dist2(p.x, p.y, this.spawn.x, this.spawn.y) < 320 ** 2) continue;
         if (this.sites.some((c) => dist2(p.x, p.y, c.x, c.y) < 380 ** 2)) continue;
-        const desert = this.arc[k] > this.zoneFrom(6) && this.arc[k] < this.zoneTo(6);
         // près de la côte des Lacs brumeux, l'eau gagne : bras de mer et lacs ouverts sur l'océan
-        const threshold = desert ? LAKE_THRESHOLD_DESERT : lakes5 ? LAKE_THRESHOLD_LAKES + 0.04 - 0.12 * clamp(1 + this.shore[k] / 450, 0, 1) : LAKE_THRESHOLD;
+        const lakes = LAKE_THRESHOLD_LAKES + 0.04 - 0.12 * clamp(1 + this.shore[k] / 450, 0, 1);
+        const threshold = LAKE_THRESHOLD + (lakes - LAKE_THRESHOLD) * w5 + (LAKE_THRESHOLD_DESERT - LAKE_THRESHOLD) * w6;
         if (this.lakeNoise(p.x, p.y) > threshold && this.pathDist(p.x, p.y) >= 130) this.water[k] = 1;
       }
     }
@@ -694,11 +699,17 @@ export class WorldMap {
   }
 
   /** Bruit des lacs : coordonnées tournées et déformées pour des rives organiques, pas alignées sur la grille. */
+  /**
+   * Bruit des lacs : deux grilles de bruit tournées l'une par rapport à l'autre et moyennées, plus une déformation
+   * large et une fine, pour des berges organiques (une seule grille donne par endroits des bords presque droits).
+   */
   private lakeNoise(x: number, y: number) {
-    const rx = x * 0.8 - y * 0.6, ry = x * 0.6 + y * 0.8;
-    const wx = (fbm(x / 900, y / 900, this.seed + 13, 2) - 0.5) * 700;
-    const wy = (fbm(x / 900, y / 900, this.seed + 17, 2) - 0.5) * 700;
-    return fbm((rx + wx) / 620, (ry + wy) / 620, this.seed + 77, 4);
+    const wx = (fbm(x / 900, y / 900, this.seed + 13, 2) - 0.5) * 700 + (fbm(x / 260, y / 260, this.seed + 14, 2) - 0.5) * 220;
+    const wy = (fbm(x / 900, y / 900, this.seed + 17, 2) - 0.5) * 700 + (fbm(x / 260, y / 260, this.seed + 18, 2) - 0.5) * 220;
+    const X = x + wx, Y = y + wy;
+    const a = fbm((X * 0.8 - Y * 0.6) / 620, (X * 0.6 + Y * 0.8) / 620, this.seed + 77, 4);
+    const b = fbm((X * 0.26 + Y * 0.97) / 560, (-X * 0.97 + Y * 0.26) / 560, this.seed + 79, 4);
+    return 0.5 + (a + b - 1) * 0.72; // la moyenne de deux bruits est plus resserrée : on la rétablit
   }
 
   /** Infranchissable : eau, obstacle solide (arbre, rocher, mur) ou hors du monde. */

@@ -16,6 +16,10 @@ const TAU = Math.PI * 2;
 export const SEA_DEEP = [24, 64, 92];
 const SEA_SHALLOW_COL = [52, 138, 156];
 const BEACH_SAND = [222, 202, 150];
+const FOAM = [226, 240, 236];
+const LAKE_WATER = [61, 127, 140]; // mêmes bleus que l'eau des lacs (#3D7F8C, #2E6574)
+const LAKE_DEEP = [46, 101, 116];
+const MOUTH = 280; // à moins de ça de la côte, l'eau d'un lac se fond dans celle de la mer
 export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76], [204, 172, 114], [86, 132, 72]];
 const STEPPE = [124, 140, 78]; // lisière verte entre le sable du désert et la mer
 const COAST_GREEN = 700; // largeur de cette lisière
@@ -96,8 +100,10 @@ export function desertMix(map: WorldMap, x: number, y: number) {
 }
 
 /** Couleur de la mer : claire le long de la côte, de plus en plus sombre vers le large. */
-export function seaColor(map: WorldMap, x: number, y: number) {
-  return lerp3(SEA_SHALLOW_COL, SEA_DEEP, Math.min(1, map.shoreAt(x, y) / (SEA_SHALLOW + 500)));
+export function seaColor(map: WorldMap, x: number, y: number, surf = true) {
+  const sh = map.shoreAt(x, y), col = lerp3(SEA_SHALLOW_COL, SEA_DEEP, Math.min(1, Math.max(0, sh) / (SEA_SHALLOW + 500)));
+  const foam = surf ? Math.max(0, 1 - sh / 70) : 0; // écume au bord, fondue (pas de chapelet de bulles)
+  return foam ? lerp3(col, FOAM, foam * foam * 0.75) : col;
 }
 
 /**
@@ -190,10 +196,26 @@ export class World {
     for (let j = 0; j < T; j++) {
       for (let i = 0; i < T; i++) {
         const px = ox + (i - 1) * TILE + TILE / 2, py = oy + (j - 1) * TILE + TILE / 2;
-        const sea = map.isSea(px, py);
+        const sea = map.isSea(px, py), sh = map.caveAt(px, py) ? -1e9 : map.shoreAt(px, py);
         const meadow = fbm(px / 420, py / 420, this.seed + 3, 2);
         const v = sea ? 0.97 + meadow * 0.06 : 0.93 + meadow * 0.12;
-        const col = sea ? seaColor(map, px, py) : landColor(map, px, py), o = (j * T + i) * 4;
+        // mer au débouché d'un lac : ni écume ni sable, l'eau continue
+        const mouth = sea && sh < 90 && [40, 80].some((r) => [0, 1, 2, 3, 4, 5, 6, 7].some((a) => {
+          const qx = px + Math.cos(a * 0.785) * r, qy = py + Math.sin(a * 0.785) * r;
+          return map.isWater(qx, qy) && !map.isSea(qx, qy);
+        }));
+        let col = mouth ? seaColor(map, px, py, false) : sea ? seaColor(map, px, py) : landColor(map, px, py);
+        if (!sea && sh > -MOUTH && map.isWater(px, py)) {
+          // lac ou bras d'eau près de la côte : il passe peu à peu au bleu de la mer (embouchure sans couture)
+          const k = Math.min(1, Math.max(0, (sh + MOUTH) / (MOUTH - 20)));
+          const deep = [1, -1].every((d) => map.isWater(px + d * 2 * TILE, py) && map.isWater(px, py + d * 2 * TILE)); // comme les disques des lacs
+          col = lerp3(deep ? LAKE_DEEP : LAKE_WATER, SEA_SHALLOW_COL, k * k * (3 - 2 * k));
+        } else if (!mouth && Math.abs(sh) < 32) {
+          // au bord de l'eau, la mer et le sable se fondent : la côte est continue une fois agrandie (pas de marches)
+          const k = (sh + 32) / 64, f = k * k * (3 - 2 * k);
+          col = lerp3(sea ? landColor(map, px, py) : col, sea ? col : seaColor(map, px, py), f);
+        }
+        const o = (j * T + i) * 4;
         ground.img.data[o] = col[0] * v;
         ground.img.data[o + 1] = col[1] * v;
         ground.img.data[o + 2] = col[2] * v;
@@ -205,18 +227,7 @@ export class World {
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(ground.canvas, ox - TILE, oy - TILE, T * TILE, T * TILE);
 
-    // Écume le long de la côte, et quelques vagues au large.
-    ctx.fillStyle = 'rgba(240,248,245,0.55)';
-    ctx.beginPath();
-    for (let ty = oy - TILE; ty < oy + CHUNK + TILE; ty += TILE) {
-      for (let tx = ox - TILE; tx < ox + CHUNK + TILE; tx += TILE) {
-        const px = tx + TILE / 2, py = ty + TILE / 2, sh = map.isSea(px, py) ? map.shoreAt(px, py) : -1;
-        if (sh < 0 || sh > 28) continue;
-        ctx.moveTo(px + 9, py);
-        ctx.arc(px, py, 9, 0, TAU);
-      }
-    }
-    ctx.fill();
+    // Quelques vagues au large (l'écume du bord est dans la couleur de la mer : voir seaColor).
     ctx.strokeStyle = 'rgba(220,240,245,0.35)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -260,23 +271,25 @@ export class World {
     }
 
     // Lacs (pas la mer) : disques par case pour des berges arrondies (berge, puis eau, puis eau profonde).
-    const water: [number, number, boolean][] = [];
+    const water: [number, number, boolean, boolean][] = []; // x, y, profonde, près de l'embouchure (pas de berge)
     for (let ty = oy - TILE; ty < oy + CHUNK + TILE; ty += TILE) {
       for (let tx = ox - TILE; tx < ox + CHUNK + TILE; tx += TILE) {
         const px = tx + TILE / 2, py = ty + TILE / 2;
-        if (!map.isWater(px, py) || map.isSea(px, py)) continue;
+        if (!map.isWater(px, py) || map.isSea(px, py) || map.shoreAt(px, py) > -MOUTH) continue; // près de la côte : peint avec le sol (fondu vers la mer)
         const deep = map.isWater(px + 2 * TILE, py) && map.isWater(px - 2 * TILE, py) && map.isWater(px, py + 2 * TILE) && map.isWater(px, py - 2 * TILE);
-        water.push([px, py, deep]);
+        water.push([px, py, deep, map.shoreAt(px, py) > -MOUTH - 70]);
       }
     }
     if (water.length) {
       for (const [color, rad, onlyDeep] of [['#5E6B49', 17, false], ['#3D7F8C', 13.5, false], ['#2E6574', 14, true]] as const) {
         ctx.fillStyle = color;
         ctx.beginPath();
-        for (const [px, py, deep] of water) {
-          if (onlyDeep && !deep) continue;
-          ctx.moveTo(px + rad, py);
-          ctx.arc(px, py, rad, 0, TAU);
+        for (const [px, py, deep, mouth] of water) {
+          if ((onlyDeep && !deep) || (mouth && color === '#5E6B49')) continue; // pas de berge en bordure de l'embouchure
+          // un peu de désordre : des berges arrondies et irrégulières, pas des bords au cordeau
+          const jx = (hash2(px, py, this.seed + 31) - 0.5) * 6, jy = (hash2(py, px, this.seed + 32) - 0.5) * 6, r = rad + (hash2(px, py, this.seed + 33) - 0.5) * 5;
+          ctx.moveTo(px + jx + r, py + jy);
+          ctx.arc(px + jx, py + jy, r, 0, TAU);
         }
         ctx.fill();
       }
