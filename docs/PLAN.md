@@ -15,7 +15,7 @@ Maquettes : canvas design « Fangleaf — Game Design » (lobby, HUD, forge, bes
 | Combat | Attaque auto du joueur sur l'ennemi le plus proche ; la meute engage seule, mais lâche tout et revient si le dompteur s'éloigne à plus de 320 px | Compétences actives |
 | Apprivoisement | 25 % de chance à chaque kill (50 % des stats de la version sauvage), meute max 12 | Objets d'apprivoisement, rareté |
 | Alpha | Aucun Alpha sauvage. À la Tanière, on lance l'éveil de l'Alpha d'une espèce avec 15 essences (30 s × zone de l'espèce, il continue hors ligne) (35 % de chance d'en obtenir une par monstre de l'espèce vaincu à proximité), puis on le renforce (10, 16, 26, 41, 66… essences : ×1,6 par niveau). Un Alpha par espèce, hors limite de meute ; il ressuscite après 10 + 8 × zone s | Alphas uniques nommés, boss de zone |
-| Progression | Or par kill → forge : arme (dégâts) et armure (PV max + réduction) séparées, 11 niveaux chacune. Essences par kill → Tanière : éveiller puis renforcer chaque Alpha (×1,25 PV/dégâts par niveau) | Arbre d'équipement, niveaux de monstres |
+| Progression | Or par kill → forge : arme (dégâts) et armure (PV max + réduction) séparées, 11 niveaux chacune. Essences par kill → Tanière : éveiller puis renforcer chaque Alpha (+15 % PV/dégâts par niveau) | Arbre d'équipement, niveaux de monstres |
 | Mort | La meute ordinaire se disperse, seuls les Alphas restent | |
 | Village | Zone sûre, éloignée du point d'arrivée : seule zone de soins (aucune régénération dehors), forge, tanière des Alphas, réapparition après une mort | Bâtiments à construire, stockage |
 | Coop | Villages à code (6 lettres), 3 places, lien d'invitation, or et essences partagés à proximité | Comptes, amis, matchmaking public |
@@ -37,7 +37,7 @@ Maquettes : canvas design « Fangleaf — Game Design » (lobby, HUD, forge, bes
 
 Joueur : 60 PV et 10 dégâts au départ.
 Arme niveau n : dégâts = (10 + 4n) × 0,75, coût = 25 × 1,6ⁿ. Armure niveau n : PV max = 60 + 20n, réduction = 3n %, coût = 20 × 1,6ⁿ.
-Alpha : ×2,5 PV et dégâts du monstre de base, taille ×1,6 ; éveil = 15 essences, renforcement niveau n → n+1 = 10 × 1,6ⁿ essences ; +25 % PV/dégâts par niveau.
+Alpha : ×2,5 PV et dégâts du monstre de base, taille ×1,6 ; éveil = 15 essences, renforcement niveau n → n+1 = 10 × 1,6ⁿ essences ; +15 % PV/dégâts par niveau.
 
 ---|---|---|---|---|---|
 | Gluant | 450–1100 | 30 | 4 | lent | 2 |

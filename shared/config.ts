@@ -233,7 +233,7 @@ export const ALPHA_CREATE_COST = 15;
 /** Temps d'éveil d'un Alpha après avoir payé ses essences : plus l'espèce est forte, plus c'est long. */
 export const alphaAwakenS = (species: number) => 30 * SPECIES[species].zone;
 export const ESSENCE_DROP = 0.35; // chance, pour chaque dompteur proche, qu'un monstre vaincu lâche une essence
-export const alphaLevelMult = (lvl: number) => 1 + 0.25 * lvl;
+export const alphaLevelMult = (lvl: number) => 1 + 0.15 * lvl; // +15 % de PV et de dégâts par niveau
 /** Résurrection d'un Alpha : plus son espèce est forte (zone), plus elle est longue. Le niveau n'y change rien. */
 export const alphaReviveS = (species: number) => 10 + 8 * SPECIES[species].zone;
 export const alphaUpCost = (lvl: number) => Math.round(10 * Math.pow(1.6, lvl)); // 10, 16, 26, 41, 66…
