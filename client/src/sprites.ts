@@ -49,6 +49,9 @@ export interface UnitLook {
   inWater?: boolean; // serpent : nage (seuls la tête et les anneaux dépassent)
 }
 
+/** Décalage de la couronne (Alpha, géant) vers la tête, en rayons, pour les espèces dont la tête est loin devant. */
+const CROWN_X: Record<string, number> = { bear: 0.8, boar: 0.85 };
+
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
   const key = u.key ?? SPECIES[u.species].sprite ?? SPECIES[u.species].key;
@@ -97,25 +100,27 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
     ctx.fillStyle = '#F0B64A';
     ctx.strokeStyle = 'rgba(12,18,16,0.8)';
     ctx.lineWidth = Math.max(1.5, r * 0.06);
+    const bx = (CROWN_X[key] ?? 0) * r;
     ctx.beginPath();
-    ctx.moveTo(-r * 0.42, -r * 0.8);
-    ctx.lineTo(-r * 0.46, -r * 1.3);
-    ctx.lineTo(-r * 0.2, -r * 1.05);
-    ctx.lineTo(0, -r * 1.42);
-    ctx.lineTo(r * 0.2, -r * 1.05);
-    ctx.lineTo(r * 0.46, -r * 1.3);
-    ctx.lineTo(r * 0.42, -r * 0.8);
+    ctx.moveTo(bx - r * 0.42, -r * 0.8);
+    ctx.lineTo(bx - r * 0.46, -r * 1.3);
+    ctx.lineTo(bx - r * 0.2, -r * 1.05);
+    ctx.lineTo(bx, -r * 1.42);
+    ctx.lineTo(bx + r * 0.2, -r * 1.05);
+    ctx.lineTo(bx + r * 0.46, -r * 1.3);
+    ctx.lineTo(bx + r * 0.42, -r * 0.8);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
   } else if (u.alpha) {
+    const cx = (CROWN_X[key] ?? 0) * r; // posée sur la tête quand elle est loin devant (ours)
     ctx.fillStyle = u.legend ? '#F0B64A' : '#B48CFF';
     ctx.beginPath();
-    ctx.moveTo(-r * 0.35, -r * 0.82);
-    ctx.lineTo(-r * 0.22, -r * 1.35);
-    ctx.lineTo(0, -r * 1.0);
-    ctx.lineTo(r * 0.22, -r * 1.35);
-    ctx.lineTo(r * 0.35, -r * 0.82);
+    ctx.moveTo(cx - r * 0.35, -r * 0.82);
+    ctx.lineTo(cx - r * 0.22, -r * 1.35);
+    ctx.lineTo(cx, -r * 1.0);
+    ctx.lineTo(cx + r * 0.22, -r * 1.35);
+    ctx.lineTo(cx + r * 0.35, -r * 0.82);
     ctx.closePath();
     ctx.fill();
   }
@@ -616,80 +621,168 @@ function taper(ctx: Ctx, r: number, pts: number[], w0: number, w1: number, color
   }
 }
 
-function legs4(ctx: Ctx, r: number, u: UnitLook, color: string, xs: number[], y: number, h: number, w: number) {
-  const step = Math.sin(u.t * 9 + u.seed) * r * 0.06;
-  ctx.fillStyle = color;
-  xs.forEach((lx, i) => {
-    ctx.beginPath();
-    ctx.roundRect(r * lx - r * w / 2, r * y + step * (i % 2 ? 1 : -1), r * w, r * h, r * 0.06);
-    ctx.fill();
-  });
-}
-
 // ───────────────────────── Sanglier ─────────────────────────
 
-/** Sanglier : crête de soies, tête en coin et grandes défenses recourbées. */
-function boar(ctx: Ctx, r: number, fill: string, u: UnitLook) {
-  const dark = u.flash ? '#FFFFFF' : '#4E321F';
-  const ivory = u.flash ? '#FFFFFF' : '#F1E8D2';
-  legs4(ctx, r, u, dark, [-0.72, -0.38, 0.18, 0.5], 0.38, 0.42, 0.22);
-  // queue
-  taper(ctx, r, [-1.0, -0.05, -1.25, -0.2, -1.3, 0.05, -1.18, 0.12], 0.08, 0.05, dark, false);
-  // corps
-  ctx.fillStyle = fill;
+/** Chemin fermé à partir de points [x, y] (en rayons), lissé par des courbes passant par les milieux. */
+const boarPath = (ctx: Ctx, r: number, pts: number[][]) => {
   ctx.beginPath();
-  ctx.ellipse(-0.08 * r, 0.06 * r, 1.02 * r, 0.66 * r, 0, 0, TAU);
-  ctx.fill();
-  ink(ctx, r);
-  // ventre plus clair
-  ctx.fillStyle = 'rgba(255,230,200,0.12)';
-  ctx.beginPath();
-  ctx.ellipse(-0.1 * r, 0.32 * r, 0.75 * r, 0.25 * r, 0, 0, TAU);
-  ctx.fill();
-  // crête de soies, du dos jusqu'à la nuque
-  ctx.fillStyle = dark;
-  ctx.beginPath();
-  ctx.moveTo(-0.85 * r, -0.28 * r);
-  for (let i = 0; i <= 10; i++) {
-    const k = i / 10, x = (-0.85 + k * 1.45) * r;
-    const base = -0.42 - Math.sin(k * Math.PI) * 0.2;
-    ctx.lineTo(x, (base - (i % 2 ? 0.2 : 0)) * r);
+  const n = pts.length, mid = (i: number) => [((pts[i % n][0] + pts[(i + 1) % n][0]) / 2) * r, ((pts[i % n][1] + pts[(i + 1) % n][1]) / 2) * r];
+  const [sx, sy] = mid(n - 1);
+  ctx.moveTo(sx, sy);
+  for (let i = 0; i < n; i++) {
+    const [mx, my] = mid(i);
+    ctx.quadraticCurveTo(pts[i][0] * r, pts[i][1] * r, mx, my);
   }
-  ctx.lineTo(0.6 * r, -0.2 * r);
   ctx.closePath();
-  ctx.fill();
-  // tête en coin, groin au bout
-  ctx.fillStyle = fill;
+};
+/** Patte fine de suidé : jarret, puis sabot fendu sombre. swing : angle du pas. */
+const hoofLeg = (ctx: Ctx, r: number, x: number, y: number, w: number, h: number, swing: number, col: string, hoof: string) => {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(swing);
+  ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.moveTo(0.45 * r, -0.4 * r);
-  ctx.quadraticCurveTo(0.95 * r, -0.35 * r, 1.22 * r, 0.02 * r);
-  ctx.lineTo(1.22 * r, 0.32 * r);
-  ctx.quadraticCurveTo(0.8 * r, 0.55 * r, 0.42 * r, 0.38 * r);
+  ctx.moveTo(-w * 0.6, 0);
+  ctx.lineTo(w * 0.6, 0);
+  ctx.lineTo(w * 0.42, h * 0.82);
+  ctx.lineTo(-w * 0.42, h * 0.82);
   ctx.closePath();
   ctx.fill();
-  ink(ctx, r);
-  // oreille
+  furLine(ctx, r, 0.06);
+  ctx.fillStyle = hoof;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.5, h * 0.8);
+  ctx.lineTo(w * 0.55, h * 0.8);
+  ctx.lineTo(w * 0.6, h);
+  ctx.lineTo(-w * 0.55, h);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth = Math.max(1, r * 0.02);
+  ctx.beginPath();
+  ctx.moveTo(w * 0.05, h * 0.82);
+  ctx.lineTo(w * 0.05, h);
+  ctx.stroke();
+  ctx.restore();
+};
+/** Défense d'ivoire qui part de la gueule et remonte en croissant. */
+const ivoryTusk = (ctx: Ctx, r: number, x: number, y: number, len: number, col: string, broken = false) => {
+  const l = broken ? len * 0.45 : len;
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(x - 0.05 * r, y);
+  ctx.quadraticCurveTo(x + l * 0.75, y + l * 0.05, x + l * 0.62, y - l * 0.85);
+  if (broken) ctx.lineTo(x + l * 0.46, y - l * 0.8);
+  ctx.quadraticCurveTo(x + l * 0.42, y - l * 0.15, x - 0.05 * r, y - 0.09 * r);
+  ctx.closePath();
+  ctx.fill();
+  furLine(ctx, r, 0.04);
+};
+/** Crête de soies dentelée le long de l'échine : de (x0, y0) à (x1, y1), plus haute au garrot. */
+const bristles = (ctx: Ctx, r: number, x0: number, y0: number, x1: number, y1: number, h: number, n: number, col: string) => {
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(x0 * r, y0 * r + 0.06 * r);
+  for (let i = 0; i <= n; i++) {
+    const k = i / n, x = x0 + (x1 - x0) * k, y = y0 + (y1 - y0) * k;
+    const lift = (i % 2 ? 1 : 0.35) * h * (0.45 + Math.sin(k * Math.PI * 0.9 + 0.3) * 0.75);
+    ctx.lineTo((x - 0.02) * r, (y - lift) * r);
+  }
+  ctx.lineTo(x1 * r, y1 * r + 0.08 * r);
+  ctx.closePath();
+  ctx.fill();
+};
+/** Groin : disque au bout du museau, deux narines. */
+const pigSnout = (ctx: Ctx, r: number, x: number, y: number, rx: number, ry: number, col: string) => {
+  blot(ctx, x, y, rx, ry, col);
+  ctx.beginPath();
+  ctx.ellipse(x, y, rx, ry, 0, 0, TAU);
+  furLine(ctx, r, 0.04);
+  blot(ctx, x + rx * 0.15, y - ry * 0.35, rx * 0.22, ry * 0.18, '#10181A');
+  blot(ctx, x + rx * 0.15, y + ry * 0.35, rx * 0.22, ry * 0.18, '#10181A');
+};
+/** Trot : pattes en diagonale (avant gauche avec arrière droite). */
+const trot = (u: UnitLook, speed = 9) => Math.sin(u.t * speed + u.seed) * 0.32;
+
+/**
+ * Sanglier (zone 3), « sanglier de bruyère » : plus rond et trapu, robe roux sombre à la livrée rayée crème (comme un marcassin qui
+ * aurait grandi sans la perdre), brins de bruyère violette pris dans la crête, gros groin, petites défenses.
+ * Le géant : rayures délavées, bruyère sèche, défenses énormes.
+ */
+function boar(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
+  const boss = !!SPECIES[u.species]?.boss;
+  const fur = whiteIf(u, boss ? '#5A3A26' : '#8B5A36'), shade = whiteIf(u, boss ? '#3E2819' : '#633F25'), dark = whiteIf(u, '#2E1E13');
+  const stripe = boss ? 'rgba(226,205,166,0.35)' : 'rgba(236,214,170,0.75)', heather = boss ? '#8E7A86' : '#B46FC2';
+  const ivory = whiteIf(u, '#F1E8D2'), disk = whiteIf(u, '#D79A7E');
+  const s = trot(u, 10), bob = Math.abs(Math.sin(u.t * 10 + u.seed)) * r * 0.035;
+  hoofLeg(ctx, r, -0.52 * r, 0.18 * r, 0.22 * r, 0.6 * r, -s, shade, dark);
+  hoofLeg(ctx, r, 0.32 * r, 0.16 * r, 0.22 * r, 0.62 * r, s, shade, dark);
+  hoofLeg(ctx, r, -0.32 * r, 0.2 * r, 0.23 * r, 0.58 * r, s, fur, dark);
+  hoofLeg(ctx, r, 0.52 * r, 0.18 * r, 0.23 * r, 0.6 * r, -s, fur, dark);
+  ctx.save();
+  ctx.translate(0, -bob);
+  // queue en tire-bouchon
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = Math.max(1.2, r * 0.05);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(-0.98 * r, -0.12 * r, 0.08 * r, -0.5 + Math.sin(u.t * 8 + u.seed) * 0.4, 4);
+  ctx.stroke();
+  // corps en tonneau
+  ctx.fillStyle = fur;
+  boarPath(ctx, r, [[-0.95, 0.02], [-0.78, -0.42], [0.0, -0.6], [0.55, -0.46], [0.72, 0.1], [0.45, 0.46], [-0.45, 0.46], [-0.9, 0.3]]);
+  ctx.fill();
+  furLine(ctx, r);
+  blot(ctx, -0.1 * r, 0.35 * r, 0.6 * r, 0.11 * r, shade);
+  if (!u.flash) {
+    // livrée rayée le long du corps
+    ctx.save();
+    boarPath(ctx, r, [[-0.95, 0.02], [-0.78, -0.42], [0.0, -0.6], [0.55, -0.46], [0.72, 0.1], [0.45, 0.46], [-0.45, 0.46], [-0.9, 0.3]]);
+    ctx.clip();
+    ctx.strokeStyle = stripe;
+    ctx.lineWidth = r * 0.07;
+    for (const y of [-0.36, -0.16, 0.04]) {
+      ctx.beginPath();
+      ctx.moveTo(-1.0 * r, (y + 0.06) * r);
+      ctx.quadraticCurveTo(-0.1 * r, (y - 0.08) * r, 0.75 * r, (y + 0.02) * r);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  bristles(ctx, r, -0.72, -0.4, 0.5, -0.5, 0.2, 12, dark);
+  if (!u.flash) {
+    // brins de bruyère plantés dans la crête : tige et grappe de clochettes
+    for (const [x, y, a] of [[-0.42, -0.6, -0.3], [-0.05, -0.72, 0.1], [0.28, -0.66, 0.35]]) {
+      ctx.save();
+      ctx.translate(x * r, y * r);
+      ctx.rotate(a + Math.sin(u.t * 3 + x * 5) * 0.08);
+      ctx.strokeStyle = boss ? '#6E5A3E' : '#4F7840';
+      ctx.lineWidth = Math.max(1, r * 0.03);
+      ctx.beginPath();
+      ctx.moveTo(0, 0.12 * r);
+      ctx.lineTo(0, -0.14 * r);
+      ctx.stroke();
+      for (let k = 0; k < 4; k++) blot(ctx, (k % 2 ? 0.04 : -0.04) * r, (-0.12 + k * 0.06) * r, 0.035 * r, 0.04 * r, heather);
+      ctx.restore();
+    }
+  }
+  // tête ronde et gros groin
+  ctx.fillStyle = fur;
+  boarPath(ctx, r, [[0.4, -0.44], [0.82, -0.36], [1.18, 0.0], [1.16, 0.3], [0.8, 0.42], [0.42, 0.34], [0.34, -0.06]]);
+  ctx.fill();
+  furLine(ctx, r);
   ctx.fillStyle = dark;
   ctx.beginPath();
-  ctx.moveTo(0.48 * r, -0.36 * r);
-  ctx.lineTo(0.42 * r, -0.72 * r);
-  ctx.lineTo(0.7 * r, -0.4 * r);
+  ctx.moveTo(0.5 * r, -0.36 * r);
+  ctx.quadraticCurveTo(0.42 * r, -0.66 * r, 0.56 * r, -0.72 * r);
+  ctx.quadraticCurveTo(0.72 * r, -0.56 * r, 0.74 * r, -0.36 * r);
   ctx.closePath();
   ctx.fill();
-  // groin
-  ctx.fillStyle = u.flash ? '#FFFFFF' : '#C98B6B';
-  ctx.beginPath();
-  ctx.ellipse(1.22 * r, 0.17 * r, 0.12 * r, 0.19 * r, 0, 0, TAU);
-  ctx.fill();
-  ink(ctx, r * 0.5);
-  ctx.fillStyle = '#10181A';
-  ctx.beginPath();
-  ctx.arc(1.24 * r, 0.11 * r, 0.035 * r, 0, TAU);
-  ctx.arc(1.24 * r, 0.23 * r, 0.035 * r, 0, TAU);
-  ctx.fill();
-  // défenses : partent de la gueule et remontent
-  taper(ctx, r, [0.98, 0.36, 1.12, 0.38, 1.18, 0.12, 1.05, -0.08], 0.13, 0.04, ivory);
-  eyes(ctx, 0.78 * r, -0.08 * r, 0, 0.09 * r, '#10181A', u.wild);
+  furLine(ctx, r, 0.05);
+  pigSnout(ctx, r, 1.18 * r, 0.15 * r, 0.13 * r, 0.18 * r, disk);
+  ivoryTusk(ctx, r, 0.98 * r, 0.32 * r, (boss ? 0.4 : 0.2) * r, ivory);
+  glowEye(ctx, 0.78 * r, -0.08 * r, 0.065 * r, u.alpha ? '#B48CFF' : boss ? '#E8693F' : '#2A1A10', u.wild, u.alpha || boss);
+  ctx.restore();
 }
 
 // ───────────────────────── Deuxième espèce de chaque zone ─────────────────────────
@@ -801,59 +894,152 @@ function spider(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   }
 }
 
-/** Ours des fourrés : énorme réservoir de PV (zone 3). */
-function bear(ctx: Ctx, r: number, fill: string, u: UnitLook) {
-  const dark = u.flash ? '#FFFFFF' : '#3E2A1C';
-  const muzzle = u.flash ? '#FFFFFF' : '#B48C66';
-  legs4(ctx, r, u, dark, [-0.65, -0.3, 0.22, 0.55], 0.4, 0.42, 0.28);
-  // corps massif
-  ctx.fillStyle = fill;
+// ───────────────────────── Ours (grizzly des fourrés) ─────────────────────────
+
+/** Contour sombre du chemin courant (fourrure). */
+const furLine = (ctx: Ctx, r: number, k = 0.1) => {
+  ctx.strokeStyle = 'rgba(12,18,16,0.7)';
+  ctx.lineWidth = Math.max(1.5, r * k);
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+};
+/** Ellipse au contour en touffes de poils (pointes vers l'extérieur). */
+const furTufts = (ctx: Ctx, cx: number, cy: number, rx: number, ry: number, n: number, col: string, jag = 1.14, rot = 0) => {
+  ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.ellipse(-0.12 * r, 0.02 * r, 1.0 * r, 0.75 * r, 0, 0, TAU);
-  ctx.fill();
-  ink(ctx, r);
-  // bosse d'épaule
-  ctx.fillStyle = 'rgba(0,0,0,0.12)';
-  ctx.beginPath();
-  ctx.ellipse(0.1 * r, -0.45 * r, 0.45 * r, 0.22 * r, 0, 0, TAU);
-  ctx.fill();
-  // tête
-  ctx.fillStyle = fill;
-  ctx.beginPath();
-  ctx.arc(0.72 * r, -0.12 * r, 0.46 * r, 0, TAU);
-  ctx.fill();
-  ink(ctx, r);
-  // oreilles rondes
-  for (const ox of [0.45, 0.9]) {
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.arc(ox * r, -0.52 * r, 0.15 * r, 0, TAU);
-    ctx.fill();
-    ink(ctx, r * 0.6);
-    ctx.fillStyle = muzzle;
-    ctx.beginPath();
-    ctx.arc(ox * r, -0.52 * r, 0.07 * r, 0, TAU);
-    ctx.fill();
+  for (let k = 0; k <= n * 2; k++) {
+    const a = (k / (n * 2)) * TAU + rot, d = k % 2 ? 1 : jag;
+    const x = cx + Math.cos(a) * rx * d, y = cy + Math.sin(a) * ry * d;
+    if (k) ctx.lineTo(x, y);
+    else ctx.moveTo(x, y);
   }
-  // museau
-  ctx.fillStyle = muzzle;
-  ctx.beginPath();
-  ctx.ellipse(1.02 * r, 0.0, 0.24 * r, 0.18 * r, 0, 0, TAU);
+  ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = '#10181A';
+};
+const blot = (ctx: Ctx, x: number, y: number, rx: number, ry: number, col: string, rot = 0) => {
+  ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.ellipse(1.18 * r, -0.04 * r, 0.08 * r, 0.06 * r, 0, 0, TAU);
+  ctx.ellipse(x, y, rx, ry, rot, 0, TAU);
   ctx.fill();
-  // griffes
-  ctx.strokeStyle = u.flash ? '#FFFFFF' : '#E9DFC8';
-  ctx.lineWidth = r * 0.05;
-  for (const cx of [0.48, 0.56, 0.64]) {
+};
+/** Patte épaisse qui avance et recule (pas lourd), griffes claires au bout. */
+const heavyPaw = (ctx: Ctx, r: number, x: number, y: number, w: number, h: number, swing: number, col: string, claw: string) => {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(swing);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.roundRect(-w / 2, 0, w, h, [w * 0.35, w * 0.35, w * 0.45, w * 0.45]);
+  ctx.fill();
+  furLine(ctx, r, 0.07);
+  ctx.strokeStyle = claw;
+  ctx.lineWidth = Math.max(1, r * 0.035);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (const k of [-0.25, 0.05, 0.35]) {
+    ctx.moveTo(w * k + w * 0.1, h - r * 0.02);
+    ctx.lineTo(w * k + w * 0.22, h + r * 0.07);
+  }
+  ctx.stroke();
+  ctx.restore();
+};
+/** Œil : lueur douce (sans shadowBlur), iris, pupille, reflet, et sourcil froncé chez le sauvage. */
+const glowEye = (ctx: Ctx, x: number, y: number, s: number, iris: string, angry: boolean, glow = false) => {
+  if (glow) {
+    ctx.globalAlpha *= 0.35;
+    blot(ctx, x, y, s * 2.4, s * 2, iris);
+    ctx.globalAlpha /= 0.35;
+  }
+  blot(ctx, x, y, s * 1.15, s, iris);
+  blot(ctx, x + s * 0.2, y, s * 0.5, s * 0.75, '#10181A');
+  blot(ctx, x - s * 0.25, y - s * 0.35, s * 0.25, s * 0.2, 'rgba(255,255,255,0.8)');
+  if (angry) {
+    ctx.strokeStyle = '#10181A';
+    ctx.lineWidth = Math.max(1.5, s * 0.6);
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(cx * r, 0.8 * r);
-    ctx.lineTo((cx + 0.04) * r, 0.9 * r);
+    ctx.moveTo(x - s * 1.6, y - s * 1.9);
+    ctx.lineTo(x + s * 1.3, y - s * 1.0);
     ctx.stroke();
   }
-  eyes(ctx, 0.74 * r, -0.2 * r, 0.12 * r, 0.06 * r, '#10181A', u.wild);
+};
+const whiteIf = (u: UnitLook, c: string) => (u.flash ? '#FFFFFF' : c);
+
+function bear(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
+  const boss = !!SPECIES[u.species]?.boss;
+  const fur = whiteIf(u, boss ? '#3F2A1D' : '#6B4A33'), shade = whiteIf(u, boss ? '#2A1C14' : '#4E3424'), dark = whiteIf(u, boss ? '#1C130E' : '#33221A');
+  const light = boss ? '#7A5A3E' : '#A7804F', muzzle = whiteIf(u, boss ? '#8C6E52' : '#C9A27A');
+  const sway = Math.sin(u.t * 6 + u.seed), swing = sway * 0.22;
+  // les quatre pattes d'abord (le corps couvre leur haut) : celles du fond plus sombres
+  heavyPaw(ctx, r, -0.62 * r, 0.12 * r, 0.3 * r, 0.62 * r, -swing, dark, '#E9DFC8');
+  heavyPaw(ctx, r, 0.4 * r, 0.08 * r, 0.32 * r, 0.66 * r, swing, dark, '#E9DFC8');
+  heavyPaw(ctx, r, -0.34 * r, 0.16 * r, 0.32 * r, 0.62 * r, swing, shade, '#F2E8D2');
+  heavyPaw(ctx, r, 0.62 * r, 0.1 * r, 0.34 * r, 0.66 * r, -swing, shade, '#F2E8D2');
+  // croupe basse et ronde, bosse d'épaule haute
+  furTufts(ctx, -0.45 * r, 0.05 * r, 0.55 * r, 0.5 * r, 9, fur);
+  furLine(ctx, r);
+  furTufts(ctx, 0.1 * r, -0.12 * r + sway * r * 0.02, 0.62 * r, 0.62 * r, 11, fur, 1.12, 0.3);
+  furLine(ctx, r);
+  furTufts(ctx, -0.25 * r, 0.1 * r, 0.75 * r, 0.42 * r, 12, fur, 1.06);
+  // ventre dans l'ombre, reflet doré sur l'échine et la bosse
+  blot(ctx, -0.2 * r, 0.38 * r, 0.62 * r, 0.12 * r, shade);
+  if (!u.flash) {
+    // pointes de poils dorées sur la bosse (grizzly : « poil argenté »), en fines mèches
+    ctx.strokeStyle = light;
+    ctx.globalAlpha = 0.75;
+    ctx.lineWidth = Math.max(1, r * 0.035);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let k = 0; k < 9; k++) {
+      const a = -2.5 + k * 0.17, x = 0.1 * r + Math.cos(a) * 0.6 * r, y = -0.12 * r + Math.sin(a) * 0.62 * r;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a) * -0.16 * r, y + Math.sin(a) * -0.16 * r);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  // tête lourde, portée bas devant l'épaule
+  const hx = 0.82 * r, hy = 0.0 * r + sway * r * 0.025;
+  furTufts(ctx, hx, hy, 0.4 * r, 0.36 * r, 9, fur, 1.1);
+  furLine(ctx, r);
+  for (const ox of [-0.18, 0.12]) {
+    ctx.fillStyle = fur;
+    ctx.beginPath();
+    ctx.arc(hx + ox * r, hy - 0.34 * r, 0.12 * r, 0, TAU);
+    ctx.fill();
+    furLine(ctx, r, 0.06);
+    blot(ctx, hx + ox * r, hy - 0.33 * r, 0.06 * r, 0.055 * r, whiteIf(u, '#3A2618'));
+  }
+  // long museau clair, truffe, gueule
+  ctx.fillStyle = muzzle;
+  ctx.beginPath();
+  ctx.moveTo(hx + 0.12 * r, hy - 0.08 * r);
+  ctx.quadraticCurveTo(hx + 0.5 * r, hy - 0.14 * r, hx + 0.6 * r, hy + 0.04 * r);
+  ctx.quadraticCurveTo(hx + 0.56 * r, hy + 0.2 * r, hx + 0.16 * r, hy + 0.2 * r);
+  ctx.closePath();
+  ctx.fill();
+  furLine(ctx, r, 0.06);
+  blot(ctx, hx + 0.58 * r, hy - 0.02 * r, 0.08 * r, 0.065 * r, '#10181A');
+  ctx.strokeStyle = 'rgba(16,24,26,0.6)';
+  ctx.lineWidth = Math.max(1, r * 0.03);
+  ctx.beginPath();
+  ctx.moveTo(hx + 0.52 * r, hy + 0.12 * r);
+  ctx.quadraticCurveTo(hx + 0.4 * r, hy + 0.17 * r, hx + 0.28 * r, hy + 0.13 * r);
+  ctx.stroke();
+  if (boss && !u.flash) {
+    // cicatrices de combat sur l'épaule et le museau
+    ctx.strokeStyle = '#C98B6A';
+    ctx.lineWidth = Math.max(1.2, r * 0.03);
+    ctx.beginPath();
+    for (const [x, y] of [[0.05, -0.38], [0.16, -0.42], [0.27, -0.46]]) {
+      ctx.moveTo(x * r, y * r);
+      ctx.lineTo((x + 0.1) * r, (y + 0.24) * r);
+    }
+    ctx.moveTo(hx + 0.2 * r, hy - 0.12 * r);
+    ctx.lineTo(hx + 0.32 * r, hy + 0.04 * r);
+    ctx.stroke();
+  }
+  glowEye(ctx, hx + 0.12 * r, hy - 0.1 * r, 0.06 * r, u.alpha ? '#B48CFF' : boss ? '#E8693F' : '#F0B64A', u.wild, u.alpha || boss);
 }
 
 /** Feu follet : flamme froide qui flotte au-dessus des ruines (zone 4). */

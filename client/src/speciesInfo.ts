@@ -7,7 +7,7 @@ export const SPECIES_DESC: Record<string, string> = {
   sporelin: 'Petit champignon sauteur. Fragile mais vif : il arrive en groupe.',
   wolf: 'Rapide, chasse en meute.',
   spider: 'Frappe fort et vite mais encaisse peu. Punit les dompteurs qui avancent seuls.',
-  boar: 'Crête de soies, tête en coin et grandes défenses. Charge lourde.',
+  boar: 'Trapu, roux sombre à la livrée rayée, des brins de bruyère plantés dans la crête. Gros groin, charge lourde.',
   bear: 'Énorme réserve de PV. Apprivoisé, il devient le tank de la meute.',
   golem: 'Bloc de pierre et de mousse, très lent, très solide.',
   wisp: 'Flamme froide qui flotte au-dessus des ruines.',
