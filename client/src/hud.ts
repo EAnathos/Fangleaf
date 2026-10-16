@@ -525,7 +525,6 @@ export class Hud {
   private initSettings(founder: boolean) {
     this.founder = founder;
     $('settings-open').onclick = () => this.setPanel('settings');
-    $('board-open').onclick = () => this.setPanel('board');
     $('menu-open').onclick = () => this.setPanel(this.panel === 'quit' ? null : 'quit');
     $('chat-open').onclick = () => this.setPanel(this.panel === 'chat' ? null : 'chat');
     $('chat-form').addEventListener('submit', (e) => {

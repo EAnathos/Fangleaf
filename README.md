@@ -113,3 +113,8 @@ scripts/  test de fumée multi-clients
 
 Tout l'équilibrage (PV, dégâts, zones, chance d'apprivoisement, coût de la forge…) est dans
 `shared/config.ts`.
+
+## Licence
+
+© 2026 EAnathos, tous droits réservés. Le code est visible mais **ni libre ni open source** : aucune copie,
+modification, redistribution ou mise en ligne sans autorisation écrite. Détails dans [LICENSE](LICENSE).

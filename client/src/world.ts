@@ -16,6 +16,8 @@ const TAU = Math.PI * 2;
 export const FOREST_GROUND = [26, 42, 33];
 export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76]];
 const PATH = [110, 97, 66];
+const VILLAGE_GROUND = [79, 101, 63]; // herbe de la place, tondue
+
 // Style commun à tous les chemins de terre : liseré sombre, terre, trace claire au centre. [r, g, b, alpha, largeur]
 const PATH_PASSES: [number, number, number, number, number][] = [[60, 50, 32, 0.35, 50], [110, 97, 66, 1, 40], [140, 124, 88, 0.35, 14]];
 const rgba = (p: number[], a = p[3]) => `rgba(${p[0]},${p[1]},${p[2]},${a})`;
@@ -32,17 +34,30 @@ const TREE_REF = 42;
 const TREE_VARIANTS = 6;
 const TREE_BOX = { l: TREE_REF * 1.3 + 6, t: TREE_REF * 1.95 + 6, w: (TREE_REF * 1.3 + 6) * 2, h: TREE_REF * 2.55 + 12 }; // autour du pied
 
+const lerp3 = (a: number[], b: number[], t: number) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
+// Herbe du village fondue dans celle du biome : pleine jusqu'à la palissade, puis s'efface sur VILLAGE_BLEND px.
+const VILLAGE_BLEND = 240;
+
+/** Part du village dans le sol d'un point : 1 jusqu'à la palissade, puis 0 au bout du fondu, au bord irrégulier. */
+export function villageMix(map: WorldMap, x: number, y: number) {
+  const d = Math.hypot(x - map.village.x, y - map.village.y) - VILLAGE_R;
+  if (d <= 0) return 1;
+  if (d >= VILLAGE_BLEND * 1.25) return 0;
+  const u = Math.min(1, Math.max(0, d / VILLAGE_BLEND + (fbm(x / 160, y / 160, map.seed + 74, 2) - 0.5) * 0.5));
+  return 1 - u * u * (3 - 2 * u);
+}
+
 /**
  * Couleur du sol d'un point (hors sous-bois) : celle de sa zone, ou près d'une frontière un fondu entre les deux
- * zones, au bord irrégulier (un peu de bruit sur le mélange).
+ * zones, au bord irrégulier (un peu de bruit sur le mélange). Autour du village, l'herbe du village s'y fond.
  */
 export function groundColor(map: WorldMap, x: number, y: number) {
-  if (map.inVillage(x, y, 30)) return ZONE_GROUND[0];
   const m = map.zoneMix(x, y);
-  if (!m.t) return ZONE_GROUND[m.z0];
-  const t = Math.min(1, Math.max(0, m.t + (fbm(x / 240, y / 240, map.seed + 73, 2) - 0.5) * 0.45));
-  const a = ZONE_GROUND[m.z0], b = ZONE_GROUND[m.z1];
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  let col = ZONE_GROUND[m.z0];
+  if (m.t) col = lerp3(col, ZONE_GROUND[m.z1], Math.min(1, Math.max(0, m.t + (fbm(x / 240, y / 240, map.seed + 73, 2) - 0.5) * 0.45)));
+  const v = villageMix(map, x, y);
+  return v ? lerp3(col, VILLAGE_GROUND, v) : col;
 }
 
 const rgb = (c: number[], k: number) => `rgb(${(c[0] * k) | 0},${(c[1] * k) | 0},${(c[2] * k) | 0})`;
@@ -55,15 +70,31 @@ export class World {
   readonly campSize = 420;
   readonly seed: number;
 
+  /** Pieux de la palissade (coordonnées du monde), de hauteur un peu irrégulière ; poteaux des 4 portes. */
+  readonly stakes: { x: number; y: number; h: number; next?: { x: number; y: number } }[] = [];
+  readonly gatePosts: { x: number; y: number; side: number; s: number }[] = [];
+
   constructor(readonly map: WorldMap) {
     this.seed = map.seed;
+    const v = map.village, n = 160;
+    const at = (a: number) => ({ x: v.x + Math.cos(a) * VILLAGE_R, y: v.y + Math.sin(a) * VILLAGE_R });
+    const open = (a: number) => [0, 1, 2, 3, 4].some((g) => Math.abs(a - (g * Math.PI) / 2) < 0.085);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU;
+      if (open(a)) continue;
+      // traverse jusqu'au pieu suivant, sauf devant une porte
+      const b = ((i + 1) / n) * TAU;
+      this.stakes.push({ ...at(a), h: 20 + ((i * 7) % 5) * 1.6, next: open(b) ? undefined : at(b) });
+    }
+    for (let side = 0; side < 4; side++) for (const s of [-1, 1]) this.gatePosts.push({ ...at((side * Math.PI) / 2 + s * 0.1), side, s });
     this.village = this.drawVillage();
     this.camp = this.drawCamp();
   }
 
   /** Zone d'un point pour l'affichage (0 si dans le village) : près d'une frontière, l'une ou l'autre par plaques. */
   zone(x: number, y: number) {
-    return this.map.inVillage(x, y, 30) ? 0 : this.map.styleZone(x, y);
+    const v = villageMix(this.map, x, y);
+    return v && hash2(x | 0, y | 0, this.seed + 75) < v ? 0 : this.map.styleZone(x, y);
   }
 
   /** Chemin du camp au village, puis piste du village au bout du couloir (calculés par la carte partagée). */
@@ -384,11 +415,7 @@ export class World {
     const ctx = c.getContext('2d')!;
     ctx.translate(size / 2, size / 2);
 
-    // Herbe du village.
-    ctx.fillStyle = '#4F653F';
-    ctx.beginPath();
-    ctx.arc(0, 0, VILLAGE_R, 0, TAU);
-    ctx.fill();
+    // Herbe du village : celle du sol (groundColor), qui se fond dans le biome autour de la palissade.
 
     // Routes : même style que le chemin du camp. Celle de la porte du camp rejoint ce chemin ;
     // les trois autres s'estompent doucement dans l'herbe au lieu de s'arrêter net.
@@ -433,27 +460,89 @@ export class World {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Palissade avec 4 portes.
-    for (let i = 0; i < 120; i++) {
-      const a = (i / 120) * TAU;
-      const nearGate = [0, 1, 2, 3, 4].some((g) => Math.abs(a - (g * Math.PI) / 2) < 0.09);
-      if (nearGate) continue;
-      const x = Math.cos(a) * VILLAGE_R, y = Math.sin(a) * VILLAGE_R;
-      ctx.fillStyle = 'rgba(8,14,12,0.35)';
+    // Ombres au sol de la palissade (les pieux eux-mêmes sont triés avec les créatures : drawStake).
+    ctx.fillStyle = 'rgba(8,14,12,0.3)';
+    const v0 = this.map.village;
+    for (const st of this.stakes) {
       ctx.beginPath();
-      ctx.ellipse(x + 3, y + 7, 9, 4, 0, 0, TAU);
+      ctx.ellipse(st.x - v0.x + 2, st.y - v0.y + 3, 7, 3, 0, 0, TAU);
       ctx.fill();
-      ctx.fillStyle = i % 2 ? '#6B4A33' : '#7A5A3A';
+    }
+    for (const g of this.gatePosts) {
       ctx.beginPath();
-      ctx.arc(x, y, 9, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = '#9C7A52';
-      ctx.beginPath();
-      ctx.arc(x - 2, y - 2, 4, 0, TAU);
+      ctx.ellipse(g.x - v0.x + 2, g.y - v0.y + 3, 8, 3.5, 0, 0, TAU);
       ctx.fill();
     }
 
     return c;
+  }
+
+  /** Un pieu taillé en pointe (coordonnées du monde), avec sa part de traverse vers le pieu suivant. */
+  drawStake(ctx: CanvasRenderingContext2D, k: number) {
+    const { x, y, h, next } = this.stakes[k];
+    if (next) {
+      ctx.strokeStyle = '#4A3322';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 10);
+      ctx.lineTo(next.x, next.y - 10);
+      ctx.stroke();
+    }
+    ctx.fillStyle = k % 2 ? '#6B4A33' : '#7A5A3A';
+    ctx.beginPath();
+    ctx.moveTo(x - 5, y);
+    ctx.lineTo(x - 5, y - h);
+    ctx.lineTo(x, y - h - 7);
+    ctx.lineTo(x + 5, y - h);
+    ctx.lineTo(x + 5, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,230,190,0.18)';
+    ctx.fillRect(x - 5, y - h, 2, h);
+    ctx.fillStyle = 'rgba(8,14,12,0.25)';
+    ctx.fillRect(x + 3, y - h, 2, h);
+  }
+
+  /** Poteau de porte (coordonnées du monde) : plus haut, coiffé d'un fanion ; au nord et au sud, linteau et bannière. */
+  drawGatePost(ctx: CanvasRenderingContext2D, k: number, t: number) {
+    const { x, y, side, s } = this.gatePosts[k];
+    ctx.fillStyle = '#5B3F2C';
+    ctx.fillRect(x - 5, y - 38, 10, 40);
+    ctx.fillStyle = '#7A5A3A';
+    ctx.fillRect(x - 5, y - 38, 10, 4);
+    if (side % 2 === 1 && s === 1) {
+      // nord ou sud : linteau d'un poteau à l'autre, bannière au milieu
+      const o = this.gatePosts[k - 1];
+      ctx.fillStyle = '#4A3322';
+      const l = Math.min(x, o.x), r = Math.max(x, o.x);
+      ctx.fillRect(l - 7, y - 42, r - l + 14, 6);
+      const cx = (x + o.x) / 2, sway = Math.sin(t * 1.6 + side) * 1.5;
+      ctx.fillStyle = '#B8432E';
+      ctx.beginPath();
+      ctx.moveTo(cx - 10, y - 36);
+      ctx.lineTo(cx + 10, y - 36);
+      ctx.lineTo(cx + 10 + sway, y - 18);
+      ctx.lineTo(cx + sway, y - 23);
+      ctx.lineTo(cx - 10 + sway, y - 18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#EFE3C4';
+      ctx.beginPath();
+      ctx.arc(cx + sway * 0.5, y - 29, 2.5, 0, TAU);
+      ctx.fill();
+    } else if (side % 2 === 0) {
+      // est ou ouest : un fanion sur chaque poteau
+      const sway = Math.sin(t * 2 + k) * 2;
+      ctx.fillStyle = '#3A2A1E';
+      ctx.fillRect(x - 1, y - 52, 2, 14);
+      ctx.fillStyle = '#B8432E';
+      ctx.beginPath();
+      ctx.moveTo(x + 1, y - 52);
+      ctx.lineTo(x + 13, y - 48 + sway);
+      ctx.lineTo(x + 1, y - 44);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 
   /** Panneau du village (coordonnées du village) : planche sur deux poteaux, couverte de petites affiches. */

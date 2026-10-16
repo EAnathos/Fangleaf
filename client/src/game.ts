@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, VILLAGE_R, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
 import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -1120,6 +1120,11 @@ export class Game {
       const label = k === 0 && !active ? `${BUILDINGS.stone.name} · ${this.hud.hall < need ? `Hôtel de ville niv. ${need}` : costText(buildingCost('stone'))}` : undefined;
       if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
+    // Palissade du village : pieux hauts, triés avec les créatures (on passe derrière).
+    if (!here && inView(village.x, village.y, VILLAGE_R + 60)) {
+      this.world.stakes.forEach((st, k) => inView(st.x, st.y, 40) && list.push({ y: st.y, draw: () => this.world.drawStake(ctx, k) }));
+      this.world.gatePosts.forEach((g, k) => inView(g.x, g.y, 60) && list.push({ y: g.y, draw: () => this.world.drawGatePost(ctx, k, this.time) }));
+    }
     // Arbres de la carte : triés avec les créatures, feuillage transparent quand on passe dessous.
     const trees = here ? [] : this.map.decorIn(camX - hw - 60, camY - hh - 60, camX + hw + 60, camY + hh + 140).filter((d) => d.kind === 0);
     for (const d of trees) this.world.treeShadow(ctx, d.x, d.y);
