@@ -1258,7 +1258,7 @@ function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; 
     };
   }
   // apprivoisé, le gibier passif se bat comme les autres : « Passif » ne vaut que pour la forme sauvage
-  const traits = [sp.passive && form === 'wild' ? 'Passif' : sp.ranged ? 'Tireur' : 'Mêlée', sp.swim ? 'aquatique' : '', MOUNTS[sp.key] ? 'monture en Alpha' : ''].filter(Boolean).join(' · ');
+  const traits = [sp.passive && form === 'wild' ? 'Passif' : sp.ranged ? 'Tireur' : 'Mêlée', sp.swim ? 'aquatique' : sp.amphibious ? 'amphibie en meute' : '', MOUNTS[sp.key] ? 'monture en Alpha' : ''].filter(Boolean).join(' · ');
   if (form === 'wild') return { name: sp.name, tag: traits, stats: `${sp.hp} PV · ${sp.dmg} dégâts`, desc: SPECIES_DESC[sp.key] ?? '' };
   const legend = form === 'legend', st = alphaStats(s, 0, 0, legend), boss = bossOf(s), perk = alphaPerk(s, 0);
   const powers = [

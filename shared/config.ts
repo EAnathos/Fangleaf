@@ -309,7 +309,8 @@ export interface Species {
   title?: string; // boss : son nom propre (affiché en entrant dans sa grotte et quand on lui parle)
   sprite?: string; // apparence à réutiliser (par défaut : key)
   ranged?: Ranged; // tireur : attaque à distance (projectile esquivable) au lieu du corps à corps
-  swim?: boolean; // sauvage, il ne quitte jamais l'eau (apprivoisé, il suit son dompteur sur terre)
+  swim?: boolean; // sauvage, il ne quitte jamais l'eau (apprivoisé, il suit son dompteur sur terre et dans l'eau)
+  amphibious?: boolean; // apprivoisé, il suit son dompteur dans l'eau (sauvage, il reste à terre)
   passive?: boolean; // sauvage, il n'attaque jamais : il broute les buissons à fruits et s'enfuit quand on le frappe
 }
 
@@ -350,9 +351,9 @@ export const SPECIES: Species[] = [
   { key: 'old_flame', name: 'Feu Ancien', color: '#4F8BFF', r: 54, hp: 11380, dmg: 75, speed: 200, atkCd: 1.3, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Lueur, la Flamme Ancienne', sprite: 'wisp', base: 'wisp' },
   // Itération 16 : un tireur dans les Ruines moussues, et la zone 5 (Lacs brumeux) au-delà du Camp avancé.
   { key: 'watcher', name: 'Guetteur runique', color: '#6E7570', r: 22, hp: 320, dmg: 38, speed: 55, atkCd: 2.0, gold: 20, zone: 4, population: 22, pack: [1, 2], ranged: { kind: 'bolt', range: 320, windup: 0.6, speed: 260 } },
-  { key: 'toad', name: 'Crapaud-mortier', color: '#6E8F45', r: 24, hp: 900, dmg: 50, speed: 75, atkCd: 2.4, gold: 40, zone: 5, population: 18, pack: [1, 2], ranged: { kind: 'arc', range: 340, windup: 0.55, speed: 0, splash: 52 } },
+  { key: 'toad', name: 'Crapaud-mortier', color: '#6E8F45', r: 24, hp: 900, dmg: 50, speed: 75, atkCd: 2.4, gold: 40, zone: 5, population: 18, pack: [1, 2], ranged: { kind: 'arc', range: 340, windup: 0.55, speed: 0, splash: 52 }, amphibious: true },
   { key: 'serpent', name: 'Serpent des brumes', color: '#4A93A0', r: 22, hp: 700, dmg: 45, speed: 105, atkCd: 1.8, gold: 36, zone: 5, population: 16, pack: [1, 1], ranged: { kind: 'jet', range: 360, windup: 0.45, speed: 560 }, swim: true },
-  { key: 'crab', name: 'Crabe des berges', color: '#D46A43', r: 24, hp: 1400, dmg: 55, speed: 70, atkCd: 1.4, gold: 45, zone: 5, population: 16, pack: [1, 2] },
+  { key: 'crab', name: 'Crabe des berges', color: '#D46A43', r: 24, hp: 1400, dmg: 55, speed: 70, atkCd: 1.4, gold: 45, zone: 5, population: 16, pack: [1, 2], amphibious: true },
   // Géants des nouvelles espèces : une grotte chacun (zone 4 : Œil des Ruines ; zone 5 : les trois autres).
   { key: 'rune_eye', name: 'Œil des Ruines', color: '#5E6662', r: 57, hp: 12480, dmg: 70, speed: 185, atkCd: 1.4, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Œil-de-Pierre le Veilleur', sprite: 'watcher', base: 'watcher' },
   { key: 'toad_king', name: 'Crapaud-Roi', color: '#5F8A3A', r: 60, hp: 27170, dmg: 100, speed: 190, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Croâ XIV, roi des Mares', sprite: 'toad', base: 'toad' },

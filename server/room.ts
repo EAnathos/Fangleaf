@@ -1682,9 +1682,10 @@ export class Room {
    * Se déplace vers (tx, ty) en réfléchissant : tout droit si la voie est libre, sinon en suivant
    * un détour calculé (A*) autour des arbres, rochers, murs et lacs, recalculé au plus une fois par seconde.
    */
-  private navTo(u: Unit, tx: number, ty: number, speed: number, stop: number) {
+  /** wait : sans chemin jusqu'au but (berge sur une île, de l'autre côté du lac), il attend sur place au lieu de buter contre l'eau. */
+  private navTo(u: Unit, tx: number, ty: number, speed: number, stop: number, wait = false) {
     if (this.swims(u)) return this.move(u, tx, ty, speed, stop); // dans l'eau : il longe la rive, sans détour par la terre
-    // serpent de la meute : à la nage tout droit dès que l'eau est en jeu, sinon par les chemins comme les autres
+    // serpent, crabe ou crapaud de la meute : à la nage tout droit dès que l'eau est en jeu, sinon par les chemins comme les autres
     if (this.amphibious(u) && (this.map.isWater(u.x, u.y) || this.map.isWater(tx, ty))) return this.move(u, tx, ty, speed, stop);
     if (this.map.clearLine(u.x, u.y, tx, ty)) {
       u.path = null;
@@ -1696,7 +1697,7 @@ export class Room {
       u.pathAt = this.time;
       [u.pathGoalX, u.pathGoalY] = [tx, ty];
     }
-    if (!u.path?.length) return this.move(u, tx, ty, speed, stop); // rien trouvé : on tente quand même
+    if (!u.path?.length) return wait ? false : this.move(u, tx, ty, speed, stop); // rien trouvé : on tente quand même (ou on attend)
     const next = u.path[0];
     if (dist2(u.x, u.y, next.x, next.y) < 14 ** 2) u.path.shift();
     this.move(u, next.x, next.y, speed, 0);
@@ -1708,9 +1709,9 @@ export class Room {
     return !u.owner && !!SPECIES[u.s].swim;
   }
 
-  /** Monstre marin de la meute (serpent apprivoisé) : il va à terre comme dans l'eau. */
+  /** Monstre de la meute qui va à terre comme dans l'eau : serpent, crabe, crapaud. */
   private amphibious(u: Unit) {
-    return !!u.owner && !!SPECIES[u.s].swim;
+    return !!u.owner && !!(SPECIES[u.s].swim || SPECIES[u.s].amphibious);
   }
 
   private blockedFor(u: Unit, x: number, y: number) {
@@ -1729,7 +1730,7 @@ export class Room {
   }
   private banks = new Map<number, { tick: number; at: { x: number; y: number } | null }>();
 
-  /** Pose une unité près d'un point, sur la terre ferme (ou dans l'eau pour un serpent de la meute). */
+  /** Pose une unité près d'un point, sur la terre ferme. */
   private placeAround(u: Unit, x: number, y: number) {
     const a = Math.random() * Math.PI * 2;
     const at = this.map.freeNear(x + Math.cos(a) * 50, y + Math.sin(a) * 50);
@@ -1952,7 +1953,7 @@ export class Room {
     const bank = this.amphibious(u) ? null : this.bankOf(o);
     const hx = bank?.x ?? o.x, hy = bank?.y ?? o.y;
     // Trop loin, ou coincé derrière un arbre ou la palissade depuis un moment : il rejoint son dompteur (ou la berge).
-    if (dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead)) {
+    if (dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead && !bank)) {
       this.placeAround(u, hx, hy);
       u.stuck = 0;
     }
@@ -1968,7 +1969,7 @@ export class Room {
       if (u.recalling) {
         if (d2o < RECALL_DONE_R ** 2) u.recalling = false;
         else {
-          this.navTo(u, hx, hy, Math.max(u.speed, PLAYER_SPEED * 1.7), 40);
+          this.navTo(u, hx, hy, Math.max(u.speed, PLAYER_SPEED * 1.7), 40, !!bank);
           return;
         }
       }
@@ -2022,7 +2023,7 @@ export class Room {
     const ownerSpeed = PLAYER_SPEED * (om ? mountSpeedOf(om.s) : 1); // la meute suit aussi un dompteur à cheval
     // Place libre dans la formation (pas au milieu d'un arbre), puis on y va en contournant les obstacles.
     const slot = this.blockedFor(u, sx, sy) ? { x: hx, y: hy } : { x: sx, y: sy };
-    this.navTo(u, slot.x, slot.y, far ? Math.max(u.speed, ownerSpeed * 1.15) : Math.max(u.speed, 90), 3);
+    this.navTo(u, slot.x, slot.y, far ? Math.max(u.speed, ownerSpeed * 1.15) : Math.max(u.speed, 90), 3, !!bank);
   }
 
   private damage(t: Ent, amount: number, by: Ent) {

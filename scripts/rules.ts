@@ -1737,26 +1737,36 @@ const noop = () => {};
     r.placeNear(u, p);
     return u;
   });
-  const swimmer = r.createUnit(serpentS, false, p.x, p.y);
-  r.makeTamed(swimmer, p);
-  // il s'éloigne de la rive en nageant
-  let swim = { x: p.x, y: p.y };
-  for (let k = 0; k < 40; k++) {
-    const w = m.waterNear(swim.x + 25, swim.y, 0) ?? m.waterNear(swim.x - 25, swim.y, 0);
-    if (w && m.isWater(w.x, w.y)) swim = w;
+  const swimmers = ['serpent', 'crab', 'toad'].map((k) => {
+    const u = r.createUnit(SPECIES.findIndex((s) => s.key === k), false, p.x, p.y);
+    r.makeTamed(u, p);
+    return u;
+  });
+  // il nage au large : un point d'eau à plus de 120 px de toute terre, la meute part de la berge la plus proche
+  let swim: { x: number; y: number } | null = null;
+  for (let y = -WORLD_HALF + 200; y < WORLD_HALF - 200 && !swim; y += 50) {
+    for (let x = -WORLD_HALF + 200; x < WORLD_HALF - 200 && !swim; x += 50) {
+      if (m.waterNear(x, y, 0) && !m.landNear(x, y, 120) && m.landNear(x, y, 300)) swim = { x, y };
+    }
   }
-  [p.x, p.y] = [swim.x, swim.y];
+  [p.x, p.y] = [swim!.x, swim!.y];
+  const start = m.landNear(p.x, p.y, 900)!;
+  for (const u of [...pack, ...swimmers]) [u.x, u.y] = [start.x, start.y];
+  for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id); // pas de sauvages : la meute ne part pas se battre
+  r.nextSpawn = r.nextSpawn.map(() => Infinity);
   let wet = 0;
   for (let i = 0; i < 20 * 8; i++) {
     r.step();
-    [p.x, p.y] = [swim.x, swim.y];
+    [p.x, p.y] = [swim!.x, swim!.y];
     p.hp = 1e6;
     wet += pack.filter((u) => m.isWater(u.x, u.y)).length;
   }
   const bank = m.landNear(p.x, p.y, 900)!;
   const onBank = pack.every((u) => Math.hypot(u.x - bank.x, u.y - bank.y) < 260);
   check(wet === 0 && onBank, `meute terrestre restée sur la berge (jamais dans l'eau, à ${Math.round(Math.max(...pack.map((u) => Math.hypot(u.x - bank.x, u.y - bank.y))))} px de la berge la plus proche)`);
-  check(m.isWater(swimmer.x, swimmer.y) && Math.hypot(swimmer.x - p.x, swimmer.y - p.y) < 160, 'le serpent de la meute suit son dompteur dans l\'eau');
+  // (leur place dans la formation peut tomber sur la rive toute proche : ils y vont, comme dans l'eau)
+  check(swimmers.every((u) => Math.hypot(u.x - p.x, u.y - p.y) < 180) && swimmers.filter((u) => m.isWater(u.x, u.y)).length >= 2,
+    'serpent, crabe et crapaud de la meute suivent leur dompteur dans l\'eau');
 }
 
 check(caveUnlockCost(1) === 150 && caveUnlockCost(3) === 450 && caveUnlockCost(4) === 1500 && caveUnlockCost(5) === 3000, 'grottes des dernières zones bien plus chères (1500 et 3000 or)');
