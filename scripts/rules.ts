@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { Room } from '../server/room.ts';
 import { SnapshotState } from '../shared/snapshot.ts';
@@ -1678,6 +1678,52 @@ const noop = () => {};
   const r = room();
   const p = r.addPlayer('a', noop);
   check(p.hp === Math.round(armorMaxHp(0) * 1.25), `nouveau dompteur : ${p.hp} PV à l'arrivée, le maximum`);
+}
+
+{
+  // Serpent des brumes en monture : seulement sur l'eau, on embarque près de l'eau, on descend au bord, on se noie s'il tombe.
+  const r = room();
+  const m = r.map;
+  const p = r.addPlayer('a', noop);
+  let shore: { x: number; y: number } | null = null, deep: { x: number; y: number } | null = null;
+  for (let y = -WORLD_HALF + 200; y < WORLD_HALF - 200 && !(shore && deep); y += 60) {
+    for (let x = -WORLD_HALF + 200; x < WORLD_HALF - 200 && !(shore && deep); x += 60) {
+      if (!shore && !m.blocked(x, y) && m.waterNear(x, y, SHORE_R * 0.6)) shore = { x, y };
+      if (!deep && m.waterNear(x, y, 0) && !m.landNear(x, y, SHORE_R + 40)) deep = { x, y };
+    }
+  }
+  const serpentS = SPECIES.findIndex((s) => s.key === 'serpent');
+  [p.x, p.y] = [shore!.x, shore!.y];
+  const sp = r.spawnAlpha(p, serpentS, 0, false);
+  [sp.x, sp.y] = [p.x, p.y];
+  r.onMount(p, sp.id);
+  check(p.mount === sp.id && m.isWater(p.x, p.y), 'serpent monté près de l\'eau : posé sur l\'eau');
+  const water = { x: p.x, y: p.y };
+  p.lastPosMs = Date.now() - 400;
+  r.onPos(p, shore!.x, shore!.y, 1, 0);
+  check(m.isWater(p.x, p.y), 'sur le serpent, impossible de marcher sur la terre');
+  [p.x, p.y] = [deep!.x, deep!.y];
+  r.onMount(p, 0);
+  check(p.mount === sp.id, 'en pleine eau, loin de la rive : on ne peut pas descendre');
+  [p.x, p.y] = [water.x, water.y];
+  r.onMount(p, 0);
+  check(p.mount === 0 && !m.blocked(p.x, p.y), 'au bord de la rive : on descend sur la terre ferme');
+  const far = r.addPlayer('b', noop);
+  [far.x, far.y] = [deep!.x + 5000, deep!.y]; // loin : pas de coéquipier pour le relever tout de suite
+  [p.x, p.y] = [shore!.x, shore!.y];
+  [sp.x, sp.y] = [p.x, p.y];
+  r.onMount(p, sp.id);
+  [p.x, p.y] = [deep!.x, deep!.y];
+  const foe = r.createUnit(0, false, p.x, p.y);
+  r.killUnit(sp, foe);
+  check(p.dead && p.mount === 0, 'le serpent tombe en pleine eau : son dompteur se noie');
+  const wolf = r.spawnAlpha(p, 1, 0, false);
+  p.dead = false;
+  [p.x, p.y] = [r.map.village.x, r.map.village.y];
+  [wolf.x, wolf.y] = [p.x, p.y];
+  const at = { x: p.x, y: p.y };
+  r.onMount(p, wolf.id);
+  check(p.mount === wolf.id && p.x === at.x, 'une monture terrestre se monte toujours sur place');
 }
 
 check(caveUnlockCost(1) === 150 && caveUnlockCost(3) === 450 && caveUnlockCost(4) === 1500 && caveUnlockCost(5) === 3000, 'grottes des dernières zones bien plus chères (1500 et 3000 or)');

@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, WORLD_HALF, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, PlayerState, ServerMsg, UnitTuple } from '../../shared/protocol.ts';
 import { UNIT_FLAG_ALPHA, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -210,21 +210,32 @@ export class Game {
     this.net.send({ t: 'help', on });
   }
 
-  /** F : descendre, ou monter sur l'Alpha chevauchable le plus proche. */
+  /**
+   * F : descendre, ou monter sur l'Alpha chevauchable le plus proche. Le serpent ne se monte que près de l'eau
+   * (on embarque sur l'eau) et on n'en descend qu'au bord d'une rive.
+   */
   private toggleMount() {
     const st = this.self();
     if (!st || st.dead) return;
-    if (st.mount) return this.net.send({ t: 'mount', id: 0 });
+    if (st.mount) {
+      if (swimMount(st.mount.species) && this.map.isWater(this.me.x, this.me.y) && !this.map.landNear(this.me.x, this.me.y, SHORE_R)) {
+        return this.hud.toast('Trop loin de la rive : rapproche-toi de la terre pour descendre du serpent.');
+      }
+      return this.net.send({ t: 'mount', id: 0 });
+    }
     const candidates = (this.net.latest?.units ?? []).filter(
       (u) => u[6] === this.myId && u[2] & UNIT_FLAG_ALPHA && MOUNTS[SPECIES[u[1]].key] && Math.hypot(u[3] - this.me.x, u[4] - this.me.y) < MOUNT_REACH,
     );
     if (!candidates.length) {
       const owned = st.army.some((a) => a.alpha && MOUNTS[SPECIES[a.species].key]);
-      this.hud.toast(owned ? 'Ta monture est trop loin ou en train de ressusciter.' : 'Aucune monture : éveille un Alpha Loup, Sanglier, Ours ou Escargot à la Tanière.');
+      this.hud.toast(owned ? 'Ta monture est trop loin ou en train de ressusciter.' : 'Aucune monture : éveille un Alpha Loup, Sanglier, Ours, Escargot ou Serpent à la Tanière.');
       return;
     }
-    // toujours l'Alpha chevauchable le plus proche
-    const pick = candidates.sort((a, b) => Math.hypot(a[3] - this.me.x, a[4] - this.me.y) - Math.hypot(b[3] - this.me.x, b[4] - this.me.y))[0];
+    // toujours l'Alpha chevauchable le plus proche ; le serpent seulement si l'eau est à portée (sinon le suivant)
+    const nearWater = !!this.map.waterNear(this.me.x, this.me.y, SHORE_R);
+    const sorted = candidates.sort((a, b) => Math.hypot(a[3] - this.me.x, a[4] - this.me.y) - Math.hypot(b[3] - this.me.x, b[4] - this.me.y));
+    const pick = sorted.find((u) => nearWater || !swimMount(u[1]));
+    if (!pick) return this.hud.toast('Approche-toi de l\'eau pour monter ton serpent : il ne nage qu\'en eau.');
     this.net.send({ t: 'mount', id: pick[0] });
   }
 
@@ -750,7 +761,8 @@ export class Game {
         break;
       case 'mount':
         if (e.by === this.myId && e.on) {
-          this.hud.toast('En selle ! F pour descendre.', 'good');
+          const swim = swimMount(this.net.latest?.units.find((u) => u[0] === e.id)?.[1] ?? this.self()?.mount?.species ?? -1);
+          this.hud.toast(swim ? 'À l\'eau sur ton serpent ! Il ne va qu\'en eau : F au bord d\'une rive pour descendre.' : 'En selle ! F pour descendre.', 'good');
         } else if (e.by === this.myId) this.hud.toast('Tu as mis pied à terre.');
         break;
       case 'full':
@@ -813,13 +825,14 @@ export class Game {
     this.me.moving = dx !== 0 || dy !== 0;
     if (this.me.moving) {
       // Même règle que le serveur : pas d'eau, on glisse le long des berges.
+      const swimming = !!st?.mount && swimMount(st.mount.species); // sur le serpent : seulement l'eau
       const speed = PLAYER_SPEED * (st?.mount ? mountSpeedOf(st.mount.species) : 1) * (st?.slowed ? WEB_SLOW : 1);
       // (bords du monde et intérieurs de grotte : gérés par blocked())
       const nx = this.me.x + dx * speed * dt, ny = this.me.y + dy * speed * dt;
       // Même règle que le serveur pour les portes fermées : on ne les franchit pas en avançant.
       let shut = -1;
       const ok = (x: number, y: number) => {
-        if (this.map.blocked(x, y) || sleeperBlocks(this.hud.sleepers, this.me.x, this.me.y, x, y)) return false;
+        if (!this.map.passable(x, y, swimming) || sleeperBlocks(this.hud.sleepers, this.me.x, this.me.y, x, y)) return false;
         const g = this.map.gateCrossed(this.me.x, this.me.y, x, y);
         if (g < 0 || this.gateOpen(g)) return true;
         shut = g;
@@ -1140,10 +1153,11 @@ export class Game {
             this.drawUnitCached(ctx, p.mount.id, {
               x, y, r: mr, species: p.mount.species, alpha: true, wild: false, ownerColor: p.color, legend: p.mount.legend,
               face: fx < -0.1 ? -1 : 1, t: this.time * (isMe && this.me.moving ? 1.8 : 1), seed: p.mount.id,
-              flash: (this.flashes.get(p.mount.id) ?? 0) > this.time,
+              flash: (this.flashes.get(p.mount.id) ?? 0) > this.time, inWater: swimMount(p.mount.species) && this.map.isWater(x, y),
             });
-            lift = mr * 0.8;
-            back = mr * 0.25 * (fx < -0.1 ? 1 : -1); // assis sur le dos, pas sur la tête
+            const swim = swimMount(p.mount.species); // serpent : assis bas sur ses anneaux, derrière son cou dressé
+            lift = mr * (swim ? 0.3 : 0.8);
+            back = mr * (swim ? 0.7 : 0.25) * (fx < -0.1 ? 1 : -1); // assis sur le dos, pas sur la tête
           }
           // Récolte en cours (un coup il y a moins d'une seconde) : l'arme laisse place à l'outil.
           const used = this.tools.get(p.id);

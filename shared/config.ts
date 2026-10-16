@@ -168,7 +168,14 @@ export const weaponCost = (lvl: number) => Math.round(25 * Math.pow(1.6, lvl));
 // (1 essence par monstre de l'espèce vaincu), puis on le renforce, de plus en plus cher.
 // Montures : certains Alphas éveillés se chevauchent. Vitesse multipliée, et la monture encaisse
 // une partie des coups (elle peut tomber : on est désarçonné, elle ressuscite comme tout Alpha).
-export const MOUNTS: Record<string, number> = { wolf: 1.6, boar: 1.4, bear: 1.25, snail: 0.6 }; // l'escargot se monte, mais ralentit
+export const MOUNTS: Record<string, number> = { wolf: 1.6, boar: 1.4, bear: 1.25, snail: 0.6, serpent: 1.5 }; // l'escargot se monte, mais ralentit
+/**
+ * Montures nageuses (le serpent) : on ne va qu'en eau avec elles. On embarque près de l'eau (à SHORE_R au plus) :
+ * on est posé sur l'eau. On ne descend que près d'une rive (posé sur la terre ferme). Si la monture tombe sur l'eau, on se noie.
+ */
+export const SWIM_MOUNTS = new Set(['serpent']);
+export const SHORE_R = 140;
+export const swimMount = (species: number) => SWIM_MOUNTS.has(SPECIES_KEYS[species]);
 export const MOUNT_SHARE = 0.75; // part des dégâts reçus par la monture
 export const MOUNT_REACH = 240; // distance max pour enfourcher sa monture
 export const mountSpeedOf = (species: number) => MOUNTS[SPECIES_KEYS[species]] ?? 1;

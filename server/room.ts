@@ -7,7 +7,7 @@ import {
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
-  armorMaxHp, armorReduction, alphaPerk, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
+  armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
@@ -452,6 +452,7 @@ export class Room {
     const now = Date.now();
     const mounted = p.mount ? this.units.get(p.mount) : undefined;
     const slow = p.slowUntil > this.time ? WEB_SLOW : 1;
+    const swimming = !!mounted && swimMount(mounted.s); // sur le serpent : seulement l'eau
     const allowed = PLAYER_SPEED * slow * (mounted ? mountSpeedOf(mounted.s) : 1) * 1.35 * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12;
     p.lastPosMs = now;
     let dx = x - p.x, dy = y - p.y;
@@ -464,7 +465,7 @@ export class Room {
     const nx = p.x + dx, ny = p.y + dy; // les bords du monde et les grottes sont gérés par blocked()
     const sleeping = this.sleepingBosses(p);
     const ok = (x: number, y: number) => {
-      if (this.map.blocked(x, y) || sleeperBlocks(sleeping, p.x, p.y, x, y)) return false;
+      if (!this.map.passable(x, y, swimming) || sleeperBlocks(sleeping, p.x, p.y, x, y)) return false;
       const g = this.map.gateCrossed(p.x, p.y, x, y);
       return g < 0 || this.gateIsOpen(g);
     };
@@ -663,7 +664,7 @@ export class Room {
     } else {
       const u = this.fieldAlpha(p, s);
       if (!u) return;
-      if (p.mount === u.id) this.dismount(p);
+      if (p.mount === u.id) this.dismount(p, true);
       p.resting.push({ s: u.s, lvl: u.level, legend: u.legend });
       p.army = p.army.filter((id) => id !== u.id);
       this.units.delete(u.id);
@@ -762,25 +763,58 @@ export class Room {
     }
   }
 
-  /** Monter sur un Alpha éveillé (id) ou en descendre (id = 0, ou la monture actuelle). */
+  /**
+   * Monter sur un Alpha éveillé (id) ou en descendre (id = 0, ou la monture actuelle).
+   * Le serpent ne se monte que près de l'eau : on est posé sur l'eau, et on ne va plus qu'en eau avec lui.
+   */
   onMount(p: Player, id: number) {
-    if (p.mount && (id === 0 || id === p.mount)) return this.dismount(p);
+    if (p.mount && (id === 0 || id === p.mount)) return void this.dismount(p);
     const u = this.units.get(id);
     if (p.dead || !u || !u.alpha || u.owner !== p.id || u.reviveAt || mountSpeedOf(u.s) === 1) return;
     if (dist2(u.x, u.y, p.x, p.y) > MOUNT_REACH ** 2) return;
-    if (p.mount) this.dismount(p);
+    const water = swimMount(u.s) ? this.map.waterNear(p.x, p.y, SHORE_R) : null;
+    if (swimMount(u.s) && !water) return p.send({ t: 'error', msg: 'Approche-toi de l\'eau pour monter ton serpent : il ne nage qu\'en eau.' });
+    if (p.mount && !this.dismount(p)) return; // sur l'eau, loin de la rive : on garde le serpent
+    if (water) this.moveTo(p, water.x, water.y); // il embarque : posé sur l'eau
     p.mount = u.id;
     u.target = 0;
     u.recalling = false;
     this.events.push({ e: 'mount', by: p.id, id: u.id, on: true });
   }
 
-  private dismount(p: Player) {
+  /**
+   * Descendre de sa monture. Sur l'eau (serpent), il faut une rive à portée : on est posé sur la terre ferme ;
+   * sinon on reste en selle (false). force : descente obligée (Alpha rangé, voyage, mort…) vers la terre la plus proche.
+   */
+  private dismount(p: Player, force = false) {
     const u = this.units.get(p.mount);
+    if (u && swimMount(u.s) && this.map.isWater(p.x, p.y)) {
+      const land = this.map.landNear(p.x, p.y, force ? 600 : SHORE_R) ?? (force ? this.map.freeNear(p.x, p.y) : null);
+      if (!land) {
+        p.send({ t: 'error', msg: 'Trop loin de la rive : rapproche-toi de la terre pour descendre du serpent.' });
+        return false;
+      }
+      this.moveTo(p, land.x, land.y);
+    }
     p.mount = 0;
-    if (!u) return;
+    if (!u) return true;
     if (!u.reviveAt) this.placeNear(u, p);
     this.events.push({ e: 'mount', by: p.id, id: u.id, on: false });
+    return true;
+  }
+
+  /** Déplace le dompteur d'un coup (embarquer, débarquer) : le client se recale sur cette position. */
+  private moveTo(p: Player, x: number, y: number) {
+    p.x = x;
+    p.y = y;
+    p.lastPosMs = Date.now();
+    p.send({ t: 'teleport', x, y });
+  }
+
+  /** Sur une monture nageuse (le serpent), donc sur l'eau. */
+  private swimming(p: Player) {
+    const m = p.mount ? this.units.get(p.mount) : undefined;
+    return !!m && swimMount(m.s);
   }
 
   /** Vrai si cette unité est la monture de son dompteur. */
@@ -881,6 +915,11 @@ export class Room {
   }
 
   private revivePlayer(d: Player, by: Player) {
+    if (this.map.isWater(d.x, d.y)) {
+      // noyé : relevé sur la rive la plus proche
+      const at = this.map.landNear(d.x, d.y, 600) ?? this.map.freeNear(d.x, d.y);
+      [d.x, d.y] = [at.x, at.y];
+    }
     d.dead = false;
     d.hp = Math.max(1, Math.round(maxHpOf(d) * REVIVE_HP));
     d.reviveBy = 0;
@@ -969,7 +1008,7 @@ export class Room {
 
   /** Voyage d'une Pierre de passage à une autre (village ou camp établi), avec toute la meute. */
   onTravel(p: Player, to: number) {
-    if (p.dead) return;
+    if (p.dead || this.swimming(p)) return; // descendre du serpent d'abord
     const from = this.stoneNear(p);
     if (from === null || from === to || (to === -1 ? !this.buildings.includes('stone') : !this.camps.includes(to))) return;
     const st = this.map.stones[to + 1];
@@ -1592,6 +1631,7 @@ export class Room {
   onCave(p: Player, id: number, enter: boolean) {
     const c = this.map.caves[id];
     if (!c || p.dead) return;
+    if (this.swimming(p)) return; // pas de grotte à la nage
     if (enter && !this.unlocked.includes(id)) return; // grotte pas encore débloquée
     const from = enter ? c.entrance : c.exit;
     if (dist2(p.x, p.y, from.x, from.y) > (BUILDING_REACH + 40) ** 2) return;
@@ -2027,7 +2067,7 @@ export class Room {
   }
 
   private killPlayer(p: Player) {
-    if (p.mount) this.dismount(p);
+    if (p.mount) this.dismount(p, true);
     p.dead = true;
     p.hp = 0;
     // Un autre dompteur est là : il a le temps de venir nous relever.
@@ -2084,6 +2124,11 @@ export class Room {
       if (rider?.mount === u.id) {
         rider.mount = 0; // désarçonné
         this.events.push({ e: 'mount', by: rider.id, id: u.id, on: false });
+        if (swimMount(u.s) && !rider.dead && this.map.isWater(rider.x, rider.y)) {
+          // son serpent tombe en pleine eau : il se noie
+          this.events.push({ e: 'info', text: `${rider.name} s'est noyé` });
+          this.killPlayer(rider);
+        }
       }
       if (u.alpha) {
         u.reviveAt = this.time + alphaReviveS(u.s);

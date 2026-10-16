@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, SWIM_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
@@ -1009,7 +1009,7 @@ export class Hud {
           ['dmg', 'Dégâts', grow(now.dmg, nxt.dmg)],
           ['revive', 'Résurrection', `${alphaReviveS(s)} s`],
         ];
-        if (MOUNTS[sp.key]) rows.push(['mount', 'Monture', `vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}`]);
+        if (MOUNTS[sp.key]) rows.push(['mount', 'Monture', `vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}${SWIM_MOUNTS.has(sp.key) ? ' · sur l\'eau' : ''}`]);
         const perk = alphaPerk(s, lvl), perkNext = alphaPerk(s, lvl + 1);
         if (perk && perkNext) {
           const grow1 = (v: number, w: number, f: (n: number) => string) => (a && !maxed ? `${f(v)} → <span class="up">${f(w)}</span>` : f(v));
@@ -1262,7 +1262,9 @@ function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; 
   if (form === 'wild') return { name: sp.name, tag: traits, stats: `${sp.hp} PV · ${sp.dmg} dégâts`, desc: SPECIES_DESC[sp.key] ?? '' };
   const legend = form === 'legend', st = alphaStats(s, 0, 0, legend), boss = bossOf(s), perk = alphaPerk(s, 0);
   const powers = [
-    MOUNTS[sp.key] ? `Se chevauche (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}).` : '',
+    MOUNTS[sp.key] ? (SWIM_MOUNTS.has(sp.key)
+      ? `Se chevauche sur l'eau seulement (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}) : on embarque près de l'eau, on descend au bord d'une rive, et s'il tombe en pleine eau, on se noie.`
+      : `Se chevauche (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}).`) : '',
     perk?.kind === 'guard' ? `Protège son dompteur : −${pctLabel(perk.value)} de dégâts reçus (plus en le renforçant).` : '',
     perk?.kind === 'heal' ? `Soigne son dompteur et sa meute proche : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s (plus en le renforçant).` : '',
     legend && boss >= 0 ? `Âme de ${SPECIES[boss].title ?? SPECIES[boss].name} : il hérite de ses attaques (${(BOSS_MOVES[SPECIES[boss].key] ?? []).map((m) => MOVE_NAMES[m.kind].toLowerCase()).join(', ')}).` : '',

@@ -77,7 +77,7 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 - **Brume des zones** : un banc de nuages couvre le couloir au-delà de la sortie du village puis de chaque zone fermée (aucun monstre n'y apparaît). Pour passer en zone suivante, il faut l'Hôtel de ville au bon niveau **et** avoir vaincu tous les géants de la zone (une fois suffit, pour tout le village). On peut toujours revenir en arrière
 - **E** près d'un bâtiment construit : Forge (classe, arme, armure), Tanière (Alphas des espèces déjà rencontrées, bestiaire), Marché (vendre les monstres de sa meute, acheter ceux des espèces déjà croisées) · **Échap** : fermer
 - **Clic sur la minicarte** (ou **M**) : grande carte, avec le brouillard des zones pas encore explorées · **Échap** ou **M** pour la fermer
-- **F** : monter sur son Alpha Loup, Sanglier ou Ours (ou en descendre)
+- **F** : monter sur son Alpha Loup, Sanglier, Ours ou Escargot (ou en descendre). L'Alpha **Serpent des brumes** se monte aussi, mais ne va qu'en eau : F près de l'eau pour embarquer (on est posé sur l'eau), F au bord d'une rive pour descendre ; s'il tombe en pleine eau, on se noie
 - **Mort** : tu perds 10 % de ton or ; ta meute ordinaire se disperse, tes Alphas restent
 - Au village ou dans un camp établi, ta meute et tes Alphas se promènent librement autour de toi
 - **R maintenu** (ou le bouton, au doigt) près d'un coéquipier à terre : le relever sur place avec la moitié de ses PV, après 5 s. Avec un autre dompteur dans le village, on reste à terre 10 s avant de repartir au camp ; seul, 5 s. Un Alpha tombé ne ressuscite qu'une fois son dompteur debout

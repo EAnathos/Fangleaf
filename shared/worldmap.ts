@@ -777,4 +777,33 @@ export class WorldMap {
     }
     return { x: this.village.x, y: this.village.y };
   }
+
+  /** Point le plus proche, à moins de maxR, qui vérifie ok (en spirale, de plus en plus loin), ou null. */
+  private nearestWhere(x: number, y: number, maxR: number, ok: (x: number, y: number) => boolean) {
+    if (ok(x, y)) return { x, y };
+    for (let r = MAP_CELL / 2; r <= maxR; r += MAP_CELL / 2) {
+      const n = Math.max(12, Math.ceil((r * Math.PI * 2) / MAP_CELL));
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2, px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+        if (ok(px, py)) return { x: px, y: py };
+      }
+    }
+    return null;
+  }
+
+  /** Eau navigable la plus proche (pas une flaque en bord de rive : de l'eau tout autour), ou null. */
+  waterNear(x: number, y: number, maxR: number) {
+    const d = MAP_CELL * 0.6;
+    return this.nearestWhere(x, y, maxR, (px, py) => this.isWater(px, py) && this.isWater(px + d, py) && this.isWater(px - d, py) && this.isWater(px, py + d) && this.isWater(px, py - d));
+  }
+
+  /** Terre ferme la plus proche (où l'on peut marcher), ou null. */
+  landNear(x: number, y: number, maxR: number) {
+    return this.nearestWhere(x, y, maxR, (px, py) => !this.blocked(px, py));
+  }
+
+  /** Où l'on peut aller : à pied, tout sauf l'eau et les obstacles ; sur une monture nageuse, seulement l'eau. */
+  passable(x: number, y: number, swimming: boolean) {
+    return swimming ? this.isWater(x, y) : !this.blocked(x, y);
+  }
 }
