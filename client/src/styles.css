@@ -85,13 +85,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tabs.auto { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
 .hint { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
 .village-list { display: flex; flex-direction: column; gap: 8px; }
-.village-pick { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 4px 14px; min-height: 60px; padding: 10px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--night); color: var(--text); text-align: left; cursor: pointer; }
+.village-pick { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 14px; min-height: 60px; padding: 10px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--night); color: var(--text); text-align: left; cursor: pointer; }
 .village-pick:hover { border-color: var(--ally); }
 .village-pick[aria-checked="true"] { border-color: var(--amber); background: rgba(240, 182, 74, 0.1); }
-.village-pick b { font: 700 22px var(--display); letter-spacing: 3px; color: var(--amber); }
-.village-pick b.named { font-size: 19px; letter-spacing: 0.5px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.village-pick .who { font-size: 14px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.village-pick .when { font-size: 13px; color: var(--muted); text-align: right; white-space: nowrap; }
+.village-pick b { grid-column: 1; font: 700 19px var(--display); letter-spacing: 0.5px; color: var(--amber); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.village-pick b.unnamed { color: var(--muted); font-style: italic; }
+.village-pick .when { grid-column: 2; font-size: 13px; color: var(--muted); text-align: right; white-space: nowrap; }
 .error { margin: 0; color: #FF9B78; font-size: 14px; }
 .error:empty { display: none; }
 
@@ -402,3 +401,4 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .intro { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; }
 #hud { transition: opacity 1.2s; }
 body.waking #hud { opacity: 0; pointer-events: none; }
+#go { padding: 0 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* « Entrer dans » + un long nom de village */

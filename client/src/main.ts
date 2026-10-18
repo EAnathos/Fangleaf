@@ -1,7 +1,7 @@
 // Lobby : créer ou rejoindre un village, puis lancer la partie.
 
 import './styles.css';
-import { MAX_VILLAGES, ZONES } from '../../shared/config.ts';
+import { MAX_VILLAGES } from '../../shared/config.ts';
 import { authEnabled, currentAccount, type MyVillage, myVillages, signInWithGoogle, signOut } from './auth.ts';
 import { startLobbyScene } from './lobbyScene.ts';
 import { Net } from './net.ts';
@@ -28,7 +28,8 @@ function setMode(m: typeof mode) {
   $('create-hint').hidden ||= full();
   const go = $<HTMLButtonElement>('go');
   go.disabled = m === 'create' && full();
-  go.textContent = m === 'mine' ? `Entrer dans ${picked}` : m === 'join' ? 'Rejoindre le village' : 'Fonder le village';
+  const named = villages.find((v) => v.code === picked)?.village;
+  go.textContent = m === 'mine' ? (named ? `Entrer dans ${named}` : 'Entrer dans le village') : m === 'join' ? 'Rejoindre le village' : 'Fonder le village';
   $('lobby-error').textContent = '';
 }
 
@@ -38,7 +39,7 @@ function since(d: Date) {
   return Number.isNaN(days) ? '' : days <= 0 ? 'aujourd\'hui' : days === 1 ? 'hier' : `il y a ${days} jours`;
 }
 
-/** Villages du compte : une carte par village (code, dompteur, zones découvertes, dernière partie), la plus récente choisie. */
+/** Villages du compte : une carte par village (son nom, dernière partie), la plus récente choisie. */
 function renderVillages() {
   $('tab-mine').hidden = !villages.length;
   if (!villages.some((v) => v.code === picked)) picked = villages[0]?.code ?? '';
@@ -49,11 +50,11 @@ function renderVillages() {
       btn.className = 'village-pick';
       btn.setAttribute('role', 'radio');
       btn.setAttribute('aria-checked', String(v.code === picked));
-      btn.innerHTML = '<b></b><span class="who"></span><span class="when"></span>';
+      btn.innerHTML = '<b></b><span class="when"></span>';
+      // le nom du village (« Sans nom » tant que l'Hôtel de ville ne l'a pas baptisé)
       const b = btn.querySelector('b')!;
-      b.textContent = v.village || v.code;
-      b.classList.toggle('named', !!v.village);
-      btn.querySelector('.who')!.textContent = `${v.village ? `${v.code} · ` : ''}${v.name || 'Dompteur'} · ${v.zones}/${ZONES} zones découvertes`;
+      b.textContent = v.village || 'Sans nom';
+      b.classList.toggle('unnamed', !v.village);
       btn.querySelector('.when')!.textContent = since(v.updated);
       btn.onclick = () => {
         picked = v.code;
