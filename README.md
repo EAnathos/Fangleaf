@@ -22,7 +22,7 @@ ou exposer ton port (ex. `cloudflared tunnel --url http://localhost:5173`).
 
 Un compte Google est requis pour jouer : le serveur refuse toute connexion sans session valide.
 La progression est rattachée au **compte dans un village** : en revenant dans son village, on retrouve
-or, bois, pierre, niveaux d'arme et d'armure, essences et **Alphas** (la meute ordinaire n'est pas sauvegardée). Rejoindre un autre village, c'est repartir de zéro là-bas. Un compte a au plus **3 villages** : le lobby les liste (« Mes villages ») pour choisir où jouer, à côté de « Créer » et « Rejoindre ». Les villages gardent leur code et leur carte.
+or, bois, pierre, niveaux d'arme et d'armure, essences et **Alphas** (la meute ordinaire n'est pas sauvegardée). Rejoindre un autre village, c'est repartir de zéro là-bas. Un compte a au plus **3 villages** : le lobby les liste (« Mes villages ») pour choisir où jouer, à côté de « Créer » et « Rejoindre ». Les villages gardent leur code et leur carte. « Quitter ce village » (sous la liste) efface sa progression dans le village choisi ; le village continue pour les autres (son fondateur passe la main au membre le plus récemment actif) et disparaît s'il n'y reste personne.
 
 1. Crée un projet sur [supabase.com](https://supabase.com).
 2. Tables : ajoute `DATABASE_URL` dans `.env` (*Project Settings › Database › Connection string › URI*) puis lance `npm run db:migrate`, qui applique les fichiers de [supabase/migrations/](supabase/migrations/) pas encore passés. À défaut, colle-les dans le *SQL Editor*, dans l'ordre.

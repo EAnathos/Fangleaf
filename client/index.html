@@ -58,6 +58,16 @@
         <button type="button" role="tab" id="tab-join" aria-selected="false">Rejoindre</button>
       </div>
       <div id="mine-list" class="village-list" role="radiogroup" aria-label="Mes villages" hidden></div>
+      <div id="mine-leave" class="mine-leave" hidden>
+        <button type="button" id="leave-ask" class="link-btn leave-ask">Quitter ce village</button>
+        <div id="leave-confirm" class="leave-confirm" hidden>
+          <p id="leave-text"></p>
+          <div class="row">
+            <button type="button" id="leave-cancel" class="btn">Annuler</button>
+            <button type="button" id="leave-go" class="danger-btn solid">Quitter</button>
+          </div>
+        </div>
+      </div>
       <label class="field" id="code-field" hidden>Code du village
         <input id="code" class="code-input" maxlength="6" autocomplete="off" spellcheck="false" placeholder="MOSS42">
       </label>
@@ -69,6 +79,25 @@
     </form>
     </div>
   </main>
+
+  <!-- Entre le lobby et le jeu : le serveur génère l'île (ou ouvre le village), puis le navigateur la dessine. -->
+  <div id="loading" class="loading" role="status" aria-live="polite" hidden>
+    <div class="loading-isle" aria-hidden="true">
+      <span class="ripple"></span><span class="ripple"></span><span class="ripple"></span>
+      <svg class="isle" viewBox="0 0 160 120" width="160" height="120">
+        <path d="M18 66 C10 50 22 34 40 32 C50 18 72 14 88 22 C104 14 128 20 136 36 C152 42 154 62 142 74 C146 92 126 104 106 98 C92 110 66 108 54 98 C34 104 14 88 18 66 Z" fill="#348A9C" opacity="0.55"/>
+        <path d="M26 66 C20 52 30 40 44 39 C54 27 72 24 86 30 C100 23 120 28 127 41 C140 46 142 62 133 71 C136 86 120 95 104 90 C92 99 70 98 59 90 C42 95 22 82 26 66 Z" fill="#DEC896"/>
+        <path d="M36 64 C32 54 40 46 50 46 C58 36 72 34 84 39 C96 33 112 37 117 47 C127 52 128 62 121 68 C122 79 110 84 100 81 C90 88 72 87 64 81 C50 85 34 76 36 64 Z" fill="#4E8A44"/>
+        <path d="M44 62 C44 56 50 52 56 53 C62 46 74 45 82 49" fill="none" stroke="#6FAA58" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+        <circle cx="62" cy="58" r="8" fill="#2F6B36"/><circle cx="76" cy="64" r="6.5" fill="#2F6B36"/><circle cx="95" cy="56" r="7.5" fill="#2F6B36"/>
+        <circle cx="60" cy="56" r="3" fill="#3E7A3C"/><circle cx="93" cy="54" r="2.8" fill="#3E7A3C"/>
+        <path d="M118 80 Q121 70 117 62" fill="none" stroke="#7A5A3A" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M117 62 q-9 -3 -13 3 M117 62 q9 -4 13 2 M117 62 q-4 -8 -11 -8 M117 62 q5 -8 11 -6" fill="none" stroke="#3E7A3C" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <p id="loading-text" class="loading-text"></p>
+    <p id="loading-sub" class="loading-sub"></p>
+  </div>
 
   <!-- ───── HUD ───── -->
   <div id="hud" hidden>

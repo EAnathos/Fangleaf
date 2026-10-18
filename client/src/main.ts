@@ -19,12 +19,14 @@ function setMode(m: typeof mode) {
   for (const t of ['mine', 'create', 'join'] as const) $(`tab-${t}`).setAttribute('aria-selected', String(m === t));
   $('code-field').hidden = m !== 'join';
   $('mine-list').hidden = m !== 'mine';
+  $('mine-leave').hidden = m !== 'mine' || !picked;
+  askLeave(false);
   $('create-hint').hidden = m !== 'create';
   const hint = $('mine-hint');
   hint.hidden = m === 'join' ? !full() : m !== 'mine' && !(m === 'create' && full());
   hint.textContent = m === 'mine'
     ? `${villages.length}/${MAX_VILLAGES} villages · ta progression est propre à chacun d'eux.`
-    : `Tu as déjà ${MAX_VILLAGES} villages : quittes-en un (Menu › Effacer ma progression ici, ou Supprimer le village) pour en ${m === 'create' ? 'fonder' : 'rejoindre'} un autre. Tu peux toujours revenir dans les tiens.`;
+    : `Tu as déjà ${MAX_VILLAGES} villages : quittes-en un (Mes villages › Quitter ce village) pour en ${m === 'create' ? 'fonder' : 'rejoindre'} un autre. Tu peux toujours revenir dans les tiens.`;
   $('create-hint').hidden ||= full();
   const go = $<HTMLButtonElement>('go');
   go.disabled = m === 'create' && full();
@@ -32,6 +34,56 @@ function setMode(m: typeof mode) {
   go.textContent = m === 'mine' ? (named ? `Entrer dans ${named}` : 'Entrer dans le village') : m === 'join' ? 'Rejoindre le village' : 'Fonder le village';
   $('lobby-error').textContent = '';
 }
+
+/** Quitter le village choisi : d'abord une confirmation (sa progression y est effacée). */
+function askLeave(on: boolean) {
+  $('leave-ask').hidden = on;
+  $('leave-confirm').hidden = !on;
+  $<HTMLButtonElement>('leave-go').disabled = false;
+  if (!on) return;
+  const v = villages.find((x) => x.code === picked);
+  $('leave-text').textContent = `Quitter « ${v?.village || 'Sans nom'} » ? Ta progression y sera effacée (or, équipement, essences, Alphas). Le village continue pour ses autres membres ; s'il n'en reste aucun, il disparaît.`;
+}
+
+/** Envoie la demande au serveur (le client ne peut pas effacer sa progression lui-même). */
+async function leavePicked() {
+  const code = picked, go = $<HTMLButtonElement>('leave-go');
+  go.disabled = true;
+  $('lobby-error').textContent = '';
+  const account = await currentAccount().catch(() => null);
+  if (!account) {
+    $('lobby-error').textContent = 'Session expirée : reconnecte-toi.';
+    return refreshAccount();
+  }
+  const net = new Net();
+  try {
+    await net.ready();
+  } catch {
+    $('lobby-error').textContent = 'Serveur injoignable. Est-il lancé ?';
+    go.disabled = false;
+    return;
+  }
+  const answer = await new Promise<string | null>((done) => {
+    net.onMessage = (m) => (m.t === 'left' ? done(null) : m.t === 'error' ? done(m.msg) : undefined);
+    net.onClose = () => done('Connexion au serveur perdue.');
+    net.send({ t: 'leave', code, token: account.token });
+  });
+  net.onClose = () => {};
+  net.close();
+  if (answer) {
+    $('lobby-error').textContent = answer;
+    go.disabled = false;
+    return;
+  }
+  villages = villages.filter((v) => v.code !== code);
+  picked = '';
+  renderVillages();
+  setMode(villages.length ? 'mine' : 'create');
+  $('card-title').textContent = villages.length ? 'Tes villages' : 'Ton premier village';
+}
+$('leave-ask').onclick = () => askLeave(true);
+$('leave-cancel').onclick = () => askLeave(false);
+$('leave-go').onclick = () => void leavePicked();
 
 /** « il y a 3 jours » : date de la dernière partie dans ce village. */
 function since(d: Date) {
@@ -169,8 +221,16 @@ $('lobby-form').addEventListener('submit', async (e) => {
     go.disabled = false;
     return;
   }
+  // Écran de chargement : le serveur génère l'île (création) ou ouvre le village, puis le navigateur la dessine.
+  const loading = $('loading');
+  const stopLoading = () => (loading.hidden = true);
+  $('loading-text').textContent = mode === 'create' ? 'L\'île se forme' : 'En route vers le village';
+  $('loading-sub').textContent = mode === 'create' ? 'Les vagues dessinent ses côtes, les forêts y poussent, les monstres s\'y installent.' : 'On rejoint l\'île et ses dompteurs.';
+  loading.classList.remove('done');
+  loading.hidden = false;
   net.onMessage = (m) => {
     if (m.t === 'error') {
+      stopLoading();
       $('lobby-error').textContent = m.msg;
       if (m.msg.startsWith('Aucun village')) $('village-tabs').hidden = false; // village introuvable : autre choix
       go.disabled = false;
@@ -180,10 +240,19 @@ $('lobby-form').addEventListener('submit', async (e) => {
       history.replaceState(null, '', location.pathname); // invitation consommée : pas de badge au rechargement
       const game = new Game($<HTMLCanvasElement>('game'), net, m.id, m.code, m.seed, m.villageFound, m.founder, m.armed);
       if (import.meta.env.DEV) Object.assign(window, { game }); // debug console
+      // l'île est prête : l'écran de chargement s'efface une fois la première image dessinée
+      requestAnimationFrame(() => {
+        loading.classList.add('done');
+        setTimeout(stopLoading, 500);
+      });
     }
   };
   net.onClose = () => {
-    if ($('lobby').hidden) {
+    if (!$('lobby').hidden) {
+      stopLoading(); // coupé avant d'entrer : on reste au lobby
+      $('lobby-error').textContent ||= 'Connexion au serveur perdue.';
+      go.disabled = false;
+    } else {
       alert('Connexion au serveur perdue.');
       location.reload();
     }

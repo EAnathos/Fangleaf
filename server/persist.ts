@@ -95,6 +95,29 @@ export async function deleteProgress(userId: string, code: string) {
   if (error) throw new Error(`Effacement de la progression impossible : ${error.message}`);
 }
 
+/**
+ * Quitter un village : sa progression y est effacée. S'il n'y reste personne, le village disparaît ; si c'était son
+ * fondateur, le membre le plus récemment actif le devient. Renvoie ce qui s'est passé.
+ */
+export async function leaveVillage(userId: string, code: string): Promise<{ deleted: boolean; founder: string | null }> {
+  if (!db) return { deleted: false, founder: null };
+  await deleteProgress(userId, code);
+  const { data, error } = await db.from('progress').select('user_id').eq('village_code', code).order('updated_at', { ascending: false });
+  if (error) throw new Error(`Lecture des membres impossible : ${error.message}`);
+  if (!data?.length) {
+    await deleteVillage(code);
+    return { deleted: true, founder: null };
+  }
+  const { data: v } = await db.from('villages').select('created_by').eq('code', code).maybeSingle();
+  let founder: string | null = v?.created_by ?? null;
+  if (founder === userId) {
+    founder = String(data[0].user_id);
+    const { error: e } = await db.from('villages').update({ created_by: founder }).eq('code', code);
+    if (e) throw new Error(`Passation du village impossible : ${e.message}`);
+  }
+  return { deleted: false, founder };
+}
+
 /** Biens communs du village (partagés par tous ses membres). */
 export async function saveVillage(code: string, v: VillageSave) {
   if (!db) return;

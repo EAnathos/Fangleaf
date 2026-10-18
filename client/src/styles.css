@@ -402,3 +402,29 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #hud { transition: opacity 1.2s; }
 body.waking #hud { opacity: 0; pointer-events: none; }
 #go { padding: 0 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* « Entrer dans » + un long nom de village */
+
+/* Écran de chargement (création ou ouverture d'un village) : une île qui flotte, des vagues qui s'en éloignent.
+   Seulement des transformations et de l'opacité : l'animation continue pendant que le navigateur génère la carte. */
+.loading { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 16px; text-align: center;
+  background: radial-gradient(circle at 50% 42%, #1F4A58 0%, #12303B 45%, #0A1A20 100%); transition: opacity 0.5s; }
+.loading.done { opacity: 0; pointer-events: none; }
+.loading-isle { position: relative; width: 240px; height: 190px; }
+.loading-isle .ripple { position: absolute; left: 50%; top: 50%; width: 150px; height: 112px; margin: -56px 0 0 -75px; border-radius: 50%;
+  border: 2px solid rgba(226, 240, 236, 0.55); opacity: 0; animation: loading-ripple 2.7s ease-out infinite; }
+.loading-isle .ripple:nth-child(2) { animation-delay: 0.9s; }
+.loading-isle .ripple:nth-child(3) { animation-delay: 1.8s; }
+.loading-isle .isle { position: absolute; left: 50%; top: 50%; width: 160px; height: 120px; margin: -60px 0 0 -80px; animation: loading-bob 3s ease-in-out infinite; }
+.loading-text { margin: 0; font: 700 28px var(--display); color: var(--amber); }
+.loading-text::after { content: ''; display: inline-block; width: 1.2em; text-align: left; animation: loading-dots 1.5s steps(4) infinite; }
+.loading-sub { margin: 0; max-width: 360px; font-size: 15px; color: var(--text-2); }
+@keyframes loading-ripple { 0% { transform: scale(0.85); opacity: 0.7; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes loading-bob { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-6px) rotate(2deg); } }
+@keyframes loading-dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+@media (prefers-reduced-motion: reduce) { .loading-isle .ripple, .loading-isle .isle, .loading-text::after { animation: none; } }
+
+/* Mes villages : quitter le village choisi (avec confirmation) */
+.mine-leave { display: flex; flex-direction: column; align-items: flex-end; margin-top: -4px; }
+.leave-ask { color: #FF9B78; font-size: 14px; }
+.leave-confirm { width: 100%; padding: 12px 14px; border-radius: 12px; border: 2px solid rgba(232, 105, 63, 0.55); background: rgba(232, 105, 63, 0.08); }
+.leave-confirm p { margin: 0 0 10px; font-size: 14px; line-height: 1.45; color: var(--text-2); }
+.leave-confirm .row { justify-content: flex-end; gap: 8px; }

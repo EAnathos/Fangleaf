@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { MAX_PLAYERS, MAX_VILLAGES, TICK_HZ } from '../shared/config.ts';
 import type { ClientMsg, ServerMsg } from '../shared/protocol.ts';
-import { countVillages, createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, loadMembers, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
+import { countVillages, createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, leaveVillage, loadMembers, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
 import { makeCode, Room, type Player } from './room.ts';
 
 try {
@@ -81,6 +81,22 @@ wss.on('connection', (ws: WebSocket) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(m));
   };
 
+  /** Depuis le lobby : quitter un de ses villages (pas celui où ce compte est en train de jouer). */
+  async function leave(msg: Extract<ClientMsg, { t: 'leave' }>) {
+    const user = persistenceEnabled() ? await verifyToken(String(msg.token ?? '')) : null;
+    if (!user) return send({ t: 'error', msg: 'Session expirée : reconnecte-toi.' });
+    const code = String(msg.code ?? '').toUpperCase().trim();
+    if (activeUsers.has(user.userId)) return send({ t: 'error', msg: 'Ce compte est en jeu : quitte la partie d\'abord.' });
+    const { deleted, founder } = await leaveVillage(user.userId, code);
+    const live = rooms.get(code);
+    if (live) {
+      live.removeSleeper(user.userId);
+      if (founder) live.founder = founder;
+    }
+    console.log(`[${code}] quitté depuis le lobby${deleted ? ' : plus personne, village supprimé' : ''}`);
+    send({ t: 'left', code });
+  }
+
   async function enter(msg: Extract<ClientMsg, { t: 'create' | 'join' }>) {
     // Compte Google obligatoire (ALLOW_GUESTS=1 n'existe que pour les tests automatisés).
     let user: { userId: string; name: string } | null = null;
@@ -96,7 +112,7 @@ wss.on('connection', (ws: WebSocket) => {
 
     // Village : un nouveau, un village déjà ouvert, ou un village enregistré qu'on rouvre (même carte).
     let r: Room;
-    const tooMany = `Tu as déjà ${MAX_VILLAGES} villages : quittes-en un (Menu › Effacer ma progression ici, ou Supprimer le village) pour en ${msg.t === 'create' ? 'fonder' : 'rejoindre'} un autre.`;
+    const tooMany = `Tu as déjà ${MAX_VILLAGES} villages : quittes-en un (Mes villages › Quitter ce village) pour en ${msg.t === 'create' ? 'fonder' : 'rejoindre'} un autre.`;
     if (msg.t === 'create') {
       if (user && (await countVillages(user.userId)) >= MAX_VILLAGES) return send({ t: 'error', msg: tooMany });
       let code = makeCode();
@@ -160,6 +176,14 @@ wss.on('connection', (ws: WebSocket) => {
             console.error(e);
             const schema = String(e?.message ?? '').includes('schema cache'); // tables Supabase manquantes
             send({ t: 'error', msg: schema ? 'Base de données incomplète : lance « npm run db:migrate » sur le serveur.' : 'Erreur serveur, réessaie.' });
+          })
+          .finally(() => (joining = false));
+      } else if (msg.t === 'leave' && !joining) {
+        joining = true;
+        leave(msg)
+          .catch((e) => {
+            console.error(e);
+            send({ t: 'error', msg: 'Impossible de quitter le village, réessaie.' });
           })
           .finally(() => (joining = false));
       }

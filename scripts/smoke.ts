@@ -219,7 +219,14 @@ async function main() {
   await sleep(300);
   check(late.msgs.some((m) => m.t === 'error'), 'village supprimé : on ne peut plus le rejoindre');
 
-  for (const b of [host, ...guests, late]) b.ws.close();
+  // Quitter un village depuis le lobby : il faut une vraie session (ici, sans Supabase : refusé).
+  const leaver = new Bot();
+  await leaver.open();
+  leaver.send({ t: 'leave', code: host.code, token: 'faux' });
+  await sleep(300);
+  check(leaver.msgs.some((m) => m.t === 'error') && !leaver.msgs.some((m) => m.t === 'left'), 'quitter un village sans session valide : refusé');
+
+  for (const b of [host, ...guests, late, leaver]) b.ws.close();
   server.kill();
   console.log(failed ? '\nÉCHEC' : '\nOK');
   process.exit(failed ? 1 : 0);

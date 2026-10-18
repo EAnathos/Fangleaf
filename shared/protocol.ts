@@ -18,6 +18,7 @@ export interface BoardRow extends Stats {
 export type ClientMsg =
   | { t: 'create'; name: string; token?: string } // token : session Supabase (optionnel)
   | { t: 'join'; code: string; name: string; token?: string }
+  | { t: 'leave'; code: string; token: string } // depuis le lobby : quitter un de ses villages (sa progression y est effacée)
   | { t: 'pos'; x: number; y: number; fx: number; fy: number }
   | { t: 'upgrade'; what: Gear }
   | { t: 'alphaUp'; s: number } // renforcer l'Alpha de cette espèce (équipé ou au repos)
@@ -201,6 +202,7 @@ export interface Snapshot {
 
 export type ServerMsg =
   | { t: 'welcome'; id: number; code: string; seed: number; saved: boolean; villageFound: boolean; founder: boolean; armed: boolean } // armed : épée déjà déterrée
+  | { t: 'left'; code: string } // village quitté (réponse à « leave »)
   | { t: 'closed'; msg: string } // village supprimé (ou progression effacée) : retour au lobby
   | { t: 'error'; msg: string }
   | { t: 'teleport'; x: number; y: number }

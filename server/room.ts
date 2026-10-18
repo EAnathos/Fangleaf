@@ -469,6 +469,11 @@ export class Room {
   }
 
   /** Fondateur du village (sans compte enregistré, en test : tout le monde). */
+  /** Un membre a quitté le village depuis le lobby : il ne dort plus au village. */
+  removeSleeper(userId: string) {
+    this.sleepers.delete(userId);
+  }
+
   isFounder(p: Player) {
     return this.founder === null || p.userId === this.founder;
   }
