@@ -58,8 +58,14 @@
         <button type="button" role="tab" id="tab-join" aria-selected="false">Rejoindre</button>
       </div>
       <div id="mine-list" class="village-list" role="radiogroup" aria-label="Mes villages" hidden></div>
+      <label class="field" id="code-field" hidden>Code du village
+        <input id="code" class="code-input" maxlength="6" autocomplete="off" spellcheck="false" placeholder="MOSS42">
+      </label>
+      <p id="create-hint" class="hint">Tu fondes un village à 4 places. Invite tes amis avec le bouton « Inviter » une fois en jeu.</p>
+      <p id="mine-hint" class="hint" hidden></p>
+      <button id="go" class="cta" type="submit">Fonder le village</button>
       <div id="mine-leave" class="mine-leave" hidden>
-        <button type="button" id="leave-ask" class="link-btn leave-ask">Quitter ce village</button>
+        <button type="button" id="leave-ask" class="danger-btn leave-ask">Quitter ce village</button>
         <div id="leave-confirm" class="leave-confirm" hidden>
           <p id="leave-text"></p>
           <div class="row">
@@ -68,12 +74,6 @@
           </div>
         </div>
       </div>
-      <label class="field" id="code-field" hidden>Code du village
-        <input id="code" class="code-input" maxlength="6" autocomplete="off" spellcheck="false" placeholder="MOSS42">
-      </label>
-      <p id="create-hint" class="hint">Tu fondes un village à 4 places. Invite tes amis avec le bouton « Inviter » une fois en jeu.</p>
-      <p id="mine-hint" class="hint" hidden></p>
-      <button id="go" class="cta" type="submit">Fonder le village</button>
       </div>
       <p id="lobby-error" class="error" role="alert"></p>
     </form>

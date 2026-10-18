@@ -423,8 +423,8 @@ body.waking #hud { opacity: 0; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .loading-isle .ripple, .loading-isle .isle, .loading-text::after { animation: none; } }
 
 /* Mes villages : quitter le village choisi (avec confirmation) */
-.mine-leave { display: flex; flex-direction: column; align-items: flex-end; margin-top: -4px; }
-.leave-ask { color: #FF9B78; font-size: 14px; }
+.mine-leave { display: flex; flex-direction: column; }
+.leave-ask { width: 100%; }
 .leave-confirm { width: 100%; padding: 12px 14px; border-radius: 12px; border: 2px solid rgba(232, 105, 63, 0.55); background: rgba(232, 105, 63, 0.08); }
 .leave-confirm p { margin: 0 0 10px; font-size: 14px; line-height: 1.45; color: var(--text-2); }
 .leave-confirm .row { justify-content: flex-end; gap: 8px; }
