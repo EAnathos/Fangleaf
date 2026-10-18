@@ -21,7 +21,7 @@ const LAKE_WATER = [61, 127, 140]; // mêmes bleus que l'eau des lacs (#3D7F8C, 
 const LAKE_DEEP = [46, 101, 116];
 const LAKE_BANK = [94, 107, 73]; // berge des lacs (#5E6B49)
 const MOUTH_SURF = 150; // en mer, l'écume et le sable s'effacent à l'approche d'une embouchure
-export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76], [204, 172, 114], [86, 132, 72]];
+export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76], [204, 172, 114]];
 const STEPPE = [124, 140, 78]; // lisière verte entre le sable du désert et la mer
 const COAST_GREEN = 700; // largeur de cette lisière
 const PATH = [110, 97, 66];
@@ -79,17 +79,8 @@ export function groundColor(map: WorldMap, x: number, y: number) {
 export function coastGreen(map: WorldMap, x: number, y: number) {
   const m = map.zoneMix(x, y), d = (m.z0 === 6 ? 1 - m.t : 0) + (m.z1 === 6 ? m.t : 0);
   if (!d) return 0;
-  // distance à l'eau la plus proche : la mer, ou un lac (les lacs des Lacs brumeux voisins s'ouvrent sur l'océan)
-  let near = -map.shoreAt(x, y);
-  for (const r of [160, 320, 520]) {
-    if (r >= near) break;
-    for (let k = 0; k < 8; k++) {
-      if (map.isWater(x + Math.cos(k * 0.785) * r, y + Math.sin(k * 0.785) * r)) {
-        near = r;
-        break;
-      }
-    }
-  }
+  // distance à l'eau la plus proche : la mer, ou un lac (oasis ; les lacs des Lacs brumeux voisins s'ouvrent sur l'océan)
+  const near = Math.min(map.wetDistAt(x, y), Math.max(0, -map.shoreAt(x, y)));
   const u = Math.min(1, Math.max(0, 1 - near / COAST_GREEN + (fbm(x / 300, y / 300, map.seed + 76, 2) - 0.5) * 0.5));
   return d * u * u * (3 - 2 * u);
 }
@@ -482,7 +473,7 @@ export class World {
         ctx.moveTo(x, y); ctx.lineTo(x, y - 9);
         ctx.moveTo(x + 4, y); ctx.lineTo(x + 6, y - 7);
         ctx.stroke();
-      } else if (h < (z === 7 ? 0.7 : 0.62) && (z === 1 || z === 0 || z === 7)) {
+      } else if (h < 0.62 && (z === 1 || z === 0)) {
         ctx.fillStyle = ['#F0B64A', '#EEE7D7', '#D886C9'][Math.floor(h * 100) % 3];
         ctx.beginPath();
         ctx.arc(x, y, 2.5, 0, TAU);
@@ -531,7 +522,7 @@ export class World {
       return;
     }
     const pine = (z === 2 && h < 0.55) || (z === 3 && h < 0.35);
-    const fruit = !pine && (z <= 2 || z === 7) && h > (z === 7 ? 0.55 : 0.8); // le Havre paisible est en fleurs
+    const fruit = !pine && z <= 2 && h > 0.8;
     if (shade) this.treeShadow(ctx, x, y);
     const k = s / TREE_REF;
     const trunk = this.treeLayer('trunk', () => this.drawTrunk);
@@ -733,7 +724,7 @@ export class World {
       ctx.stroke();
     } else if (fruit) {
       // quelques fruits ou fleurs sur certains arbres de la Lisière
-      ctx.fillStyle = z === 1 ? '#E8A43C' : z === 7 ? '#F4B6CF' : '#D886C9';
+      ctx.fillStyle = z === 1 ? '#E8A43C' : '#D886C9';
       for (let k = 0; k < 5; k++) {
         ctx.beginPath();
         ctx.arc(x + (hash2(k, 3, v) - 0.5) * s * 1.2, cy + (hash2(k, 7, v) - 0.5) * s * 0.9, 2.5, 0, TAU);

@@ -293,11 +293,11 @@ const noop = () => {};
     check(edgeSea, `graine ${seed} : une île, la mer profonde tout autour`);
     const site = m.sites[0], stone = m.stones[1];
     const reach = m.findPath(m.village.x, m.village.y + 40, stone.x, stone.y + 50, 500000);
-    const zones = [1, 2, 3, 4, 5, 6, 7].map((z) => { const q = m.spineAt((m.zoneFrom(z) + m.zoneTo(z)) / 2); return m.zoneAt(q.x, q.y); }).join('');
+    const zones = [1, 2, 3, 4, 5, 6].map((z) => { const q = m.spineAt((m.zoneFrom(z) + m.zoneTo(z)) / 2); return m.zoneAt(q.x, q.y); }).join('');
     const end = m.spineAt(m.length - 250);
     const reachEnd = m.findPath(stone.x, stone.y + 50, end.x, end.y, 600000);
-    check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '1234567' && m.caves.length === 15,
-      `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de l'île (Havre paisible) atteignable, 15 grottes`);
+    check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '123456' && m.caves.length === 15,
+      `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de l'île (Mer de sable) atteignable, 15 grottes`);
     const mid = m.length / 2, c = m.spineAt(mid), nv = m.normalAt(mid), far = m.halfWidth(mid) + 1700;
     let shallow = false;
     for (let x = -WORLD_HALF + 50; x < WORLD_HALF && !shallow; x += 120) for (let y = -WORLD_HALF + 50; y < WORLD_HALF && !shallow; y += 120) shallow = m.isSea(x, y) && m.isWater(x, y);
@@ -1314,7 +1314,17 @@ const noop = () => {};
   const p = r.addPlayer('a', noop);
   const { map } = r;
   // Porte du village (0) : fermée tant que l'Hôtel de ville est au niveau 0.
-  const before = map.spineAt(map.gates[0] - 60), after = map.spineAt(map.gates[0] + 60);
+  // De part et d'autre d'une porte, sur une ligne droite libre (décalée le long de la porte si un arbre est sur la colonne).
+  const across = (g: number) => {
+    const n = map.normalAt(map.gates[g]);
+    for (const off of [0, 40, -40, 80, -80, 120, -120, 160, -160, 200, -200]) {
+      const a = map.spineAt(map.gates[g] - 60), b = map.spineAt(map.gates[g] + 60);
+      const p0 = { x: a.x + n.x * off, y: a.y + n.y * off }, p1 = { x: b.x + n.x * off, y: b.y + n.y * off };
+      if (!map.blocked(p0.x, p0.y) && map.clearLine(p0.x, p0.y, p1.x, p1.y)) return [p0, p1];
+    }
+    return [map.spineAt(map.gates[g] - 60), map.spineAt(map.gates[g] + 60)];
+  };
+  const [before, after] = across(0);
   const walk = (from: { x: number; y: number }, to: { x: number; y: number }, gate = 0) => {
     [p.x, p.y] = [from.x, from.y];
     for (let i = 0; i < 40; i++) {
@@ -1339,10 +1349,19 @@ const noop = () => {};
   [p.x, p.y] = [map.hall.x, map.hall.y + 60];
   r.onHall(p, '  Les\n  Trois   Chênes  ');
   check(r.name === 'Les Trois Chênes' && saved.name === 'Les Trois Chênes', `Hôtel de ville construit : le village est nommé (« ${r.name} »), nom nettoyé et sauvegardé`);
+  r.onRename(p, 'Bourg-Mousse');
+  check(r.name === 'Bourg-Mousse' && saved.name === 'Bourg-Mousse', 'village renommé devant l\'Hôtel de ville, sauvegardé');
+  r.onRename(p, 'Trop-Vite');
+  check(r.name === 'Bourg-Mousse', 'pas deux changements de nom en moins de 5 s');
+  r.time += 6;
+  [p.x, p.y] = [map.village.x, map.village.y];
+  r.onRename(p, 'Loin');
+  check(r.name === 'Bourg-Mousse', 'loin de l\'Hôtel de ville : pas de changement de nom');
+  [p.x, p.y] = [map.hall.x, map.hall.y + 60];
   check(r.hall === 1 && p.gold === 0 && r.stock.wood === 0 && r.stock.stone === 0 && saved.hall === 1, `niveau 1 pour ${HALL[0].gold} or, ${HALL[0].wood} bois, ${HALL[0].stone} pierre, sauvegardé`);
   check(walk(before, after), 'niveau 1 : la porte du village s\'ouvre');
   // Porte de la zone 2 : Hôtel de ville niv. 3 et tous les géants de la zone 1.
-  const b1 = map.spineAt(map.gates[1] - 60), a1 = map.spineAt(map.gates[1] + 60);
+  const [b1, a1] = across(1);
   r.hall = gateHall(1);
   check(!walk(b1, a1, 1), 'géants de la zone 1 pas encore vaincus : porte de la zone 2 fermée');
   const [g1, g2] = zoneBosses(1);

@@ -7,7 +7,7 @@
 // - On arrive sur la plage d'un bout de l'île (une épave, des planches) ; un chemin de cailloux mène au village.
 // - Zones de danger : ZONES bandes successives à travers l'île, de plus en plus loin de la plage, frontières bruitées ;
 //   la zone 5 (Lacs brumeux) est criblée de lacs, parfois ouverts sur la mer, où nagent les Serpents des brumes ; la 6 (Mer de sable)
-//   n'a que de rares oasis et une lisière verte le long de la côte ; la 7 (Havre paisible), au bout, n'a ni monstre ni grotte.
+//   n'a que de rares oasis et une lisière verte le long de la côte (jusqu'au bout de l'île : la transition avec la mer).
 // - Au bout de la zone 4 : un emplacement de camp, que le village peut établir contre de l'or
 //   (feu qui soigne, point de réapparition, Pierre de passage pour voyager entre camps).
 // - Lacs dans l'île, en laissant toujours libre une voie centrale.
@@ -165,6 +165,7 @@ export class WorldMap {
   private arc = new Float32Array(N * N); // abscisse (le long de la colonne) du point de colonne le plus proche
   private shore = new Float32Array(N * N).fill(1e9); // distance à la côte : négative dans l'île, positive en mer
   private mouth = new Float32Array(N * N).fill(1e9); // embouchures (voir buildMouths)
+  private wetDist = new Float32Array(N * N); // distance à l'eau la plus proche, mer ou lac (voir buildWetDist)
   private palisadeCells: number[] = []; // cases de la palissade (solides seulement une fois construite)
 
   constructor(readonly seed: number) {
@@ -246,6 +247,7 @@ export class WorldMap {
     }
     this.cleanWater(keepDry);
     this.buildMouths();
+    this.buildWetDist();
 
     // Grottes : deux ou trois par zone, dans la bande de la zone, de part et d'autre de la colonne, l'ouverture accessible.
     const free = (x: number, y: number, r: number) => {
@@ -517,6 +519,30 @@ export class WorldMap {
         }
       }
     }
+  }
+
+  /** Distance (px) à l'eau la plus proche pour chaque case : transformée de distance en deux passes (pas de 1 et √2 case). */
+  private buildWetDist() {
+    const d = this.wetDist, w = this.water, D = 1.414 * MAP_CELL;
+    for (let k = 0; k < N * N; k++) d[k] = w[k] === 1 || w[k] === 3 ? 0 : 1e9;
+    for (let j = 1; j < N - 1; j++) {
+      for (let i = 1, k = j * N + 1; i < N - 1; i++, k++) {
+        d[k] = Math.min(d[k], d[k - 1] + MAP_CELL, d[k - N] + MAP_CELL, d[k - N - 1] + D, d[k - N + 1] + D);
+      }
+    }
+    for (let j = N - 2; j > 0; j--) {
+      for (let i = N - 2, k = j * N + N - 2; i > 0; i--, k--) {
+        d[k] = Math.min(d[k], d[k + 1] + MAP_CELL, d[k + N] + MAP_CELL, d[k + N + 1] + D, d[k + N - 1] + D);
+      }
+    }
+  }
+
+  /** Distance à l'eau la plus proche (mer ou lac), interpolée entre les cases : un dégradé sans marches. */
+  wetDistAt(x: number, y: number) {
+    const fx = (x + WORLD_HALF) / MAP_CELL - 0.5, fy = (y + WORLD_HALF) / MAP_CELL - 0.5;
+    const i = clamp(Math.floor(fx), 0, N - 2), j = clamp(Math.floor(fy), 0, N - 2), u = clamp(fx - i, 0, 1), v = clamp(fy - j, 0, 1);
+    const k = j * N + i, d = this.wetDist;
+    return (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + N] * (1 - u) + d[k + N + 1] * u) * v;
   }
 
   /** Embouchure : distance (à travers l'eau) d'un lac à la mer, ou de la mer au lac le plus proche ; 1e9 loin de toute embouchure. */

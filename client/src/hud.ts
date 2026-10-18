@@ -160,6 +160,7 @@ export class Hud {
   onDeposit = () => {};
   beaten: number[] = []; // géants vaincus par le village
   onHall = (_name?: string) => {};
+  onRename = (_name: string) => {};
   onAttackMode = () => {};
   onKick = (_id: number) => {};
   onUnban = (_user: string) => {};
@@ -223,8 +224,16 @@ export class Hud {
       if (!name) return input.focus(); // on construit l'Hôtel de ville : il faut nommer le village
       this.onHall(name);
     };
+    // Hôtel de ville construit : on peut renommer le village à tout moment
+    $('hall-rename').onclick = () => {
+      const input = $<HTMLInputElement>('hall-name');
+      const name = input.value.replace(/\s+/g, ' ').trim();
+      if (!name) return input.focus();
+      if (name !== this.vname) this.onRename(name);
+      input.blur();
+    };
     $('hall-name').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') $('hall-up').click();
+      if (e.key === 'Enter') $(this.hall > 0 ? 'hall-rename' : 'hall-up').click();
       else if (e.key === 'Escape') (e.target as HTMLInputElement).blur(); // les touches reviennent au jeu
     });
     this.initSettings(founder);
@@ -806,7 +815,15 @@ export class Hud {
     const funds = this.funds(me);
     $('hall-title').textContent = this.vname ? `Hôtel de ville · ${this.vname}` : 'Hôtel de ville';
     $('hall-have').textContent = this.hall ? `Niveau ${this.hall}/${HALL_MAX}` : 'À construire : donne un nom au village';
-    $('hall-naming').hidden = this.hall > 0;
+    // à la construction : le nom à donner ; ensuite : le nom actuel, modifiable (sans écraser ce qu'on est en train de taper)
+    const input = $<HTMLInputElement>('hall-name'), built = this.hall > 0;
+    setHidden($('hall-rename'), !built);
+    if (built && document.activeElement !== input && input.dataset.shown !== this.vname) {
+      input.value = this.vname;
+      input.dataset.shown = this.vname;
+    }
+    const btnRename = $<HTMLButtonElement>('hall-rename'), typed = input.value.replace(/\s+/g, ' ').trim();
+    btnRename.disabled = !typed || typed === this.vname;
     const maxed = this.hall >= HALL_MAX, cost = HALL[this.hall];
     $('hall-cost').hidden = maxed;
     if (!maxed) this.costChips('hall-cost', funds, cost);

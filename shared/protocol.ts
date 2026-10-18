@@ -32,6 +32,7 @@ export type ClientMsg =
   | { t: 'establish'; site: number } // établir le camp de cet emplacement (pour tout le village)
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, sinon index du camp
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
+  | { t: 'rename'; name: string } // renommer le village, devant l'Hôtel de ville (une fois construit)
   | { t: 'hall'; name?: string } // améliorer la Maison commune (pour tout le village) ; name : nom du village, à sa construction
   | { t: 'sword' } // tirer sur l'épée plantée dans le sable (SWORD_PULLS fois)
   | { t: 'pick' } // cueillir les baies du buisson garni le plus proche

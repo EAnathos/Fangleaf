@@ -267,7 +267,8 @@ export class Room {
   readonly buildings: BuildingId[]; // bâtiments construits au village
   readonly unlocked: number[]; // grottes débloquées (index dans map.caves)
   hall: number; // niveau de l'Hôtel de ville
-  name = ''; // nom du village, donné en construisant l'Hôtel de ville
+  name = ''; // nom du village, donné en construisant l'Hôtel de ville (renommable ensuite)
+  private renamedAt?: number; // dernier changement de nom (anti-spam)
   readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
   readonly stock = { wood: 0, stone: 0 }; // réserve commune de l'entrepôt
   banned: { id: string; name: string }[] = []; // comptes expulsés par le fondateur (leur progression est gardée)
@@ -619,6 +620,17 @@ export class Room {
     this.saveVillage();
     this.events.push({ e: 'hall', lvl: this.hall, by: p.id });
     if (this.hall === 1) this.events.push({ e: 'info', text: `${p.name} a fondé le village « ${this.name} »` });
+  }
+
+  /** Renommer le village, devant l'Hôtel de ville une fois construit (n'importe quel membre, pas plus d'une fois toutes les 5 s). */
+  onRename(p: Player, name: unknown) {
+    const n = villageName(name);
+    if (!n || n === this.name || this.hall < 1 || !this.near(p, this.map.hall)) return;
+    if (this.time - (this.renamedAt ?? -99) < 5) return;
+    this.renamedAt = this.time;
+    this.name = n;
+    this.saveVillage();
+    this.events.push({ e: 'info', text: `${p.name} a renommé le village « ${n} »` });
   }
 
   /** Porte k ouverte pour le village (Hôtel de ville assez haut, géants de la zone vaincus). */

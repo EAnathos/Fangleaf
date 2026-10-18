@@ -54,7 +54,6 @@ export const HALL: (Cost & { unlock: string })[] = [
   { gold: 1500, wood: 350, stone: 300, unlock: 'Porte des Ruines moussues (zone 4)' },
   { gold: 3000, wood: 600, stone: 550, unlock: 'Porte des Lacs brumeux (zone 5)' },
   { gold: 6000, wood: 1000, stone: 900, unlock: 'Porte de la Mer de sable (zone 6)' },
-  { gold: 10000, wood: 1500, stone: 1400, unlock: 'Porte du Havre paisible (zone 7)' },
 ];
 export const HALL_MAX = HALL.length;
 /** Géants d'une zone (index d'espèce) : il faut tous les vaincre pour ouvrir la porte de la zone suivante. */
@@ -419,8 +418,8 @@ export const SPECIES_KEYS = SPECIES.map((s) => s.key);
 export const SPECIES_BY_ZONE = SPECIES.map((_, i) => i).sort((a, b) => SPECIES[a].zone - SPECIES[b].zone || a - b);
 
 // Le monde est une île (voir worldmap.ts) découpée en ZONES zones successives, de plus en plus loin de la plage d'arrivée.
-export const ZONES = 7; // la dernière (Havre paisible) n'a ni monstre ni grotte : le bout du voyage
-export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable', 'Havre paisible'];
+export const ZONES = 6; // la Mer de sable va jusqu'au bout de l'île
+export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable'];
 export const SPAWN_SAFE_R = 420; // pas de monstre qui apparaît près de la plage d'arrivée
 
 // Buissons à fruits : le gibier passif vient y manger ; les fruits repoussent ensuite.

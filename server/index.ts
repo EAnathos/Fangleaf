@@ -180,6 +180,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'travel') room.onTravel(player, +msg.to);
     else if (msg.t === 'build') room.onBuild(player, msg.b);
     else if (msg.t === 'hall') room.onHall(player, msg.name);
+    else if (msg.t === 'rename') room.onRename(player, msg.name);
     else if (msg.t === 'deposit') room.onDeposit(player);
     else if (msg.t === 'chat') room.onChat(player, String(msg.text ?? ''));
     else if (msg.t === 'board') room.onBoard(player);
