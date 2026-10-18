@@ -15,7 +15,7 @@
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = mer profonde).
 
-import { CAVE_RX, CAVE_RY, BOARD_OFFSET, DEN_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
+import { CAVE_RX, CAVE_RY, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -138,6 +138,7 @@ export class WorldMap {
   readonly den: Pt;
   readonly market: Pt;
   readonly hall: Pt; // Hôtel de ville
+  readonly elder: Pt; // le vieil homme, près du feu du village
   readonly store: Pt; // entrepôt (réserve commune de bois et de pierre)
   readonly board: Pt; // panneau du village (tableau des exploits)
   readonly egg: Pt; // œuf brisé, juste à côté de l'endroit où l'on se réveille
@@ -200,6 +201,7 @@ export class WorldMap {
     this.market = { x: village.x + MARKET_OFFSET.x, y: village.y + MARKET_OFFSET.y };
     this.hall = { x: village.x + HALL_OFFSET.x, y: village.y + HALL_OFFSET.y };
     this.store = { x: village.x + STORE_OFFSET.x, y: village.y + STORE_OFFSET.y };
+    this.elder = { x: village.x + ELDER_OFFSET.x, y: village.y + ELDER_OFFSET.y };
     this.board = { x: village.x + BOARD_OFFSET.x, y: village.y + BOARD_OFFSET.y };
     for (const s of [VILLAGE_ARC + VILLAGE_R + 200, ...Array.from({ length: ZONES - 1 }, (_, k) => this.zoneTo(k + 1))]) if (s < this.length - 300) this.gates.push(s);
     this.stones.push({ x: village.x + VILLAGE_STONE_OFFSET.x, y: village.y + VILLAGE_STONE_OFFSET.y });
@@ -876,6 +878,7 @@ export class WorldMap {
     this.solidRect(v.x + FORGE_OFFSET.x + 10, v.y + FORGE_OFFSET.y + 12, v.x + FORGE_OFFSET.x + 54, v.y + FORGE_OFFSET.y + 38);
     for (const k of [-1, 0, 1]) this.solidDisc(v.x + DEN_OFFSET.x + k * 46, v.y + DEN_OFFSET.y - 6, 38);
     this.solidDisc(v.x, v.y, 20);
+    this.solidDisc(this.elder.x, this.elder.y, 16); // le vieil homme
     this.solidRect(v.x + STORE_OFFSET.x - 36, v.y + STORE_OFFSET.y - 14, v.x + STORE_OFFSET.x + 36, v.y + STORE_OFFSET.y + 14); // entrepôt
     this.solidRect(v.x + BOARD_OFFSET.x - 18, v.y + BOARD_OFFSET.y - 2, v.x + BOARD_OFFSET.x + 18, v.y + BOARD_OFFSET.y + 4); // panneau
     // plage d'arrivée : la barque échouée

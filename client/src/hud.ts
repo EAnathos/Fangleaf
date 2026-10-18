@@ -7,21 +7,21 @@ import {
 } from '../../shared/config.ts';
 import type { BoardRow, PlayerState, UnitTuple } from '../../shared/protocol.ts';
 import type { WorldMap } from '../../shared/worldmap.ts';
-import { armorColor, drawUnit } from './sprites.ts';
+import { armorColor, drawElder, drawUnit } from './sprites.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { sound } from './audio.ts';
 import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
 import { landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'settings' | 'chat' | 'board' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'hall' | 'settings' | 'chat' | 'board' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
 export interface Spot {
   pos: { x: number; y: number };
   label: string;
-  panel?: 'forge' | 'den' | 'market' | 'travel' | 'camp' | 'buy' | 'talk' | 'hall' | 'board'; // ouvre un panneau
+  panel?: 'forge' | 'den' | 'market' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'hall' | 'board'; // ouvre un panneau
   cave?: { id: number; enter: boolean }; // entre dans une grotte / en sort
   at?: number; // Pierre de passage : -1 village, sinon index du camp ; emplacement de camp : son index
   buy?: Purchase; // panneau d'achat : ce qui est à acheter
@@ -50,6 +50,13 @@ export interface VillageView {
   bare: number[]; // buissons dont les baies ont été mangées ou cueillies
   sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
 }
+/** Le vieil homme du village : il a tout oublié, mais il est content de voir quelqu'un. */
+const ELDER_LINES = [
+  'Oh ! Quelqu\'un ! Approche, approche… que je te regarde un peu.',
+  'Pardonne-moi, j\'ai la mémoire qui flanche. Je ne me souviens plus de rien : ni de mon nom, ni de comment je suis arrivé ici.',
+  'Mais je suis bien content de te voir ! Ça fait bien longtemps que je n\'ai vu personne…',
+  'Enfin, je crois…',
+];
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 /** Prix (or, bois, pierre), nom et niveau de Hôtel de ville requis d'un achat pour le village. */
 export const purchaseOf = (map: WorldMap, buy: Purchase): { name: string; cost: Cost; hall: number } =>
@@ -69,6 +76,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     return v.buildings.includes(b) ? open : offer(b, pos, 'Construire');
   };
   const spots: Spot[] = [
+    { panel: 'elder', pos: map.elder, reach: 55, label: 'E — Parler au vieil homme' },
     ...(v.sword < SWORD_PULLS ? [{ sword: true, pos: map.sword, reach: SWORD_REACH, label: v.sword ? `E — Tirer encore (${v.sword}/${SWORD_PULLS})` : 'E — Déterrer l\'épée' }] : []),
     ...(v.buildings.includes('palisade') ? [] : [{ ...offer('palisade', map.village, 'Monter'), reach: 110 }]),
     { panel: 'hall', pos: map.hall, label: `E — Hôtel de ville · niv. ${v.hall}` },
@@ -168,7 +176,8 @@ export class Hud {
   banned: { id: string; name: string }[] = []; // bannis du village (vu par le fondateur)
   onChest = (_id: number) => {};
   onChallenge = (_cave: number) => {};
-  private talker: Portrait[] = []; // portrait du géant à qui l'on parle
+  private talker: Portrait[] = [];
+  private elderAt = 0; // réplique du vieil homme en cours // portrait du géant à qui l'on parle
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
   private spotAt = 0; // Pierre ou emplacement devant lequel on se tient (panneaux voyage et camp)
   private bigBg?: HTMLCanvasElement;
@@ -240,7 +249,13 @@ export class Hud {
     $('hold-btn').onclick = () => this.onHold();
     $('mount-btn').onclick = () => this.onRide();
     $('talk-later').onclick = () => this.setPanel(null);
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'hall', 'settings', 'board'] as const) {
+    // le vieil homme : une réplique après l'autre, puis on lui dit au revoir
+    $('elder-next').onclick = () => {
+      if (this.elderAt >= ELDER_LINES.length - 1) return this.setPanel(null);
+      this.elderAt++;
+      this.showElder();
+    };
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'elder', 'hall', 'settings', 'board'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -336,6 +351,11 @@ export class Hud {
     $('travel').hidden = panel !== 'travel';
     $('camp').hidden = panel !== 'camp';
     $('talk').hidden = panel !== 'talk';
+    $('elder').hidden = panel !== 'elder';
+    if (panel === 'elder') {
+      this.elderAt = 0; // il reprend depuis le début : il ne se souvient pas de la dernière fois
+      this.showElder();
+    }
     $('hall').hidden = panel !== 'hall';
     $('settings').hidden = panel !== 'settings';
     $('chat').hidden = panel !== 'chat';
@@ -527,6 +547,18 @@ export class Hud {
     const btn = $<HTMLButtonElement>('camp-buy');
     btn.disabled = me.gold < CAMP_COST;
     btn.textContent = me.gold < CAMP_COST ? `Il te faut ${CAMP_COST} or` : `Établir le camp · ${CAMP_COST} or`;
+  }
+
+  /** Réplique en cours du vieil homme, son portrait, et le bouton pour la suite. */
+  private showElder() {
+    $('elder-line').textContent = `« ${ELDER_LINES[this.elderAt]} »`;
+    $('elder-next').textContent = this.elderAt >= ELDER_LINES.length - 1 ? 'Au revoir' : 'Suite';
+    const c = $<HTMLCanvasElement>('elder-portrait'), dpr = Math.min(2, devicePixelRatio || 1);
+    c.width = 110 * dpr;
+    c.height = 96 * dpr;
+    const ctx = c.getContext('2d')!;
+    ctx.setTransform(dpr * 2.3, 0, 0, dpr * 2.3, 0, 0);
+    drawElder(ctx, 110 / 2.3 / 2, 96 / 2.3 / 2 + 2, 0, 0, 0.4, ''); // de face, le regard vers nous
   }
 
   /** Dialogue avec un géant endormi : sa réplique, puis on lance le combat (ou pas). */

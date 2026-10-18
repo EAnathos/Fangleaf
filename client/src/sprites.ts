@@ -473,6 +473,100 @@ export function drawPlayer(
   ctx.fillText(name, x, cy - r - 10);
 }
 
+/**
+ * Le vieil homme du village : un dompteur comme les autres (une simple boule), en plus vieux. Canne à la main,
+ * barbe et sourcils blancs, lunettes rondes ; il respire doucement et regarde vers (lx, ly) (direction unitaire).
+ */
+export function drawElder(ctx: Ctx, x: number, y: number, t: number, lx = 1, ly = 0, name = 'Vieil homme') {
+  const r = 16, cy = y - Math.sin(t * 1.6) * 0.8; // la respiration
+  shadow(ctx, x, y, r);
+  // canne, posée à côté de lui
+  ctx.strokeStyle = '#5B3F2C';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x + 20, y + 13);
+  ctx.lineTo(x + 22, cy - 14);
+  ctx.arc(x + 17, cy - 14, 5, 0, Math.PI, true);
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+  // corps : une boule, comme les dompteurs
+  ctx.fillStyle = '#B7A88F';
+  ctx.beginPath();
+  ctx.arc(x, cy, r, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(16,24,26,0.22)';
+  ctx.beginPath();
+  ctx.arc(x, cy, r, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.fill();
+  // crâne dégarni qui brille, touffes blanches sur les côtés
+  ctx.fillStyle = 'rgba(255,250,235,0.45)';
+  ctx.beginPath();
+  ctx.ellipse(x - 4, cy - 10, 5, 2.6, -0.3, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#EEEAE2';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(x + s * 13.5, cy - 3, 4.2, 0, TAU);
+    ctx.arc(x + s * 14.5, cy + 1.5, 3.4, 0, TAU);
+    ctx.fill();
+  }
+  // barbe blanche, ronde, qui couvre le bas du visage
+  const ex = x + lx * 4, ey = cy + ly * 3 - 3;
+  ctx.fillStyle = '#F1EDE5';
+  ctx.strokeStyle = 'rgba(120,110,95,0.6)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - 12, cy + 1);
+  ctx.quadraticCurveTo(x - 11, cy + 16, x, cy + 19);
+  ctx.quadraticCurveTo(x + 11, cy + 16, x + 12, cy + 1);
+  ctx.quadraticCurveTo(x, cy + 6, x - 12, cy + 1);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(150,140,125,0.55)';
+  ctx.beginPath();
+  ctx.moveTo(x - 4, cy + 8);
+  ctx.quadraticCurveTo(x - 3, cy + 13, x - 1, cy + 16);
+  ctx.moveTo(x + 4, cy + 8);
+  ctx.quadraticCurveTo(x + 3, cy + 13, x + 1, cy + 16);
+  ctx.stroke();
+  // moustache
+  ctx.fillStyle = '#E6E1D8';
+  ctx.beginPath();
+  ctx.ellipse(ex - 3.5, ey + 6, 4, 2, 0.25, 0, TAU);
+  ctx.ellipse(ex + 3.5, ey + 6, 4, 2, -0.25, 0, TAU);
+  ctx.fill();
+  // yeux, derrière des lunettes rondes, sous de gros sourcils blancs
+  ctx.fillStyle = '#10181A';
+  ctx.beginPath();
+  ctx.arc(ex - 4.5, ey, 2, 0, TAU);
+  ctx.arc(ex + 4.5, ey, 2, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = '#C9A24A';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(ex - 4.5, ey, 3.8, 0, TAU);
+  ctx.moveTo(ex + 8.3, ey);
+  ctx.arc(ex + 4.5, ey, 3.8, 0, TAU);
+  ctx.moveTo(ex - 0.7, ey - 0.5);
+  ctx.lineTo(ex + 0.7, ey - 0.5);
+  ctx.stroke();
+  ctx.fillStyle = '#F4F1EA';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(ex + s * 5, ey - 5.2, 3.6, 1.6, s * 0.2, 0, TAU);
+    ctx.fill();
+  }
+  if (!name) return;
+  ctx.font = '600 13px Outfit, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+  ctx.strokeText(name, x, cy - r - 10);
+  ctx.fillStyle = '#E8DCC2';
+  ctx.fillText(name, x, cy - r - 10);
+}
+
 /** Épée du guerrier : pommeau, poignée gainée, garde recourbée, lame à gouttière ; elle s'orne avec le niveau d'arme. */
 function drawSword(ctx: Ctx, r: number, lvl: number) {
   const steel = lvl >= 9 ? '#F6D27A' : lvl >= 6 ? '#E6ECF2' : '#D4DAE0', edge = lvl >= 9 ? '#FFF1C4' : '#FFFFFF';

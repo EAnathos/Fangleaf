@@ -83,6 +83,7 @@ export const caveUnlockCost = (zone: number) => CAVE_UNLOCK[zone - 1] ?? 150 * z
 // Camps : un emplacement au bout de la zone 4, établi par n'importe quel membre du village contre de l'or.
 export const CAMP_COST = 2000;
 export const CAMP_R = 260; // feu qui soigne, monstres tenus à l'écart
+export const ELDER_OFFSET = { x: -46, y: 62 }; // le vieil homme, près du feu du village
 export const VILLAGE_STONE_OFFSET = { x: 95, y: 225 }; // Pierre de passage du village
 export const campName = (i: number) => (i === 0 ? 'Camp avancé' : `Camp avancé ${i + 1}`);
 

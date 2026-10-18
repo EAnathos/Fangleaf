@@ -14,7 +14,7 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBrokenEgg, drawPlantedSword, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawBrokenEgg, drawElder, drawPlantedSword, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
@@ -1251,6 +1251,13 @@ export class Game {
       if (next === 1) this.fades.delete(d);
       else this.fades.set(d, next);
       list.push({ y: d.y + s * 0.5, draw: () => this.world.tree(ctx, d.x, d.y, this.map.styleZone(d.x, d.y), next, false) });
+    }
+    // le vieil homme, près du feu : il regarde le dompteur qui s'approche, sinon le feu
+    const { elder } = this.map;
+    if (inView(elder.x, elder.y, 60)) {
+      const near = Math.hypot(this.me.x - elder.x, this.me.y - elder.y) < 220;
+      const tx = near ? this.me.x : this.map.village.x, ty = near ? this.me.y : this.map.village.y, d = Math.hypot(tx - elder.x, ty - elder.y) || 1;
+      list.push({ y: elder.y, draw: () => drawElder(ctx, elder.x, elder.y, this.time, (tx - elder.x) / d, (ty - elder.y) / d) });
     }
     // plage de l'éveil : l'œuf brisé, et l'épée plantée tant qu'on ne l'a pas déterrée (elle s'envole en sortant)
     const { egg, sword } = this.map;
