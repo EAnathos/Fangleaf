@@ -1014,8 +1014,10 @@ const noop = () => {};
     // (le tir part un peu au-dessus du tireur : on vérifie une bande, pas une ligne)
     const clear = (x0: number, y0: number) =>
       Array.from({ length: 23 }, (_, i) => i / 22).every((f) => [0, -12, -24].every((dy) => !r.map.blocked(x0 - 220 * f, y0 + dy)));
-    let spot = r.map.freeNear(r.map.spineAt(12000).x, r.map.spineAt(12000).y);
-    for (let s = 12000; s < 16000 && !clear(spot.x, spot.y); s += 150) spot = r.map.freeNear(r.map.spineAt(s).x, r.map.spineAt(s).y);
+    // dans les Lacs brumeux (zone des tireurs) : pas dans la Mer de sable, où une tempête blesserait le dompteur
+    const lo = r.map.zoneFrom(5) + 300, hi = r.map.zoneTo(5) - 300;
+    let spot = r.map.freeNear(r.map.spineAt(lo).x, r.map.spineAt(lo).y);
+    for (let s = lo; s < hi && !clear(spot.x, spot.y); s += 150) spot = r.map.freeNear(r.map.spineAt(s).x, r.map.spineAt(s).y);
     p.x = spot.x;
     p.y = spot.y;
     p.hp = 1e6; // on mesure les dégâts sans mourir
@@ -1047,10 +1049,14 @@ const noop = () => {};
     run(r, 4, () => {
       const s = r.shots[0];
       if (s && !dodged) {
-        const spot = r.map.freeNear(s.tx + 200 * Math.sign(p.x - w.x || 1), s.ty + 160);
-        p.x = spot.x;
-        p.y = spot.y;
-        dodged = Math.hypot(p.x - s.tx, p.y - s.ty) > s.splash + p.r;
+        // un point libre bien hors du cercle annoncé (freeNear seul peut retomber dedans quand l'eau ou un arbre gêne)
+        const out = s.splash + p.r + 60;
+        for (let k = 0; k < 24 && !dodged; k++) {
+          const a = (k / 24) * Math.PI * 2, x = s.tx + Math.cos(a) * out, y = s.ty + Math.sin(a) * out;
+          if (r.map.blocked(x, y)) continue;
+          [p.x, p.y] = [x, y];
+          dodged = true;
+        }
         w.atkCd = 99; // un seul tir
       }
     });
@@ -1579,7 +1585,7 @@ const noop = () => {};
   const snail = SPECIES.findIndex((sp) => sp.key === 'snail'), hare = SPECIES.findIndex((sp) => sp.key === 'hare');
   check(SPECIES[snail].zone === 1 && !!SPECIES[snail].passive && SPECIES[hare].zone === 3 && SPECIES[hare].zone === SPECIES[2].zone, 'escargot passif en zone 1, lièvre dans la zone des sangliers et des ours');
   const p = r.addPlayer('a', noop);
-  const bush = r.map.bushes[3];
+  const bush = r.map.bushes.find((b: { zone: number }) => b.zone === 1) ?? r.map.bushes[3]; // dans la Lisière, chez l'escargot (pas sous une tempête de sable)
   [p.x, p.y] = [bush.x + 30, bush.y];
   r.onPick(p);
   check(p.fruits === BERRIES_PICKED && r.bushBack[bush.id] > r.time, `${BERRIES_PICKED} baies cueillies, le buisson est vide`);
