@@ -395,7 +395,7 @@ export function armorColor(lvl: number) {
 
 export function drawPlayer(
   ctx: Ctx, x: number, y: number, color: string, fx: number, fy: number, armor: number, name: string,
-  t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null, tool: Tool | null = null, weapon = 0,
+  t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null, tool: Tool | null = null, weapon = 0, armed = true,
 ) {
   const r = 16;
   const bob = moving ? Math.abs(Math.sin(t * (riding ? 16 : 12))) * 2 : 0;
@@ -444,7 +444,7 @@ export function drawPlayer(
     ctx.beginPath();
     ctx.arc(r + 16, -8, 4, 0, TAU);
     ctx.fill();
-  } else drawSword(ctx, r, weapon);
+  } else if (armed) drawSword(ctx, r, weapon); // pas encore d'arme : l'épée est plantée sur la plage
   ctx.restore();
   // corps
   ctx.fillStyle = flash ? '#FFFFFF' : color;
@@ -2286,6 +2286,171 @@ export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: num
 // ───────────────────────── Coffre des géants ─────────────────────────
 
 /** Coffre royal : bois rouge, coins et cerclages dorés, gemme sur la serrure. lid : 0 fermé → 1 grand ouvert ; drop : hauteur de chute. */
+/**
+ * Épée plantée dans le sable, pointe en bas. out : part déjà sortie (0 : enfoncée jusqu'à la garde, 1 : presque libre) ;
+ * wiggle : secousse du dernier coup (1 juste après, puis 0). Un éclat passe sur la lame de temps en temps.
+ */
+export function drawPlantedSword(ctx: Ctx, x: number, y: number, out: number, t: number, wiggle = 0) {
+  const show = 10 + out * 26; // longueur de lame visible au-dessus du sable
+  // sable soulevé autour de la lame
+  ctx.fillStyle = 'rgba(8,14,12,0.18)';
+  ctx.beginPath();
+  ctx.ellipse(x + 3, y + 2, 17, 6, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#D9C391';
+  ctx.beginPath();
+  ctx.ellipse(x, y, 15, 5.5, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(120,96,64,0.45)';
+  ctx.beginPath();
+  ctx.ellipse(x, y - 0.5, 4.5 + out * 2, 2, 0, 0, TAU);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(0.12 + Math.sin(t * 38) * 0.16 * wiggle);
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(12,18,16,0.85)';
+  ctx.lineWidth = 1.5;
+  // lame (vers le bas, enfoncée dans le sable)
+  ctx.fillStyle = '#D4DAE0';
+  ctx.beginPath();
+  ctx.moveTo(-3.2, -show);
+  ctx.lineTo(3.2, -show);
+  ctx.lineTo(2.6, 0);
+  ctx.lineTo(-2.6, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(90,100,110,0.7)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, -show + 2);
+  ctx.lineTo(0, -1);
+  ctx.stroke();
+  // garde, poignée, pommeau
+  const g = -show;
+  ctx.strokeStyle = 'rgba(12,18,16,0.85)';
+  ctx.lineWidth = 1.5;
+  ctx.fillStyle = '#B8863B';
+  ctx.beginPath();
+  ctx.moveTo(-10, g - 1);
+  ctx.quadraticCurveTo(0, g - 5, 10, g - 1);
+  ctx.lineTo(10, g + 2);
+  ctx.quadraticCurveTo(0, g - 1, -10, g + 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#5B3F2C';
+  ctx.fillRect(-2.5, g - 13, 5, 10);
+  ctx.strokeRect(-2.5, g - 13, 5, 10);
+  ctx.strokeStyle = 'rgba(255,230,190,0.35)';
+  ctx.beginPath();
+  for (let k = 0; k < 3; k++) {
+    ctx.moveTo(-2.5, g - 11 + k * 3);
+    ctx.lineTo(2.5, g - 9 + k * 3);
+  }
+  ctx.stroke();
+  ctx.fillStyle = '#E0B24E';
+  ctx.strokeStyle = 'rgba(12,18,16,0.85)';
+  ctx.beginPath();
+  ctx.arc(0, g - 15, 3.5, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  // éclat qui file le long de la lame (toutes les 2,5 s) : ça brille, il faut aller voir
+  const k = (t % 2.5) / 0.5;
+  if (k < 1) {
+    const sy = g + 2 + k * (show - 4), a = Math.sin(k * Math.PI);
+    ctx.fillStyle = `rgba(255,255,255,${0.9 * a})`;
+    ctx.beginPath();
+    ctx.moveTo(0, sy - 6);
+    ctx.lineTo(1.4, sy);
+    ctx.lineTo(0, sy + 6);
+    ctx.lineTo(-1.4, sy);
+    ctx.closePath();
+    ctx.moveTo(-5, sy);
+    ctx.lineTo(0, sy - 1.2);
+    ctx.lineTo(5, sy);
+    ctx.lineTo(0, sy + 1.2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Œuf brisé, posé dans le sable : le bas de la coquille aux bords en dents de scie, et des éclats autour. */
+export function drawBrokenEgg(ctx: Ctx, x: number, y: number) {
+  const shell = '#F1E7D0', shade = '#CDBE9E', spot = '#9FB58A';
+  // éclats de coquille éparpillés
+  for (const [dx, dy, a, s] of [[-22, 6, 0.6, 1], [19, 9, -0.9, 0.8], [-12, 14, 2.1, 0.7], [27, -3, 1.3, 0.6], [6, 16, -2.4, 0.9]]) {
+    ctx.save();
+    ctx.translate(x + dx, y + dy);
+    ctx.rotate(a);
+    ctx.scale(s, s);
+    ctx.fillStyle = 'rgba(8,14,12,0.2)';
+    ctx.beginPath();
+    ctx.moveTo(-5, 2);
+    ctx.lineTo(1, -3);
+    ctx.lineTo(6, 1);
+    ctx.lineTo(1, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = shell;
+    ctx.beginPath();
+    ctx.moveTo(-6, 0);
+    ctx.lineTo(0, -5);
+    ctx.lineTo(6, -1);
+    ctx.lineTo(2, 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = spot;
+    ctx.beginPath();
+    ctx.arc(0, -1, 1.3, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+  // ombre, puis le bas de l'œuf, ouvert sur le dessus
+  ctx.fillStyle = 'rgba(8,14,12,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(x + 3, y + 10, 15, 5, 0, 0, TAU);
+  ctx.fill();
+  const rim = [[-13, -2], [-9, -9], [-5, -3], [-1, -11], [3, -4], [7, -10], [10, -3], [13, -6]];
+  ctx.fillStyle = shell;
+  ctx.strokeStyle = 'rgba(70,60,40,0.7)';
+  ctx.lineWidth = 1.2;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.beginPath();
+  ctx.moveTo(-13, -2);
+  ctx.bezierCurveTo(-15, 8, -8, 13, 0, 13);
+  ctx.bezierCurveTo(8, 13, 15, 8, 13, -6);
+  for (let i = rim.length - 1; i >= 0; i--) ctx.lineTo(rim[i][0], rim[i][1]);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // intérieur sombre de la coquille, vu par l'ouverture
+  ctx.fillStyle = '#6E6450';
+  ctx.beginPath();
+  ctx.moveTo(-11, -2);
+  for (const [px, py] of rim.slice(1, -1)) ctx.lineTo(px * 0.85, py * 0.55 + 1);
+  ctx.lineTo(11, -4);
+  ctx.quadraticCurveTo(0, 3, -11, -2);
+  ctx.fill();
+  // ombre du flanc et taches
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  ctx.moveTo(4, 12.5);
+  ctx.bezierCurveTo(10, 11, 14, 6, 13, -2);
+  ctx.bezierCurveTo(11, 6, 8, 10, 4, 12.5);
+  ctx.fill();
+  ctx.fillStyle = spot;
+  for (const [px, py, r] of [[-7, 4, 2], [-2, 8, 1.4], [5, 3, 1.7], [-9, -3, 1.1]]) {
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 export function drawChest(ctx: Ctx, x: number, y: number, lid: number, t: number, drop = 0) {
   const sk = 1 - Math.min(0.5, drop / 160); // l'ombre rétrécit pendant la chute
   ctx.fillStyle = 'rgba(8, 14, 12, 0.35)';

@@ -33,6 +33,10 @@ const DENS = 7; // tanières de suricates
 const ZONE_BLEND = 900; // largeur de la transition (affichage) entre deux zones
 const STAMP_R = 4300; // au-delà, mer profonde : on ne calcule plus la distance à la colonne
 const LANE = 280; // voie centrale jamais inondée (bord bruité)
+const MIN_LAKE = 40; // en cases : un lac plus petit (une flaque) est asséché
+const MIN_ISLET = 40; // en cases : un îlot plus petit est englouti
+export const MOUTH_FADE = 320; // embouchure : sur cette distance (à travers l'eau), l'eau d'un lac passe à celle de la mer
+const NB8 = [-N - 1, -N, -N + 1, -1, 1, N - 1, N, N + 1];
 const CAVE_GAP = 4000; // > VIEW_R + 2 × CAVE_RX + la demi-largeur de l'écran
 const VILLAGE_ARC = 800; // abscisse du village le long de la colonne
 const ZONE1_EXTRA = VILLAGE_ARC + VILLAGE_R; // la zone 1 commence par la plage et le village : elle est plus longue
@@ -136,6 +140,8 @@ export class WorldMap {
   readonly hall: Pt; // Hôtel de ville
   readonly store: Pt; // entrepôt (réserve commune de bois et de pierre)
   readonly board: Pt; // panneau du village (tableau des exploits)
+  readonly egg: Pt; // œuf brisé, juste à côté de l'endroit où l'on se réveille
+  readonly sword: Pt; // épée plantée dans le sable, un peu plus haut sur la plage
   readonly gates: number[] = []; // portes : abscisse le long du couloir ([0] sortie du village, puis début de chaque zone)
   readonly wreck: { boat: Pt; out: number; planks: { x: number; y: number; a: number; l: number }[] } = { boat: { x: 0, y: 0 }, out: 0, planks: [] }; // épave sur la plage d'arrivée (décalages depuis le point d'arrivée)
   readonly zoneLen: number; // longueur (le long de la colonne) des zones 2 à 6 ; la zone 1 a en plus la plage et le village
@@ -158,6 +164,7 @@ export class WorldMap {
   private cdist = new Float32Array(N * N).fill(1e9); // distance à la colonne
   private arc = new Float32Array(N * N); // abscisse (le long de la colonne) du point de colonne le plus proche
   private shore = new Float32Array(N * N).fill(1e9); // distance à la côte : négative dans l'île, positive en mer
+  private mouth = new Float32Array(N * N).fill(1e9); // embouchures (voir buildMouths)
   private palisadeCells: number[] = []; // cases de la palissade (solides seulement une fois construite)
 
   constructor(readonly seed: number) {
@@ -173,6 +180,10 @@ export class WorldMap {
     let d = 0;
     while (d < 4000 && this.shoreAt(s0.x + ox * d, s0.y + oy * d) < -BEACH * 0.6) d += 16;
     this.spawn = { x: s0.x + ox * (d - 90), y: s0.y + oy * (d - 90) };
+    // au réveil : l'œuf brisé à côté (à gauche ou à droite, côté terre : jamais caché par le nom), l'épée plantée
+    // un peu plus haut, vers l'intérieur de l'île
+    this.egg = { x: this.spawn.x + (ox > 0 ? -36 : 36), y: this.spawn.y + 8 };
+    this.sword = { x: this.spawn.x - ox * 130 + oy * 40, y: this.spawn.y - oy * 130 - ox * 40 };
     const village = (this.village = this.spineAt(VILLAGE_ARC));
     this.gate = this.gateToward(this.spawn);
     // épave : la barque échouée côté mer, des planches éparpillées autour
@@ -206,6 +217,7 @@ export class WorldMap {
     this.indexPaths();
 
     // Lacs : seulement dans l'île, hors de la voie centrale, de la plage, du village et des emplacements de camp.
+    const keepDry = new Uint8Array(N * N); // cases qui doivent rester au sec (le nettoyage de l'eau n'y touche pas)
     for (let j = 0; j < N; j++) {
       for (let i = 0; i < N; i++) {
         const k = j * N + i;
@@ -214,18 +226,26 @@ export class WorldMap {
         // part de Lacs brumeux et de désert, en fondu à travers les frontières bruitées des zones (pas de bord au cordeau)
         const m = this.zoneMix(p.x, p.y), w = (z: number) => (m.z0 === z ? 1 - m.t : 0) + (m.z1 === z ? m.t : 0);
         const w5 = w(5), w6 = w(6);
-        if (w5 < 0.5 && this.shore[k] > -BEACH - 120) continue; // plage au sec (sauf aux Lacs brumeux : les lacs y rejoignent la mer)
-        // voie centrale au sec, au bord très irrégulier (jamais moins d'une centaine de px de chaque côté de la colonne)
-        if (this.cdist[k] < LANE + (fbm(p.x / 500, p.y / 500, this.seed + 95, 2) - 0.5) * 700) continue;
-        if (dist2(p.x, p.y, village.x, village.y) < (VILLAGE_R + 160) ** 2) continue;
-        if (dist2(p.x, p.y, this.spawn.x, this.spawn.y) < 320 ** 2) continue;
-        if (this.sites.some((c) => dist2(p.x, p.y, c.x, c.y) < 380 ** 2)) continue;
+        if (
+          (w5 < 0.5 && this.shore[k] > -BEACH - 120) || // plage au sec (sauf aux Lacs brumeux : les lacs y rejoignent la mer)
+          // voie centrale au sec, au bord très irrégulier (jamais moins d'une centaine de px de chaque côté de la colonne)
+          this.cdist[k] < LANE + (fbm(p.x / 500, p.y / 500, this.seed + 95, 2) - 0.5) * 700 ||
+          dist2(p.x, p.y, village.x, village.y) < (VILLAGE_R + 160) ** 2 ||
+          dist2(p.x, p.y, this.spawn.x, this.spawn.y) < 320 ** 2 ||
+          this.sites.some((c) => dist2(p.x, p.y, c.x, c.y) < 380 ** 2) ||
+          this.pathDist(p.x, p.y) < 130
+        ) {
+          keepDry[k] = 1;
+          continue;
+        }
         // près de la côte des Lacs brumeux, l'eau gagne : bras de mer et lacs ouverts sur l'océan
         const lakes = LAKE_THRESHOLD_LAKES + 0.04 - 0.12 * clamp(1 + this.shore[k] / 450, 0, 1);
         const threshold = LAKE_THRESHOLD + (lakes - LAKE_THRESHOLD) * w5 + (LAKE_THRESHOLD_DESERT - LAKE_THRESHOLD) * w6;
-        if (this.lakeNoise(p.x, p.y) > threshold && this.pathDist(p.x, p.y) >= 130) this.water[k] = 1;
+        if (this.lakeNoise(p.x, p.y) > threshold) this.water[k] = 1;
       }
     }
+    this.cleanWater(keepDry);
+    this.buildMouths();
 
     // Grottes : deux ou trois par zone, dans la bande de la zone, de part et d'autre de la colonne, l'ouverture accessible.
     const free = (x: number, y: number, r: number) => {
@@ -346,6 +366,163 @@ export class WorldMap {
         else if (d > 0) this.water[c] = 1;
       }
     }
+  }
+
+  /**
+   * Nettoie l'eau une fois la côte et les lacs posés : ni flaque d'une case, ni pointe, ni encoche (lissage), ni petit
+   * lac, ni poche de mer coupée du large (asséchés), ni îlot minuscule (englouti). Les cases keepDry restent au sec.
+   */
+  private cleanWater(keepDry: Uint8Array) {
+    const w = this.water, sh = this.shore, wet = new Uint8Array(N * N);
+    const syncWet = () => {
+      for (let k = 0; k < N * N; k++) wet[k] = w[k] === 1 || w[k] === 3 ? 1 : 0;
+    };
+    const wetAround = (k: number) => wet[k - N - 1] + wet[k - N] + wet[k - N + 1] + wet[k - 1] + wet[k + 1] + wet[k + N - 1] + wet[k + N] + wet[k + N + 1];
+    // Lissage : une case d'eau presque entourée de terre s'assèche, une case de terre presque entourée d'eau est noyée.
+    for (let pass = 0; pass < 3; pass++) {
+      syncWet();
+      const dry: number[] = [], flood: number[] = [];
+      for (let j = 1; j < N - 1; j++) {
+        for (let i = 1, k = j * N + 1; i < N - 1; i++, k++) {
+          const v = w[k];
+          if (v === 3 || (v === 0 && keepDry[k])) continue;
+          const n = wetAround(k);
+          if (v === 1 && n <= 3) dry.push(k);
+          else if (v === 0 && n >= 6) flood.push(k);
+        }
+      }
+      for (const k of dry) {
+        w[k] = 0;
+        if (sh[k] > 0) sh[k] = -1; // un bout de mer devenu plage
+      }
+      for (const k of flood) {
+        w[k] = 1;
+        for (const d of NB8) if (sh[k + d] > 0) sh[k] = 1; // une encoche de la côte : elle rejoint la mer
+      }
+    }
+    // Composantes (4-connexité) : eau sans accès au large trop petite, terre détachée de l'île trop petite.
+    syncWet();
+    const seen = new Uint8Array(N * N), stack = new Int32Array(N * N), cells: number[] = [];
+    for (let s = 0; s < N * N; s++) {
+      if (seen[s]) continue;
+      const isWet = wet[s];
+      let top = 0, ocean = false, coast = false;
+      cells.length = 0;
+      stack[top++] = s;
+      seen[s] = 1;
+      while (top) {
+        const k = stack[--top], i = k % N;
+        cells.push(k);
+        if (w[k] === 3) ocean = true;
+        for (let e = 0; e < 4; e++) {
+          const nk = e === 0 ? (i > 0 ? k - 1 : -1) : e === 1 ? (i < N - 1 ? k + 1 : -1) : e === 2 ? k - N : k + N;
+          if (nk < 0 || nk >= N * N) {
+            ocean = true; // bord du monde
+            continue;
+          }
+          if (wet[nk] !== isWet) {
+            if (sh[nk] > 0) coast = true; // touche la mer
+            continue;
+          }
+          if (seen[nk]) continue;
+          seen[nk] = 1;
+          stack[top++] = nk;
+        }
+      }
+      if (isWet && !ocean) {
+        if (cells.length < MIN_LAKE) {
+          for (const k of cells) {
+            w[k] = 0;
+            if (sh[k] > 0) sh[k] = -1;
+          }
+        } else for (const k of cells) if (sh[k] > 0) sh[k] = -1; // poche de mer enclavée : c'est un lac
+      } else if (!isWet && cells.length < MIN_ISLET) {
+        for (const k of cells) {
+          w[k] = 1;
+          if (coast) sh[k] = 1;
+        }
+      }
+    }
+  }
+
+  /**
+   * Embouchures : pour chaque case de lac, distance (à travers l'eau) à la mer ; pour chaque case de mer, distance au
+   * lac le plus proche. Plafonnée à MOUTH_FADE (1e9 au-delà). Le dessin y fond l'eau du lac dans celle de la mer.
+   */
+  private buildMouths() {
+    const w = this.water, sh = this.shore, md = this.mouth;
+    const kind = new Uint8Array(N * N); // 0 terre, 1 lac, 2 mer
+    for (let k = 0; k < N * N; k++) kind[k] = w[k] === 1 || w[k] === 3 ? (sh[k] > 0 ? 2 : 1) : 0;
+    // départs : de part et d'autre de chaque contact lac-mer
+    const toLake: number[] = [], toSea: number[] = [];
+    for (let j = 1; j < N - 1; j++) {
+      for (let i = 1, k = j * N + 1; i < N - 1; i++, k++) {
+        if (kind[k] !== 1) continue;
+        for (const d of NB8) {
+          if (kind[k + d] !== 2) continue;
+          toLake.push(k + d);
+          toSea.push(k);
+        }
+      }
+    }
+    // on avance dans l'eau de l'autre sorte (Dijkstra, pas de 1 ou √2 case), jusqu'à MOUTH_FADE
+    const keys: number[] = [], dists: number[] = [];
+    const push = (d: number, k: number) => {
+      let c = keys.length;
+      keys.push(k);
+      dists.push(d);
+      while (c > 0) {
+        const p = (c - 1) >> 1;
+        if (dists[p] <= d) break;
+        keys[c] = keys[p];
+        dists[c] = dists[p];
+        c = p;
+      }
+      keys[c] = k;
+      dists[c] = d;
+    };
+    const pop = () => {
+      const k = keys[0], lk = keys.pop()!, ld = dists.pop()!;
+      if (keys.length) {
+        let c = 0;
+        for (;;) {
+          const l = 2 * c + 1, r = l + 1;
+          let m = -1, md2 = ld;
+          if (l < keys.length && dists[l] < md2) [m, md2] = [l, dists[l]];
+          if (r < keys.length && dists[r] < md2) m = r;
+          if (m < 0) break;
+          keys[c] = keys[m];
+          dists[c] = dists[m];
+          c = m;
+        }
+        keys[c] = lk;
+        dists[c] = ld;
+      }
+      return k;
+    };
+    for (const [starts, into] of [[toLake, 1], [toSea, 2]] as const) {
+      const done = new Uint8Array(N * N);
+      for (const k of starts) push(0, k);
+      while (keys.length) {
+        const d = dists[0], k = pop();
+        if (done[k]) continue;
+        done[k] = 1;
+        const i = k % N;
+        if (i === 0 || i === N - 1 || k < N || k >= N * (N - 1)) continue;
+        for (let n = 0; n < 8; n++) {
+          const nk = k + NB8[n], nd = d + (n === 0 || n === 2 || n === 5 || n === 7 ? 1.414 : 1) * MAP_CELL;
+          if (kind[nk] !== into || nd >= md[nk] || nd > MOUTH_FADE) continue;
+          md[nk] = nd;
+          push(nd, nk);
+        }
+      }
+    }
+  }
+
+  /** Embouchure : distance (à travers l'eau) d'un lac à la mer, ou de la mer au lac le plus proche ; 1e9 loin de toute embouchure. */
+  mouthAt(x: number, y: number) {
+    if (x <= -WORLD_HALF || y <= -WORLD_HALF || x >= WORLD_HALF || y >= WORLD_HALF) return 1e9;
+    return this.mouth[this.cellOf(x, y)];
   }
 
   /** Distance à la côte (négative dans l'île, positive en mer). */

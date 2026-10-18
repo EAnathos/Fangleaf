@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
@@ -29,6 +29,7 @@ export interface Spot {
   deposit?: boolean; // entrepôt : déposer son sac
   pick?: boolean; // buisson garni : cueillir ses baies
   chest?: number; // coffre d'un géant vaincu à ouvrir
+  sword?: boolean; // épée plantée dans le sable : tirer dessus
 }
 /** Géant endormi dans sa grotte : on peut aller lui parler. */
 export interface Sleeper {
@@ -47,6 +48,7 @@ export interface VillageView {
   chests: [number, number, number, number][]; // coffres des géants : [id, x, y, déjà ouvert]
   hall: number; // niveau de l'Hôtel de ville
   bare: number[]; // buissons dont les baies ont été mangées ou cueillies
+  sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 /** Prix (or, bois, pierre), nom et niveau de Hôtel de ville requis d'un achat pour le village. */
@@ -67,6 +69,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     return v.buildings.includes(b) ? open : offer(b, pos, 'Construire');
   };
   const spots: Spot[] = [
+    ...(v.sword < SWORD_PULLS ? [{ sword: true, pos: map.sword, reach: SWORD_REACH, label: v.sword ? `E — Tirer encore (${v.sword}/${SWORD_PULLS})` : 'E — Déterrer l\'épée' }] : []),
     ...(v.buildings.includes('palisade') ? [] : [{ ...offer('palisade', map.village, 'Monter'), reach: 110 }]),
     { panel: 'hall', pos: map.hall, label: `E — Hôtel de ville · niv. ${v.hall}` },
     { deposit: true, pos: map.store, label: 'E — Entrepôt : déposer ton bois et ta pierre' },
@@ -146,13 +149,17 @@ export class Hud {
   sleepers: Sleeper[] = []; // géants endormis à portée de vue
   chests: [number, number, number, number][] = []; // coffres des géants vaincus
   hall = 0; // niveau de l'Hôtel de ville
+  vname = ''; // nom du village ('' : pas encore nommé)
+  sword = SWORD_PULLS; // coups donnés pour déterrer l'épée
   stock: [number, number] = [0, 0]; // réserve du village : bois, pierre
   bare: number[] = []; // buissons sans baies
   onPick = () => {};
   onHold = () => {};
+  onSword = () => {};
+  onRide = () => {}; // bouton selle (mobile) : monter ou descendre
   onDeposit = () => {};
   beaten: number[] = []; // géants vaincus par le village
-  onHall = () => {};
+  onHall = (_name?: string) => {};
   onAttackMode = () => {};
   onKick = (_id: number) => {};
   onUnban = (_user: string) => {};
@@ -209,9 +216,20 @@ export class Hud {
       this.onReset();
     };
     $('talk-fight').onclick = () => this.onChallenge(this.spotAt);
-    $('hall-up').onclick = () => this.onHall();
+    $('hall-up').onclick = () => {
+      if (this.hall > 0) return this.onHall();
+      const input = $<HTMLInputElement>('hall-name');
+      const name = input.value.replace(/\s+/g, ' ').trim();
+      if (!name) return input.focus(); // on construit l'Hôtel de ville : il faut nommer le village
+      this.onHall(name);
+    };
+    $('hall-name').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $('hall-up').click();
+      else if (e.key === 'Escape') (e.target as HTMLInputElement).blur(); // les touches reviennent au jeu
+    });
     this.initSettings(founder);
     $('hold-btn').onclick = () => this.onHold();
+    $('mount-btn').onclick = () => this.onRide();
     $('talk-later').onclick = () => this.setPanel(null);
     for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'hall', 'settings', 'board'] as const) {
       const el = $(id);
@@ -348,15 +366,20 @@ export class Hud {
     const fill = $('self-hp');
     setStyle(fill, 'width', `${Math.round(Math.max(0, hpRatio) * 1000) / 10}%`); // arrondi : comparable à ce que le navigateur garde
     fill.classList.toggle('low', hpRatio < 0.3);
-    setText($('self-hptext'), `PV ${me.hp}/${me.maxHp}`);
-    setText($('self-gold'), `Or ${me.gold}`);
-    setText($('self-wood'), `Bois ${me.wood}`);
-    setText($('self-stone'), `Pierre ${me.stone}`);
-    setText($('self-fruits'), `Baies ${me.fruits}`);
+    setText($('self-hptext'), `${me.hp} / ${me.maxHp}`); // dans la barre de vie
+    setText($('self-gold'), String(me.gold)); // l'icône (pièce) dit ce que c'est
+    setText($('self-wood'), String(me.wood)); // l'icône dit ce que c'est
+    setText($('self-stone'), String(me.stone));
+    setText($('self-fruits'), String(me.fruits));
     // au doigt seulement (sur PC : touche T) : tendre ou ranger un fruit
     const hold = $('hold-btn');
     hold.classList.toggle('on', me.holding);
-    setText(hold, me.holding ? 'Ranger le fruit' : 'Tendre un fruit');
+    hold.setAttribute('aria-label', me.holding ? 'Ranger la baie' : 'Tendre une baie');
+    // au doigt (sur PC : touche F) : monter ou descendre, dès qu'on a une monture dans sa meute
+    const ride = $('mount-btn');
+    ride.classList.toggle('on', !!me.mount);
+    ride.setAttribute('aria-label', me.mount ? 'Descendre de sa monture' : 'Monter sur sa monture');
+    setHidden(ride, !me.mount && !me.army.some((a) => a.alpha && MOUNTS[SPECIES[a.species].key]));
     setText($('self-army'), `Meute ${me.army.filter((a) => !a.alpha).length}/${ARMY_CAP}`);
     setText($('ping'), ping && settings.display.ping ? `${ping} ms` : '');
     setHidden($('invite'), players.length >= MAX_PLAYERS); // village complet : plus personne à inviter
@@ -394,8 +417,8 @@ export class Hud {
     if (b) {
       // au doigt, pas de touche à rappeler ; sur PC, la touche réglée pour « interagir »
       setText(prompt, b.label.replace(/^E — /, touchOnly ? '' : `${keyLabel('interact')} — `));
-      setClass(prompt, `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`);
-      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
+      setClass(prompt, `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick || b.sword ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`);
+      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
     }
     const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board'].includes(this.panel);
     if (building && b?.panel !== this.panel) this.setPanel(null);
@@ -781,14 +804,16 @@ export class Hud {
   /** Hôtel de ville : ses niveaux (ce que chacun débloque), le prochain à payer, et l'état des portes des zones. */
   private updateHall(me: PlayerState) {
     const funds = this.funds(me);
-    $('hall-have').textContent = `Niveau ${this.hall}/${HALL_MAX}`;
+    $('hall-title').textContent = this.vname ? `Hôtel de ville · ${this.vname}` : 'Hôtel de ville';
+    $('hall-have').textContent = this.hall ? `Niveau ${this.hall}/${HALL_MAX}` : 'À construire : donne un nom au village';
+    $('hall-naming').hidden = this.hall > 0;
     const maxed = this.hall >= HALL_MAX, cost = HALL[this.hall];
     $('hall-cost').hidden = maxed;
     if (!maxed) this.costChips('hall-cost', funds, cost);
     const btn = $<HTMLButtonElement>('hall-up');
     const camp = this.hall > 0 || this.buildings.includes('palisade'); // le camp d'abord : la palissade
     btn.disabled = maxed || !camp || !canPay(funds, cost);
-    btn.textContent = maxed ? 'Niveau maximum' : !camp ? 'Construis d\'abord la palissade' : !canPay(funds, cost) ? 'Il manque des ressources' : `Passer au niveau ${this.hall + 1}`;
+    btn.textContent = maxed ? 'Niveau maximum' : !camp ? 'Construis d\'abord la palissade' : !canPay(funds, cost) ? 'Il manque des ressources' : this.hall ? `Passer au niveau ${this.hall + 1}` : 'Construire et nommer le village';
   }
 
   /** Marché : vendre les monstres ordinaires de sa meute, acheter ceux des espèces déjà croisées. */

@@ -1,4 +1,4 @@
-// Un village : jusqu'à 3 joueurs, la carte et sa simulation autoritaire.
+// Un village : jusqu'à MAX_PLAYERS (4) joueurs, la carte et sa simulation autoritaire.
 
 import {
   bossMelee, sleeperBlocks,
@@ -6,7 +6,7 @@ import {
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
-  SPAWN_SAFE_R, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
+  SPAWN_SAFE_R, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
   armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
@@ -142,6 +142,8 @@ export interface Player {
   reviveBy: number; // à terre : id du coéquipier qui le relève (0 = personne)
   reviveT: number; // à terre : secondes de réanimation déjà passées
   atkCd: number;
+  sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
+  swordAt: number; // dernier coup (pas plus d'un toutes les 0,3 s)
   lastPosMs: number;
   army: number[];
   mount: number; // id de l'Alpha chevauché, 0 sinon
@@ -205,6 +207,9 @@ const statsOf = (s?: Partial<Stats>): Stats => ({
   given: Math.max(0, Math.floor(Number(s?.given) || 0)),
 });
 
+/** Nom de village propre : sans caractères de contrôle, espaces réduits, 24 caractères au plus. */
+export const villageName = (s: unknown) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
+
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const makeCode = () =>
   Array.from({ length: 6 }, () => CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]).join('');
@@ -215,6 +220,7 @@ export interface VillageState {
   buildings: BuildingId[];
   unlocked: number[];
   hall: number; // niveau de l'Hôtel de ville
+  name: string; // nom du village ('' : pas encore nommé)
   beaten: number[]; // géants (espèce) déjà vaincus au moins une fois
   wood: number; // réserve commune (entrepôt)
   stone: number;
@@ -261,6 +267,7 @@ export class Room {
   readonly buildings: BuildingId[]; // bâtiments construits au village
   readonly unlocked: number[]; // grottes débloquées (index dans map.caves)
   hall: number; // niveau de l'Hôtel de ville
+  name = ''; // nom du village, donné en construisant l'Hôtel de ville
   readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
   readonly stock = { wood: 0, stone: 0 }; // réserve commune de l'entrepôt
   banned: { id: string; name: string }[] = []; // comptes expulsés par le fondateur (leur progression est gardée)
@@ -278,6 +285,7 @@ export class Room {
     this.unlocked = indexes(saved.unlocked, this.map.caves.length);
     this.buildings = BUILDING_IDS.filter((b) => saved.buildings?.includes(b));
     this.hall = clamp(Math.floor(Number(saved.hall) || 0), 0, HALL_MAX);
+    this.name = villageName(saved.name);
     // Village d'avant l'île (déjà lancé) : son camp est considéré comme installé (palissade, emplacements défrichés).
     if ((this.hall > 0 || this.buildings.length) && !this.buildings.includes('palisade')) {
       for (const b of ['palisade', 'plot_forge', 'plot_den', 'plot_market'] as const) if (!this.buildings.includes(b)) this.buildings.push(b);
@@ -309,15 +317,17 @@ export class Room {
     // Première fois : on échoue sur la plage et il faut trouver le village.
     // Une fois le village découvert, on y apparaît directement.
     const found = !!account?.profile?.village_found;
+    // tout nouveau dompteur : sans arme (l'épée est plantée dans le sable), il se réveille à côté de l'œuf
+    const armed = account?.profile ? account.profile.armed !== false : false;
     const from = found ? { x: this.map.village.x, y: this.map.village.y + 40 } : this.map.spawn;
-    const a = Math.random() * Math.PI * 2;
-    const at = this.map.freeNear(from.x + Math.cos(a) * 60, from.y + Math.sin(a) * 60);
+    const a = Math.random() * Math.PI * 2, spread = armed ? 60 : 12;
+    const at = this.map.freeNear(from.x + Math.cos(a) * spread, from.y + Math.sin(a) * spread);
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
       hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, stats: { bosses: 0, tamed: 0, given: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
-      lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
+      sword: armed ? SWORD_PULLS : 0, swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
     };
     const prof = account?.profile;
     if (prof) {
@@ -362,7 +372,7 @@ export class Room {
     this.players.set(p.id, p);
     this.scaleBosses();
     this.refreshAlphas(p);
-    send({ t: 'welcome', id: p.id, code: this.code, seed: this.seed, saved: !!p.userId, villageFound: found, founder: this.isFounder(p) });
+    send({ t: 'welcome', id: p.id, code: this.code, seed: this.seed, saved: !!p.userId, villageFound: found, founder: this.isFounder(p), armed: p.sword >= SWORD_PULLS });
     send({ t: 'teleport', x: p.x, y: p.y });
     this.events.push({ e: 'info', text: `${name} a rejoint le village` });
     return p;
@@ -522,7 +532,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen], stats: { ...p.stats } };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, armed: p.sword >= SWORD_PULLS, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen], stats: { ...p.stats } };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -561,7 +571,7 @@ export class Room {
   }
 
   private saveVillage() {
-    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, beaten: [...this.beaten], ...this.stock, banned: [...this.banned] });
+    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, beaten: [...this.beaten], ...this.stock, banned: [...this.banned] });
   }
 
   /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
@@ -589,14 +599,26 @@ export class Room {
     this.events.push({ e: 'built', b, by: p.id });
   }
 
+  /** Tirer sur l'épée plantée dans le sable, à côté d'elle : au bout de SWORD_PULLS coups, elle est sortie. */
+  onSword(p: Player) {
+    if (p.dead || p.sword >= SWORD_PULLS || this.time - p.swordAt < 0.3) return;
+    if (dist2(p.x, p.y, this.map.sword.x, this.map.sword.y) > SWORD_REACH ** 2) return;
+    p.swordAt = this.time;
+    p.sword++;
+    p.dirty = true;
+    this.events.push({ e: 'sword', by: p.id, n: p.sword });
+  }
+
   /** Améliorer l'Hôtel de ville, devant elle : un niveau de plus pour tout le village (or, bois, pierre). */
-  onHall(p: Player) {
+  onHall(p: Player, name?: string) {
     if (this.hall >= HALL_MAX || !this.near(p, this.map.hall)) return;
     if (this.hall === 0 && !this.buildings.includes('palisade')) return; // le camp d'abord : la palissade
     if (!this.pay(p, HALL[this.hall])) return;
     this.hall++;
+    if (this.hall === 1 || !this.name) this.name = villageName(name) || `Village ${this.code}`; // construite : le village reçoit son nom
     this.saveVillage();
     this.events.push({ e: 'hall', lvl: this.hall, by: p.id });
+    if (this.hall === 1) this.events.push({ e: 'info', text: `${p.name} a fondé le village « ${this.name} »` });
   }
 
   /** Porte k ouverte pour le village (Hôtel de ville assez haut, géants de la zone vaincus). */
@@ -1278,6 +1300,7 @@ export class Room {
     p.atkCd -= DT;
     if (p.atkCd > 0) return;
     if (p.holding) return this.feed(p); // fruit en main : on nourrit, on ne frappe pas
+    if (p.sword < SWORD_PULLS) return p.manual ? undefined : this.mine(p); // pas encore d'arme : on ne se bat pas
     if (p.manual) return this.time <= p.orderUntil ? this.aimedAttack(p) : undefined; // attaque au clic : rien sans ordre
     const cls = classOf(p.cls);
     const reach = PLAYER_R + cls.range;
@@ -1584,7 +1607,7 @@ export class Room {
       case 'spores':
         // Nuages sous les dompteurs proches : ils restent 5 s et rongent ceux qui y restent.
         // (un Alpha légendaire n'en pose qu'un, sur sa cible)
-        for (const p of u.owner ? [t] : this.alliesNear(u.x, u.y, 650).filter((e) => e.kind === 'p').slice(0, 3)) {
+        for (const p of u.owner ? [t] : this.alliesNear(u.x, u.y, 650).filter((e) => e.kind === 'p').slice(0, MAX_PLAYERS)) {
           this.hazard(u, { kind: 2, style: 'spores', x: p.x, y: p.y, r: 95, at: this.time + 0.9, until: this.time + 5.9, dmg: d * 0.6 });
         }
         break;
@@ -1614,7 +1637,7 @@ export class Room {
         break;
       }
       case 'rocks':
-        for (const e of this.targetsNear(u, u.x, u.y, 700).slice(0, 3)) {
+        for (const e of this.targetsNear(u, u.x, u.y, 700).slice(0, MAX_PLAYERS)) {
           this.hazard(u, { kind: 0, style: 'rock', x: e.x, y: e.y, r: 80, at: this.time + 1.2, dmg: d * 1.4 });
         }
         break;
@@ -2609,7 +2632,7 @@ export class Room {
     for (const p of this.players.values()) {
       const st: PlayerState = {
         id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: Math.round(p.fx * 100) / 100, fy: Math.round(p.fy * 100) / 100,
-        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
+        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, sword: p.sword, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
         essences: p.essences, saved: !!p.userId, dead: p.dead,
         respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
         revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),
@@ -2680,7 +2703,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev });
     }
   }
 }

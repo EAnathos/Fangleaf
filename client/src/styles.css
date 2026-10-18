@@ -89,6 +89,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .village-pick:hover { border-color: var(--ally); }
 .village-pick[aria-checked="true"] { border-color: var(--amber); background: rgba(240, 182, 74, 0.1); }
 .village-pick b { font: 700 22px var(--display); letter-spacing: 3px; color: var(--amber); }
+.village-pick b.named { font-size: 19px; letter-spacing: 0.5px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .village-pick .who { font-size: 14px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .village-pick .when { font-size: 13px; color: var(--muted); text-align: right; white-space: nowrap; }
 .error { margin: 0; color: #FF9B78; font-size: 14px; }
@@ -113,6 +114,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .pname { font: 700 18px var(--display); }
 .bar { height: 12px; border-radius: 6px; background: var(--night); overflow: hidden; }
 .bar.thin { height: 8px; }
+.hp-bar { position: relative; height: 18px; border-radius: 9px; }
+.bar-text { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 700 12px var(--body); color: #F4F1E6; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75); pointer-events: none; }
 .fill { height: 100%; width: 100%; background: var(--hp); transition: width 0.15s; }
 .fill.low { background: var(--enemy); }
 .stats { font-size: 14px; gap: 14px; }
@@ -336,10 +339,19 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* Baies : compteur et bouton « tendre un fruit » (touche T). */
 .berry { color: #E86A74; }
-.hold-btn { position: absolute; right: 16px; bottom: 96px; height: 52px; padding: 0 18px; font: 700 15px var(--display); border-color: #C8323C; color: #F3A3AA; background: rgba(27, 38, 36, 0.92); }
+.hold-btn { position: absolute; right: 16px; bottom: 96px; width: 56px; height: 56px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border-color: #C8323C; background: rgba(27, 38, 36, 0.92); }
+.hold-btn svg { transition: transform 0.15s; }
 /* Boutons réservés au doigt (sur PC, une touche fait la même chose). */
 @media (pointer: fine) { .touch-only { display: none !important; } }
-.hold-btn.on { background: rgba(200, 50, 60, 0.25); color: #FFD3D6; }
+.hold-btn.on { background: rgba(200, 50, 60, 0.35); box-shadow: 0 0 0 3px rgba(243, 163, 170, 0.35); }
+.hold-btn.on svg { transform: translateY(-3px) scale(1.12); } /* baie tendue */
+.res { display: inline-flex; align-items: center; gap: 3px; }
+.stats.small:has(.res) { gap: 10px; } /* sac : icône + nombre */
+@media (max-width: 480px) { .stats.small:has(.res) > .muted { display: none; } } /* téléphone : les icônes suffisent, sans le mot « Sac » */
+.res svg { flex: none; }
+/* sous le bouton baie, même forme : il n'apparaît qu'avec une monture */
+.mount-btn { position: absolute; right: 16px; bottom: 28px; width: 56px; height: 56px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border-color: #B8743A; background: rgba(27, 38, 36, 0.92); }
+.mount-btn.on { border-color: var(--amber); background: rgba(240, 182, 74, 0.18); }
 .prompt.pick { border-color: #C8323C; color: #F3A3AA; }
 
 /* Paramètres. */
@@ -382,3 +394,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .vol-row input[type="range"] { accent-color: var(--amber); width: 100%; }
 .vol-row.mute { grid-template-columns: auto 1fr; }
 .vol-row.mute input { accent-color: var(--amber); width: 18px; height: 18px; }
+
+/* Premier réveil sur l'île (intro.ts) : l'animation par-dessus le jeu, le HUD attend qu'on ait ouvert les yeux. */
+.intro { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; }
+#hud { transition: opacity 1.2s; }
+body.waking #hud { opacity: 0; pointer-events: none; }

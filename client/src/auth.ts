@@ -34,6 +34,7 @@ export async function currentAccount(): Promise<Account | null> {
 /** Un village où ce compte a une progression. */
 export interface MyVillage {
   code: string;
+  village: string; // nom du village ('' : Hôtel de ville pas encore construit)
   name: string; // nom du dompteur dans ce village
   zones: number; // zones découvertes par le village (1 à ZONES)
   updated: Date; // dernière partie
@@ -44,12 +45,12 @@ export async function myVillages(): Promise<MyVillage[]> {
   if (!authEnabled) return [];
   const { data, error } = await (await sb())
     .from('progress')
-    .select('village_code, name, updated_at, villages(hall, beaten)')
+    .select('village_code, name, updated_at, villages(name, hall, beaten)')
     .order('updated_at', { ascending: false });
   if (error || !data) return [];
   return data.map((d) => {
-    const v = (Array.isArray(d.villages) ? d.villages[0] : d.villages) as { hall?: number; beaten?: number[] } | null;
-    return { code: String(d.village_code), name: String(d.name ?? ''), zones: zonesOpen(Number(v?.hall ?? 0), (v?.beaten ?? []).map(Number)), updated: new Date(d.updated_at) };
+    const v = (Array.isArray(d.villages) ? d.villages[0] : d.villages) as { name?: string; hall?: number; beaten?: number[] } | null;
+    return { code: String(d.village_code), village: String(v?.name ?? ''), name: String(d.name ?? ''), zones: zonesOpen(Number(v?.hall ?? 0), (v?.beaten ?? []).map(Number)), updated: new Date(d.updated_at) };
   });
 }
 

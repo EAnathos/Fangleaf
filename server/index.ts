@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { MAX_VILLAGES, TICK_HZ } from '../shared/config.ts';
+import { MAX_PLAYERS, MAX_VILLAGES, TICK_HZ } from '../shared/config.ts';
 import type { ClientMsg, ServerMsg } from '../shared/protocol.ts';
 import { countVillages, createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, loadMembers, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
 import { makeCode, Room, type Player } from './room.ts';
@@ -122,7 +122,7 @@ wss.on('connection', (ws: WebSocket) => {
         }
       }
       if (r.isBanned(user?.userId)) return send({ t: 'error', msg: 'Tu as été expulsé de ce village.' });
-      if (r.full) return send({ t: 'error', msg: 'Ce village est complet (3 dompteurs max).' });
+      if (r.full) return send({ t: 'error', msg: `Ce village est complet (${MAX_PLAYERS} dompteurs max).` });
     }
 
     // Progression propre à ce compte DANS ce village : ailleurs, on repart de zéro.
@@ -140,7 +140,7 @@ wss.on('connection', (ws: WebSocket) => {
     player = r.addPlayer(name, send, user ? { userId: user.userId, profile } : undefined);
     player.close = () => ws.close();
     if (user && !profile) void save(r, player); // le village apparaît tout de suite dans « Ton village »
-    console.log(`[${r.code}] ${player.name} ${msg.t === 'create' ? 'a fondé le village' : 'a rejoint'} (${r.players.size}/3)${user ? (profile ? ' · progression chargée' : ' · nouvelle progression') : ''}`);
+    console.log(`[${r.code}] ${player.name} ${msg.t === 'create' ? 'a fondé le village' : 'a rejoint'} (${r.players.size}/${MAX_PLAYERS})${user ? (profile ? ' · progression chargée' : ' · nouvelle progression') : ''}`);
   }
 
   ws.on('message', (raw) => {
@@ -179,7 +179,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'establish') room.onEstablish(player, +msg.site);
     else if (msg.t === 'travel') room.onTravel(player, +msg.to);
     else if (msg.t === 'build') room.onBuild(player, msg.b);
-    else if (msg.t === 'hall') room.onHall(player);
+    else if (msg.t === 'hall') room.onHall(player, msg.name);
     else if (msg.t === 'deposit') room.onDeposit(player);
     else if (msg.t === 'chat') room.onChat(player, String(msg.text ?? ''));
     else if (msg.t === 'board') room.onBoard(player);
@@ -187,6 +187,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'unban') room.onUnban(player, String(msg.user));
     else if (msg.t === 'mode') room.onMode(player, !!msg.manual);
     else if (msg.t === 'attack') room.onAttack(player, +msg.x, +msg.y);
+    else if (msg.t === 'sword') room.onSword(player);
     else if (msg.t === 'pick') room.onPick(player);
     else if (msg.t === 'hold') room.onHold(player, !!msg.on);
     else if (msg.t === 'unlock') room.onUnlock(player, +msg.cave);

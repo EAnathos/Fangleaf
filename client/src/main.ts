@@ -50,8 +50,10 @@ function renderVillages() {
       btn.setAttribute('role', 'radio');
       btn.setAttribute('aria-checked', String(v.code === picked));
       btn.innerHTML = '<b></b><span class="who"></span><span class="when"></span>';
-      btn.querySelector('b')!.textContent = v.code;
-      btn.querySelector('.who')!.textContent = `${v.name || 'Dompteur'} · ${v.zones}/${ZONES} zones découvertes`;
+      const b = btn.querySelector('b')!;
+      b.textContent = v.village || v.code;
+      b.classList.toggle('named', !!v.village);
+      btn.querySelector('.who')!.textContent = `${v.village ? `${v.code} · ` : ''}${v.name || 'Dompteur'} · ${v.zones}/${ZONES} zones découvertes`;
       btn.querySelector('.when')!.textContent = since(v.updated);
       btn.onclick = () => {
         picked = v.code;
@@ -175,7 +177,7 @@ $('lobby-form').addEventListener('submit', async (e) => {
     } else if (m.t === 'welcome') {
       $('lobby').hidden = true;
       history.replaceState(null, '', location.pathname); // invitation consommée : pas de badge au rechargement
-      const game = new Game($<HTMLCanvasElement>('game'), net, m.id, m.code, m.seed, m.villageFound, m.founder);
+      const game = new Game($<HTMLCanvasElement>('game'), net, m.id, m.code, m.seed, m.villageFound, m.founder, m.armed);
       if (import.meta.env.DEV) Object.assign(window, { game }); // debug console
     }
   };

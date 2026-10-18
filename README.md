@@ -1,7 +1,7 @@
 # Fangleaf
 
 MVP d'un jeu coop façon *Wild Tamer* : chasse des monstres, apprivoise-les, fais apparaître des Alphas
-qui ressuscitent, améliore ton armure à la forge du village. Jusqu'à 3 joueurs par village.
+qui ressuscitent, améliore ton armure à la forge du village. Jusqu'à 4 joueurs par village.
 
 Plan, périmètre et choix techniques : [docs/PLAN.md](docs/PLAN.md).
 
@@ -65,24 +65,25 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 | `npm start` | Prod : un seul process sert `dist/` et le WebSocket (`PORT`, défaut 3001) |
 | `npm run typecheck` | Vérification TypeScript |
 | `npm run db:migrate` | Applique les migrations Supabase manquantes (`DATABASE_URL` requis) |
-| `npm run smoke` | Test bot (autorise les invités via `ALLOW_GUESTS=1`, réservé aux tests) : création, 3 joueurs max, combat, or, forge, anti-téléportation |
+| `npm run smoke` | Test bot (autorise les invités via `ALLOW_GUESTS=1`, réservé aux tests) : création, 4 joueurs max, combat, or, forge, anti-téléportation |
 | `npm run test:rules` | Règles : dispersion de la meute, rappel, régénération, forge, éveil et renforcement des Alphas, profil |
 
 ## Contrôles
 
 - **ZQSD / WASD / flèches** ou **glisser** (souris / doigt) : se déplacer. Sur PC, toutes les touches se règlent (Échap › Paramètres), et l'attaque peut passer d'automatique (par défaut) au **clic gauche** vers le pointeur ; au doigt, rien ne change
 - Attaque automatique, la meute suit et combat seule
+- **Premier réveil** : on ouvre les yeux sur une plage inconnue, sans arme. L'épée est plantée dans le sable tout près : **E** (ou le bouton) trois fois pour la déterrer ; avant, on ne peut pas se battre
 - **Bâtiments du village** : ce ne sont au départ que des chantiers. **E** devant l'un d'eux pour le construire, une fois pour tout le village, avec ton or et le bois et la pierre de la réserve du village : Forge (10 or, 5 bois), Marché (50 or, 25 bois, 10 pierre), Tanière (20 or, 20 bois, 15 pierre), Pierre de passage (200 or, 10 bois, 40 pierre)
-- **Hôtel de ville** (E devant lui) : en ruine au départ. Chaque niveau (or, bois, pierre, pour tout le village) débloque la suite : niv. 1 porte du village et Marché, niv. 2 porte des Bois profonds et Pierre de passage, puis une porte de zone par niveau jusqu'au niv. 5 (les derniers niveaux demandent beaucoup plus de bois et de pierre)
+- **Hôtel de ville** (E devant lui) : en ruine au départ. En le construisant, on donne son nom au village (affiché dans « Mes villages »). Chaque niveau (or, bois, pierre, pour tout le village) débloque la suite : niv. 1 porte du village et Marché, niv. 2 porte des Bois profonds et Pierre de passage, puis une porte de zone par niveau jusqu'au niv. 5 (les derniers niveaux demandent beaucoup plus de bois et de pierre)
 - **Brume des zones** : un banc de nuages couvre le couloir au-delà de la sortie du village puis de chaque zone fermée (aucun monstre n'y apparaît). Pour passer en zone suivante, il faut l'Hôtel de ville au bon niveau **et** avoir vaincu tous les géants de la zone (une fois suffit, pour tout le village). On peut toujours revenir en arrière
 - **E** près d'un bâtiment construit : Forge (classe, arme, armure), Tanière (Alphas des espèces déjà rencontrées, bestiaire), Marché (vendre les monstres de sa meute, acheter ceux des espèces déjà croisées) · **Échap** : fermer
 - **Clic sur la minicarte** (ou **M**) : grande carte, avec le brouillard des zones pas encore explorées · **Échap** ou **M** pour la fermer
-- **F** : monter sur son Alpha Loup, Sanglier, Ours ou Escargot (ou en descendre). L'Alpha **Serpent des brumes** se monte aussi, mais ne va qu'en eau : F près de l'eau pour embarquer (on est posé sur l'eau), F au bord d'une rive pour descendre ; s'il tombe en pleine eau, on se noie
+- **F** (au doigt : le bouton selle, sous le bouton à baies) : monter sur son Alpha Loup, Sanglier, Ours ou Escargot (ou en descendre). L'Alpha **Serpent des brumes** se monte aussi, mais ne va qu'en eau : F près de l'eau pour embarquer (on est posé sur l'eau), F au bord d'une rive pour descendre ; s'il tombe en pleine eau, on se noie
 - **Mort** : tu perds 10 % de ton or ; ta meute ordinaire se disperse, tes Alphas restent
 - Au village ou dans un camp établi, ta meute et tes Alphas se promènent librement autour de toi
 - **R maintenu** (ou le bouton, au doigt) près d'un coéquipier à terre : le relever sur place avec la moitié de ses PV, après 5 s. Avec un autre dompteur dans le village, on reste à terre 10 s avant de repartir au camp ; seul, 5 s. Un Alpha tombé ne ressuscite qu'une fois son dompteur debout
 - **Récolte** : reste à côté d'un filon d'or (or et un peu de pierre), d'un rocher (pierre) ou de bois mort (bois) : ton personnage sort sa pioche ou sa hache tout seul quand aucun monstre n'est à portée. Bois et pierre vont dans ton sac : **E à l'entrepôt** du village pour les verser dans la réserve commune, qui paie les constructions
-- **Baies et gibier** : **E** près d'un buisson garni pour cueillir ses baies. **T** (ou le bouton) : tendre un fruit. L'Escargot des mousses (zone 1) et le Lièvre des ronces (zone 3), gibier passif qui n'attaque jamais, s'approchent peu à peu ; chaque fruit mangé a une chance de l'apprivoiser (bien plus faible pour un monstre hostile). Fruit en main, on ne se bat plus
+- **Baies et gibier** : **E** près d'un buisson garni pour cueillir ses baies. **T** (au doigt : le bouton rond à baies, qui apparaît près d'un gibier) : tendre un fruit. L'Escargot des mousses (zone 1) et le Lièvre des ronces (zone 3), gibier passif qui n'attaque jamais, s'approchent peu à peu ; chaque fruit mangé a une chance de l'apprivoiser (bien plus faible pour un monstre hostile). Fruit en main, on ne se bat plus
 - **Le monde est un long chemin** : du camp de départ (au bord de la carte) au village, puis une piste à travers 5 zones de plus en plus dangereuses ; la dernière, les Lacs brumeux, s'atteint depuis le Camp avancé
 - **Tireurs** (Guetteur runique, Crapaud-mortier, Serpent des brumes) : ils s'immobilisent pour charger leur tir — écarte-toi de la trajectoire, ou sors du cercle annoncé au sol
 - **E** sur l'emplacement de camp au bout de la zone 4 : l'établir pour tout le village (2000 or) — feu qui soigne, réapparition sur place, Pierre de passage

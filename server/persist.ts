@@ -18,6 +18,7 @@ export interface Profile {
   armor: number;
   torch?: number; // 0 : pas de torche (absent dans les sauvegardes d'avant la migration 015)
   boots?: number;
+  armed?: boolean; // épée déterrée (absent dans les sauvegardes d'avant la migration 017 : armé)
   essences: number[];
   alphas: { s: number; lvl: number; wakeAt?: number; legend?: boolean; rest?: boolean }[]; // rest : rangé à la Tanière // wakeAt : éveil en cours (horodatage ms)
   village_found: boolean; // village déjà découvert : on y apparaît directement
@@ -57,6 +58,7 @@ export interface VillageSave {
   buildings: BuildingId[];
   unlocked: number[];
   hall: number;
+  name: string; // nom donné en construisant l'Hôtel de ville ('' : pas encore nommé)
   beaten: number[];
   wood: number; // réserve commune
   stone: number;
@@ -66,13 +68,13 @@ export interface VillageSave {
 /** Graine et biens communs d'un village enregistré, ou null s'il n'existe pas. */
 export async function findVillage(code: string): Promise<({ seed: number; founder: string | null } & VillageSave) | null> {
   if (!db) return null;
-  const { data, error } = await db.from('villages').select('seed, camps, buildings, caves, hall, beaten, wood, stone, banned, created_by').eq('code', code).maybeSingle();
+  const { data, error } = await db.from('villages').select('seed, name, camps, buildings, caves, hall, beaten, wood, stone, banned, created_by').eq('code', code).maybeSingle();
   if (error) throw new Error(`Lecture du village impossible : ${error.message}`);
   const list = (v: unknown) => (Array.isArray(v) ? v : []);
   return data
     ? {
       seed: Number(data.seed), camps: list(data.camps).map(Number), buildings: list(data.buildings), unlocked: list(data.caves).map(Number),
-      hall: Number(data.hall ?? 0), beaten: list(data.beaten).map(Number), wood: Number(data.wood ?? 0), stone: Number(data.stone ?? 0),
+      hall: Number(data.hall ?? 0), name: String(data.name ?? ''), beaten: list(data.beaten).map(Number), wood: Number(data.wood ?? 0), stone: Number(data.stone ?? 0),
       banned: list(data.banned).filter((b) => b && typeof b.id === 'string').map((b) => ({ id: String(b.id), name: String(b.name ?? '') })),
       founder: data.created_by ?? null,
     }
@@ -96,7 +98,7 @@ export async function deleteProgress(userId: string, code: string) {
 /** Biens communs du village (partagés par tous ses membres). */
 export async function saveVillage(code: string, v: VillageSave) {
   if (!db) return;
-  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked, hall: v.hall, beaten: v.beaten, wood: v.wood, stone: v.stone, banned: v.banned }).eq('code', code);
+  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked, hall: v.hall, name: v.name, beaten: v.beaten, wood: v.wood, stone: v.stone, banned: v.banned }).eq('code', code);
   if (error) console.error('Sauvegarde du village impossible :', error.message);
 }
 
@@ -110,7 +112,7 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   if (!db) return null;
   const { data, error } = await db
     .from('progress')
-    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, essences, alphas, village_found, class, pack, seen, stats')
+    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, armed, essences, alphas, village_found, class, pack, seen, stats')
     .eq('user_id', userId)
     .eq('village_code', code)
     .maybeSingle();

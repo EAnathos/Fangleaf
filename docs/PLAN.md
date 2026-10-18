@@ -1,7 +1,7 @@
 # Fangleaf — Plan du MVP
 
 Jeu coop top-down façon *Wild Tamer* : on se balade sur une carte, on tue des monstres,
-on les apprivoise, on mène une meute. Jusqu'à 3 joueurs par village.
+on les apprivoise, on mène une meute. Jusqu'à 4 joueurs par village.
 
 Maquettes : canvas design « Fangleaf — Game Design » (lobby, HUD, forge, bestiaire).
 
@@ -53,9 +53,9 @@ Armure niveau n : PV max = 100 + 25n, réduction = 4n %, coût = 20 × 1,6ⁿ.
 ## 2. Évaluation du stack
 
 ### Contraintes
-- Coop en ligne à 3, « inviter des copains » → il faut un serveur et un partage de lien sans friction.
+- Coop en ligne à 4, « inviter des copains » → il faut un serveur et un partage de lien sans friction.
 - MVP rapide à itérer, jouable dans le navigateur (zéro install pour les amis).
-- Des centaines d'unités (meutes de 3 joueurs + monstres sauvages).
+- Des centaines d'unités (meutes de 4 joueurs + monstres sauvages).
 
 ### Options étudiées
 
@@ -83,7 +83,7 @@ Chemin d'évolution : passer le rendu sur Phaser/Pixi quand arrivent de vrais sp
 shared/   config.ts (équilibrage, espèces)   protocol.ts (messages)   worldmap.ts (génération de la carte)   math.ts (bruit)
 server/   index.ts (HTTP + WS + salons)      room.ts (simulation d'un village)   grid.ts (hash spatial)
 client/   index.html  src/main.ts (lobby, boucle)  net.ts  world.ts (terrain)  render.ts  hud.ts  input.ts
-scripts/  smoke.ts (test bot : création, 3 joueurs, 4e refusé, snapshots)
+scripts/  smoke.ts (test bot : création, 4 joueurs, 5e refusé, snapshots)
 ```
 
 Flux : le client envoie `create` / `join` → le serveur répond `welcome` (id, code, graine de carte) →

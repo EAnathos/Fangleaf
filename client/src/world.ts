@@ -3,7 +3,7 @@
 
 import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, BOARD_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
-import { BEACH, caveEdge, MAP_CELL, SEA_SHALLOW, type Cave, type WorldMap } from '../../shared/worldmap.ts';
+import { BEACH, caveEdge, MAP_CELL, MOUTH_FADE, SEA_SHALLOW, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 import { maxDpr, settings } from './settings.ts';
 import { drawCocoon, drawEntrance, drawWeb, INSIDE, insideProp } from './caves.ts';
 
@@ -19,7 +19,8 @@ const BEACH_SAND = [222, 202, 150];
 const FOAM = [226, 240, 236];
 const LAKE_WATER = [61, 127, 140]; // mêmes bleus que l'eau des lacs (#3D7F8C, #2E6574)
 const LAKE_DEEP = [46, 101, 116];
-const MOUTH = 280; // à moins de ça de la côte, l'eau d'un lac se fond dans celle de la mer
+const LAKE_BANK = [94, 107, 73]; // berge des lacs (#5E6B49)
+const MOUTH_SURF = 150; // en mer, l'écume et le sable s'effacent à l'approche d'une embouchure
 export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76], [204, 172, 114], [86, 132, 72]];
 const STEPPE = [124, 140, 78]; // lisière verte entre le sable du désert et la mer
 const COAST_GREEN = 700; // largeur de cette lisière
@@ -99,11 +100,25 @@ export function desertMix(map: WorldMap, x: number, y: number) {
   return (m.z0 === 6 ? 1 - m.t : 0) + (m.z1 === 6 ? m.t : 0);
 }
 
+const smooth = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+
+/** En mer, part du rivage (écume, sable) : 1 loin des embouchures, 0 face à l'eau d'un lac qui s'y jette. */
+export const surfAt = (map: WorldMap, x: number, y: number) => smooth(map.mouthAt(x, y) / MOUTH_SURF);
+
+/** Dans un lac, part de la mer : 1 à l'embouchure, 0 à MOUTH_FADE (à travers l'eau) et dans les lacs fermés. */
+export const mouthMix = (map: WorldMap, x: number, y: number) => 1 - smooth(map.mouthAt(x, y) / MOUTH_FADE);
+
 /** Couleur de la mer : claire le long de la côte, de plus en plus sombre vers le large. */
 export function seaColor(map: WorldMap, x: number, y: number, surf = true) {
   const sh = map.shoreAt(x, y), col = lerp3(SEA_SHALLOW_COL, SEA_DEEP, Math.min(1, Math.max(0, sh) / (SEA_SHALLOW + 500)));
-  const foam = surf ? Math.max(0, 1 - sh / 70) : 0; // écume au bord, fondue (pas de chapelet de bulles)
+  const foam = surf ? Math.max(0, 1 - sh / 70) * surfAt(map, x, y) : 0; // écume au bord, fondue (pas de chapelet de bulles)
   return foam ? lerp3(col, FOAM, foam * foam * 0.75) : col;
+}
+
+/** Eau d'un lac (profonde ou non), qui passe au bleu de la mer près d'une embouchure. */
+export function lakeColor(map: WorldMap, x: number, y: number, deep: boolean, base = deep ? LAKE_DEEP : LAKE_WATER) {
+  const k = mouthMix(map, x, y);
+  return k ? lerp3(base, SEA_SHALLOW_COL, k) : base;
 }
 
 /**
@@ -199,21 +214,32 @@ export class World {
         const sea = map.isSea(px, py), sh = map.caveAt(px, py) ? -1e9 : map.shoreAt(px, py);
         const meadow = fbm(px / 420, py / 420, this.seed + 3, 2);
         const v = sea ? 0.97 + meadow * 0.06 : 0.93 + meadow * 0.12;
-        // mer au débouché d'un lac : ni écume ni sable, l'eau continue
-        const mouth = sea && sh < 90 && [40, 80].some((r) => [0, 1, 2, 3, 4, 5, 6, 7].some((a) => {
-          const qx = px + Math.cos(a * 0.785) * r, qy = py + Math.sin(a * 0.785) * r;
-          return map.isWater(qx, qy) && !map.isSea(qx, qy);
-        }));
-        let col = mouth ? seaColor(map, px, py, false) : sea ? seaColor(map, px, py) : landColor(map, px, py);
-        if (!sea && sh > -MOUTH && map.isWater(px, py)) {
-          // lac ou bras d'eau près de la côte : il passe peu à peu au bleu de la mer (embouchure sans couture)
-          const k = Math.min(1, Math.max(0, (sh + MOUTH) / (MOUTH - 20)));
-          const deep = [1, -1].every((d) => map.isWater(px + d * 2 * TILE, py) && map.isWater(px, py + d * 2 * TILE)); // comme les disques des lacs
-          col = lerp3(deep ? LAKE_DEEP : LAKE_WATER, SEA_SHALLOW_COL, k * k * (3 - 2 * k));
-        } else if (!mouth && Math.abs(sh) < 32) {
-          // au bord de l'eau, la mer et le sable se fondent : la côte est continue une fois agrandie (pas de marches)
-          const k = (sh + 32) / 64, f = k * k * (3 - 2 * k);
-          col = lerp3(sea ? landColor(map, px, py) : col, sea ? col : seaColor(map, px, py), f);
+        let col = sea ? seaColor(map, px, py) : landColor(map, px, py);
+        // Près d'une embouchure, l'eau du lac est peinte avec le sol (les disques s'y effacent, voir plus bas) ; son bord
+        // est adouci comme celui de la côte : part d'eau parmi les cases voisines (pondérées), pas de marches.
+        let wet = 0, mouth = false;
+        const water = [0, 0, 0];
+        if (!sea) {
+          for (let dj = -1; dj <= 1; dj++) {
+            for (let di = -1; di <= 1; di++) {
+              const qx = px + di * TILE, qy = py + dj * TILE, inSea = map.isSea(qx, qy);
+              if (!inSea && (!map.isWater(qx, qy) || map.mouthAt(qx, qy) >= MOUTH_FADE)) continue;
+              mouth ||= !inSea;
+              const wt = (di ? 1 : 2) * (dj ? 1 : 2), deep = [1, -1].every((d) => map.isWater(qx + d * 2 * TILE, qy) && map.isWater(qx, qy + d * 2 * TILE)); // comme les disques des lacs
+              const c = inSea ? seaColor(map, qx, qy, false) : lakeColor(map, qx, qy, deep);
+              for (let n = 0; n < 3; n++) water[n] += c[n] * wt;
+              wet += wt;
+            }
+          }
+        }
+        if (mouth) {
+          const u = wet / 16;
+          col = lerp3(col, water.map((c) => c / wet), u * u * (3 - 2 * u));
+        } else if (Math.abs(sh) < 32) {
+          // au bord de l'eau, la mer et le sable se fondent : la côte est continue une fois agrandie (pas de marches) ;
+          // face à une embouchure, la mer reste de l'eau (pas de sable sous l'eau du lac qui s'y jette)
+          const k = (sh + 32) / 64, f = k * k * (3 - 2 * k), s = sea ? surfAt(map, px, py) : 1;
+          if (s) col = lerp3(col, lerp3(sea ? landColor(map, px, py) : col, sea ? col : seaColor(map, px, py), f), s);
         }
         const o = (j * T + i) * 4;
         ground.img.data[o] = col[0] * v;
@@ -271,28 +297,36 @@ export class World {
     }
 
     // Lacs (pas la mer) : disques par case pour des berges arrondies (berge, puis eau, puis eau profonde).
-    const water: [number, number, boolean, boolean][] = []; // x, y, profonde, près de l'embouchure (pas de berge)
+    // Près d'une embouchure, ils passent par paliers au bleu de la mer et s'effacent : l'eau peinte avec le sol prend le relais.
+    const STEPS = 12;
+    const water: [number, number, boolean, number][] = []; // x, y, profonde, palier vers la mer (0 : lac)
     for (let ty = oy - TILE; ty < oy + CHUNK + TILE; ty += TILE) {
       for (let tx = ox - TILE; tx < ox + CHUNK + TILE; tx += TILE) {
         const px = tx + TILE / 2, py = ty + TILE / 2;
-        if (!map.isWater(px, py) || map.isSea(px, py) || map.shoreAt(px, py) > -MOUTH) continue; // près de la côte : peint avec le sol (fondu vers la mer)
+        if (!map.isWater(px, py) || map.isSea(px, py)) continue;
         const deep = map.isWater(px + 2 * TILE, py) && map.isWater(px - 2 * TILE, py) && map.isWater(px, py + 2 * TILE) && map.isWater(px, py - 2 * TILE);
-        water.push([px, py, deep, map.shoreAt(px, py) > -MOUTH - 70]);
+        water.push([px, py, deep, Math.round(mouthMix(map, px, py) * STEPS)]);
       }
     }
     if (water.length) {
-      for (const [color, rad, onlyDeep] of [['#5E6B49', 17, false], ['#3D7F8C', 13.5, false], ['#2E6574', 14, true]] as const) {
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        for (const [px, py, deep, mouth] of water) {
-          if ((onlyDeep && !deep) || (mouth && color === '#5E6B49')) continue; // pas de berge en bordure de l'embouchure
-          // un peu de désordre : des berges arrondies et irrégulières, pas des bords au cordeau
-          const jx = (hash2(px, py, this.seed + 31) - 0.5) * 6, jy = (hash2(py, px, this.seed + 32) - 0.5) * 6, r = rad + (hash2(px, py, this.seed + 33) - 0.5) * 5;
-          ctx.moveTo(px + jx + r, py + jy);
-          ctx.arc(px + jx, py + jy, r, 0, TAU);
+      for (const [base, rad, onlyDeep] of [[LAKE_BANK, 17, false], [LAKE_WATER, 13.5, false], [LAKE_DEEP, 14, true]] as const) {
+        for (let step = 0; step < STEPS; step++) {
+          ctx.fillStyle = rgb(lerp3(base, SEA_SHALLOW_COL, step / STEPS), 1);
+          ctx.globalAlpha = 1 - step / STEPS;
+          ctx.beginPath();
+          let any = false;
+          for (const [px, py, deep, s] of water) {
+            if (s !== step || (onlyDeep && !deep)) continue;
+            // un peu de désordre : des berges arrondies et irrégulières, pas des bords au cordeau
+            const jx = (hash2(px, py, this.seed + 31) - 0.5) * 6, jy = (hash2(py, px, this.seed + 32) - 0.5) * 6, r = rad + (hash2(px, py, this.seed + 33) - 0.5) * 5;
+            ctx.moveTo(px + jx + r, py + jy);
+            ctx.arc(px + jx, py + jy, r, 0, TAU);
+            any = true;
+          }
+          if (any) ctx.fill();
         }
-        ctx.fill();
       }
+      ctx.globalAlpha = 1;
       // reflets
       ctx.strokeStyle = 'rgba(200,235,240,0.35)';
       ctx.lineWidth = 2;

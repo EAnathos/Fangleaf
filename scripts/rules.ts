@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { SWORD_PULLS, SWORD_REACH, SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { BEACH, WorldMap } from '../shared/worldmap.ts';
 import { DAY_MS, sky } from '../shared/weather.ts';
 import { Room } from '../server/room.ts';
@@ -30,6 +30,38 @@ const ALL_CAVES = Array.from({ length: 64 }, (_, i) => i);
 const ALL_BOSSES = SPECIES.map((sp, i) => (sp.boss ? i : -1)).filter((i) => i >= 0);
 // (toutes les portes ouvertes : Hôtel de ville au maximum, tous les géants vaincus)
 const room = (): any => new Room('TEST', undefined, { buildings: [...BUILDING_IDS], unlocked: ALL_CAVES, hall: HALL_MAX, beaten: ALL_BOSSES });
+// Un dompteur sans compte arrive sans arme (l'épée est plantée sur la plage) : les tests le veulent armé, sauf celui de l'épée.
+const unarmedAdd = Room.prototype.addPlayer;
+Room.prototype.addPlayer = function (this: Room, ...args: Parameters<Room['addPlayer']>) {
+  const p = unarmedAdd.apply(this, args);
+  p.sword = SWORD_PULLS;
+  return p;
+};
+
+{
+  // L'épée plantée dans le sable : un nouveau venu se réveille sans arme, à côté de l'œuf, et la déterre en trois coups.
+  const r = room(), m = r.map;
+  const p = unarmedAdd.call(r, 'neuf', () => {});
+  check(p.sword === 0 && Math.hypot(p.x - m.spawn.x, p.y - m.spawn.y) < 40 && Math.hypot(m.egg.x - m.spawn.x, m.egg.y - m.spawn.y) < 60, 'nouveau venu : sans arme, réveillé à côté de l\'œuf');
+  check(!m.blocked(m.sword.x, m.sword.y) && Math.hypot(m.sword.x - m.spawn.x, m.sword.y - m.spawn.y) < 200, 'épée plantée sur la plage, tout près');
+  const u = r.createUnit(0, false, p.x + 30, p.y);
+  const hp = u.hp;
+  for (let i = 0; i < 40; i++) r.step();
+  check(u.hp === hp, 'sans arme : on ne frappe pas');
+  r.units.delete(u.id);
+  r.onSword(p);
+  check(p.sword === 0, 'trop loin de l\'épée : rien');
+  [p.x, p.y] = [m.sword.x + SWORD_REACH - 20, m.sword.y];
+  for (let i = 0; i < SWORD_PULLS; i++) {
+    r.onSword(p);
+    r.onSword(p); // trop tôt : ne compte pas
+    r.time += 0.35;
+  }
+  check(p.sword === SWORD_PULLS && r.profileOf(p).armed, `épée déterrée en ${SWORD_PULLS} coups, sauvegardée`);
+  const back = unarmedAdd.call(r, 'revenu', () => {}, { userId: 'x', profile: { ...r.profileOf(p), village_found: false } });
+  const old = unarmedAdd.call(r, 'ancien', () => {}, { userId: 'y', profile: { ...r.profileOf(p), armed: undefined } });
+  check(back.sword === SWORD_PULLS && old.sword === SWORD_PULLS, 'déjà armé (ou ancienne sauvegarde) : l\'épée reste en main');
+}
 const noop = () => {};
 
 {
@@ -271,6 +303,36 @@ const noop = () => {};
     for (let x = -WORLD_HALF + 50; x < WORLD_HALF && !shallow; x += 120) for (let y = -WORLD_HALF + 50; y < WORLD_HALF && !shallow; y += 120) shallow = m.isSea(x, y) && m.isWater(x, y);
     check([-1, 1].every((k) => m.isForest(c.x + nv.x * far * k, c.y + nv.y * far * k) && m.blocked(c.x + nv.x * far * k, c.y + nv.y * far * k)) && shallow,
       `graine ${seed} : mer profonde infranchissable de part et d'autre, mer peu profonde le long de la côte (le serpent y nage)`);
+  }
+  {
+    // Eau propre : ni flaque isolée, ni lac minuscule, ni poche de mer enclavée, ni îlot minuscule.
+    const m = new WorldMap(4242) as unknown as { water: Uint8Array; shore: Float32Array };
+    const n = Math.sqrt(m.water.length), wet = (k: number) => m.water[k] === 1 || m.water[k] === 3;
+    const seen = new Uint8Array(n * n), small: number[] = [];
+    let lone = 0;
+    for (let s = 0; s < n * n; s++) {
+      if (seen[s]) continue;
+      const w = wet(s), st = [s];
+      let size = 0, ocean = false;
+      seen[s] = 1;
+      while (st.length) {
+        const k = st.pop()!, i = k % n;
+        size++;
+        if (m.water[k] === 3) ocean = true;
+        for (const nk of [i > 0 ? k - 1 : -1, i < n - 1 ? k + 1 : -1, k - n, k + n]) {
+          if (nk < 0 || nk >= n * n) { ocean = true; continue; }
+          if (!seen[nk] && wet(nk) === w) (seen[nk] = 1), st.push(nk);
+        }
+      }
+      if ((w && !ocean && size < 40) || (!w && size < 40)) small.push(size);
+    }
+    for (let k = n + 1; k < n * n - n - 1; k++) {
+      if (m.water[k] !== 1) continue;
+      let c = 0;
+      for (const d of [-n - 1, -n, -n + 1, -1, 1, n - 1, n, n + 1]) c += +wet(k + d);
+      if (c === 0) lone++;
+    }
+    check(!small.length && !lone, `carte nettoyée : ni flaque isolée, ni lac ou îlot minuscule (${small.length} trop petits, ${lone} cases d'eau seules)`);
   }
   const a = new WorldMap(99), b = new WorldMap(99);
   check(a.village.x === b.village.x && a.sites[0].x === b.sites[0].x && a.isWater(500, 500) === b.isWater(500, 500) && a.zoneAt(2000, -1500) === b.zoneAt(2000, -1500), 'carte déterministe');
@@ -1247,7 +1309,7 @@ const noop = () => {};
 {
   // Hôtel de ville : chaque niveau coûte or, bois et pierre ; elle ouvre les portes avec les géants vaincus.
   const r: any = new Room('TEST');
-  let saved: { hall: number; beaten: number[] } = { hall: 0, beaten: [] };
+  let saved: { hall: number; name: string; beaten: number[] } = { hall: 0, name: '', beaten: [] };
   r.onVillage = (v: typeof saved) => (saved = v);
   const p = r.addPlayer('a', noop);
   const { map } = r;
@@ -1275,7 +1337,8 @@ const noop = () => {};
   r.onBuild(p, 'palisade');
   check(r.buildings.includes('palisade') && map.blocked(map.village.x + Math.cos(0.7) * 360, map.village.y + Math.sin(0.7) * 360), `palissade montée (${costText(buildingCost('palisade'))}) : elle bloque`);
   [p.x, p.y] = [map.hall.x, map.hall.y + 60];
-  r.onHall(p);
+  r.onHall(p, '  Les\n  Trois   Chênes  ');
+  check(r.name === 'Les Trois Chênes' && saved.name === 'Les Trois Chênes', `Hôtel de ville construit : le village est nommé (« ${r.name} »), nom nettoyé et sauvegardé`);
   check(r.hall === 1 && p.gold === 0 && r.stock.wood === 0 && r.stock.stone === 0 && saved.hall === 1, `niveau 1 pour ${HALL[0].gold} or, ${HALL[0].wood} bois, ${HALL[0].stone} pierre, sauvegardé`);
   check(walk(before, after), 'niveau 1 : la porte du village s\'ouvre');
   // Porte de la zone 2 : Hôtel de ville niv. 3 et tous les géants de la zone 1.

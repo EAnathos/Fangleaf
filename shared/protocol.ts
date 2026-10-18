@@ -32,7 +32,8 @@ export type ClientMsg =
   | { t: 'establish'; site: number } // établir le camp de cet emplacement (pour tout le village)
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, sinon index du camp
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
-  | { t: 'hall' } // améliorer la Maison commune (pour tout le village)
+  | { t: 'hall'; name?: string } // améliorer la Maison commune (pour tout le village) ; name : nom du village, à sa construction
+  | { t: 'sword' } // tirer sur l'épée plantée dans le sable (SWORD_PULLS fois)
   | { t: 'pick' } // cueillir les baies du buisson garni le plus proche
   | { t: 'hold'; on: boolean } // tendre un fruit (ou le ranger) : le gibier passif s'approche
   | { t: 'deposit' }
@@ -64,6 +65,7 @@ export interface PlayerState {
   armor: number;
   torch: number; // 0 : pas de torche
   boots: number;
+  sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
   cls: ClassId | null; // classe (null : pas encore choisie)
   gold: number;
   fruits: number; // baies dans son sac
@@ -141,6 +143,7 @@ export type GameEvent =
   | { e: 'chest'; id: number; to: number; gold: number; x: number; y: number } // coffre ouvert : or tiré au hasard
   | { e: 'eat'; id: number; bush: number } // du gibier mange les fruits d'un buisson
   | { e: 'pick'; by: number; bush: number; n: number } // baies cueillies
+  | { e: 'sword'; by: number; n: number } // un coup pour déterrer l'épée (n : coups donnés ; SWORD_PULLS : elle est sortie)
   | { e: 'feed'; by: number; id: number } // un fruit donné, sans apprivoiser cette fois
   | { e: 'boom'; x: number; y: number; r: number; kind: string; by?: number } // une attaque spéciale frappe (by : dompteur de l'Alpha qui l'a lancée)
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire
@@ -186,6 +189,7 @@ export interface Snapshot {
   camps: number[]; // emplacements de camp établis par le village
   buildings: BuildingId[]; // bâtiments construits au village
   hall: number; // niveau de la Maison commune
+  vname: string; // nom du village ('' : Hôtel de ville pas encore construit)
   stock: [number, number]; // réserve du village : [bois, pierre]
   beaten: number[]; // géants (espèce) déjà vaincus par le village : ils ouvrent les portes des zones
   unlocked: number[]; // grottes débloquées par le village
@@ -195,7 +199,7 @@ export interface Snapshot {
 }
 
 export type ServerMsg =
-  | { t: 'welcome'; id: number; code: string; seed: number; saved: boolean; villageFound: boolean; founder: boolean }
+  | { t: 'welcome'; id: number; code: string; seed: number; saved: boolean; villageFound: boolean; founder: boolean; armed: boolean } // armed : épée déjà déterrée
   | { t: 'closed'; msg: string } // village supprimé (ou progression effacée) : retour au lobby
   | { t: 'error'; msg: string }
   | { t: 'teleport'; x: number; y: number }

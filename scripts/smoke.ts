@@ -8,7 +8,7 @@ import WebSocket from 'ws';
 import type { ServerMsg, Snapshot } from '../shared/protocol.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { SnapshotState } from '../shared/snapshot.ts';
-import { SPECIES } from '../shared/config.ts';
+import { SPECIES, SWORD_PULLS } from '../shared/config.ts';
 
 const PORT = 3999;
 const server = spawn('npx', ['tsx', 'server/index.ts'], { env: { ...process.env, PORT: String(PORT), ALLOW_GUESTS: '1', SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '' }, stdio: 'pipe' }); // jamais la vraie base
@@ -65,17 +65,17 @@ async function main() {
   for (let i = 0; i < 100 && !host.code; i++) await sleep(50); // la génération de la carte prend quelques centaines de ms
   check(host.code.length === 6, `village créé (code ${host.code})`);
 
-  const guests = [new Bot(), new Bot(), new Bot()];
+  const guests = [new Bot(), new Bot(), new Bot(), new Bot()];
   for (const g of guests) {
     await g.open();
     g.send({ t: 'join', code: host.code.toLowerCase(), name: 'Invité' });
     await sleep(150);
   }
-  check(guests[0].id > 0 && guests[1].id > 0, '2 invités acceptés (code insensible à la casse)');
-  check(guests[2].msgs.some((m) => m.t === 'error'), '4e joueur refusé (village complet)');
+  check(guests[0].id > 0 && guests[1].id > 0 && guests[2].id > 0, '3 invités acceptés (code insensible à la casse)');
+  check(guests[3].msgs.some((m) => m.t === 'error'), '5e joueur refusé (village complet)');
 
   await sleep(300);
-  check(host.last?.players.length === 3, `snapshot contient 3 joueurs (${host.last?.players.length})`);
+  check(host.last?.players.length === 4, `snapshot contient 4 joueurs (${host.last?.players.length})`);
 
   const map = new WorldMap(host.seed);
   let x = host.me()!.x, y = host.me()!.y;
@@ -102,6 +102,15 @@ async function main() {
     host.send({ t: 'pos', x, y, fx: 1, fy: 0 });
     return false;
   };
+
+  // Réveillé sans arme : il va déterrer l'épée plantée sur la plage.
+  check(host.me()!.sword === 0, 'arrivée sans arme');
+  for (let i = 0; i < 200 && !stepTo(map.sword.x, map.sword.y, 30); i++) await sleep(50);
+  for (let i = 0; i < 30 && host.me()!.sword < SWORD_PULLS; i++) {
+    host.send({ t: 'sword' });
+    await sleep(120);
+  }
+  check(host.me()!.sword === SWORD_PULLS, `épée déterrée (${host.me()!.sword}/${SWORD_PULLS})`);
 
   // Le bot hôte chasse la proie la plus proche jusqu'à son premier kill (combat et or vérifiés de bout en bout).
   const t0 = Date.now();
@@ -198,7 +207,7 @@ async function main() {
 
   guests[0].ws.close();
   await sleep(300);
-  check(host.last?.players.length === 2, 'départ d\'un joueur pris en compte');
+  check(host.last?.players.length === 3, 'départ d\'un joueur pris en compte');
 
   // Suppression du village : tout le monde revient au lobby, le code n'existe plus.
   host.send({ t: 'reset' });

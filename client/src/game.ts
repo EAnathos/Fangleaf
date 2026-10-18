@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -9,11 +9,12 @@ import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, 
 import { type Ambience, sound } from './audio.ts';
 import { Fog } from './fog.ts';
 import { Fx } from './fx.ts';
+import { playWakeUp } from './intro.ts';
 import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawBrokenEgg, drawPlantedSword, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
@@ -64,10 +65,13 @@ export class Game {
   private fog: Fog;
   private area = '';
   private shake = 0;
+  private introUntil = 0; // réveil sur l'île en cours : pas de bandeau de lieu
+  private swordHit = -9; // dernier coup sur l'épée plantée (elle tremble)
+  private swordOut = -9; // épée sortie du sable (elle s'envole)
   private areaTimer = 0;
   private helping = false; // R maintenu (ou bouton tactile) : relever un coéquipier
 
-  constructor(private canvas: HTMLCanvasElement, private net: Net, private myId: number, code: string, seed: number, villageFound = false, founder = false) {
+  constructor(private canvas: HTMLCanvasElement, private net: Net, private myId: number, code: string, seed: number, villageFound = false, founder = false, armed = true) {
     this.ctx = canvas.getContext('2d')!;
     this.map = new WorldMap(seed);
     this.world = new World(this.map);
@@ -85,12 +89,14 @@ export class Game {
     this.hud.onBuy = (s) => net.send({ t: 'buy', s });
     this.hud.onChallenge = (cave) => net.send({ t: 'challenge', cave });
     this.hud.onChest = (id) => net.send({ t: 'chest', id });
-    this.hud.onHall = () => net.send({ t: 'hall' });
+    this.hud.onHall = (name) => net.send({ t: 'hall', name });
     this.hud.onDeposit = () => net.send({ t: 'deposit' });
     this.hud.onChat = (text) => net.send({ t: 'chat', text });
     this.hud.onBoard = () => net.send({ t: 'board' });
     this.hud.onPick = () => net.send({ t: 'pick' });
     this.hud.onHold = () => this.toggleHold();
+    this.hud.onRide = () => this.toggleMount();
+    this.hud.onSword = () => net.send({ t: 'sword' });
     this.hud.onReset = () => net.send({ t: 'reset' });
     this.hud.onQuit = () => {
       net.close(); // le serveur sauvegarde la progression à la déconnexion
@@ -102,9 +108,24 @@ export class Game {
     this.hud.onAlphaCreate = (s) => net.send({ t: 'alphaCreate', s });
     this.hud.onHelp = (on) => this.setHelp(on);
     this.hud.onQuality = () => this.resize();
-    this.hud.toast(touchOnly ? 'Glisse pour bouger · attaque auto · touche un bouton pour interagir'
-      : `ZQSD / flèches pour bouger · ${settings.attack === 'click' ? 'clic gauche pour attaquer' : 'attaque auto'} · ${keyLabel('interact')} près d'un bâtiment · touches et attaque : Échap › Paramètres`);
-    if (!villageFound) this.hud.toast('Suis le chemin de terre jusqu\'au village (étoile dorée : clique sur la minicarte).');
+    const hints = () => {
+      if (!touchOnly) this.hud.toast(`ZQSD / flèches pour bouger · ${settings.attack === 'click' ? 'clic gauche pour attaquer' : 'attaque auto'} · ${keyLabel('interact')} près d'un bâtiment · touches et attaque : Échap › Paramètres`);
+      if (armed && !villageFound) this.hud.toast('Suis le chemin de terre jusqu\'au village (étoile dorée : clique sur la minicarte).');
+    };
+    // Tout premier réveil sur l'île (pas encore d'épée) : on ouvre les yeux, sans comprendre ce qu'on fait là.
+    const key = `fangleaf.woke.${code}`;
+    let woke = true;
+    try {
+      woke = !!localStorage.getItem(key);
+      localStorage.setItem(key, '1');
+    } catch { /* stockage indisponible : on montre le réveil */ woke = false; }
+    if (!armed && !villageFound && !woke) {
+      this.introUntil = Infinity;
+      playWakeUp(canvas, () => {
+        this.introUntil = 0;
+        hints();
+      });
+    } else hints();
     initInput(canvas, (code, key) => this.onKey(code, key), (code, key) => (key === '' || matches('revive', code, key)) && this.setHelp(false));
     this.hud.onAttackMode = () => this.sendMode();
     this.hud.onKick = (id) => net.send({ t: 'kick', id });
@@ -193,6 +214,7 @@ export class Game {
       else if (st && !st.dead && b?.panel) this.hud.setPanel(b.panel);
       else if (st && !st.dead && b?.deposit) this.net.send({ t: 'deposit' });
       else if (st && !st.dead && b?.pick) this.net.send({ t: 'pick' });
+      else if (st && !st.dead && b?.sword) this.net.send({ t: 'sword' });
       else if (st && !st.dead && b?.chest !== undefined) this.net.send({ t: 'chest', id: b.chest });
       else if (st && !st.dead && b?.cave) this.net.send({ t: 'cave', id: b.cave.id, enter: b.cave.enter });
     } else if (key === 'Escape') {
@@ -257,6 +279,7 @@ export class Game {
     this.areaTimer -= dt;
     if (this.areaTimer > 0) return;
     this.areaTimer = 0.25;
+    if (this.introUntil) return; // le bandeau attendra que l'on ait ouvert les yeux
     const { x, y } = this.me, { spawn } = this.map;
     const cave = this.map.caveAt(x, y);
     const site = this.map.siteAt(x, y, CAMP_R);
@@ -271,7 +294,7 @@ export class Game {
     if (area === this.area) return;
     const first = this.area === '';
     this.area = area;
-    if (area === 'camp') this.hud.banner('Plage du naufrage', first ? 'Suis le chemin de cailloux jusqu\'au feu de camp' : 'De retour sur la plage');
+    if (area === 'camp') this.hud.banner(first && this.hud.sword < SWORD_PULLS ? 'Une plage inconnue' : 'Plage du naufrage', first ? (this.hud.sword < SWORD_PULLS ? 'Quelque chose brille dans le sable' : 'Suis le chemin de cailloux jusqu\'au feu de camp') : 'De retour sur la plage');
     else if (area === 'village') this.hud.banner('Village', '');
     else if (area.startsWith('site')) {
       if (area.endsWith('+')) this.hud.banner(campName(site), 'Feu de camp · réapparition · Pierre de passage');
@@ -642,6 +665,26 @@ export class Game {
         this.hud.toast(e.by === this.myId ? `Hôtel de ville au niveau ${e.lvl} : ${HALL[e.lvl - 1].unlock}` : `${name(e.by)} a amélioré l'Hôtel de ville (niv. ${e.lvl})`, 'good');
         break;
       }
+      case 'sword': {
+        // un coup sur l'épée plantée : le sable vole ; au dernier, elle sort
+        const s = this.map.sword;
+        this.fx.dust(s.x, s.y, 22, 8);
+        this.fx.debris(s.x, s.y, ['#D9C391', '#C8B07A', '#B89A62'], 7, 110, 4);
+        if (e.by !== this.myId) break;
+        this.swordHit = this.time;
+        this.shake = Math.max(this.shake, 0.12);
+        sound.play('thunk');
+        if (e.n >= SWORD_PULLS) {
+          this.swordOut = this.time;
+          this.fx.ring(s.x, s.y - 20, '#F0B64A', 10, 110, 0.9);
+          this.fx.burst(s.x, s.y - 30, '#FFE7A8', 22, 170);
+          this.fx.text(s.x, s.y - 70, 'Une épée !', '#F0B64A', 19, 1.8);
+          sound.play('fanfare');
+          this.hud.toast('Elle tient bien en main. Les monstres n\'ont qu\'à bien se tenir.', 'good');
+          this.hud.toast('Un chemin de cailloux s\'enfonce dans l\'île : suis-le (étoile dorée sur la minicarte).');
+        } else this.fx.text(s.x, s.y - 50, e.n === 1 ? 'Elle est bien enfoncée…' : 'Ça bouge !', '#EEE7D7', 14, 1.2);
+        break;
+      }
       case 'pick': {
         const b = this.map.bushes[e.bush];
         if (b) this.fx.burst(b.x, b.y - 10, '#C8323C', 10, 90);
@@ -936,6 +979,8 @@ export class Game {
     this.hud.unlocked = this.net.latest?.unlocked ?? [];
     this.hud.chests = this.net.latest?.chests ?? [];
     this.hud.hall = this.net.latest?.hall ?? 0;
+    this.hud.vname = this.net.latest?.vname ?? '';
+    this.hud.sword = this.self()?.sword ?? SWORD_PULLS;
     this.hud.banned = this.net.latest?.banned ?? [];
     this.hud.stock = this.net.latest?.stock ?? [0, 0];
     const palisade = this.hud.buildings.includes('palisade');
@@ -1206,6 +1251,22 @@ export class Game {
       else this.fades.set(d, next);
       list.push({ y: d.y + s * 0.5, draw: () => this.world.tree(ctx, d.x, d.y, this.map.styleZone(d.x, d.y), next, false) });
     }
+    // plage de l'éveil : l'œuf brisé, et l'épée plantée tant qu'on ne l'a pas déterrée (elle s'envole en sortant)
+    const { egg, sword } = this.map;
+    if (inView(egg.x, egg.y, 60)) list.push({ y: egg.y, draw: () => drawBrokenEgg(ctx, egg.x, egg.y) });
+    const pulls = this.hud.sword, flight = (this.time - this.swordOut) / 0.6;
+    if (inView(sword.x, sword.y, 80) && (pulls < SWORD_PULLS || flight < 1)) {
+      list.push({
+        y: sword.y,
+        draw: () => {
+          if (pulls < SWORD_PULLS) return drawPlantedSword(ctx, sword.x, sword.y, pulls / SWORD_PULLS, this.time, Math.max(0, 1 - (this.time - this.swordHit) / 0.45));
+          ctx.save();
+          ctx.globalAlpha = 1 - flight;
+          drawPlantedSword(ctx, sword.x, sword.y - flight * 60, 1, this.time, 1 - flight);
+          ctx.restore();
+        },
+      });
+    }
     const bare = new Set(this.net.latest?.bare ?? []);
     for (const b of this.map.bushes) {
       if (inView(b.x, b.y, 60)) list.push({ y: b.y, draw: () => drawBush(ctx, b.x, b.y, !bare.has(b.id), b.id, this.map.styleZone(b.x, b.y)) });
@@ -1378,7 +1439,7 @@ export class Game {
             : used && this.time - used.at < 0.9 ? { kind: used.kind, ang: Math.atan2(used.ty - y, used.tx - x), k: Math.min(1, k) } : null;
           drawPlayer(
             ctx, x + back, y - lift, p.color, fx, fy, p.armor, p.name, this.time,
-            isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool, p.weapon,
+            isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool, p.weapon, (p.sword ?? SWORD_PULLS) >= SWORD_PULLS,
           );
           if (p.torch && sky.light < 0.85) drawTorch(ctx, x + back - (fx < -0.1 ? -15 : 15), y - lift - 2, p.torch, this.time); // de l'autre main
           if (p.slowed) drawWebbed(ctx, x, y - lift, this.time);

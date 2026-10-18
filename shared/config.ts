@@ -3,7 +3,9 @@
 export const TICK_HZ = 20;
 export const DT = 1 / TICK_HZ;
 
-export const MAX_PLAYERS = 3;
+export const MAX_PLAYERS = 4;
+export const SWORD_PULLS = 3; // à l'arrivée sur l'île, l'épée est plantée dans le sable : trois coups pour la déterrer
+export const SWORD_REACH = 80;
 export const MAX_VILLAGES = 3; // villages par compte (on choisit le sien au lobby)
 export const WORLD_HALF = 10800; // carte de -10800 à 10800 : une île au milieu de la mer (voir worldmap.ts)
 export const VILLAGE_R = 360;
@@ -142,7 +144,7 @@ export const REVIVE_WINDOW_S = 10;
 export const REVIVE_HOLD_S = 5; // R maintenu près du corps
 export const REVIVE_R = 80;
 export const REVIVE_HP = 0.5; // relevé avec la moitié de ses PV
-export const PLAYER_COLORS = ['#5CC8B8', '#E6A15C', '#D886C9'];
+export const PLAYER_COLORS = ['#5CC8B8', '#E6A15C', '#D886C9', '#8FD16A']; // une par place du village (MAX_PLAYERS)
 
 export const ARMY_CAP = 12; // meute ordinaire (les Alphas ne comptent pas)
 export const RECALL_R = 420; // trop loin du dompteur : la meute lâche tout et revient
@@ -371,7 +373,7 @@ export const SPECIES: Species[] = [
   { key: 'wolf', name: 'Loup', color: '#8A93A8', r: 19, hp: 70, dmg: 9, speed: 135, atkCd: 0.8, gold: 5, zone: 2, population: 43, pack: [2, 4] },
   { key: 'boar', name: 'Sanglier', color: '#8B5E3C', r: 20, hp: 180, dmg: 18, speed: 95, atkCd: 1.1, gold: 10, zone: 3, population: 34, pack: [1, 3], sleeps: true },
   { key: 'golem', name: 'Golem de mousse', color: '#5F7A5A', r: 24, hp: 450, dmg: 32, speed: 60, atkCd: 1.4, gold: 20, zone: 4, population: 30, pack: [1, 2] },
-  { key: 'sporelin', name: 'Sporelin', color: '#C8553D', r: 13, hp: 18, dmg: 3, speed: 95, atkCd: 1.0, gold: 2, zone: 1, population: 38, pack: [3, 5] },
+  { key: 'sporelin', name: 'Sporelin', color: '#C8553D', r: 13, hp: 18, dmg: 5, speed: 95, atkCd: 1.0, gold: 2, zone: 1, population: 38, pack: [3, 5] },
   { key: 'spider', name: 'Araignée sylvestre', color: '#6A4E7E', r: 17, hp: 55, dmg: 11, speed: 155, atkCd: 0.9, gold: 5, zone: 2, population: 30, pack: [1, 3] },
   { key: 'bear', name: 'Ours des fourrés', color: '#6B4A33', r: 24, hp: 240, dmg: 15, speed: 80, atkCd: 1.3, gold: 12, zone: 3, population: 24, pack: [1, 1] },
   { key: 'wisp', name: 'Feu follet', color: '#6FB7FF', r: 18, hp: 300, dmg: 40, speed: 110, atkCd: 1.2, gold: 22, zone: 4, population: 21, pack: [1, 2] },
@@ -381,7 +383,7 @@ export const SPECIES: Species[] = [
   { key: 'shadow_fang', name: "Croc-d'Ombre", color: '#4A4E6A', r: 48, hp: 2140, dmg: 22, speed: 235, atkCd: 0.8, gold: 150, zone: 2, population: 0, pack: [1, 1], boss: true, title: 'Grisecroc le Hurleur', sprite: 'wolf', base: 'wolf' },
   { key: 'old_tusk', name: 'Vieille-Défense', color: '#6E3F24', r: 54, hp: 5590, dmg: 40, speed: 200, atkCd: 1.1, gold: 300, zone: 3, population: 0, pack: [1, 1], boss: true, title: 'Grognard le Vieux Solitaire', sprite: 'boar', base: 'boar' },
   { key: 'moss_heart', name: 'Cœur-de-Mousse', color: '#3F5E45', r: 63, hp: 14170, dmg: 65, speed: 185, atkCd: 1.5, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Moussegrave le Millénaire', sprite: 'golem', base: 'golem' },
-  { key: 'spore_giant', name: 'Champignon Géant', color: '#B8432E', r: 57, hp: 610, dmg: 6, speed: 205, atkCd: 1.2, gold: 60, zone: 1, population: 0, pack: [1, 1], boss: true, title: 'Amanite la Vénéneuse', sprite: 'sporelin', base: 'sporelin' },
+  { key: 'spore_giant', name: 'Champignon Géant', color: '#B8432E', r: 57, hp: 610, dmg: 9, speed: 205, atkCd: 1.2, gold: 60, zone: 1, population: 0, pack: [1, 1], boss: true, title: 'Amanite la Vénéneuse', sprite: 'sporelin', base: 'sporelin' },
   { key: 'weaver', name: 'Mère Tisseuse', color: '#4E3760', r: 51, hp: 1880, dmg: 24, speed: 220, atkCd: 0.9, gold: 150, zone: 2, population: 0, pack: [1, 1], boss: true, title: 'Arachnée la Fileuse', sprite: 'spider', base: 'spider' },
   { key: 'colossus', name: 'Ours Colosse', color: '#4F3524', r: 63, hp: 5000, dmg: 34, speed: 190, atkCd: 1.3, gold: 300, zone: 3, population: 0, pack: [1, 1], boss: true, title: 'Ursus Mâchefer', sprite: 'bear', base: 'bear' },
   { key: 'old_flame', name: 'Feu Ancien', color: '#4F8BFF', r: 54, hp: 11380, dmg: 75, speed: 200, atkCd: 1.3, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Lueur, la Flamme Ancienne', sprite: 'wisp', base: 'wisp' },
