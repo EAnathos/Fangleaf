@@ -2299,82 +2299,90 @@ export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: num
   if (res === 'wood') return drawDeadwood(ctx, x, y, zone, hpPct, t, seed);
   const r = 18 + zone * 3;
   // ombre posée sous la base du rocher (pas décollée : il ne doit pas avoir l'air de voler)
-  ctx.fillStyle = 'rgba(8, 14, 12, 0.35)';
+  ctx.fillStyle = 'rgba(8, 14, 12, 0.32)';
   ctx.beginPath();
-  ctx.ellipse(x + 3, y + r * 0.42, r * 1.05, r * 0.32, 0, 0, TAU);
+  ctx.ellipse(x + 3, y + r * 0.45, r * 1.05, r * 0.3, 0, 0, TAU);
   ctx.fill();
   const shake = hpPct < 100 ? Math.sin(t * 40 + seed) * 0.6 : 0;
   ctx.save();
   ctx.translate(x + shake, y);
-  ctx.fillStyle = '#6B706B';
-  ctx.beginPath();
-  ctx.moveTo(-r, r * 0.4);
-  ctx.lineTo(-r * 0.8, -r * 0.4);
-  ctx.lineTo(-r * 0.2, -r * 0.85);
-  ctx.lineTo(r * 0.55, -r * 0.6);
-  ctx.lineTo(r, r * 0.1);
-  ctx.lineTo(r * 0.7, r * 0.55);
-  ctx.closePath();
-  ctx.fill();
-  ink(ctx, r);
-  ctx.fillStyle = '#8A908A';
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.6, -r * 0.35);
-  ctx.lineTo(-r * 0.15, -r * 0.7);
-  ctx.lineTo(r * 0.3, -r * 0.5);
-  ctx.lineTo(-r * 0.1, -r * 0.2);
-  ctx.closePath();
-  ctx.fill();
   if (res === 'stone') {
-    // rocher à casser : fissures et éclats clairs, pas d'or
-    ctx.strokeStyle = 'rgba(16,24,26,0.55)';
-    ctx.lineWidth = 2;
+    // rocher à casser : bloc à trois faces, coussin de mousse sur le dessus, une fissure, des cailloux autour
+    facetRock(ctx, r, '#A3A9A3', '#828882', '#626863');
+    ctx.fillStyle = '#5E8A4E';
     ctx.beginPath();
-    ctx.moveTo(-r * 0.5, r * 0.3);
-    ctx.lineTo(-r * 0.1, 0);
-    ctx.lineTo(-r * 0.2, -r * 0.3);
-    ctx.moveTo(-r * 0.1, 0);
-    ctx.lineTo(r * 0.45, r * 0.1);
+    ctx.ellipse(-r * 0.2, -r * 0.55, r * 0.35, r * 0.16, -0.25, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#76A35E';
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.27, -r * 0.6, r * 0.2, r * 0.08, -0.25, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(40,46,42,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.6, r * 0.3);
+    ctx.lineTo(-r * 0.25, r * 0.05);
+    ctx.lineTo(-r * 0.3, -r * 0.05);
     ctx.stroke();
-    ctx.fillStyle = '#A9B0AB';
-    for (const [nx, ny, nr] of [[0.35, -0.25, 0.12], [-0.45, -0.05, 0.1], [0.15, 0.3, 0.09]] as const) {
+    ctx.fillStyle = '#8A908A';
+    for (const [nx, ny, nr] of [[-1.05, 0.5, 0.12], [0.95, 0.5, 0.1], [0.6, 0.65, 0.08]] as const) {
       ctx.beginPath();
-      ctx.arc(nx * r, ny * r, nr * r, 0, TAU);
+      ctx.ellipse(nx * r, ny * r, nr * r * 1.3, nr * r, 0, 0, TAU);
       ctx.fill();
     }
     ctx.restore();
     if (hpPct < 100) hpBar(ctx, x, y - r - 10, 28, hpPct, '#B9C2BC');
     return;
   }
-  // veines et pépites d'or
-  ctx.strokeStyle = '#C9922F';
-  ctx.lineWidth = 2;
+  // filon d'or : bloc gris d'où jaillissent des cristaux dorés, dans un léger halo qui pulse
+  ctx.fillStyle = `rgba(247,199,102,${0.14 + 0.06 * Math.sin(t * 2 + seed)})`;
   ctx.beginPath();
-  ctx.moveTo(-r * 0.6, r * 0.2);
-  ctx.lineTo(-r * 0.1, -r * 0.1);
-  ctx.lineTo(r * 0.5, r * 0.15);
-  ctx.stroke();
-  ctx.fillStyle = '#F0B64A';
-  for (const [nx, ny, nr] of [[-0.45, 0.1, 0.16], [0.05, -0.15, 0.2], [0.45, 0.12, 0.14], [-0.1, 0.3, 0.1]] as const) {
-    ctx.beginPath();
-    ctx.arc(nx * r, ny * r, nr * r, 0, TAU);
-    ctx.fill();
-  }
-  // éclat qui scintille
+  ctx.ellipse(0, -r * 0.45, r * 0.85, r * 0.65, 0, 0, TAU);
+  ctx.fill();
+  facetRock(ctx, r, '#8F958F', '#727873', '#575D58');
+  const crystal = (bx: number, by: number, h: number, w: number, a: number) => {
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(a);
+    fillPoly(ctx, [[-w, 0], [-w * 0.7, -h * 0.75], [0, -h], [0, 0]], '#F7C766'); // face éclairée
+    fillPoly(ctx, [[0, 0], [0, -h], [w * 0.7, -h * 0.75], [w, 0]], '#C9922F'); // face à l'ombre
+    ctx.restore();
+  };
+  crystal(-r * 0.3, -r * 0.35, r * 0.75, r * 0.16, -0.35);
+  crystal(r * 0.05, -r * 0.45, r, r * 0.2, 0.05);
+  crystal(r * 0.35, -r * 0.3, r * 0.6, r * 0.14, 0.45);
+  crystal(-r * 0.6, r * 0.05, r * 0.4, r * 0.11, -0.7);
+  // éclat qui scintille à la pointe du grand cristal
   const tw = (Math.sin(t * 3 + seed) + 1) / 2;
-  if (tw > 0.75) {
-    const k = (tw - 0.75) * 4, sx = r * 0.05, sy = -r * 0.15;
-    ctx.strokeStyle = `rgba(255,240,200,${k})`;
-    ctx.lineWidth = 1.5;
+  if (tw > 0.6) {
+    const k = (tw - 0.6) * 2.5, sx = r * 0.05, sy = -r * 1.2;
+    ctx.strokeStyle = `rgba(255,244,210,${k})`;
+    ctx.lineWidth = 1.4;
     ctx.beginPath();
-    ctx.moveTo(sx - 6 * k, sy);
-    ctx.lineTo(sx + 6 * k, sy);
-    ctx.moveTo(sx, sy - 6 * k);
-    ctx.lineTo(sx, sy + 6 * k);
+    ctx.moveTo(sx - 5 * k, sy);
+    ctx.lineTo(sx + 5 * k, sy);
+    ctx.moveTo(sx, sy - 5 * k);
+    ctx.lineTo(sx, sy + 5 * k);
     ctx.stroke();
   }
   ctx.restore();
-  if (hpPct < 100) hpBar(ctx, x, y - r - 10, 28, hpPct, '#F0B64A');
+  if (hpPct < 100) hpBar(ctx, x, y - r * 1.3 - 10, 28, hpPct, '#F0B64A');
+}
+
+function fillPoly(ctx: Ctx, pts: readonly (readonly [number, number] | number[])[], fill: string) {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** Rocher à trois faces : le dessus clair, la face avant moyenne, le flanc droit sombre (lumière en haut à gauche). */
+function facetRock(ctx: Ctx, r: number, light: string, mid: string, dark: string) {
+  fillPoly(ctx, [[-r, r * 0.4], [-r * 0.85, -r * 0.2], [-r * 0.45, -r * 0.05], [r * 0.15, -r * 0.15], [r * 0.45, r * 0.55]], mid);
+  fillPoly(ctx, [[r * 0.15, -r * 0.15], [r * 0.4, -r * 0.7], [r, -r * 0.05], [r * 0.85, r * 0.45], [r * 0.45, r * 0.55]], dark);
+  fillPoly(ctx, [[-r * 0.85, -r * 0.2], [-r * 0.35, -r * 0.8], [r * 0.4, -r * 0.7], [r * 0.15, -r * 0.15], [-r * 0.45, -r * 0.05]], light);
 }
 
 // ───────────────────────── Coffre des géants ─────────────────────────

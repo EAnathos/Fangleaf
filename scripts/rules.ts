@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { SWORD_PULLS, SWORD_REACH, SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { SWORD_PULLS, SWORD_REACH, SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, resRoll, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { BEACH, WorldMap } from '../shared/worldmap.ts';
 import { DAY_MS, sky } from '../shared/weather.ts';
 import { Room } from '../server/room.ts';
@@ -1293,8 +1293,10 @@ const noop = () => {};
       r.step();
     }
     const got = { wood: p.wood - w0, stone: p.stone - s0, gold: p.gold - g0 };
-    const want = res === 'wood' ? { wood: resYield(o.zone), stone: 0, gold: 0 } : res === 'stone' ? { wood: 0, stone: resYield(o.zone), gold: 0 } : { wood: 0, stone: oreStone(o.zone), gold: got.gold };
-    check(JSON.stringify(got) === JSON.stringify(want) && (res !== 'gold' || got.gold > 0), `${res} (zone ${o.zone}) : +${got.wood} bois, +${got.stone} pierre, +${got.gold} or`);
+    // quantité au hasard autour de la moyenne : entre le tirage le plus bas et le plus haut
+    const base = res === 'gold' ? oreStone(o.zone) : resYield(o.zone), lo = resRoll(base, 0), hi = resRoll(base, 1);
+    const n = res === 'wood' ? got.wood : got.stone, other = res === 'wood' ? got.stone : got.wood;
+    check(n >= lo && n <= hi && other === 0 && (res !== 'gold' ? got.gold === 0 : got.gold > 0), `${res} (zone ${o.zone}) : +${got.wood} bois, +${got.stone} pierre, +${got.gold} or (entre ${lo} et ${hi})`);
   }
   const prof = r.profileOf(p);
   const r2: any = room();

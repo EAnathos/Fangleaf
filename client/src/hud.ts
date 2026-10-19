@@ -2,7 +2,7 @@
 
 import {
   ALPHA_EQUIP_MAX, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
-  BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, costText, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
+  BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
 import type { BoardRow, PlayerState, UnitTuple } from '../../shared/protocol.ts';
@@ -68,7 +68,7 @@ type Funds = { gold: number; wood: number; stone: number };
 const canPay = (f: Funds, c: Cost) => f.gold >= c.gold && f.wood >= c.wood && f.stone >= c.stone;
 /** Point d'interaction (touche E) à portée : bâtiments (ou leur chantier), Pierres de passage, emplacements de camp, grottes. */
 export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView): Spot | undefined => {
-  const offer = (b: BuildingId, pos: { x: number; y: number }, verb: string): Spot => ({ panel: 'buy', pos, buy: { b }, label: `E — ${verb} : ${BUILDINGS[b].name} · ${costText(buildingCost(b))}` });
+  const offer = (b: BuildingId, pos: { x: number; y: number }, verb: string): Spot => ({ panel: 'buy', pos, buy: { b }, label: `E — ${verb} : ${BUILDINGS[b].name}` }); // le prix : dans le panneau qui s'ouvre
   // un emplacement à défricher passe avant le bâtiment
   const building = (b: BuildingId, pos: { x: number; y: number }, open: Spot): Spot => {
     const needs = BUILDINGS[b].needs;
@@ -89,7 +89,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     ...map.sites.map((site, i): Spot =>
       v.camps.includes(i)
         ? { panel: 'travel', pos: map.stones[i + 1], label: 'E — Pierre de passage', at: i }
-        : { panel: 'camp', pos: site, label: `E — Établir le camp · ${CAMP_COST} or`, at: i },
+        : { panel: 'camp', pos: site, label: 'E — Établir le camp', at: i },
     ),
     ...map.caves.flatMap((c): Spot[] => [
       v.unlocked.includes(c.id)
@@ -97,7 +97,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
           cave: { id: c.id, enter: true }, pos: c.entrance,
           label: v.caves[c.id] ? `E — Entrer (${SPECIES[c.boss].name} revient dans ${clock(v.caves[c.id])})` : `E — Entrer · ${SPECIES[c.boss].name} t'attend`,
         }
-        : { panel: 'buy', pos: c.entrance, buy: { cave: c.id }, label: `E — Débloquer la grotte · ${caveUnlockCost(c.zone)} or` },
+        : { panel: 'buy', pos: c.entrance, buy: { cave: c.id }, label: 'E — Débloquer la grotte' },
       { cave: { id: c.id, enter: false }, pos: c.exit, label: 'E — Sortir de la grotte' },
     ]),
     ...v.chests.filter((c) => !c[3]).map((c): Spot => ({ chest: c[0], pos: { x: c[1], y: c[2] }, label: 'E — Ouvrir le coffre' })),
@@ -586,7 +586,7 @@ export class Hud {
     if ('b' in buy) $('buy-desc').textContent = BUILDINGS[buy.b].desc;
     else {
       const boss = SPECIES[this.map.caves[buy.cave].boss], base = SPECIES.find((s) => s.key === boss.base);
-      $('buy-desc').textContent = `Ouvre la grotte pour tout le village : ${boss.name} y attend, et son âme rend légendaire ton Alpha ${base?.name ?? ''}.`;
+      $('buy-desc').textContent = `Ouvre la grotte pour tout le village : ${boss.name} y attend, et son âme permet le double éveil de ton Alpha ${base?.name ?? ''}.`;
     }
     const btn = $<HTMLButtonElement>('buy-go');
     btn.disabled = this.hall < hall || !canPay(funds, cost);
@@ -1009,15 +1009,17 @@ export class Hud {
     const all = form === 'boss' ? SPECIES_BY_ZONE.filter((s) => SPECIES[s].boss)
       : SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss && (form !== 'legend' || bossOf(s) >= 0));
     const seen = new Set(form === 'boss' ? this.beaten : me.seen);
-    const key = `${form}|${all.filter((s) => seen.has(s)).join(',')}`;
+    // Alphas possédés (sur le terrain ou au repos), et ceux qui ont fait leur double éveil
+    const owned = [...me.army.filter((a) => a.alpha).map((a) => ({ s: a.species, legend: a.legend })), ...me.resting.map((r) => ({ s: r.species, legend: r.legend }))];
+    const awake = new Set(owned.map((o) => o.s)), double = new Set(owned.filter((o) => o.legend).map((o) => o.s));
+    const key = `${form}|${all.filter((s) => seen.has(s)).join(',')}|${[...awake].join(',')}|${[...double].join(',')}`;
     if (key !== this.last.bestiary) {
       this.last.bestiary = key;
-      const n = all.filter((s) => seen.has(s)).length;
-      $('bestiary-count').innerHTML = form === 'boss'
-        ? `<b>${n}/${all.length}</b> géants vaincus par le village · chacun attend au fond de sa grotte.`
-        : form === 'legend'
-          ? `<b>${n}/${all.length}</b> espèces croisées · l'âme de leur géant (${LEGEND_SOULS} âmes) rend leur Alpha légendaire.`
-          : `<b>${n}/${all.length}</b> espèces croisées · les autres t'attendent plus loin sur le chemin.`;
+      const count = (set: Set<number>) => all.filter((s) => set.has(s)).length;
+      $('bestiary-count').innerHTML = form === 'boss' ? `<b>${count(seen)}/${all.length}</b> géants vaincus par le village`
+        : form === 'alpha' ? `<b>${count(awake)}/${all.length}</b> éveillés`
+        : form === 'legend' ? `<b>${count(double)}/${all.length}</b> double éveillés`
+        : `<b>${count(seen)}/${all.length}</b> espèces rencontrées`;
       this.beasts = [];
       const zones = [...new Set(all.map((s) => SPECIES[s].zone))];
       $('bestiary').replaceChildren(
@@ -1097,11 +1099,11 @@ export class Hud {
           <div class="ess"><div class="ess-bar"><i></i><span></span></div></div></div><div class="actions"><button class="buy"></button></div>`;
         const canvas = el.querySelector('canvas')!;
         canvas.setAttribute('role', 'img');
-        canvas.setAttribute('aria-label', `Alpha ${sp.name}`);
+        canvas.setAttribute('aria-label', `${sp.name} alpha`);
         this.portraits.push({ canvas, s, seen: true, alpha: true, legend: !!a?.legend });
         el.querySelector('.title')!.textContent = a
-          ? `${a.legend ? `${sp.name} légendaire` : `Alpha ${sp.name}`} · niv. ${lvl}${a.reviveIn ? ' (ressuscite…)' : ''}${rest ? ' · au repos' : ''}`
-          : `Alpha ${sp.name} · endormi`;
+          ? `${a.legend ? `${sp.name} légendaire` : `${sp.name} alpha`} · niv. ${lvl}${a.reviveIn ? ' (ressuscite…)' : ''}${rest ? ' · au repos' : ''}`
+          : `${sp.name} alpha`;
         const now = stat(lvl), nxt = stat(lvl + 1);
         // Une ligne par statistique, avec la valeur au niveau suivant quand on peut renforcer.
         const grow = (a1: number, b1: number) => (a && !maxed ? `${a1} → <span class="up">${b1}</span>` : String(a1));
@@ -1130,7 +1132,7 @@ export class Hud {
         if (waking) {
           // Éveil en cours : compte à rebours à la place de la jauge d'essences.
           el.className = 'alpha-card waking';
-          el.querySelector('.title')!.textContent = `Alpha ${sp.name} · éveil en cours`;
+          el.querySelector('.title')!.textContent = `${sp.name} alpha · éveil en cours`;
           (el.querySelector('.ess-bar i') as HTMLElement).style.width = `${(100 * (waking.total - waking.left)) / waking.total}%`;
           const mm = Math.floor(waking.left / 60), ss = String(waking.left % 60).padStart(2, '0');
           el.querySelector('.ess span')!.textContent = `S'éveille dans ${mm}:${ss}`;
@@ -1141,16 +1143,24 @@ export class Hud {
         if (rest) el.classList.add('resting');
         btn.disabled = maxed || have < cost || !!waking;
         btn.textContent = maxed ? 'Niveau maximum' : a ? 'Renforcer' : waking ? 'Éveil…' : `Éveiller · ${duration(alphaAwakenS(s))}`;
-        // Évolution légendaire : une âme du boss géant de l'espèce.
+        // Double éveil (Alpha légendaire) : les âmes du géant de l'espèce, dans une jauge sous celle des essences.
         const boss = bossOf(s);
         if (a && !a.legend && boss >= 0) {
           const souls = me.essences[boss] ?? 0;
+          const why = `Double éveil : PV et dégâts ×${String(LEGEND_MULT.hp).replace('.', ',')}, aura dorée. Bats ${SPECIES[boss].name} dans sa grotte pour obtenir son âme.`;
+          const gauge = document.createElement('div');
+          gauge.className = 'ess double';
+          gauge.title = why;
+          gauge.innerHTML = '<div class="ess-bar"><i></i><span></span></div>';
+          (gauge.querySelector('i') as HTMLElement).style.width = `${Math.min(100, (100 * souls) / LEGEND_SOULS)}%`;
+          gauge.querySelector('span')!.textContent = `Double éveil · ${Math.min(souls, LEGEND_SOULS)} / ${LEGEND_SOULS} âmes`; // de quel géant : dans l'infobulle
+          el.querySelector('.col')!.append(gauge);
           const leg = document.createElement('button');
           leg.className = 'legend-btn';
           leg.dataset.legend = String(s);
           leg.disabled = souls < LEGEND_SOULS;
-          leg.textContent = souls >= LEGEND_SOULS ? `Rendre légendaire · ${LEGEND_SOULS} âme${LEGEND_SOULS > 1 ? 's' : ''}` : `Légendaire : âme de ${SPECIES[boss].name} (${souls}/${LEGEND_SOULS})`;
-          leg.title = `PV et dégâts ×${String(LEGEND_MULT.hp).replace('.', ',')}, aura dorée. Bats ${SPECIES[boss].name} dans sa grotte pour obtenir son âme.`;
+          leg.textContent = 'Double éveil';
+          leg.title = why;
           el.querySelector('.actions')!.append(leg);
         }
         // Équiper (5 au maximum sur le terrain) ou ranger à la Tanière.
@@ -1160,7 +1170,7 @@ export class Hud {
           eq.dataset.s = String(s);
           eq.dataset.equip = rest ? '1' : '0';
           eq.disabled = !!rest && equipped >= ALPHA_EQUIP_MAX;
-          eq.textContent = rest ? (equipped >= ALPHA_EQUIP_MAX ? `Équipés : ${ALPHA_EQUIP_MAX}/${ALPHA_EQUIP_MAX}` : 'Équiper') : 'Ranger';
+          eq.textContent = rest ? (equipped >= ALPHA_EQUIP_MAX ? `${ALPHA_EQUIP_MAX}/${ALPHA_EQUIP_MAX} équipés` : 'Équiper') : 'Déséquiper';
           el.querySelector('.actions')!.append(eq);
         }
         // Monture : seuls certains Alphas équipés se chevauchent.
@@ -1170,7 +1180,8 @@ export class Hud {
           ride.className = `ride${on ? ' on' : ''}`;
           ride.dataset.id = String(field.id);
           ride.disabled = !!field.reviveIn;
-          ride.textContent = on ? 'Descendre' : `Monter · vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}`;
+          ride.textContent = on ? 'Descendre' : 'Monter';
+          ride.title = `Monture : vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}`;
           el.querySelector('.actions')!.append(ride);
         }
         return el;
@@ -1358,7 +1369,7 @@ function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; 
     legend && boss >= 0 ? `Âme de ${SPECIES[boss].title ?? SPECIES[boss].name} : il hérite de ses attaques (${(BOSS_MOVES[SPECIES[boss].key] ?? []).map((m) => MOVE_NAMES[m.kind].toLowerCase()).join(', ')}).` : '',
     !legend ? `Éveil : ${ALPHA_CREATE_COST} essences, puis ${duration(alphaAwakenS(s))}.` : '',
   ].filter(Boolean).join(' ');
-  return { name: legend ? `${sp.name} légendaire` : `Alpha ${sp.name}`, tag: legend ? `Aura dorée · ×${String(LEGEND_MULT.hp).replace('.', ',')} PV et dégâts` : traits, stats: `niv. 0 · ${st.hp} PV · ${st.dmg} dégâts`, desc: powers };
+  return { name: legend ? `${sp.name} légendaire` : `${sp.name} alpha`, tag: legend ? `Aura dorée · ×${String(LEGEND_MULT.hp).replace('.', ',')} PV et dégâts` : traits, stats: `niv. 0 · ${st.hp} PV · ${st.dmg} dégâts`, desc: powers };
 }
 
 type Portrait = { canvas: HTMLCanvasElement; s: number; seen: boolean; alpha?: boolean; legend?: boolean; tame?: boolean };

@@ -1,7 +1,7 @@
 // Terrain procédural par morceaux (chunks) mis en cache, village et plage d'arrivée pré-rendus.
 // Tout découle de la WorldMap partagée : zones, lacs, chemin du camp au village.
 
-import { BUILDINGS, buildingCost, costText, CAMP_COST, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, BOARD_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName, type BuildingId } from '../../shared/config.ts';
+import { BUILDINGS, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, BOARD_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
 import { BEACH, caveEdge, MAP_CELL, MOUTH_FADE, SEA_SHALLOW, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 import { maxDpr, settings } from './settings.ts';
@@ -521,7 +521,7 @@ export class World {
       ctx.globalAlpha = a;
       return;
     }
-    const pine = (z === 2 && h < 0.55) || (z === 3 && h < 0.35);
+    const pine = z === 2 || (z === 3 && h < 0.35); // Bois profonds : rien que des sapins
     const fruit = !pine && z <= 2 && h > 0.8;
     if (shade) this.treeShadow(ctx, x, y);
     const k = s / TREE_REF;
@@ -836,7 +836,7 @@ export class World {
       ctx.fillStyle = '#E8DCC0';
       ctx.fillRect(x - 2, y - 14, 4, 4);
     }
-    const label = `${BUILDINGS.palisade.name} · ${costText(buildingCost('palisade'))}`;
+    const label = BUILDINGS.palisade.name; // le prix : dans le panneau de construction
     ctx.font = '700 15px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
@@ -929,7 +929,7 @@ export class World {
     ctx.fill();
   }
 
-  /** Entrepôt (coordonnées du village) : caisses, rondins et tas de pierres, qui grossissent avec la réserve. */
+  /** Entrepôt (coordonnées du village) : sous son auvent, rondins et tas de pierres, qui grossissent avec la réserve. */
   drawStore(ctx: CanvasRenderingContext2D, stock: [number, number]) {
     const x = STORE_OFFSET.x, y = STORE_OFFSET.y;
     ctx.fillStyle = 'rgba(8,14,12,0.3)';
@@ -961,16 +961,6 @@ export class World {
       ctx.ellipse(x + 12 + (i % 3) * 8, y + 6 - Math.floor(i / 3) * 7, 6, 4.5, 0, 0, TAU);
       ctx.fill();
     }
-    // caisse
-    ctx.fillStyle = '#8B5A33';
-    ctx.fillRect(x - 8, y - 14, 16, 16);
-    ctx.strokeStyle = '#3A2819';
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(x - 8, y - 14, 16, 16);
-    ctx.beginPath();
-    ctx.moveTo(x - 8, y - 14);
-    ctx.lineTo(x + 8, y + 2);
-    ctx.stroke();
     ctx.font = '700 15px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
@@ -1134,7 +1124,7 @@ export class World {
       }
     }
     const p = `plot_${b}` as const;
-    const label = `${BUILDINGS[p].name} · ${costText(buildingCost(p))}`;
+    const label = BUILDINGS[p].name;
     ctx.font = '700 15px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
@@ -1166,8 +1156,8 @@ export class World {
     ctx.beginPath();
     ctx.ellipse(x1 - 26, y1 - 16, 10, 7, 0, 0, TAU);
     ctx.fill();
-    const need = BUILDINGS[b].hall;
-    const label = `${BUILDINGS[b].name} · ${hall < need ? `Hôtel de ville niv. ${need}` : costText(buildingCost(b))}`;
+    const need = BUILDINGS[b].hall; // pas encore constructible : le nom en grisé
+    const label = BUILDINGS[b].name; // le prix et le niveau d'Hôtel de ville requis : dans le panneau de construction
     ctx.font = '700 15px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
@@ -1335,56 +1325,65 @@ export class World {
     ctx.fillText('Forge', fx - 36, fy - 50);
   }
 
-  /** Marché : étal sous un auvent rayé, caisses et cage d'un monstre à vendre. */
+  /**
+   * Marché : une échoppe sous un auvent rayé en pente (bord festonné), comptoir en planches, deux lanternes ;
+   * sur le comptoir, un panier d'essences, des pièces d'or et la cage d'un monstre à vendre.
+   */
   private drawMarket(ctx: CanvasRenderingContext2D) {
     const mx = MARKET_OFFSET.x, my = MARKET_OFFSET.y;
-    ctx.fillStyle = 'rgba(8,14,12,0.3)';
-    ctx.fillRect(mx - 52, my + 34, 112, 14);
-    // poteaux et comptoir
-    ctx.fillStyle = '#5B3F2C';
-    ctx.fillRect(mx - 52, my - 40, 6, 80);
-    ctx.fillRect(mx + 46, my - 40, 6, 80);
-    ctx.fillStyle = '#7A5A3A';
-    ctx.fillRect(mx - 54, my + 8, 108, 30);
-    ctx.fillStyle = '#9C7A52';
-    ctx.fillRect(mx - 54, my + 8, 108, 6);
-    // auvent rayé
-    for (let k = 0; k < 6; k++) {
-      ctx.fillStyle = k % 2 ? '#EEE7D7' : '#5CC8B8';
+    ctx.fillStyle = 'rgba(8,14,12,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(mx + 4, my + 40, 66, 10, 0, 0, TAU);
+    ctx.fill();
+    // poteaux, comptoir en planches et son plateau
+    stallBox(ctx, mx - 54, my - 36, 7, 76, '#5B3F2C', 1);
+    stallBox(ctx, mx + 47, my - 36, 7, 76, '#5B3F2C', 1);
+    stallBox(ctx, mx - 58, my + 8, 116, 32, '#7A5A3A', 3);
+    ctx.strokeStyle = 'rgba(40,26,14,0.5)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (const k of [-30, 0, 30]) {
+      ctx.moveTo(mx + k, my + 16);
+      ctx.lineTo(mx + k, my + 40);
+    }
+    ctx.stroke();
+    stallBox(ctx, mx - 60, my + 6, 120, 8, '#A9845A', 2);
+    // marchandises
+    stallEssences(ctx, mx - 32, my + 7);
+    stallCoins(ctx, mx - 8, my + 4);
+    stallCage(ctx, mx + 26, my + 7);
+    // auvent : bandes teal et crème en pente, bord festonné, ombre portée sur l'échoppe
+    ctx.fillStyle = 'rgba(8,14,12,0.25)';
+    ctx.fillRect(mx - 54, my - 22, 108, 8);
+    const n = 7, w = 132 / n;
+    for (let k = 0; k < n; k++) {
+      const x0 = mx - 66 + k * w;
+      ctx.fillStyle = k % 2 ? '#EEE7D7' : '#4FB8A9';
       ctx.beginPath();
-      ctx.moveTo(mx - 62 + k * 21, my - 34);
-      ctx.lineTo(mx - 41 + k * 21, my - 34);
-      ctx.lineTo(mx - 41 + k * 21, my - 18);
-      ctx.quadraticCurveTo(mx - 51.5 + k * 21, my - 10, mx - 62 + k * 21, my - 18);
+      ctx.moveTo(x0 + 4, my - 46);
+      ctx.lineTo(x0 + w + 4, my - 46);
+      ctx.lineTo(x0 + w, my - 24);
+      ctx.quadraticCurveTo(x0 + w / 2, my - 14, x0, my - 24);
       ctx.closePath();
       ctx.fill();
     }
-    ctx.fillStyle = '#3F8F84';
-    ctx.fillRect(mx - 62, my - 40, 126, 7);
-    // marchandises : un panier d'essences et une petite cage
-    ctx.fillStyle = '#B48CFF';
-    for (const [ox, oy] of [[-34, 2], [-26, -1], [-18, 3]]) {
-      ctx.beginPath();
-      ctx.arc(mx + ox, my + oy, 4, 0, TAU);
-      ctx.fill();
-    }
-    ctx.strokeStyle = '#3A2819';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(mx + 8, my - 12, 30, 22);
-    for (let k = 1; k < 4; k++) {
-      ctx.beginPath();
-      ctx.moveTo(mx + 8 + k * 7.5, my - 12);
-      ctx.lineTo(mx + 8 + k * 7.5, my + 10);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#7FCB5B';
+    stallBox(ctx, mx - 64, my - 50, 136, 6, '#2F7F75', 2);
+    stallLantern(ctx, mx - 44, my - 18);
+    stallLantern(ctx, mx + 44, my - 18);
+    // une caisse au pied du comptoir
+    stallBox(ctx, mx - 73, my + 28, 14, 14, '#9C7A52', 2);
+    ctx.strokeStyle = 'rgba(60,40,24,0.7)';
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.ellipse(mx + 23, my + 4, 8, 6, 0, 0, TAU);
-    ctx.fill();
+    ctx.moveTo(mx - 71, my + 30);
+    ctx.lineTo(mx - 61, my + 40);
+    ctx.moveTo(mx - 73, my + 35);
+    ctx.lineTo(mx - 59, my + 35);
+    ctx.stroke();
     ctx.font = '700 16px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#5CC8B8';
-    ctx.fillText('Marché', mx, my - 50);
+    ctx.fillText('Marché', mx, my - 60);
   }
 
   /** Plage d'arrivée : épave, planches, caisses, et panneau qui indique le village. */
@@ -1701,7 +1700,7 @@ export class World {
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(16,24,26,0.85)';
-    const label = established ? campName(i) : `Emplacement de camp · ${CAMP_COST} or`;
+    const label = established ? campName(i) : 'Emplacement de camp';
     ctx.strokeText(label, 0, -170);
     ctx.fillStyle = established ? '#F0B64A' : '#C9CFC2';
     ctx.fillText(label, 0, -170);
@@ -1790,4 +1789,100 @@ export class World {
     ctx.ellipse(0, -4 * f, 7, 12 * f, 0, 0, TAU);
     ctx.fill();
   }
+}
+
+// ── Échoppe du marché : petits éléments dessinés, en aplats sans contour (comme les autres bâtiments) ──
+
+function stallBox(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fill: string, r = 2) {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  ctx.fill();
+}
+
+/** Cage d'un monstre à vendre (un gluant), posée sur le comptoir. */
+function stallCage(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  stallBox(ctx, x - 16, y - 24, 32, 24, 'rgba(40,30,20,0.35)', 3);
+  ctx.fillStyle = '#7FCB5B';
+  ctx.beginPath();
+  ctx.ellipse(x, y - 7, 9, 7, 0, Math.PI, 0);
+  ctx.lineTo(x + 9, y - 2);
+  ctx.lineTo(x - 9, y - 2);
+  ctx.fill();
+  ctx.fillStyle = '#10181A';
+  ctx.beginPath();
+  ctx.arc(x - 3, y - 8, 1.4, 0, TAU);
+  ctx.arc(x + 3, y - 8, 1.4, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = '#3A2819';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let k = -12; k <= 12; k += 6) {
+    ctx.moveTo(x + k, y - 24);
+    ctx.lineTo(x + k, y);
+  }
+  ctx.stroke();
+  ctx.fillStyle = '#5B3F2C';
+  ctx.fillRect(x - 18, y - 27, 36, 4);
+  ctx.strokeStyle = '#C9A24A';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y - 30, 4, Math.PI, 0);
+  ctx.stroke();
+}
+
+/** Panier d'essences lumineuses. */
+function stallEssences(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.fillStyle = 'rgba(180,140,255,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(x, y - 8, 14, 9, 0, 0, TAU);
+  ctx.fill();
+  for (const [ox, oy, c] of [[-6, -9, '#B48CFF'], [1, -12, '#E2D3FF'], [7, -8, '#9C70F0'], [-1, -6, '#C9A8FF']] as const) {
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.arc(x + ox, y + oy, 3.6, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#B98B5A';
+  ctx.beginPath();
+  ctx.moveTo(x - 12, y - 7);
+  ctx.lineTo(x + 12, y - 7);
+  ctx.lineTo(x + 9, y + 1);
+  ctx.lineTo(x - 9, y + 1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(90,60,30,0.6)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x - 10, y - 3);
+  ctx.lineTo(x + 10, y - 3);
+  ctx.stroke();
+}
+
+/** Petite pile de pièces d'or. */
+function stallCoins(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.fillStyle = '#F0B64A';
+  ctx.strokeStyle = '#7A5418';
+  ctx.lineWidth = 1;
+  for (const [ox, oy] of [[0, 0], [5, -2], [2, -4], [-4, -1]]) {
+    ctx.beginPath();
+    ctx.ellipse(x + ox, y + oy, 3.5, 2.2, 0, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+/** Lanterne suspendue, avec son halo. */
+function stallLantern(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.strokeStyle = '#3A2819';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y - 6);
+  ctx.lineTo(x, y);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,200,100,0.25)';
+  ctx.beginPath();
+  ctx.arc(x, y + 6, 9, 0, TAU);
+  ctx.fill();
+  stallBox(ctx, x - 3.5, y, 7, 10, '#F7C766', 2);
 }

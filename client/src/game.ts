@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, buildingCost, costText, gateHall, gateOpen, HALL, zoneBosses, REVIVE_R, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -626,7 +626,7 @@ export class Game {
       case 'soul':
         if (e.to === this.myId) {
           this.fx.essence(e.x, e.y - 50, SPECIES[e.s].color, '+1 âme');
-          this.hud.toast(`Âme de ${SPECIES[e.s].name} obtenue : rends ton Alpha ${SPECIES.find((b) => b.key === SPECIES[e.s].base)?.name ?? ''} légendaire à la Tanière !`, 'alpha');
+          this.hud.toast(`Âme de ${SPECIES[e.s].name} obtenue : double éveil de ton Alpha ${SPECIES.find((b) => b.key === SPECIES[e.s].base)?.name ?? ''} à la Tanière !`, 'alpha');
         }
         break;
       case 'move': {
@@ -758,8 +758,8 @@ export class Game {
         break;
       }
       case 'legend':
-        if (e.by === this.myId) this.hud.toast(`Ton Alpha ${SPECIES[e.s].name} devient légendaire ! (×${String(LEGEND_MULT.hp).replace('.', ',')})`, 'alpha');
-        else this.hud.toast(`${name(e.by)} a rendu légendaire son Alpha ${SPECIES[e.s].name}`, 'alpha');
+        if (e.by === this.myId) this.hud.toast(`Double éveil : ton Alpha ${SPECIES[e.s].name} devient légendaire ! (×${String(LEGEND_MULT.hp).replace('.', ',')})`, 'alpha');
+        else this.hud.toast(`${name(e.by)} a réussi le double éveil de son Alpha ${SPECIES[e.s].name}`, 'alpha');
         {
           const u = this.posOf(e.id, players);
           if (u) {
@@ -1229,8 +1229,7 @@ export class Game {
     this.map.stones.forEach((st, k) => {
       // celle du village se construit ; celles des camps s'éveillent avec leur camp
       const active = k === 0 ? this.hud.buildings.includes('stone') : camps.includes(k - 1);
-      const need = BUILDINGS.stone.hall;
-      const label = k === 0 && !active ? `${BUILDINGS.stone.name} · ${this.hud.hall < need ? `Hôtel de ville niv. ${need}` : costText(buildingCost('stone'))}` : undefined;
+      const label = k === 0 && !active ? BUILDINGS.stone.name : undefined; // le prix : dans le panneau de construction
       if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
     // Palissade du village : pieux hauts, triés avec les créatures (on passe derrière) ; pas encore construite : son tracé.

@@ -679,8 +679,8 @@ export class WorldMap {
         const z = this.zoneAt(x, y);
         const f = fbm(x / 700, y / 700, this.seed + 55, 3);
         const edge = this.shoreAt(x, y) > -600; // près de la côte : plus dense
-        const forest = (f > 0.56 ? 4.5 : f > 0.48 ? 1.2 : 0.15) * (edge ? 3 : 1);
-        const treeP = [0, 0.1, 0.2, 0.09, 0.05, 0.07, 0.025][z] * forest; // désert : de rares cactus
+        const forest = Math.max(f > 0.56 ? 4.5 : f > 0.48 ? 1.2 : 0.15, z === 2 ? 0.7 : 0) * (edge ? 3 : 1); // Bois profonds : jamais de vraie clairière
+        const treeP = [0, 0.1, 0.3, 0.09, 0.05, 0.07, 0.025][z] * forest; // Bois profonds : forêt dense de sapins ; désert : de rares cactus
         if (h >= treeP) continue; // les rochers ronds d'autrefois ont disparu : la pierre vient des rochers à casser
         if (this.pathDist(x, y) < 30) continue;
         const d: Decor = { kind: 0, x, y, zone: z };

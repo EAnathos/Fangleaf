@@ -14,7 +14,7 @@ export const VIEW_R = 1250; // rayon d'intérêt : unités envoyées à chaque j
 // Bâtiments : positions relatives au centre du village.
 export const FORGE_OFFSET = { x: -150, y: 90 };
 export const DEN_OFFSET = { x: 170, y: -150 };
-export const MARKET_OFFSET = { x: -180, y: -160 };
+export const MARKET_OFFSET = { x: -168, y: -185 };
 export const BUILDING_REACH = 110;
 // Bâtiments du village : construits par n'importe quel membre contre de l'or, une fois pour tout le village.
 // Il faut aussi du bois et de la pierre (récoltés sur la carte), et parfois un Hôtel de ville assez développé.
@@ -42,7 +42,7 @@ export const buildingCost = (b: BuildingId): Cost => ({ gold: BUILDINGS[b].cost,
 
 // Hôtel de ville : on l'améliore (or, bois, pierre) pour débloquer le reste du village et du monde.
 // HALL[n] : passage au niveau n + 1. La porte de la zone z + 1 demande aussi d'avoir vaincu les géants de la zone z.
-export const HALL_OFFSET = { x: 185, y: 150 };
+export const HALL_OFFSET = { x: 185, y: 138 };
 // Entrepôt : chacun y dépose le bois et la pierre de son sac ; constructions et Hôtel de ville puisent dans cette réserve commune.
 export const STORE_OFFSET = { x: -270, y: -55 };
 // Panneau du village, au bord de la place : le tableau des exploits de chacun.
@@ -71,8 +71,11 @@ export const zonesOpen = (hall: number, beaten: number[]) => {
 
 // Récolte : filons d'or (or et un peu de pierre), rochers (pierre) et bois mort (bois).
 export type Resource = 'gold' | 'wood' | 'stone';
-export const resYield = (zone: number) => 4 + 2 * zone; // bois ou pierre d'un tas épuisé
-export const oreStone = (zone: number) => 1 + zone; // pierre en plus de l'or d'un filon
+export const resYield = (zone: number) => 4 + 2 * zone; // bois ou pierre d'un tas épuisé (en moyenne)
+export const oreStone = (zone: number) => 1 + zone; // pierre en plus de l'or d'un filon (en moyenne)
+export const RES_SPREAD = 0.4; // la récolte varie de ± 40 % autour de la moyenne
+/** Quantité réellement récoltée : un tirage autour de la moyenne n (r : hasard entre 0 et 1), jamais moins de 1. */
+export const resRoll = (n: number, r = Math.random()) => Math.max(1, Math.round(n * (1 - RES_SPREAD + 2 * RES_SPREAD * r)));
 export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[];
 // Marché : prix d'un monstre ordinaire (apprivoisé) selon l'or qu'il rapporte à la chasse.
 export const monsterBuyPrice = (species: number) => SPECIES[species].gold * 12;

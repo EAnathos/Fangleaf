@@ -6,7 +6,7 @@ import {
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
-  SPAWN_SAFE_R, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
+  SPAWN_SAFE_R, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
   armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
@@ -1459,8 +1459,8 @@ export class Room {
       p.gold += gold;
       this.events.push({ e: 'gold', to: p.id, n: gold, x: o.x, y: o.y - 10 });
     }
-    // un filon donne aussi un peu de pierre ; rochers et bois mort donnent leur matière
-    const wood = o.res === 'wood' ? resYield(o.zone) : 0, stone = o.res === 'stone' ? resYield(o.zone) : o.res === 'gold' ? oreStone(o.zone) : 0;
+    // un filon donne aussi un peu de pierre ; rochers et bois mort donnent leur matière (quantité un peu au hasard)
+    const wood = o.res === 'wood' ? resRoll(resYield(o.zone)) : 0, stone = o.res === 'stone' ? resRoll(resYield(o.zone)) : o.res === 'gold' ? resRoll(oreStone(o.zone)) : 0;
     p.wood += wood;
     p.stone += stone;
     this.events.push({ e: 'res', to: p.id, wood, stone, x: o.x, y: o.y - (o.res === 'gold' ? 30 : 10) });

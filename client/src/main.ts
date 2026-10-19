@@ -30,8 +30,7 @@ function setMode(m: typeof mode) {
   $('create-hint').hidden ||= full();
   const go = $<HTMLButtonElement>('go');
   go.disabled = m === 'create' && full();
-  const named = villages.find((v) => v.code === picked)?.village;
-  go.textContent = m === 'mine' ? (named ? `Entrer dans ${named}` : 'Entrer dans le village') : m === 'join' ? 'Rejoindre le village' : 'Fonder le village';
+  go.textContent = m === 'mine' ? 'Entrer dans le village' : m === 'join' ? 'Rejoindre le village' : 'Fonder le village';
   $('lobby-error').textContent = '';
 }
 
