@@ -23,10 +23,8 @@ function setMode(m: typeof mode) {
   askLeave(false);
   $('create-hint').hidden = m !== 'create';
   const hint = $('mine-hint');
-  hint.hidden = m === 'join' ? !full() : m !== 'mine' && !(m === 'create' && full());
-  hint.textContent = m === 'mine'
-    ? `${villages.length}/${MAX_VILLAGES} villages · ta progression est propre à chacun d'eux.`
-    : `Tu as déjà ${MAX_VILLAGES} villages : quittes-en un (Mes villages › Quitter ce village) pour en ${m === 'create' ? 'fonder' : 'rejoindre'} un autre. Tu peux toujours revenir dans les tiens.`;
+  hint.hidden = !full() || m === 'mine'; // seulement quand on ne peut plus fonder ni rejoindre
+  hint.textContent = `Tu as déjà ${MAX_VILLAGES} villages : quittes-en un (Mes villages › Quitter ce village) pour en ${m === 'create' ? 'fonder' : 'rejoindre'} un autre.`;
   $('create-hint').hidden ||= full();
   const go = $<HTMLButtonElement>('go');
   go.disabled = m === 'create' && full();

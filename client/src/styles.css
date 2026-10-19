@@ -381,6 +381,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* Chat (comme dans Minecraft) : n'apparaît que lorsqu'on l'ouvre. */
 .army-badge { position: absolute; left: 16px; bottom: 16px; height: 44px; padding: 0 14px 0 10px; display: flex; align-items: center; gap: 8px; border-radius: 22px; font: 700 16px var(--body); color: var(--text); font-variant-numeric: tabular-nums; }
+.army-icon { width: 34px; height: 30px; flex: none; } /* le gluant du jeu, dessiné avec son sprite */
 .chat { position: absolute; left: 16px; bottom: 16px; width: min(460px, calc(100vw - 32px)); padding: 10px; display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
 .chat-log { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; font-size: 14px; }
 .chat-log p { margin: 0; line-height: 1.35; overflow-wrap: anywhere; }

@@ -189,6 +189,15 @@ export class Hud {
   constructor(code: string, private map: WorldMap, private fog: Fog, founder: boolean) {
     this.miniBg = this.renderMapBackground(180);
     $('hud').hidden = false;
+    // pastille de meute : le gluant du jeu, dessiné avec son sprite et qui remplit la pastille
+    requestAnimationFrame(() => {
+      const c = $<HTMLCanvasElement>('army-icon'), dpr = Math.min(2, devicePixelRatio || 1), s = SPECIES.findIndex((sp) => sp.key === 'slime');
+      c.width = Math.round(c.clientWidth * dpr);
+      c.height = Math.round(c.clientHeight * dpr);
+      const ctx = c.getContext('2d')!, r = SPECIES[s].r, k = (c.height * 0.5) / r;
+      ctx.setTransform(k, 0, 0, k, c.width / 2, c.height * 0.58);
+      drawUnit(ctx, { x: 0, y: 0, r, species: s, alpha: false, legend: false, wild: false, face: 1, t: 0, seed: s, flash: false });
+    });
     $('code-label').textContent = code;
     const revive = $('revive-prompt');
     revive.onpointerdown = (e) => {
@@ -518,20 +527,17 @@ export class Hud {
     if (key === this.last.travel) return;
     this.last.travel = key;
     const village = this.buildings.includes('stone');
-    const rows = [{ to: -1, name: 'Village', sub: village ? 'Feu de camp · Forge · Tanière · Marché' : `Pierre du village pas encore construite (${BUILDINGS.stone.cost} or)`, open: village }].concat(
-      this.map.sites.map((_, i) => ({
-        to: i, name: campName(i), open: this.camps.includes(i),
-        sub: this.camps.includes(i) ? 'Feu de camp · réapparition' : `Au bout de la zone ${4 * (i + 1)} · pas encore établi`,
-      })),
+    // juste le nom de chaque lieu (le village, les camps)
+    const rows = [{ to: -1, name: 'Village', open: village }].concat(
+      this.map.sites.map((_, i) => ({ to: i, name: campName(i), open: this.camps.includes(i) })),
     );
     $('stones').replaceChildren(
       ...rows.map((r) => {
         const here = r.to === this.spotAt;
         const row = document.createElement('div');
         row.className = `stone-row${r.open ? '' : ' locked'}`;
-        row.innerHTML = `<div class="col"><b></b><span class="small muted"></span></div><button class="cta"></button>`;
+        row.innerHTML = `<div class="col"><b></b></div><button class="cta"></button>`;
         row.querySelector('b')!.textContent = r.name;
-        row.querySelector('span')!.textContent = r.sub;
         const btn = row.querySelector('button')!;
         btn.dataset.to = String(r.to);
         btn.disabled = here || !r.open;
@@ -619,6 +625,7 @@ export class Hud {
           $(`set-tab-${t}`).setAttribute('aria-selected', String(t === tab));
           $(`set-${t}`).hidden = t !== tab;
         }
+        if (tab === 'village') this.onBoard(); // les membres déconnectés : le serveur répond avec le tableau du village
       };
     }
     // Affichage : qualité, chiffres des dégâts, secousses, latence (appliqués tout de suite).
@@ -712,14 +719,24 @@ export class Hud {
     }, true);
   }
   private founder = false;
+  private offline: { name: string; color: string }[] = []; // membres déconnectés (d'après le tableau du village)
   private keymap = () => {};
   onQuality = () => {};
 
-  /** Membres en ligne (le fondateur peut les expulser) et comptes bannis (il peut les réintégrer). */
+  /** Membres en ligne (le fondateur peut les expulser), puis déconnectés ; comptes bannis (il peut les réintégrer). */
   private updateMembers(me: PlayerState, players: PlayerState[]) {
-    const key = JSON.stringify([players.map((p) => [p.id, p.name]), this.banned]);
+    const key = JSON.stringify([players.map((p) => [p.id, p.name]), this.offline, this.banned]);
     if (key === this.last.members) return;
     this.last.members = key;
+    const away = this.offline.filter((o) => !players.some((p) => p.name === o.name)).map((o) => {
+      const row = document.createElement('div');
+      row.className = 'stone-row';
+      row.innerHTML = '<div class="col"><b></b><span class="small muted">Hors ligne</span></div>';
+      const b = row.querySelector('b')!;
+      b.textContent = o.name;
+      b.style.color = o.color;
+      return row;
+    });
     $('members').replaceChildren(
       ...players.map((p) => {
         const row = document.createElement('div');
@@ -749,6 +766,7 @@ export class Hud {
         }
         return row;
       }),
+      ...away,
     );
     $('banned-box').hidden = !this.founder || !this.banned.length;
     $('banned').replaceChildren(
@@ -765,6 +783,7 @@ export class Hud {
 
   /** Tableau du village reçu du serveur : un rang par membre, couronne pour le premier de chaque colonne. */
   board(rows: BoardRow[]) {
+    this.offline = rows.filter((r) => !r.online).map((r) => ({ name: r.name, color: r.color })); // pour la liste des membres
     const best = (k: 'bosses' | 'tamed' | 'given') => Math.max(1, ...rows.map((r) => r[k]));
     const top = { bosses: best('bosses'), tamed: best('tamed'), given: best('given') };
     rows.sort((a, b) => b.bosses - a.bosses || b.tamed - a.tamed || b.given - a.given);
@@ -940,6 +959,7 @@ export class Hud {
           el.innerHTML = '<b></b><span></span><span class="tag"></span>';
           el.querySelector('b')!.textContent = c.name;
           el.querySelector('span')!.textContent = c.desc;
+          el.querySelector('span')!.hidden = !c.desc; // seul le guerrier a une particularité à dire
           el.querySelector('.tag')!.textContent = on ? 'Classe actuelle' : cost ? `Choisir · ${cost} or` : 'Choisir · gratuit';
           el.onclick = () => this.onClass(id);
           return el;
@@ -1252,7 +1272,7 @@ export class Hud {
     $('explored').textContent = `${Math.round(this.fog.progress * 100)} % de la carte explorée`;
   }
 
-  /** Grottes déjà repérées (hors brouillard) : arche sombre, point rouge si le mini-boss est là. */
+  /** Grottes déjà repérées (hors brouillard) : arche sombre, avec un sablier tant que son géant n'est pas revenu. */
   private drawCaves(ctx: CanvasRenderingContext2D, m: (v: number) => number, size: number) {
     for (const c of this.map.caves) {
       if (!this.fog.isExplored(c.entrance.x, c.entrance.y)) continue;
@@ -1268,10 +1288,29 @@ export class Hud {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-      if (!this.caves[c.id]) {
-        ctx.fillStyle = '#E8693F';
+      if (this.caves[c.id]) {
+        // sablier : le géant ressuscite
+        const w = size * 0.42, h = size * 0.55, cy = y + size * 0.05;
+        ctx.fillStyle = '#E8D9B0';
         ctx.beginPath();
-        ctx.arc(x, y, size * 0.35, 0, Math.PI * 2);
+        ctx.moveTo(x - w, cy - h);
+        ctx.lineTo(x + w, cy - h);
+        ctx.lineTo(x, cy);
+        ctx.lineTo(x + w, cy + h);
+        ctx.lineTo(x - w, cy + h);
+        ctx.lineTo(x, cy);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#F0B64A'; // le sable qui reste en haut, et celui tombé en bas
+        ctx.beginPath();
+        ctx.moveTo(x - w * 0.5, cy - h * 0.5);
+        ctx.lineTo(x + w * 0.5, cy - h * 0.5);
+        ctx.lineTo(x, cy);
+        ctx.closePath();
+        ctx.moveTo(x - w * 0.75, cy + h);
+        ctx.lineTo(x + w * 0.75, cy + h);
+        ctx.lineTo(x, cy + h * 0.45);
+        ctx.closePath();
         ctx.fill();
       }
     }

@@ -120,17 +120,17 @@ export interface HeroClass {
 export const CLASSES: Record<ClassId, HeroClass> = {
   warrior: {
     name: 'Guerrier', range: 42, dmg: 1, cd: 0.55, hp: 1.25,
-    desc: 'Corps à corps. Robuste : +25 % de PV.',
+    desc: '+25 % de PV',
     weapons: ['Bâton', 'Coutelas', 'Épée courte', 'Épée longue', 'Lame dentée', 'Sabre', 'Croc-lame', 'Lame runique', 'Fendeur', 'Crocs jumeaux', 'Fangleaf'],
   },
   archer: {
     name: 'Archer', range: 300, dmg: 0.8, cd: 0.7, hp: 0.9,
-    desc: 'Tire de loin sur une cible. Fragile au contact.',
+    desc: '',
     weapons: ['Fronde', 'Arc court', 'Arc de chasse', 'Arc long', 'Arc composite', 'Arc de frêne', 'Arc-croc', 'Arc runique', 'Arc du traqueur', 'Arc jumeau', 'Arc Fangleaf'],
   },
   mage: {
     name: 'Mage', range: 240, dmg: 0.6, cd: 1, hp: 0.85, splash: 80,
-    desc: 'Orbe qui explose et touche tous les monstres autour de la cible.',
+    desc: '',
     weapons: ['Baguette', 'Bâton noueux', 'Bâton de chêne', 'Sceptre', 'Orbe de mousse', 'Bâton runique', 'Croc de lune', 'Sceptre ancien', 'Bâton du voile', 'Orbe jumelé', 'Bâton Fangleaf'],
   },
 };

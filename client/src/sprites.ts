@@ -2196,30 +2196,44 @@ export function drawSoaringShadow(ctx: Ctx, x: number, y: number, r: number) {
 }
 
 /**
- * Sous le sable (UNIT_FLAG_HIDDEN) : le ver n'est qu'une bosse qui avance en soulevant du sable ;
- * le suricate, rien (il est dans sa tanière, dessinée avec le sol).
+ * Sous le sable (UNIT_FLAG_HIDDEN) : le ver n'est qu'une rangée de trois bosses fissurées qui ondulent en vague
+ * (son corps juste dessous), d'où retombe du sable ; le suricate, rien (il est dans sa tanière, dessinée avec le sol).
  */
 export function drawBurrow(ctx: Ctx, x: number, y: number, r: number, worm: boolean, t: number, seed: number) {
   if (!worm) return; // suricate : caché dans sa tanière
-  const w = Math.sin(t * 6 + seed) * 0.08;
-  ctx.fillStyle = 'rgba(8,14,12,0.25)';
+  const gy = y + r * 0.35; // le sol, sous le ver
+  ctx.fillStyle = 'rgba(8,14,12,0.14)';
   ctx.beginPath();
-  ctx.ellipse(x + 3, y + r * 0.45, r * 1.15, r * 0.35, 0, 0, TAU);
+  ctx.ellipse(x + 2, gy + r * 0.12, r * 1.3, r * 0.2, 0, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = '#C8A46E';
-  ctx.beginPath();
-  ctx.ellipse(x, y + r * 0.3, r * (1.05 + w), r * (0.42 - w), 0, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = '#DDBE88';
-  ctx.beginPath();
-  ctx.ellipse(x - r * 0.15, y + r * 0.18, r * 0.55, r * 0.2, 0, 0, TAU);
-  ctx.fill();
-  // grains de sable projetés
-  ctx.fillStyle = 'rgba(221,190,136,0.85)';
-  for (let k = 0; k < 5; k++) {
-    const ph = (t * 1.8 + k / 5 + seed * 0.1) % 1, a = k * 1.3 + seed;
+  for (let k = 2; k >= 0; k--) {
+    const ph = t * 4 + seed - k * 1.1, bx = x - r * 0.78 + k * r * 0.78, lift = 0.75 + Math.sin(ph) * 0.25;
+    const rr = r * (0.46 + (k === 1 ? 0.16 : 0)); // la bosse du milieu, plus grosse
+    ctx.fillStyle = k % 2 ? '#C8A46E' : '#C29C64';
     ctx.beginPath();
-    ctx.arc(x + Math.cos(a) * r * (0.5 + ph * 0.7), y + r * 0.2 - Math.sin(ph * Math.PI) * r * 0.6, r * 0.06 * (1 - ph), 0, TAU);
+    ctx.ellipse(bx, gy, rr, rr * 1.05 * lift, 0, Math.PI, 0);
+    ctx.lineTo(bx + rr, gy + rr * 0.2);
+    ctx.lineTo(bx - rr, gy + rr * 0.2);
+    ctx.fill();
+    ctx.fillStyle = '#DDBE88';
+    ctx.beginPath();
+    ctx.ellipse(bx - rr * 0.25, gy - rr * 0.45 * lift, rr * 0.45, rr * 0.16, -0.2, 0, TAU);
+    ctx.fill();
+    // fissure au sommet
+    ctx.strokeStyle = 'rgba(120,88,48,0.7)';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(bx - rr * 0.35, gy - rr * 0.55 * lift);
+    ctx.lineTo(bx - rr * 0.05, gy - rr * 0.68 * lift);
+    ctx.lineTo(bx + rr * 0.3, gy - rr * 0.5 * lift);
+    ctx.stroke();
+  }
+  // sable qui retombe des sommets
+  ctx.fillStyle = 'rgba(221,190,136,0.9)';
+  for (let k = 0; k < 6; k++) {
+    const ph = (t * 1.6 + k / 6 + seed * 0.1) % 1, side = k > 2 ? 1 : -1, bx = x - r * 0.78 + (k % 3) * r * 0.78 + side * 4;
+    ctx.beginPath();
+    ctx.arc(bx + ph * 6 * side, gy - r * 0.45 + ph * r * 0.5, 1.6 * (1 - ph * 0.5), 0, TAU);
     ctx.fill();
   }
 }

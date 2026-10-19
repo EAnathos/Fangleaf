@@ -298,8 +298,7 @@ export class Game {
     if (area === 'camp') this.hud.banner(first && this.hud.sword < SWORD_PULLS ? 'Une plage inconnue' : 'Plage du naufrage', first ? (this.hud.sword < SWORD_PULLS ? 'Quelque chose brille dans le sable' : 'Suis le chemin de cailloux jusqu\'au feu de camp') : 'De retour sur la plage');
     else if (area === 'village') this.hud.banner('Village', '');
     else if (area.startsWith('site')) {
-      if (area.endsWith('+')) this.hud.banner(campName(site), 'Feu de camp · réapparition · Pierre de passage');
-      else this.hud.banner('Emplacement de camp', 'Établis-le pour tout le village (E) : soins, réapparition, voyage');
+      this.hud.banner(campName(site), ''); // juste le nom du camp, établi ou non
     }
     else if (cave) {
       const boss = SPECIES[cave.boss];
