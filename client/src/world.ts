@@ -330,6 +330,16 @@ export class World {
       ctx.stroke();
     }
 
+    // Épave du bout de l'île, couchée sur le sable (dessinée avec le sol : elle ne bouge pas).
+    const sw = map.shipwreck;
+    if (sw.x > ox - 220 && sw.x < ox + CHUNK + 220 && sw.y > oy - 220 && sw.y < oy + CHUNK + 220) {
+      ctx.save();
+      ctx.translate(sw.x, sw.y);
+      ctx.rotate(sw.a);
+      drawShipwreck(ctx);
+      ctx.restore();
+    }
+
     // Tanières de suricates : butte de sable percée de trous.
     for (const d of map.dens) {
       if (d.x < ox - 80 || d.x > ox + CHUNK + 80 || d.y < oy - 80 || d.y > oy + CHUNK + 80) continue;
@@ -1885,4 +1895,163 @@ function stallLantern(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.arc(x, y + 6, 9, 0, TAU);
   ctx.fill();
   stallBox(ctx, x - 3.5, y, 7, 10, '#F7C766', 2);
+}
+
+// ── Épave coupée en deux (bout de l'île) : poupe à gauche, proue à droite, en coordonnées locales ──
+const SHIP_WOOD = '#6B4A33', SHIP_DARK = '#4A3322', SHIP_LIGHT = '#8A6446', SHIP_DECK = '#9A7448', SHIP_HOLE = '#24180F';
+
+function shipPlank(ctx: CanvasRenderingContext2D, x: number, y: number, a: number, l: number) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(a);
+  ctx.fillStyle = 'rgba(8,14,12,0.25)';
+  ctx.fillRect(-l / 2 + 2, -2, l, 7);
+  ctx.fillStyle = SHIP_LIGHT;
+  ctx.fillRect(-l / 2, -4, l, 6);
+  ctx.restore();
+}
+
+function shipBarrel(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.fillStyle = 'rgba(8,14,12,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(x + 3, y + 5, 10, 5, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#7A5A3A';
+  ctx.beginPath();
+  ctx.ellipse(x, y, 9, 11, 0.3, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = '#4A4E52';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(x, y, 9, 11, 0.3, -0.9, 0.9);
+  ctx.stroke();
+}
+
+/**
+ * Épave coupée en deux, un peu délabrée : la poupe et la proue séparées par une bande de sable, membrures à nu aux
+ * cassures, beaupré cassé ; entre les deux, des planches et un tonneau ; à côté, un bout de mât et sa voile déchirée.
+ */
+function drawShipwreck(ctx: CanvasRenderingContext2D) {
+  ctx.fillStyle = 'rgba(8,14,12,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(8, 14, 140, 32, 0, 0, TAU);
+  ctx.fill();
+  // poupe, cassée à droite
+  ctx.save();
+  ctx.translate(-55, 0);
+  ctx.rotate(0.08);
+  ctx.beginPath();
+  ctx.moveTo(-70, -26);
+  ctx.quadraticCurveTo(-10, -36, 40, -30);
+  ctx.lineTo(34, -18);
+  ctx.lineTo(44, -8);
+  ctx.lineTo(36, 4);
+  ctx.lineTo(46, 14);
+  ctx.lineTo(38, 30);
+  ctx.quadraticCurveTo(-10, 36, -70, 26);
+  ctx.quadraticCurveTo(-78, 0, -70, -26);
+  ctx.closePath();
+  ctx.fillStyle = SHIP_WOOD;
+  ctx.fill();
+  ctx.fillStyle = SHIP_DECK;
+  ctx.fillRect(-60, -20, 86, 38);
+  ctx.strokeStyle = 'rgba(74,51,34,0.5)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let k = -48; k < 26; k += 12) {
+    ctx.moveTo(k, -20);
+    ctx.lineTo(k, 18);
+  }
+  ctx.stroke();
+  ctx.fillStyle = SHIP_LIGHT; // château arrière
+  ctx.fillRect(-64, -18, 26, 34);
+  ctx.fillStyle = SHIP_DARK;
+  ctx.fillRect(-60, -14, 18, 26);
+  ctx.fillStyle = SHIP_HOLE; // la cale, ouverte à la cassure
+  ctx.fillRect(10, -16, 22, 30);
+  ctx.strokeStyle = SHIP_LIGHT; // membrures à nu
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (const k of [-12, -2, 8]) {
+    ctx.moveTo(14, k - 10);
+    ctx.quadraticCurveTo(28, k, 14, k + 10);
+  }
+  ctx.stroke();
+  ctx.restore();
+  // proue, cassée à gauche, un peu tournée
+  ctx.save();
+  ctx.translate(80, 6);
+  ctx.rotate(-0.22);
+  ctx.beginPath();
+  ctx.moveTo(-36, -28);
+  ctx.quadraticCurveTo(20, -32, 64, 0);
+  ctx.quadraticCurveTo(20, 32, -36, 28);
+  ctx.lineTo(-30, 16);
+  ctx.lineTo(-40, 6);
+  ctx.lineTo(-32, -6);
+  ctx.lineTo(-42, -16);
+  ctx.closePath();
+  ctx.fillStyle = SHIP_WOOD;
+  ctx.fill();
+  ctx.fillStyle = SHIP_DECK;
+  ctx.beginPath();
+  ctx.moveTo(-28, -20);
+  ctx.quadraticCurveTo(16, -22, 50, 0);
+  ctx.quadraticCurveTo(16, 22, -28, 20);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = SHIP_HOLE;
+  ctx.fillRect(-28, -14, 16, 26);
+  ctx.fillStyle = SHIP_LIGHT; // beaupré cassé
+  ctx.save();
+  ctx.translate(60, 0);
+  ctx.rotate(0.1);
+  ctx.fillRect(0, -3, 26, 6);
+  ctx.restore();
+  ctx.restore();
+  // entre les deux morceaux : sable amassé, planches, tonneau
+  ctx.fillStyle = 'rgba(214,190,138,0.9)';
+  ctx.beginPath();
+  ctx.ellipse(8, 6, 18, 24, 0, 0, TAU);
+  ctx.fill();
+  shipPlank(ctx, 4, -10, 1.2, 26);
+  shipPlank(ctx, 16, 18, 0.4, 22);
+  shipBarrel(ctx, -4, 34);
+  // bout de mât couché, voile déchirée
+  ctx.save();
+  ctx.translate(-70, -40);
+  ctx.rotate(-0.25);
+  ctx.fillStyle = 'rgba(8,14,12,0.25)';
+  ctx.fillRect(6, 5, 70, 6);
+  ctx.fillStyle = SHIP_LIGHT;
+  ctx.fillRect(0, -4, 70, 8);
+  ctx.fillStyle = SHIP_DARK;
+  ctx.beginPath();
+  ctx.moveTo(70, -4);
+  ctx.lineTo(75, -2);
+  ctx.lineTo(72, 0);
+  ctx.lineTo(76, 3);
+  ctx.lineTo(70, 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(-40, -62);
+  ctx.rotate(-0.2);
+  ctx.fillStyle = '#D9CCAE';
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(38, 4);
+  ctx.lineTo(34, 16);
+  ctx.lineTo(27, 13);
+  ctx.lineTo(23, 23);
+  ctx.lineTo(13, 18);
+  ctx.lineTo(4, 25);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(120,100,70,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(18, 9, 4.5, 2.7, 0.4, 0, TAU);
+  ctx.fill();
+  ctx.restore();
 }

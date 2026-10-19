@@ -141,6 +141,7 @@ export class WorldMap {
   readonly elder: Pt; // le vieil homme, près du feu du village
   readonly store: Pt; // entrepôt (réserve commune de bois et de pierre)
   readonly board: Pt; // panneau du village (tableau des exploits)
+  readonly shipwreck: Pt & { a: number }; // épave coupée en deux, sur la plage du bout de l'île (a : direction de la coque)
   readonly egg: Pt; // œuf brisé, juste à côté de l'endroit où l'on se réveille
   readonly sword: Pt; // épée plantée dans le sable, un peu plus haut sur la plage
   readonly gates: number[] = []; // portes : abscisse le long du couloir ([0] sortie du village, puis début de chaque zone)
@@ -182,6 +183,14 @@ export class WorldMap {
     let d = 0;
     while (d < 4000 && this.shoreAt(s0.x + ox * d, s0.y + oy * d) < -BEACH * 0.6) d += 16;
     this.spawn = { x: s0.x + ox * (d - 90), y: s0.y + oy * (d - 90) };
+    // Épave au bout de l'île (Mer de sable) : sur le sable, au bord de l'eau, couchée le long du rivage.
+    {
+      const e0 = this.spine[this.spine.length - 1], e1 = this.spine[Math.max(0, this.spine.length - 5)];
+      const el = Math.hypot(e0.x - e1.x, e0.y - e1.y) || 1, ex = (e0.x - e1.x) / el, ey = (e0.y - e1.y) / el;
+      let de = 0;
+      while (de < 4000 && this.shoreAt(e0.x + ex * de, e0.y + ey * de) < -45) de += 8;
+      this.shipwreck = { x: e0.x + ex * (de - 12), y: e0.y + ey * (de - 12), a: Math.atan2(ey, ex) + Math.PI / 2 }; // la coque touche l'eau
+    }
     // au réveil : l'œuf brisé à côté (à gauche ou à droite, côté terre : jamais caché par le nom), l'épée plantée
     // un peu plus haut, vers l'intérieur de l'île
     this.egg = { x: this.spawn.x + (ox > 0 ? -36 : 36), y: this.spawn.y + 8 };
@@ -235,6 +244,7 @@ export class WorldMap {
           this.cdist[k] < LANE + (fbm(p.x / 500, p.y / 500, this.seed + 95, 2) - 0.5) * 700 ||
           dist2(p.x, p.y, village.x, village.y) < (VILLAGE_R + 160) ** 2 ||
           dist2(p.x, p.y, this.spawn.x, this.spawn.y) < 320 ** 2 ||
+          dist2(p.x, p.y, this.shipwreck.x, this.shipwreck.y) < 260 ** 2 ||
           this.sites.some((c) => dist2(p.x, p.y, c.x, c.y) < 380 ** 2) ||
           this.pathDist(p.x, p.y) < 130
         ) {
@@ -250,6 +260,13 @@ export class WorldMap {
     this.cleanWater(keepDry);
     this.buildMouths();
     this.buildWetDist();
+    // l'épave : poupe et proue solides (le reste, des débris sur le sable, se traverse)
+    {
+      const { x, y, a } = this.shipwreck, c = Math.cos(a), sn = Math.sin(a);
+      for (const [lx, ly, r] of [[-110, 0, 26], [-80, 0, 30], [-50, 0, 30], [-20, 2, 28], [55, 6, 26], [85, 4, 24], [112, 0, 18]]) {
+        this.solidDisc(x + lx * c - ly * sn, y + lx * sn + ly * c, r);
+      }
+    }
 
     // Grottes : deux ou trois par zone, dans la bande de la zone, de part et d'autre de la colonne, l'ouverture accessible.
     const free = (x: number, y: number, r: number) => {
@@ -271,7 +288,7 @@ export class WorldMap {
           const x = sx + n.x * off, y = sy + n.y * off;
           if (this.zoneAt(x, y) !== z || !free(x, y, 120) || !free(x, y + 70, 40)) continue;
           if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < gap ** 2)) continue;
-          if (this.sites.some((c) => dist2(x, y, c.x, c.y) < 700 ** 2)) continue; // pas au pied d'un camp
+          if (this.sites.some((c) => dist2(x, y, c.x, c.y) < 700 ** 2) || this.nearWreck(x, y, 450)) continue; // pas au pied d'un camp ni de l'épave
           if (!this.findPath(sx, sy, x, y + 70, 20000)) continue;
           const id = this.caves.length;
           // intérieurs alignés hors du monde, assez espacés pour qu'aucun ne soit visible (ni ses monstres envoyés) depuis un autre
@@ -288,7 +305,7 @@ export class WorldMap {
       const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
       const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 90);
       const x = sx + n.x * off, y = sy + n.y * off;
-      if (!free(x, y, 40) || this.inVillage(x, y, 200) || dist2(x, y, this.spawn.x, this.spawn.y) < 300 ** 2) continue;
+      if (!free(x, y, 40) || this.inVillage(x, y, 200) || dist2(x, y, this.spawn.x, this.spawn.y) < 300 ** 2 || this.nearWreck(x, y, 240)) continue;
       if (this.sites.some((c) => dist2(x, y, c.x, c.y) < 350 ** 2)) continue;
       if (this.ores.some((o) => dist2(x, y, o.x, o.y) < 480 ** 2)) continue;
       if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 250 ** 2)) continue;
@@ -671,7 +688,7 @@ export class WorldMap {
         const x = (gx + 0.2 + hash2(gx, gy, this.seed + 4) * 0.6) * DECO_CELL;
         const y = (gy + 0.2 + hash2(gx, gy, this.seed + 5) * 0.6) * DECO_CELL;
         if (Math.abs(x) > WORLD_HALF - 20 || Math.abs(y) > WORLD_HALF - 20 || this.isForest(x, y) || this.shoreAt(x, y) > -BEACH - 40) continue; // ni en mer ni sur la plage
-        if (this.inVillage(x, y, 80) || Math.hypot(x - this.spawn.x, y - this.spawn.y) < 230) continue;
+        if (this.inVillage(x, y, 80) || Math.hypot(x - this.spawn.x, y - this.spawn.y) < 230 || this.nearWreck(x, y, 220)) continue;
         if (this.sites.some((c) => Math.hypot(x - c.x, y - c.y) < 300)) continue;
         if (this.isWater(x, y) || this.isWater(x + 24, y) || this.isWater(x - 24, y) || this.isWater(x, y + 24)) continue;
         if (this.caves.some((c) => Math.hypot(x - c.entrance.x, y - c.entrance.y) < 190)) continue;
@@ -705,7 +722,7 @@ export class WorldMap {
       const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 80);
       const x = sx + n.x * off, y = sy + n.y * off;
       if (this.blocked(x, y) || this.blocked(x + 20, y) || this.blocked(x - 20, y) || this.inVillage(x, y, 120)) continue;
-      if (dist2(x, y, this.spawn.x, this.spawn.y) < 260 ** 2 || this.sites.some((c) => dist2(x, y, c.x, c.y) < 320 ** 2)) continue;
+      if (dist2(x, y, this.spawn.x, this.spawn.y) < 260 ** 2 || this.nearWreck(x, y, 240) || this.sites.some((c) => dist2(x, y, c.x, c.y) < 320 ** 2)) continue;
       if (this.pathDist(x, y) < 40 || this.bushes.some((b) => dist2(x, y, b.x, b.y) < 300 ** 2)) continue;
       if (this.ores.some((o) => dist2(x, y, o.x, o.y) < 90 ** 2) || this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 220 ** 2)) continue;
       this.bushes.push({ id: this.bushes.length, x, y, zone: this.zoneAt(x, y) });
@@ -731,7 +748,7 @@ export class WorldMap {
         const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
         const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 90);
         const x = sx + n.x * off, y = sy + n.y * off;
-        if (!free(x, y) || this.inVillage(x, y, 150) || dist2(x, y, this.spawn.x, this.spawn.y) < 260 ** 2) continue;
+        if (!free(x, y) || this.inVillage(x, y, 150) || dist2(x, y, this.spawn.x, this.spawn.y) < 260 ** 2 || this.nearWreck(x, y, 240)) continue;
         if (this.sites.some((c) => dist2(x, y, c.x, c.y) < 350 ** 2) || this.pathDist(x, y) < 50) continue;
         if (this.ores.some((o) => dist2(x, y, o.x, o.y) < (first ? 160 : 300) ** 2) || this.bushes.some((b) => dist2(x, y, b.x, b.y) < 70 ** 2)) continue;
         if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 250 ** 2)) continue;
@@ -753,11 +770,16 @@ export class WorldMap {
       const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 140);
       const x = sx + n.x * off, y = sy + n.y * off;
       if (this.zoneAt(x, y) !== 6 || this.blocked(x, y) || this.blocked(x + 40, y) || this.blocked(x - 40, y) || this.blocked(x, y + 30)) continue;
-      if (this.pathDist(x, y) < 90 || this.dens.some((d) => dist2(x, y, d.x, d.y) < 700 ** 2)) continue;
+      if (this.pathDist(x, y) < 90 || this.nearWreck(x, y, 300) || this.dens.some((d) => dist2(x, y, d.x, d.y) < 700 ** 2)) continue;
       if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 400 ** 2) || this.ores.some((o) => dist2(x, y, o.x, o.y) < 120 ** 2)) continue;
       if (this.bushes.some((b) => dist2(x, y, b.x, b.y) < 100 ** 2)) continue;
       this.dens.push({ x, y });
     }
+  }
+
+  /** Près de l'épave du bout de l'île (rien n'y pousse ni n'y apparaît). */
+  nearWreck(x: number, y: number, r: number) {
+    return dist2(x, y, this.shipwreck.x, this.shipwreck.y) < r * r;
   }
 
   /** Palissade construite (solide) ou non (on passe). Seules ses cases encore libres changent. */
