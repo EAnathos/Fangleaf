@@ -102,8 +102,6 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 - Un membre **déconnecté** dort près du feu du village (« z z z »), ses Alphas équipés et sa meute autour de lui : certains dorment aussi, les autres flânent dans le village
 - **F9** (dev uniquement) : +300 or, +100 bois, +100 pierre et +30 essences de chaque espèce pour tester la forge, l'Hôtel de ville et la Tanière
 
-Bestiaire animé de toutes les espèces (outil de dev) : http://localhost:5173/bestiary.html
-
 ## Structure
 
 ```

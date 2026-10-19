@@ -1,4 +1,4 @@
-// Descriptions des espèces : bestiaire de la Tanière et page de dev /bestiary.html.
+// Descriptions des espèces : bestiaire de la Tanière.
 
 export const SPECIES_DESC: Record<string, string> = {
   hare: 'Gibier des Landes qui grignote les baies des buissons. Il ne se bat pas : frappé, il détale. Tends-lui un fruit (T) pour l\'apprivoiser.',
