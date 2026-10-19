@@ -259,7 +259,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .alphas .empty { color: var(--muted); padding: 16px; text-align: center; background: var(--night); border-radius: 12px; }
 @media (max-width: 640px) {
   .forge-cols { grid-template-columns: 1fr; }
-  .alpha-card { flex-wrap: wrap; }
+  /* Tanière sur téléphone : portrait et nom en haut, les infos sur toute la largeur, les boutons en rangée en bas */
+  .alpha-card { display: grid; grid-template-columns: 56px minmax(0, 1fr); grid-template-areas: "portrait col" "actions actions"; align-items: start; gap: 10px 12px; padding: 12px; }
+  .alpha-card .portrait { grid-area: portrait; width: 56px; height: 56px; border-radius: 12px; }
+  .alpha-card .col { grid-area: col; }
+  .alpha-card .title { font-size: 16px; line-height: 1.25; }
+  .alpha-card .actions { grid-area: actions; width: auto; flex-direction: row; flex-wrap: wrap; }
+  .alpha-card .actions > button { flex: 1 1 0; min-width: 96px; height: 42px; }
+  /* bestiaire : deux colonnes, des cartes plus compactes, les quatre formes tiennent sur une ligne */
+  .bestiary-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .beast { padding: 8px; }
+  .beast canvas { height: 76px; }
+  .beast b { font-size: 14px; }
+  .beast .desc { font-size: 12px; }
+  #bestiary-forms { gap: 6px; }
+  #bestiary-forms .seg-btn { min-width: 0; padding: 0 4px; font-size: 13px; }
 }
 
 /* ───── Compte ───── */
@@ -452,3 +466,7 @@ body.waking #hud { opacity: 0; pointer-events: none; }
 .talk-line b { display: block; margin-bottom: 2px; font: 700 13px var(--body); font-style: normal; color: #E8DCC2; }
 .talk-line.mine { border-color: rgba(92, 200, 184, 0.5); font-style: normal; } /* c'est nous qui parlons */
 .talk-line.mine b { color: var(--ally); }
+.scroll-pick { width: 100%; text-align: left; cursor: pointer; color: var(--text); flex-direction: column; align-items: flex-start; gap: 2px; }
+.scroll-pick:hover { border-color: #C9A24A; }
+.scroll-pick .small { color: #E8DCC2; }
+.elder-boat { max-height: 46vh; overflow-y: auto; } /* les 15 parchemins défilent */

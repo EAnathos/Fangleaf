@@ -200,6 +200,7 @@ export interface Snapshot {
   hall: number; // niveau de la Maison commune
   vname: string; // nom du village ('' : Hôtel de ville pas encore construit)
   scrolls: number[]; // grottes dont le parchemin attend ce dompteur
+  told: number[]; // parchemins lus par le vieil homme (géant de chacun), dans l'ordre de ses souvenirs
   lore: [number, number, number]; // souvenirs retrouvés par le vieil homme, étapes du bateau achevées, secondes avant la fin de l'étape en cours (0 : aucune)
   stock: [number, number]; // réserve du village : [bois, pierre]
   beaten: number[]; // géants (espèce) déjà vaincus par le village : ils ouvrent les portes des zones

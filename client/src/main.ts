@@ -7,6 +7,11 @@ import { startLobbyScene } from './lobbyScene.ts';
 import { Net } from './net.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+
+// Application installable (PWA) : le service worker, seulement en production (en dev, il gênerait le rechargement à chaud).
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => { /* navigateur sans service worker : tant pis */ }));
+}
 const nameInput = $<HTMLInputElement>('name');
 const codeInput = $<HTMLInputElement>('code');
 let mode: 'mine' | 'create' | 'join' = 'create';

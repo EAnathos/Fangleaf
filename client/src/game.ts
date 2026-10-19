@@ -1008,6 +1008,7 @@ export class Game {
     this.hud.sword = this.self()?.sword ?? SWORD_PULLS;
     this.hud.scrollCaves = this.net.latest?.scrolls ?? [];
     this.hud.lore = this.net.latest?.lore ?? [0, 0, 0];
+    this.hud.told = this.net.latest?.told ?? [];
     this.hud.banned = this.net.latest?.banned ?? [];
     this.hud.stock = this.net.latest?.stock ?? [0, 0];
     const palisade = this.hud.buildings.includes('palisade');

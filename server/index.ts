@@ -20,6 +20,7 @@ const DIST = fileURLToPath(new URL('../dist', import.meta.url));
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon', '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
 };
 
 const http = createServer((req, res) => {

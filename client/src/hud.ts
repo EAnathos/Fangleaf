@@ -8,7 +8,7 @@ import {
 import type { BoardRow, PlayerState, UnitTuple } from '../../shared/protocol.ts';
 import type { WorldMap } from '../../shared/worldmap.ts';
 import { armorColor, drawElder, drawHatchling, drawUnit } from './sprites.ts';
-import { ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCHLINGS } from './elder.ts';
+import { CHAPTER_TITLES, ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD } from './elder.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { sound } from './audio.ts';
 import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
@@ -185,7 +185,8 @@ export class Hud {
   private npcWho = 0; // nouveau-né à qui l'on parle
   private npcAt = 0; // réplique en cours avec lui
   private elderLines: string[] = []; // ce qu'il est en train de dire
-  private elderView: 'talk' | 'boat' = 'talk';
+  private elderView: 'talk' | 'boat' | 'scrolls' = 'talk';
+  told: number[] = []; // parchemins lus par Aubin (géant de chacun), dans l'ordre
   private myScrolls = 0; // parchemins dans mon sac
   lore: [number, number, number] = [0, 0, 0]; // souvenirs retrouvés, étapes du bateau, secondes avant la fin de l'étape en cours
   scrollCaves: number[] = []; // grottes dont le parchemin m'attend // portrait du géant à qui l'on parle
@@ -616,7 +617,7 @@ export class Hud {
   /** Panneau du vieil homme : sa réplique, et selon le moment, donner ses parchemins, réécouter ses souvenirs, le bateau. */
   private updateElder(me: PlayerState) {
     const total = this.map.caves.length, [told, boat, left] = this.lore, funds = this.funds(me);
-    const key = JSON.stringify([this.elderView, this.elderAt, this.elderLines.length, me.scrolls, this.lore, this.elderView === 'boat' ? [funds.gold >= 0 && canPay(funds, BOAT_STAGES[boat] ?? BOAT_STAGES[0])] : 0]);
+    const key = JSON.stringify([this.elderView, this.elderAt, this.elderLines.length, me.scrolls, this.lore, this.told, this.elderView === 'boat' ? [funds.gold >= 0 && canPay(funds, BOAT_STAGES[boat] ?? BOAT_STAGES[0])] : 0]);
     if (key === this.last.elder) return;
     this.last.elder = key;
     $('elder-title').textContent = told ? 'Aubin' : 'Un vieil homme';
@@ -629,8 +630,29 @@ export class Hud {
       return b;
     };
     const actions: HTMLButtonElement[] = [];
-    $('elder-boat').hidden = this.elderView !== 'boat';
-    if (this.elderView === 'boat') {
+    $('elder-boat').hidden = this.elderView === 'talk';
+    if (this.elderView === 'scrolls') {
+      // les anciens parchemins : on lui en remontre un, il le raconte à nouveau
+      $('elder-line').textContent = '« Lequel veux-tu me montrer ? »';
+      $('elder-boat').replaceChildren(
+        ...this.told.slice(0, told).map((boss, i) => {
+          const row = document.createElement('button');
+          row.className = 'boat-stage scroll-pick';
+          row.innerHTML = '<b></b><span class="small"></span>';
+          row.querySelector('b')!.textContent = `${i + 1}. ${CHAPTER_TITLES[i] ?? ''}`;
+          row.querySelector('span')!.textContent = `Parchemin de ${SPECIES[boss]?.title ?? SPECIES[boss]?.name ?? '?'}`;
+          row.onclick = () => {
+            this.elderView = 'talk';
+            this.elderSay([...REREAD, ...ELDER_CHAPTERS[i]]);
+          };
+          return row;
+        }),
+      );
+      actions.push(button('Retour', 'btn', () => {
+        this.elderView = 'talk';
+        this.elderSay(elderGreeting(told, total, boat, BOAT_STAGES.length));
+      }));
+    } else if (this.elderView === 'boat') {
       // le bateau : les étapes faites, celle en chantier, ou celle à payer
       $('elder-line').textContent = `« ${boat >= BOAT_STAGES.length ? 'Le bateau est prêt ! Une Pierre de passage t\'attend à côté.' : left ? 'Je m\'en occupe ! Reviens dans un moment.' : 'Voilà ce qu\'il me faut pour la suite.'} »`;
       $('elder-boat').replaceChildren(
@@ -671,7 +693,10 @@ export class Hud {
           this.elderView = 'boat';
           this.last.elder = '';
         }));
-        if (told) actions.push(button('Raconte-moi encore', 'btn', () => this.elderSay(ELDER_CHAPTERS.slice(0, told).flat())));
+        if (told) actions.push(button('Les anciens parchemins', 'btn', () => {
+          this.elderView = 'scrolls';
+          this.last.elder = '';
+        }));
       }
     }
     actions.push(button('Au revoir', 'btn', () => this.setPanel(null)));

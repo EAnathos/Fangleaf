@@ -81,6 +81,15 @@ export const ELDER_CHAPTERS: string[][] = [
   ],
 ];
 
+/** Titre de chaque souvenir (la liste des anciens parchemins). */
+export const CHAPTER_TITLES = [
+  'Un nom', 'Le village', 'Nos compagnons', 'Les gardiens', 'La Brume', 'Les lisières', 'Le grand bateau', 'Le naufrage',
+  'Le départ', 'Les œufs', 'Le gardien', 'Ton œuf', 'L\'épée', 'La Brume recule', 'Le bateau à reconstruire',
+];
+
+/** Ce qu'il dit quand on lui remontre un parchemin déjà lu. */
+export const REREAD = ['Ah oui, celui-là ! Je m\'en souviens bien, maintenant. Écoute…'];
+
 /** Son nom, une fois le premier souvenir retrouvé. */
 export const elderName = (told: number) => (told > 0 ? 'Aubin' : 'Vieil homme');
 
