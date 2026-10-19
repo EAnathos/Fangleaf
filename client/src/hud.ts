@@ -409,7 +409,7 @@ export class Hud {
     ride.classList.toggle('on', !!me.mount);
     ride.setAttribute('aria-label', me.mount ? 'Descendre de sa monture' : 'Monter sur sa monture');
     setHidden(ride, !me.mount && !me.army.some((a) => a.alpha && MOUNTS[SPECIES[a.species].key]));
-    setText($('self-army'), `Meute ${me.army.filter((a) => !a.alpha).length}/${ARMY_CAP}`);
+    setText($('self-army'), `${me.army.filter((a) => !a.alpha).length} / ${ARMY_CAP}`); // meute ordinaire, en bas à gauche
     setText($('ping'), ping && settings.display.ping ? `${ping} ms` : '');
     setHidden($('invite'), players.length >= MAX_PLAYERS); // village complet : plus personne à inviter
     // au doigt, « Tendre un fruit » seulement près d'un gibier passif (ou si on en tend déjà un)
@@ -867,7 +867,6 @@ export class Hud {
 
   /** Marché : vendre les monstres ordinaires de sa meute, acheter ceux des espèces déjà croisées. */
   private updateMarket(me: PlayerState) {
-    $('market-gold').textContent = String(me.gold);
     const pack = me.army.filter((a) => !a.alpha);
     const key = JSON.stringify([this.hall, this.beaten, me.gold, me.seen, pack.map((a) => a.id)]);
     if (key !== this.last.market) {
@@ -1068,7 +1067,7 @@ export class Hud {
     $('collection').innerHTML = (count
       ? `Bonus de collection : <b>+${Math.round((collectionMult(count) - 1) * 100)} %</b> PV et dégâts`
       : 'Bonus de collection : chaque Alpha éveillé donnera +5 % de PV et de dégâts à tous tes Alphas.')
-      + `<br>Équipés : <b>${equipped}/${ALPHA_EQUIP_MAX}</b> · les autres se reposent ici et comptent quand même pour le bonus.`;
+      + `<br>Équipés : <b>${equipped}/${ALPHA_EQUIP_MAX}</b>`;
 
     // Une carte par espèce déjà rencontrée (ou dont on a déjà l'Alpha) : éveiller son Alpha, puis le renforcer.
     // espèces croisées dont la zone est ouverte (un Alpha déjà possédé reste visible, même d'une zone fermée)
@@ -1095,7 +1094,7 @@ export class Hud {
         const el = document.createElement('div');
         el.className = `alpha-card${a ? '' : ' asleep'}`;
         el.innerHTML = `<canvas class="portrait"></canvas><div class="col"><span class="title"></span><div class="stat-rows"></div>
-          <div class="ess"><div class="ess-bar"><i></i></div><span></span></div></div><div class="actions"><button class="buy"></button></div>`;
+          <div class="ess"><div class="ess-bar"><i></i><span></span></div></div></div><div class="actions"><button class="buy"></button></div>`;
         const canvas = el.querySelector('canvas')!;
         canvas.setAttribute('role', 'img');
         canvas.setAttribute('aria-label', `Alpha ${sp.name}`);
@@ -1125,7 +1124,7 @@ export class Hud {
           .map(([icon, label, value]) => `<div class="stat-row ${icon}">${ICONS[icon]}<span>${label}</span><b>${value}</b></div>`)
           .join('');
         (el.querySelector('.ess-bar i') as HTMLElement).style.width = `${maxed ? 100 : Math.min(100, (100 * have) / cost)}%`;
-        el.querySelector('.ess span')!.textContent = maxed ? `${have} essences` : `${have}/${cost} ${unit} de ${sp.name}`;
+        el.querySelector('.ess span')!.textContent = maxed ? `${have} ${unit}` : `${have} / ${cost} ${unit}`; // dans la jauge
         if (a?.legend) el.classList.add('legend');
         const waking = me.awakening.find((w) => w.species === s);
         if (waking) {

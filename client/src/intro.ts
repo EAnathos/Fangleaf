@@ -5,7 +5,7 @@
 import { sound } from './audio.ts';
 
 const LINES: { text: string; from: number; to: number; low?: boolean }[] = [
-  { text: 'Chaud…', from: 1.1, to: 3.5 },
+  { text: 'J\'ai chaud…', from: 1.1, to: 3.5 },
   { text: 'Un grondement. Il s\'en va… et il revient.', from: 3.8, to: 6.6 },
   { text: 'Où suis-je ?', from: 10.4, to: 13.2, low: true }, // les yeux ouverts : en bas, sur la plage
 ];

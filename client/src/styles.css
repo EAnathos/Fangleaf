@@ -238,8 +238,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .alpha-card.waking .ess-bar i { background: linear-gradient(90deg, var(--alpha), #E2D3FF); }
 @keyframes waking { 50% { box-shadow: 0 0 14px var(--alpha); opacity: 0.6; } }
 .ess { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 13px; color: var(--muted); }
-.ess-bar { flex: 1; max-width: 220px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.ess-bar { position: relative; flex: 1; max-width: 260px; height: 18px; border-radius: 9px; background: var(--line); overflow: hidden; }
 .ess-bar i { display: block; height: 100%; background: var(--alpha); }
+.ess-bar span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 700 12px var(--body); color: #F4F1E6; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75); white-space: nowrap; } /* compteur dans la jauge */
 .collection { margin: 0; padding: 10px 14px; border-radius: 10px; background: rgba(180, 140, 255, 0.12); color: var(--text-2); font-size: 14px; }
 .collection b { color: var(--alpha); }
 .alpha-card.legend { border-color: var(--amber); background: linear-gradient(90deg, rgba(240, 182, 74, 0.12), var(--night) 60%); }
@@ -375,6 +376,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .stone-row .kick.sure { background: var(--enemy); color: var(--amber-ink); }
 
 /* Chat (comme dans Minecraft) : n'apparaît que lorsqu'on l'ouvre. */
+.army-badge { position: absolute; left: 16px; bottom: 16px; height: 44px; padding: 0 14px 0 10px; display: flex; align-items: center; gap: 8px; border-radius: 22px; font: 700 16px var(--body); color: var(--text); font-variant-numeric: tabular-nums; }
 .chat { position: absolute; left: 16px; bottom: 16px; width: min(460px, calc(100vw - 32px)); padding: 10px; display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
 .chat-log { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; font-size: 14px; }
 .chat-log p { margin: 0; line-height: 1.35; overflow-wrap: anywhere; }
