@@ -213,6 +213,9 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'mode') room.onMode(player, !!msg.manual);
     else if (msg.t === 'attack') room.onAttack(player, +msg.x, +msg.y);
     else if (msg.t === 'sword') room.onSword(player);
+    else if (msg.t === 'scroll') room.onScroll(player, +msg.cave);
+    else if (msg.t === 'scrollGive') room.onScrollGive(player);
+    else if (msg.t === 'boat') room.onBoat(player);
     else if (msg.t === 'pick') room.onPick(player);
     else if (msg.t === 'hold') room.onHold(player, !!msg.on);
     else if (msg.t === 'unlock') room.onUnlock(player, +msg.cave);

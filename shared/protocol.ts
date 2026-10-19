@@ -31,7 +31,10 @@ export type ClientMsg =
   | { t: 'challenge'; cave: number } // parler au géant endormi de sa grotte : le combat commence
   | { t: 'chest'; id: number } // ouvrir le coffre laissé par un géant vaincu (une fois par dompteur)
   | { t: 'establish'; site: number } // établir le camp de cet emplacement (pour tout le village)
-  | { t: 'travel'; to: number } // Pierre de passage : -1 = village, sinon index du camp
+  | { t: 'travel'; to: number } // Pierre de passage : -1 = village, -2 = bateau, sinon index du camp
+  | { t: 'scroll'; cave: number } // ramasser le parchemin laissé par le géant de cette grotte
+  | { t: 'scrollGive' } // donner ses parchemins au vieil homme : il retrouve des souvenirs
+  | { t: 'boat' } // donner au vieil homme les ressources de l'étape suivante du bateau
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
   | { t: 'rename'; name: string } // renommer le village, devant l'Hôtel de ville (une fois construit)
   | { t: 'hall'; name?: string } // améliorer la Maison commune (pour tout le village) ; name : nom du village, à sa construction
@@ -68,6 +71,7 @@ export interface PlayerState {
   torch: number; // 0 : pas de torche
   boots: number;
   sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
+  scrolls: number; // parchemins dans son sac (à donner au vieil homme)
   cls: ClassId | null; // classe (null : pas encore choisie)
   gold: number;
   fruits: number; // baies dans son sac
@@ -168,6 +172,9 @@ export type GameEvent =
   | { e: 'hall'; lvl: number; by: number } // Maison commune améliorée
   | { e: 'deposit'; by: number; wood: number; stone: number } // bois et pierre déposés à l'entrepôt
   | { e: 'beaten'; s: number; by: number } // un géant vaincu pour la première fois par le village
+  | { e: 'scroll'; to: number; s: number } // parchemin ramassé (s : son géant)
+  | { e: 'lore'; by: number; from: number; to: number } // le vieil homme a retrouvé les souvenirs from à to - 1
+  | { e: 'boat'; by: number; stage: number; done: boolean } // une étape du bateau commence (by) ou s'achève (done)
   | { e: 'res'; to: number; wood: number; stone: number; x: number; y: number } // bois ou pierre récoltés
   | { e: 'unlock'; cave: number; by: number } // une grotte vient d'être débloquée
   | { e: 'trade'; to: number; s: number; gold: number; sold: boolean } // Marché : monstre vendu ou acheté
@@ -192,6 +199,8 @@ export interface Snapshot {
   buildings: BuildingId[]; // bâtiments construits au village
   hall: number; // niveau de la Maison commune
   vname: string; // nom du village ('' : Hôtel de ville pas encore construit)
+  scrolls: number[]; // grottes dont le parchemin attend ce dompteur
+  lore: [number, number, number]; // souvenirs retrouvés par le vieil homme, étapes du bateau achevées, secondes avant la fin de l'étape en cours (0 : aucune)
   stock: [number, number]; // réserve du village : [bois, pierre]
   beaten: number[]; // géants (espèce) déjà vaincus par le village : ils ouvrent les portes des zones
   unlocked: number[]; // grottes débloquées par le village

@@ -6,7 +6,7 @@ import {
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
-  SPAWN_SAFE_R, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
+  SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
   armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
@@ -143,6 +143,7 @@ export interface Player {
   reviveT: number; // à terre : secondes de réanimation déjà passées
   atkCd: number;
   sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
+  scrolls: number[]; // parchemins portés (géant de chacun), à donner au vieil homme
   swordAt: number; // dernier coup (pas plus d'un toutes les 0,3 s)
   lastPosMs: number;
   army: number[];
@@ -221,6 +222,9 @@ export interface VillageState {
   unlocked: number[];
   hall: number; // niveau de l'Hôtel de ville
   name: string; // nom du village ('' : pas encore nommé)
+  told: number[]; // parchemins donnés au vieil homme (géant de chacun), dans l'ordre : ses souvenirs
+  boat: number; // étapes du bateau achevées
+  boatAt: number; // fin de l'étape en cours (horodatage ms ; 0 : aucune)
   beaten: number[]; // géants (espèce) déjà vaincus au moins une fois
   wood: number; // réserve commune (entrepôt)
   stone: number;
@@ -268,6 +272,9 @@ export class Room {
   readonly unlocked: number[]; // grottes débloquées (index dans map.caves)
   hall: number; // niveau de l'Hôtel de ville
   name = ''; // nom du village, donné en construisant l'Hôtel de ville (renommable ensuite)
+  told: number[] = []; // parchemins donnés au vieil homme, dans l'ordre (un souvenir chacun)
+  boat = 0; // étapes du bateau achevées (BOAT_STAGES.length : le bateau est prêt)
+  boatAt = 0; // fin de l'étape en cours (Date.now en ms ; 0 : aucune)
   private renamedAt?: number; // dernier changement de nom (anti-spam)
   readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
   readonly stock = { wood: 0, stone: 0 }; // réserve commune de l'entrepôt
@@ -287,6 +294,9 @@ export class Room {
     this.buildings = BUILDING_IDS.filter((b) => saved.buildings?.includes(b));
     this.hall = clamp(Math.floor(Number(saved.hall) || 0), 0, HALL_MAX);
     this.name = villageName(saved.name);
+    this.told = (saved.told ?? []).map(Number).filter((s, i, all) => s in SPECIES && SPECIES[s].boss && all.indexOf(s) === i);
+    this.boat = clamp(Math.floor(Number(saved.boat) || 0), 0, BOAT_STAGES.length);
+    this.boatAt = this.boat < BOAT_STAGES.length ? Math.max(0, Number(saved.boatAt) || 0) : 0;
     // Village d'avant l'île (déjà lancé) : son camp est considéré comme installé (palissade, emplacements défrichés).
     if ((this.hall > 0 || this.buildings.length) && !this.buildings.includes('palisade')) {
       for (const b of ['palisade', 'plot_forge', 'plot_den', 'plot_market'] as const) if (!this.buildings.includes(b)) this.buildings.push(b);
@@ -328,7 +338,7 @@ export class Room {
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
       hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, stats: { bosses: 0, tamed: 0, given: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
-      sword: armed ? SWORD_PULLS : 0, swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
+      sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
     };
     const prof = account?.profile;
     if (prof) {
@@ -336,6 +346,7 @@ export class Room {
       p.wood = Math.max(0, Math.floor(prof.wood ?? 0));
       p.stone = Math.max(0, Math.floor(prof.stone ?? 0));
       p.fruits = Math.max(0, Math.floor(prof.fruits ?? 0));
+      p.scrolls = (prof.scrolls ?? []).map(Number).filter((s, i, all) => s in SPECIES && SPECIES[s].boss && all.indexOf(s) === i);
       p.stats = statsOf(prof.stats);
       p.weapon = clamp(prof.weapon, 0, WEAPON_MAX);
       p.armor = clamp(prof.armor, 0, ARMOR_MAX);
@@ -538,7 +549,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, armed: p.sword >= SWORD_PULLS, essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen], stats: { ...p.stats } };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen], stats: { ...p.stats } };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -577,7 +588,7 @@ export class Room {
   }
 
   private saveVillage() {
-    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, beaten: [...this.beaten], ...this.stock, banned: [...this.banned] });
+    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, beaten: [...this.beaten], ...this.stock, banned: [...this.banned] });
   }
 
   /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
@@ -603,6 +614,57 @@ export class Room {
     }
     this.saveVillage();
     this.events.push({ e: 'built', b, by: p.id });
+  }
+
+  /** Grottes dont le parchemin attend ce dompteur : géant déjà vaincu par le village, souvenir pas encore rendu, pas déjà dans son sac. */
+  private scrollCaves(p: Player) {
+    return this.map.caves.filter((c) => this.beaten.includes(c.boss) && !this.told.includes(c.boss) && !p.scrolls.includes(c.boss)).map((c) => c.id);
+  }
+
+  /** Ramasser le parchemin laissé par le géant de cette grotte (chacun le sien, tant que le vieil homme ne l'a pas lu). */
+  onScroll(p: Player, cave: number) {
+    const c = this.map.caves[cave];
+    if (!c || p.dead || !this.scrollCaves(p).includes(cave)) return;
+    const at = this.map.scrollPos(c);
+    if (dist2(p.x, p.y, at.x, at.y) > SCROLL_REACH ** 2) return;
+    p.scrolls.push(c.boss);
+    p.dirty = true;
+    this.events.push({ e: 'scroll', to: p.id, s: c.boss });
+  }
+
+  /** Donner ses parchemins au vieil homme : chacun qu'il n'a pas encore lu lui rend un souvenir (dans l'ordre où on les lui donne). */
+  onScrollGive(p: Player) {
+    if (p.dead || !p.scrolls.length || dist2(p.x, p.y, this.map.elder.x, this.map.elder.y) > ELDER_REACH ** 2) return;
+    const from = this.told.length;
+    for (const s of p.scrolls) if (!this.told.includes(s)) this.told.push(s);
+    p.scrolls = [];
+    p.dirty = true;
+    if (this.told.length === from) return;
+    this.saveVillage();
+    this.events.push({ e: 'lore', by: p.id, from, to: this.told.length });
+  }
+
+  /** Le bateau : tous ses souvenirs retrouvés, le vieil homme en bâtit l'étape suivante contre des ressources (30 minutes). */
+  onBoat(p: Player) {
+    if (p.dead || this.told.length < this.bossCount() || this.boat >= BOAT_STAGES.length || this.boatAt) return;
+    if (dist2(p.x, p.y, this.map.elder.x, this.map.elder.y) > ELDER_REACH ** 2) return;
+    if (!this.pay(p, BOAT_STAGES[this.boat])) return;
+    this.boatAt = Date.now() + BOAT_STAGE_MS;
+    this.saveVillage();
+    this.events.push({ e: 'boat', by: p.id, stage: this.boat, done: false });
+  }
+
+  /** Étape du bateau terminée (le temps court même quand personne n'est là : on regarde l'horloge). */
+  private updateBoat() {
+    if (!this.boatAt || Date.now() < this.boatAt) return;
+    this.boatAt = 0;
+    this.boat++;
+    this.saveVillage();
+    this.events.push({ e: 'boat', by: 0, stage: this.boat - 1, done: true });
+  }
+
+  private bossCount() {
+    return this.map.caves.length;
   }
 
   /** Tirer sur l'épée plantée dans le sable, à côté d'elle : au bout de SWORD_PULLS coups, elle est sortie. */
@@ -939,6 +1001,7 @@ export class Room {
     this.clearEmptyCaves();
     this.updateAwakenings();
     this.updateSleepers();
+    if (this.tick % TICK_HZ === 0) this.updateBoat();
     for (const p of this.players.values()) {
       if (p.villageFound || p.dead || !this.map.inVillage(p.x, p.y)) continue;
       p.villageFound = true; // découvert : la prochaine fois, on arrivera ici
@@ -1100,6 +1163,7 @@ export class Room {
   private stoneNear(p: Player): number | null {
     const near = (st: { x: number; y: number }) => dist2(p.x, p.y, st.x, st.y) <= (BUILDING_REACH + 40) ** 2;
     if (this.buildings.includes('stone') && near(this.map.stones[0])) return -1;
+    if (this.boat >= BOAT_STAGES.length && near(this.map.boatStone)) return -2;
     for (const c of this.camps) if (near(this.map.stones[c + 1])) return c;
     return null;
   }
@@ -1108,8 +1172,9 @@ export class Room {
   onTravel(p: Player, to: number) {
     if (p.dead || this.swimming(p)) return; // descendre du serpent d'abord
     const from = this.stoneNear(p);
-    if (from === null || from === to || (to === -1 ? !this.buildings.includes('stone') : !this.camps.includes(to))) return;
-    const st = this.map.stones[to + 1];
+    const open = to === -1 ? this.buildings.includes('stone') : to === -2 ? this.boat >= BOAT_STAGES.length : this.camps.includes(to);
+    if (from === null || from === to || !open) return;
+    const st = to === -2 ? this.map.boatStone : this.map.stones[to + 1];
     const at = this.map.freeNear(st.x - 10, st.y + 60);
     this.events.push({ e: 'travel', id: p.id, x: Math.round(p.x), y: Math.round(p.y), tx: Math.round(at.x), ty: Math.round(at.y) });
     p.x = at.x;
@@ -2637,7 +2702,7 @@ export class Room {
       case 'move': case 'charge': case 'feed': case 'revive': case 'heal': return ent(e.id) ?? null;
       case 'mine': return this.map.ores[e.id] ?? null;
       case 'eat': case 'pick': return this.map.bushes[e.bush] ?? null;
-      case 'gold': case 'essence': case 'soul': case 'res': case 'chest': case 'full': case 'seen': case 'trade': return e.to;
+      case 'gold': case 'essence': case 'soul': case 'res': case 'chest': case 'full': case 'seen': case 'trade': case 'scroll': return e.to;
       case 'mount': return e.by;
       default: return null;
     }
@@ -2649,7 +2714,7 @@ export class Room {
     for (const p of this.players.values()) {
       const st: PlayerState = {
         id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: Math.round(p.fx * 100) / 100, fy: Math.round(p.fy * 100) / 100,
-        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, sword: p.sword, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
+        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, sword: p.sword, scrolls: p.scrolls.length, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
         essences: p.essences, saved: !!p.userId, dead: p.dead,
         respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
         revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),
@@ -2720,7 +2785,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev });
     }
   }
 }

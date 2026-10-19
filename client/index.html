@@ -385,8 +385,23 @@
           <canvas id="elder-portrait" class="talk-portrait" role="img" aria-label="Le vieil homme"></canvas>
           <p id="elder-line" class="talk-line" aria-live="polite"></p>
         </div>
-        <div class="row talk-actions">
-          <button id="elder-next" class="cta"></button>
+        <div id="elder-boat" class="col elder-boat" hidden></div>
+        <div id="elder-actions" class="row talk-actions elder-actions"></div>
+      </div>
+    </div>
+
+    <div id="npc" class="overlay dim" hidden>
+      <div class="panel modal talk elder" role="dialog" aria-modal="true" aria-labelledby="npc-title">
+        <div class="row between">
+          <h2 id="npc-title"></h2>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div class="row talk-body">
+          <canvas id="npc-portrait" class="talk-portrait" role="img"></canvas>
+          <p id="npc-line" class="talk-line" aria-live="polite"></p>
+        </div>
+        <div class="row talk-actions elder-actions">
+          <button id="npc-next" class="cta"></button>
         </div>
       </div>
     </div>

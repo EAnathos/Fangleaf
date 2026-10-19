@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -10,11 +10,12 @@ import { type Ambience, sound } from './audio.ts';
 import { Fog } from './fog.ts';
 import { Fx } from './fx.ts';
 import { playWakeUp } from './intro.ts';
+import { eggsOf, elderName, HATCHLINGS } from './elder.ts';
 import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBrokenEgg, drawElder, drawPlantedSword, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawBrokenEgg, drawElder, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
@@ -98,6 +99,9 @@ export class Game {
     this.hud.onHold = () => this.toggleHold();
     this.hud.onRide = () => this.toggleMount();
     this.hud.onSword = () => net.send({ t: 'sword' });
+    this.hud.onScroll = (cave) => net.send({ t: 'scroll', cave });
+    this.hud.onScrollGive = () => net.send({ t: 'scrollGive' });
+    this.hud.onBoat = () => net.send({ t: 'boat' });
     this.hud.onReset = () => net.send({ t: 'reset' });
     this.hud.onQuit = () => {
       net.close(); // le serveur sauvegarde la progression à la déconnexion
@@ -216,6 +220,7 @@ export class Game {
       else if (st && !st.dead && b?.deposit) this.net.send({ t: 'deposit' });
       else if (st && !st.dead && b?.pick) this.net.send({ t: 'pick' });
       else if (st && !st.dead && b?.sword) this.net.send({ t: 'sword' });
+      else if (st && !st.dead && b?.scroll !== undefined) this.net.send({ t: 'scroll', cave: b.scroll });
       else if (st && !st.dead && b?.chest !== undefined) this.net.send({ t: 'chest', id: b.chest });
       else if (st && !st.dead && b?.cave) this.net.send({ t: 'cave', id: b.cave.id, enter: b.cave.enter });
     } else if (key === 'Escape') {
@@ -704,7 +709,27 @@ export class Game {
       }
       case 'beaten':
         this.hud.toast(`Première victoire du village sur ${bossName(e.s)} !`, 'good');
+        this.hud.toast('Il a laissé tomber un parchemin, au fond de sa grotte.');
         break;
+      case 'scroll': {
+        sound.play('chime', 0.6);
+        this.hud.toast('Un vieux parchemin… Le vieil homme du village saura peut-être le lire.', 'good');
+        break;
+      }
+      case 'lore':
+        this.hud.elderRemembers(e.from, e.to, e.by === this.myId);
+        if (e.by !== this.myId) this.hud.toast(`${name(e.by)} a rapporté un parchemin : Aubin retrouve la mémoire.`, 'good');
+        for (let i = eggsOf(e.from).hatched; i < eggsOf(e.to).hatched; i++) this.hud.toast(`Un œuf vient d'éclore près du feu : ${HATCHLINGS[i].name} !`, 'good');
+        sound.play('chime', 0.5);
+        break;
+      case 'boat': {
+        const st = BOAT_STAGES[e.stage];
+        if (!e.done) this.hud.toast(`${e.by === this.myId ? 'Tu as' : `${name(e.by)} a`} lancé le bateau : ${st.name} (30 min).`, 'good');
+        else if (e.stage + 1 >= BOAT_STAGES.length) this.hud.toast('Le bateau est prêt ! Une Pierre de passage t\'y attend, au bout de l\'île.', 'good');
+        else this.hud.toast(`Bateau : ${st.name} terminé. Aubin attend la suite.`, 'good');
+        sound.play('fanfare', e.done ? 1 : 0.5);
+        break;
+      }
       case 'eat': {
         const b = this.map.bushes[e.bush];
         if (b) this.fx.burst(b.x, b.y - 10, '#C8323C', 8, 80);
@@ -981,6 +1006,8 @@ export class Game {
     this.hud.hall = this.net.latest?.hall ?? 0;
     this.hud.vname = this.net.latest?.vname ?? '';
     this.hud.sword = this.self()?.sword ?? SWORD_PULLS;
+    this.hud.scrollCaves = this.net.latest?.scrolls ?? [];
+    this.hud.lore = this.net.latest?.lore ?? [0, 0, 0];
     this.hud.banned = this.net.latest?.banned ?? [];
     this.hud.stock = this.net.latest?.stock ?? [0, 0];
     const palisade = this.hud.buildings.includes('palisade');
@@ -1231,6 +1258,14 @@ export class Game {
       const label = k === 0 && !active ? BUILDINGS.stone.name : undefined; // le prix : dans le panneau de construction
       if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
+    // Pierre de passage du bateau : elle apparaît une fois le bateau reconstruit
+    const bs = this.map.boatStone;
+    if (this.hud.lore[1] >= BOAT_STAGES.length && inView(bs.x, bs.y, 100)) list.push({ y: bs.y, draw: () => this.world.drawStone(ctx, bs.x, bs.y, true, this.time) });
+    // parchemins laissés par les géants, au fond de leur grotte (chacun voit ceux qui l'attendent)
+    for (const id of this.hud.scrollCaves) {
+      const at = this.map.scrollPos(this.map.caves[id]);
+      if (inView(at.x, at.y, 60)) list.push({ y: at.y, draw: () => drawScroll(ctx, at.x, at.y, this.time, id) });
+    }
     // Palissade du village : pieux hauts, triés avec les créatures (on passe derrière) ; pas encore construite : son tracé.
     const palisade = this.hud.buildings.includes('palisade');
     if (!here && !palisade && inView(village.x, village.y, VILLAGE_R + 60)) this.world.drawPalisadePlan(ctx);
@@ -1255,7 +1290,18 @@ export class Game {
     if (inView(elder.x, elder.y, 60)) {
       const near = Math.hypot(this.me.x - elder.x, this.me.y - elder.y) < 220;
       const tx = near ? this.me.x : this.map.village.x, ty = near ? this.me.y : this.map.village.y, d = Math.hypot(tx - elder.x, ty - elder.y) || 1;
-      list.push({ y: elder.y, draw: () => drawElder(ctx, elder.x, elder.y, this.time, (tx - elder.x) / d, (ty - elder.y) / d) });
+      list.push({ y: elder.y, draw: () => drawElder(ctx, elder.x, elder.y, this.time, (tx - elder.x) / d, (ty - elder.y) / d, elderName(this.hud.lore[0])) });
+    }
+    // les autres œufs du village : visibles une fois qu'Aubin s'en souvient, ils éclosent un par un
+    const eggs = eggsOf(this.hud.lore[0]);
+    if (eggs.shown) {
+      HATCHLINGS.forEach((h, i) => {
+        const hx = this.map.village.x + h.x, hy = this.map.village.y + h.y;
+        if (!inView(hx, hy, 60)) return;
+        if (i >= eggs.hatched) return list.push({ y: hy, draw: () => drawWholeEgg(ctx, hx, hy, this.time, i) });
+        const near = Math.hypot(this.me.x - hx, this.me.y - hy) < 200, d = Math.hypot(this.me.x - hx, this.me.y - hy) || 1;
+        list.push({ y: hy, draw: () => drawHatchling(ctx, hx, hy, h.color, this.time, near ? (this.me.x - hx) / d : 0, near ? (this.me.y - hy) / d : 1, h.name) });
+      });
     }
     // plage de l'éveil : l'œuf brisé, et l'épée plantée tant qu'on ne l'a pas déterrée (elle s'envole en sortant)
     const { egg, sword } = this.map;

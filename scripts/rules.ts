@@ -1,9 +1,10 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { SWORD_PULLS, SWORD_REACH, SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, resRoll, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { BOAT_STAGES, SWORD_PULLS, SWORD_REACH, SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, resRoll, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
 import { BEACH, WorldMap } from '../shared/worldmap.ts';
 import { DAY_MS, sky } from '../shared/weather.ts';
 import { Room } from '../server/room.ts';
+import { ELDER_CHAPTERS } from '../client/src/elder.ts';
 import { SnapshotState } from '../shared/snapshot.ts';
 
 // Hasard reproductible : même graine à chaque exécution, donc même résultat en local et en CI.
@@ -37,6 +38,53 @@ Room.prototype.addPlayer = function (this: Room, ...args: Parameters<Room['addPl
   p.sword = SWORD_PULLS;
   return p;
 };
+
+{
+  // Les parchemins des géants, les souvenirs du vieil homme et son bateau.
+  const r = room(), m = r.map;
+  let saved: { told: number[]; boat: number; boatAt: number } = { told: [], boat: 0, boatAt: 0 };
+  r.onVillage = (v: typeof saved) => (saved = v);
+  const p = r.addPlayer('lecteur', () => {});
+  const c0 = m.caves[0], at = m.scrollPos(c0);
+  [p.x, p.y] = [at.x + 200, at.y];
+  r.onScroll(p, 0);
+  check(p.scrolls.length === 0, 'parchemin trop loin : rien');
+  [p.x, p.y] = [at.x + 20, at.y];
+  r.onScroll(p, 0);
+  r.onScroll(p, 0);
+  check(p.scrolls.length === 1 && p.scrolls[0] === c0.boss && r.profileOf(p).scrolls.length === 1, 'géant vaincu : son parchemin se ramasse (une fois), sauvegardé');
+  r.onScrollGive(p);
+  check(r.told.length === 0, 'loin du vieil homme : on ne lui donne rien');
+  [p.x, p.y] = [m.elder.x + 50, m.elder.y + 20];
+  r.onScrollGive(p);
+  check(r.told.length === 1 && p.scrolls.length === 0 && saved.told.length === 1, 'parchemin donné au vieil homme : un souvenir retrouvé, sauvegardé');
+  [p.x, p.y] = [at.x + 20, at.y];
+  r.onScroll(p, 0);
+  check(p.scrolls.length === 0, 'souvenir déjà rendu : plus de parchemin dans cette grotte');
+  [p.x, p.y] = [m.elder.x + 50, m.elder.y + 20];
+  p.gold = 1e6;
+  Object.assign(r.stock, { wood: 1e5, stone: 1e5 });
+  r.onBoat(p);
+  check(r.boat === 0 && r.boatAt === 0, 'bateau : pas avant d\'avoir rendu tous les souvenirs');
+  r.told = m.caves.map((c: { boss: number }) => c.boss);
+  r.onBoat(p);
+  r.onBoat(p);
+  check(r.boatAt > Date.now() && p.gold === 1e6 - BOAT_STAGES[0].gold && r.stock.wood === 1e5 - BOAT_STAGES[0].wood, `bateau : étape 1 (${BOAT_STAGES[0].name}) payée une fois, en chantier`);
+  for (let i = 0; i < 25; i++) r.step();
+  check(r.boat === 0, 'étape en cours : pas encore finie');
+  for (let k = 0; k < BOAT_STAGES.length; k++) {
+    r.boatAt = Date.now() - 1;
+    for (let i = 0; i < 25; i++) r.step();
+    if (k < BOAT_STAGES.length - 1) r.onBoat(p);
+  }
+  check(r.boat === BOAT_STAGES.length && saved.boat === BOAT_STAGES.length, `bateau terminé en ${BOAT_STAGES.length} étapes`);
+  check(ELDER_CHAPTERS.length === m.caves.length, `un souvenir par géant (${ELDER_CHAPTERS.length} chapitres, ${m.caves.length} géants)`);
+  [p.x, p.y] = [m.stones[0].x, m.stones[0].y + 40];
+  r.onTravel(p, -2);
+  check(Math.hypot(p.x - m.boatStone.x, p.y - m.boatStone.y) < 120, 'Pierre de passage du bateau : on y voyage depuis le village');
+  r.onTravel(p, -1);
+  check(Math.hypot(p.x - m.stones[0].x, p.y - m.stones[0].y) < 120, '… et on en revient');
+}
 
 {
   // L'épée plantée dans le sable : un nouveau venu se réveille sans arme, à côté de l'œuf, et la déterre en trois coups.

@@ -437,3 +437,18 @@ body.waking #hud { opacity: 0; pointer-events: none; }
 .leave-confirm { width: 100%; padding: 12px 14px; border-radius: 12px; border: 2px solid rgba(232, 105, 63, 0.55); background: rgba(232, 105, 63, 0.08); }
 .leave-confirm p { margin: 0 0 10px; font-size: 14px; line-height: 1.45; color: var(--text-2); }
 .leave-confirm .row { justify-content: flex-end; gap: 8px; }
+
+/* Aubin : ses boutons (parchemins, souvenirs, bateau) et les étapes du bateau */
+.elder-actions { flex-wrap: wrap; gap: 8px; }
+.elder-actions .btn, .elder-actions .cta { height: 48px; padding: 0 18px; font: 700 15px var(--body); } /* les chiffres de la police pixel se confondent (2 et 8) */
+.elder-boat { gap: 6px; }
+.boat-stage { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: 10px; background: var(--night); border: 2px solid var(--line); }
+.boat-stage b { font: 700 15px var(--body); }
+.boat-stage .small { color: var(--muted); }
+.boat-stage.done { border-color: rgba(127, 203, 91, 0.45); }
+.boat-stage.done .small { color: var(--hp); }
+.boat-stage.now { border-color: #C9A24A; }
+.boat-stage.now .small { color: #E8DCC2; }
+.talk-line b { display: block; margin-bottom: 2px; font: 700 13px var(--body); font-style: normal; color: #E8DCC2; }
+.talk-line.mine { border-color: rgba(92, 200, 184, 0.5); font-style: normal; } /* c'est nous qui parlons */
+.talk-line.mine b { color: var(--ally); }

@@ -1,27 +1,28 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
 import type { BoardRow, PlayerState, UnitTuple } from '../../shared/protocol.ts';
 import type { WorldMap } from '../../shared/worldmap.ts';
-import { armorColor, drawElder, drawUnit } from './sprites.ts';
+import { armorColor, drawElder, drawHatchling, drawUnit } from './sprites.ts';
+import { ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCHLINGS } from './elder.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { sound } from './audio.ts';
 import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
 import { landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'hall' | 'settings' | 'chat' | 'board' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
 export interface Spot {
   pos: { x: number; y: number };
   label: string;
-  panel?: 'forge' | 'den' | 'market' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'hall' | 'board'; // ouvre un panneau
+  panel?: 'forge' | 'den' | 'market' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'board'; // ouvre un panneau
   cave?: { id: number; enter: boolean }; // entre dans une grotte / en sort
   at?: number; // Pierre de passage : -1 village, sinon index du camp ; emplacement de camp : son index
   buy?: Purchase; // panneau d'achat : ce qui est à acheter
@@ -30,6 +31,7 @@ export interface Spot {
   pick?: boolean; // buisson garni : cueillir ses baies
   chest?: number; // coffre d'un géant vaincu à ouvrir
   sword?: boolean; // épée plantée dans le sable : tirer dessus
+  scroll?: number; // grotte dont on ramasse le parchemin
 }
 /** Géant endormi dans sa grotte : on peut aller lui parler. */
 export interface Sleeper {
@@ -49,14 +51,9 @@ export interface VillageView {
   hall: number; // niveau de l'Hôtel de ville
   bare: number[]; // buissons dont les baies ont été mangées ou cueillies
   sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
+  scrollCaves: number[]; // grottes dont le parchemin m'attend
+  lore: [number, number, number]; // souvenirs du vieil homme, étapes du bateau, secondes avant la fin de l'étape en cours
 }
-/** Le vieil homme du village : il a tout oublié, mais il est content de voir quelqu'un. */
-const ELDER_LINES = [
-  'Oh ! Quelqu\'un ! Approche, approche… que je te regarde un peu.',
-  'Pardonne-moi, j\'ai la mémoire qui flanche. Je ne me souviens plus de rien : ni de mon nom, ni de comment je suis arrivé ici.',
-  'Mais je suis bien content de te voir ! Ça fait bien longtemps que je n\'ai vu personne…',
-  'Enfin, je crois…',
-];
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 /** Prix (or, bois, pierre), nom et niveau de Hôtel de ville requis d'un achat pour le village. */
 export const purchaseOf = (map: WorldMap, buy: Purchase): { name: string; cost: Cost; hall: number } =>
@@ -76,7 +73,11 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     return v.buildings.includes(b) ? open : offer(b, pos, 'Construire');
   };
   const spots: Spot[] = [
-    { panel: 'elder', pos: map.elder, reach: 55, label: 'E — Parler au vieil homme' },
+    { panel: 'elder', pos: map.elder, reach: 55, label: `E — Parler ${v.lore[0] ? 'à Aubin' : 'au vieil homme'}` },
+    // les nouveau-nés des œufs du village (at : lequel)
+    ...HATCHLINGS.slice(0, eggsOf(v.lore[0]).hatched).map((h, i): Spot => ({ panel: 'npc', at: i, pos: { x: map.village.x + h.x, y: map.village.y + h.y }, reach: 60, label: `E — Parler à ${h.name}` })),
+    ...v.scrollCaves.map((id): Spot => ({ scroll: id, pos: map.scrollPos(map.caves[id]), reach: SCROLL_REACH, label: 'E — Ramasser le parchemin' })),
+    ...(v.lore[1] >= BOAT_STAGES.length ? [{ panel: 'travel' as const, pos: map.boatStone, label: 'E — Pierre de passage', at: -2 }] : []),
     ...(v.sword < SWORD_PULLS ? [{ sword: true, pos: map.sword, reach: SWORD_REACH, label: v.sword ? `E — Tirer encore (${v.sword}/${SWORD_PULLS})` : 'E — Déterrer l\'épée' }] : []),
     ...(v.buildings.includes('palisade') ? [] : [{ ...offer('palisade', map.village, 'Monter'), reach: 110 }]),
     { panel: 'hall', pos: map.hall, label: `E — Hôtel de ville · niv. ${v.hall}` },
@@ -124,7 +125,7 @@ const duration = (sec: number) => (sec < 60 ? `${sec} s` : `${Math.floor(sec / 6
 export class Hud {
   private mini = $<HTMLCanvasElement>('minimap').getContext('2d')!;
   private miniBg: HTMLCanvasElement;
-  private last = { party: '', den: '', cls: '', travel: '', bestiary: '', market: '', hall: '', members: '' };
+  private last = { party: '', den: '', cls: '', travel: '', bestiary: '', market: '', hall: '', members: '', elder: '' };
   private denTab: 'alphas' | 'bestiary' = 'alphas';
   private form: BestiaryForm = 'wild'; // forme montrée par le bestiaire
   private beasts: Portrait[] = [];
@@ -163,6 +164,9 @@ export class Hud {
   bare: number[] = []; // buissons sans baies
   onPick = () => {};
   onHold = () => {};
+  onScroll = (_cave: number) => {};
+  onScrollGive = () => {};
+  onBoat = () => {};
   onSword = () => {};
   onRide = () => {}; // bouton selle (mobile) : monter ou descendre
   onDeposit = () => {};
@@ -177,7 +181,14 @@ export class Hud {
   onChest = (_id: number) => {};
   onChallenge = (_cave: number) => {};
   private talker: Portrait[] = [];
-  private elderAt = 0; // réplique du vieil homme en cours // portrait du géant à qui l'on parle
+  private elderAt = 0; // réplique du vieil homme en cours
+  private npcWho = 0; // nouveau-né à qui l'on parle
+  private npcAt = 0; // réplique en cours avec lui
+  private elderLines: string[] = []; // ce qu'il est en train de dire
+  private elderView: 'talk' | 'boat' = 'talk';
+  private myScrolls = 0; // parchemins dans mon sac
+  lore: [number, number, number] = [0, 0, 0]; // souvenirs retrouvés, étapes du bateau, secondes avant la fin de l'étape en cours
+  scrollCaves: number[] = []; // grottes dont le parchemin m'attend // portrait du géant à qui l'on parle
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
   private spotAt = 0; // Pierre ou emplacement devant lequel on se tient (panneaux voyage et camp)
   private bigBg?: HTMLCanvasElement;
@@ -258,13 +269,14 @@ export class Hud {
     $('hold-btn').onclick = () => this.onHold();
     $('mount-btn').onclick = () => this.onRide();
     $('talk-later').onclick = () => this.setPanel(null);
-    // le vieil homme : une réplique après l'autre, puis on lui dit au revoir
-    $('elder-next').onclick = () => {
-      if (this.elderAt >= ELDER_LINES.length - 1) return this.setPanel(null);
-      this.elderAt++;
-      this.showElder();
+    // un nouveau-né : on se parle à tour de rôle, une réplique après l'autre
+    $('npc-next').onclick = () => {
+      const h = HATCHLINGS[this.npcWho];
+      if (!h || this.npcAt >= h.lines.length - 1) return this.setPanel(null);
+      this.npcAt++;
+      this.showNpc();
     };
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'elder', 'hall', 'settings', 'board'] as const) {
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -361,9 +373,16 @@ export class Hud {
     $('camp').hidden = panel !== 'camp';
     $('talk').hidden = panel !== 'talk';
     $('elder').hidden = panel !== 'elder';
+    $('npc').hidden = panel !== 'npc';
+    if (panel === 'npc') {
+      this.npcWho = this.spotAt;
+      this.npcAt = 0;
+      this.showNpc();
+    }
     if (panel === 'elder') {
-      this.elderAt = 0; // il reprend depuis le début : il ne se souvient pas de la dernière fois
-      this.showElder();
+      // des parchemins à lui donner : il les réclame ; sinon il salue (et reprend depuis le début)
+      this.elderView = 'talk';
+      this.elderSay(this.myScrolls ? ['Oh ! Ce que tu tiens là… ce sont des parchemins ? Fais voir, fais voir !'] : elderGreeting(this.lore[0], this.map.caves.length, this.lore[1], BOAT_STAGES.length));
     }
     $('hall').hidden = panel !== 'hall';
     $('settings').hidden = panel !== 'settings';
@@ -455,8 +474,8 @@ export class Hud {
     if (b) {
       // au doigt, pas de touche à rappeler ; sur PC, la touche réglée pour « interagir »
       setText(prompt, b.label.replace(/^E — /, touchOnly ? '' : `${keyLabel('interact')} — `));
-      setClass(prompt, `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick || b.sword ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`);
-      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
+      setClass(prompt, `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick || b.sword || b.scroll !== undefined ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`);
+      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
     }
     const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board'].includes(this.panel);
     if (building && b?.panel !== this.panel) this.setPanel(null);
@@ -470,6 +489,8 @@ export class Hud {
     if (this.panel === 'buy') this.updateBuy(me);
     if (this.panel === 'talk') this.updateTalk();
     if (this.panel === 'hall') this.updateHall(me);
+    this.myScrolls = me.scrolls ?? 0;
+    if (this.panel === 'elder') this.updateElder(me);
     if (this.panel === 'settings') this.updateMembers(me, players);
     if (this.panel === 'market') this.updateMarket(me);
     if (this.panel === 'forge') this.updateForge(me);
@@ -523,13 +544,14 @@ export class Hud {
 
   /** Pierre de passage : le village et chaque emplacement de camp, joignables s'ils sont établis. */
   private updateTravel() {
-    const key = `${this.spotAt}|${this.camps.join(',')}|${this.buildings.join(',')}`;
+    const key = `${this.spotAt}|${this.camps.join(',')}|${this.buildings.join(',')}|${this.lore[1]}`;
     if (key === this.last.travel) return;
     this.last.travel = key;
     const village = this.buildings.includes('stone');
     // juste le nom de chaque lieu (le village, les camps)
     const rows = [{ to: -1, name: 'Village', open: village }].concat(
       this.map.sites.map((_, i) => ({ to: i, name: campName(i), open: this.camps.includes(i) })),
+      this.lore[1] >= BOAT_STAGES.length ? [{ to: -2, name: 'Bateau', open: true }] : [],
     );
     $('stones').replaceChildren(
       ...rows.map((r) => {
@@ -555,10 +577,105 @@ export class Hud {
     btn.textContent = me.gold < CAMP_COST ? `Il te faut ${CAMP_COST} or` : `Établir le camp · ${CAMP_COST} or`;
   }
 
-  /** Réplique en cours du vieil homme, son portrait, et le bouton pour la suite. */
-  private showElder() {
-    $('elder-line').textContent = `« ${ELDER_LINES[this.elderAt]} »`;
-    $('elder-next').textContent = this.elderAt >= ELDER_LINES.length - 1 ? 'Au revoir' : 'Suite';
+  /** Réplique en cours avec un nouveau-né : son nom ou « Toi » en tête, son portrait, et la suite. */
+  private showNpc() {
+    const h = HATCHLINGS[this.npcWho];
+    if (!h) return;
+    const [me, text] = h.lines[this.npcAt];
+    $('npc-title').textContent = h.name;
+    const line = $('npc-line');
+    line.classList.toggle('mine', me);
+    line.innerHTML = '<b></b><span></span>';
+    line.querySelector('b')!.textContent = me ? 'Toi' : h.name;
+    line.querySelector('span')!.textContent = me ? text : `« ${text} »`;
+    $('npc-next').textContent = this.npcAt >= h.lines.length - 1 ? 'Au revoir' : 'Suite';
+    const c = $<HTMLCanvasElement>('npc-portrait'), dpr = Math.min(2, devicePixelRatio || 1);
+    c.width = 110 * dpr;
+    c.height = 96 * dpr;
+    const ctx = c.getContext('2d')!;
+    ctx.setTransform(dpr * 2.3, 0, 0, dpr * 2.3, 0, 0);
+    drawHatchling(ctx, 110 / 2.3 / 2 - 6, 96 / 2.3 / 2 + 8, h.color, 0, 0, 0.4);
+  }
+
+  /** Le vieil homme dit ces répliques, une à une (bouton « Suite »). */
+  private elderSay(lines: string[]) {
+    this.elderLines = lines;
+    this.elderAt = 0;
+    this.last.elder = '';
+  }
+
+  /** Il vient de retrouver les souvenirs from à to - 1 : il les raconte (si on est avec lui), sinon on l'annonce. */
+  elderRemembers(from: number, to: number, mine: boolean) {
+    const lines = ELDER_CHAPTERS.slice(from, to).flat();
+    if (mine && this.panel === 'elder') {
+      this.elderView = 'talk';
+      this.elderSay(lines);
+    } else if (mine) this.toast('Aubin a retrouvé des souvenirs : va l\'écouter près du feu.', 'good');
+  }
+
+  /** Panneau du vieil homme : sa réplique, et selon le moment, donner ses parchemins, réécouter ses souvenirs, le bateau. */
+  private updateElder(me: PlayerState) {
+    const total = this.map.caves.length, [told, boat, left] = this.lore, funds = this.funds(me);
+    const key = JSON.stringify([this.elderView, this.elderAt, this.elderLines.length, me.scrolls, this.lore, this.elderView === 'boat' ? [funds.gold >= 0 && canPay(funds, BOAT_STAGES[boat] ?? BOAT_STAGES[0])] : 0]);
+    if (key === this.last.elder) return;
+    this.last.elder = key;
+    $('elder-title').textContent = told ? 'Aubin' : 'Un vieil homme';
+    const last = this.elderAt >= this.elderLines.length - 1;
+    const button = (label: string, cls: string, act: () => void) => {
+      const b = document.createElement('button');
+      b.className = cls;
+      b.textContent = label;
+      b.onclick = act;
+      return b;
+    };
+    const actions: HTMLButtonElement[] = [];
+    $('elder-boat').hidden = this.elderView !== 'boat';
+    if (this.elderView === 'boat') {
+      // le bateau : les étapes faites, celle en chantier, ou celle à payer
+      $('elder-line').textContent = `« ${boat >= BOAT_STAGES.length ? 'Le bateau est prêt ! Une Pierre de passage t\'attend à côté.' : left ? 'Je m\'en occupe ! Reviens dans un moment.' : 'Voilà ce qu\'il me faut pour la suite.'} »`;
+      $('elder-boat').replaceChildren(
+        ...BOAT_STAGES.map((st, i) => {
+          const row = document.createElement('div');
+          row.className = `boat-stage${i < boat ? ' done' : i === boat ? ' now' : ''}`;
+          row.innerHTML = '<b></b><span class="small"></span>';
+          row.querySelector('b')!.textContent = `${i + 1}. ${st.name}`;
+          const info = row.querySelector('span')!;
+          if (i < boat) info.textContent = 'Terminé';
+          else if (i === boat && left) info.textContent = `En chantier · ${clock(left)}`;
+          else if (i === boat) {
+            info.className = 'cost-list';
+            info.id = 'elder-cost';
+          } else info.textContent = '…';
+          return row;
+        }),
+      );
+      if (boat < BOAT_STAGES.length && !left) {
+        this.costChips('elder-cost', funds, BOAT_STAGES[boat]);
+        const pay = button(canPay(funds, BOAT_STAGES[boat]) ? 'Donner les ressources' : 'Il manque des ressources', 'cta', () => this.onBoat());
+        pay.disabled = !canPay(funds, BOAT_STAGES[boat]);
+        actions.push(pay);
+      }
+      actions.push(button('Retour', 'btn', () => {
+        this.elderView = 'talk';
+        this.elderSay(elderGreeting(told, total, boat, BOAT_STAGES.length));
+      }));
+    } else {
+      $('elder-line').textContent = `« ${this.elderLines[this.elderAt] ?? ''} »`;
+      if (!last) actions.push(button('Suite', 'cta', () => {
+        this.elderAt++;
+        this.last.elder = '';
+      }));
+      else {
+        if (me.scrolls) actions.push(button(`Donner ${me.scrolls > 1 ? `les ${me.scrolls} parchemins` : 'le parchemin'}`, 'cta', () => this.onScrollGive()));
+        if (told >= total) actions.push(button('Le bateau', me.scrolls ? 'btn' : 'cta', () => {
+          this.elderView = 'boat';
+          this.last.elder = '';
+        }));
+        if (told) actions.push(button('Raconte-moi encore', 'btn', () => this.elderSay(ELDER_CHAPTERS.slice(0, told).flat())));
+      }
+    }
+    actions.push(button('Au revoir', 'btn', () => this.setPanel(null)));
+    $('elder-actions').replaceChildren(...actions);
     const c = $<HTMLCanvasElement>('elder-portrait'), dpr = Math.min(2, devicePixelRatio || 1);
     c.width = 110 * dpr;
     c.height = 96 * dpr;

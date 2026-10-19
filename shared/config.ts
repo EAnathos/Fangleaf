@@ -86,6 +86,17 @@ export const caveUnlockCost = (zone: number) => CAVE_UNLOCK[zone - 1] ?? 150 * z
 // Camps : un emplacement au bout de la zone 4, établi par n'importe quel membre du village contre de l'or.
 export const CAMP_COST = 2000;
 export const CAMP_R = 260; // feu qui soigne, monstres tenus à l'écart
+// Le bateau du vieil homme : une fois tous ses souvenirs retrouvés, il le reconstruit en 4 étapes (or des dompteurs,
+// bois et pierre de la réserve du village), chacune prenant 30 minutes (temps réel).
+export const BOAT_STAGES: (Cost & { name: string })[] = [
+  { name: 'La quille', gold: 3000, wood: 300, stone: 150 },
+  { name: 'La coque', gold: 5000, wood: 500, stone: 250 },
+  { name: 'Le pont et les mâts', gold: 8000, wood: 700, stone: 400 },
+  { name: 'Les voiles', gold: 12000, wood: 900, stone: 600 },
+];
+export const BOAT_STAGE_MS = 30 * 60 * 1000;
+export const ELDER_REACH = 90; // pour lui parler, lui donner un parchemin ou des ressources
+export const SCROLL_REACH = 70; // pour ramasser un parchemin
 export const ELDER_OFFSET = { x: -46, y: 62 }; // le vieil homme, près du feu du village
 export const VILLAGE_STONE_OFFSET = { x: 95, y: 225 }; // Pierre de passage du village
 export const campName = (i: number) => (i === 0 ? 'Camp avancé' : `Camp avancé ${i + 1}`);

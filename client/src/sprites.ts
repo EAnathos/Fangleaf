@@ -2493,6 +2493,143 @@ export function drawPlantedSword(ctx: Ctx, x: number, y: number, out: number, t:
   ctx.restore();
 }
 
+/**
+ * Parchemin laissé par un géant au fond de sa grotte : un rouleau de papier jauni noué d'un ruban rouge, qui flotte
+ * un peu au-dessus du sol dans une lueur dorée (il faut le remarquer).
+ */
+export function drawScroll(ctx: Ctx, x: number, y: number, t: number, seed: number) {
+  const bob = Math.sin(t * 2 + seed) * 2.5, glow = 0.14 + 0.08 * Math.sin(t * 3 + seed);
+  ctx.fillStyle = 'rgba(8,14,12,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 8, 15, 5, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = `rgba(247,214,140,${glow})`;
+  ctx.beginPath();
+  ctx.arc(x, y - 10 + bob, 19, 0, TAU);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(x, y - 10 + bob);
+  ctx.rotate(-0.25);
+  // papier déroulé un peu au milieu, rouleaux aux deux bouts
+  ctx.fillStyle = '#EADBB4';
+  ctx.fillRect(-12, -7, 24, 14);
+  ctx.fillStyle = 'rgba(150,120,80,0.45)'; // lignes d'écriture
+  for (const ly of [-3, 0, 3]) ctx.fillRect(-8, ly - 0.6, 16 - (ly === 3 ? 6 : 0), 1.2);
+  for (const sx of [-1, 1]) {
+    ctx.fillStyle = '#D9C69A';
+    ctx.beginPath();
+    ctx.ellipse(sx * 13, 0, 3.5, 8.5, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#B9A274';
+    ctx.beginPath();
+    ctx.ellipse(sx * 13 + sx * 1.5, 0, 1.6, 6.5, 0, 0, TAU);
+    ctx.fill();
+  }
+  // ruban rouge et son sceau
+  ctx.fillStyle = '#B8323C';
+  ctx.fillRect(-2, -8, 4, 16);
+  ctx.beginPath();
+  ctx.moveTo(-1, 7);
+  ctx.lineTo(-5, 13);
+  ctx.lineTo(-1, 11);
+  ctx.moveTo(1, 7);
+  ctx.lineTo(5, 13);
+  ctx.lineTo(1, 11);
+  ctx.fill();
+  ctx.fillStyle = '#8E1F28';
+  ctx.beginPath();
+  ctx.arc(0, 0, 3.4, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Œuf de dompteur pas encore éclos, au village : il tremble par à-coups, de petites fissures sur la coquille. */
+export function drawWholeEgg(ctx: Ctx, x: number, y: number, t: number, seed: number) {
+  const k = (t * 0.8 + seed * 0.37) % 3, shake = k < 0.5 ? Math.sin(k * 40) * 0.12 * (1 - k * 2) : 0; // un frisson toutes les 3 s
+  ctx.fillStyle = 'rgba(8,14,12,0.28)';
+  ctx.beginPath();
+  ctx.ellipse(x + 2, y + 2, 12, 4.5, 0, 0, TAU);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(shake);
+  ctx.fillStyle = '#F1E7D0';
+  ctx.beginPath();
+  ctx.ellipse(0, -13, 11, 14, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#CDBE9E'; // flanc à l'ombre
+  ctx.beginPath();
+  ctx.ellipse(4, -11, 6, 11, 0, -1.2, 1.6);
+  ctx.fill();
+  ctx.fillStyle = '#9FB58A';
+  for (const [px, py, r] of [[-5, -18, 2], [2, -8, 1.6], [-3, -5, 1.3], [5, -20, 1.2]] as const) {
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, TAU);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(90,75,50,0.7)'; // fissures
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-6, -22);
+  ctx.lineTo(-3, -19);
+  ctx.lineTo(-5, -16);
+  ctx.lineTo(-1, -14);
+  ctx.moveTo(3, -24);
+  ctx.lineTo(5, -21);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Nouveau-né sorti d'un œuf du village : un dompteur comme nous (une boule de sa couleur), un bout de coquille encore
+ * sur la tête, à côté des restes de son œuf. Il regarde vers (lx, ly).
+ */
+export function drawHatchling(ctx: Ctx, x: number, y: number, color: string, t: number, lx = 0, ly = 1, name = '') {
+  const r = 16, cy = y - Math.abs(Math.sin(t * 1.3 + x)) * 1.2;
+  drawBrokenEgg(ctx, x + 26, y + 6);
+  shadow(ctx, x, y, r);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, cy, r, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(16,24,26,0.22)';
+  ctx.beginPath();
+  ctx.arc(x, cy, r, 0.15 * Math.PI, 0.85 * Math.PI);
+  ctx.fill();
+  const ex = x + lx * 5, ey = cy + ly * 4 - 2;
+  ctx.fillStyle = '#10181A';
+  ctx.beginPath();
+  ctx.arc(ex - 4.5, ey, 2.4, 0, TAU);
+  ctx.arc(ex + 4.5, ey, 2.4, 0, TAU);
+  ctx.fill();
+  // bout de coquille posé de travers sur la tête, bord en dents de scie
+  ctx.save();
+  ctx.translate(x - 2, cy - r + 3);
+  ctx.rotate(-0.25);
+  ctx.fillStyle = '#F1E7D0';
+  ctx.beginPath();
+  ctx.moveTo(-10, 2);
+  ctx.quadraticCurveTo(-9, -9, 0, -10);
+  ctx.quadraticCurveTo(9, -9, 10, 2);
+  for (const [px, py] of [[7, -1], [4, 3], [1, -1], [-2, 3], [-5, -1], [-8, 3]]) ctx.lineTo(px, py);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#9FB58A';
+  ctx.beginPath();
+  ctx.arc(-3, -5, 1.6, 0, TAU);
+  ctx.arc(4, -6, 1.2, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  if (!name) return;
+  ctx.font = '600 13px Outfit, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+  ctx.strokeText(name, x, cy - r - 14);
+  ctx.fillStyle = '#EEE7D7';
+  ctx.fillText(name, x, cy - r - 14);
+}
+
 /** Œuf brisé, posé dans le sable : le bas de la coquille aux bords en dents de scie, et des éclats autour. */
 export function drawBrokenEgg(ctx: Ctx, x: number, y: number) {
   const shell = '#F1E7D0', shade = '#CDBE9E', spot = '#9FB58A';

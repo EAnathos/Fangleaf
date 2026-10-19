@@ -141,7 +141,8 @@ export class WorldMap {
   readonly elder: Pt; // le vieil homme, près du feu du village
   readonly store: Pt; // entrepôt (réserve commune de bois et de pierre)
   readonly board: Pt; // panneau du village (tableau des exploits)
-  readonly shipwreck: Pt & { a: number }; // épave coupée en deux, sur la plage du bout de l'île (a : direction de la coque)
+  readonly shipwreck: Pt & { a: number };
+  readonly boatStone: Pt; // Pierre de passage du bateau (une fois reconstruit), côté terre de l'épave // épave coupée en deux, sur la plage du bout de l'île (a : direction de la coque)
   readonly egg: Pt; // œuf brisé, juste à côté de l'endroit où l'on se réveille
   readonly sword: Pt; // épée plantée dans le sable, un peu plus haut sur la plage
   readonly gates: number[] = []; // portes : abscisse le long du couloir ([0] sortie du village, puis début de chaque zone)
@@ -190,6 +191,7 @@ export class WorldMap {
       let de = 0;
       while (de < 4000 && this.shoreAt(e0.x + ex * de, e0.y + ey * de) < -45) de += 8;
       this.shipwreck = { x: e0.x + ex * (de - 12), y: e0.y + ey * (de - 12), a: Math.atan2(ey, ex) + Math.PI / 2 }; // la coque touche l'eau
+      this.boatStone = { x: this.shipwreck.x - ex * 130, y: this.shipwreck.y - ey * 130 };
     }
     // au réveil : l'œuf brisé à côté (à gauche ou à droite, côté terre : jamais caché par le nom), l'épée plantée
     // un peu plus haut, vers l'intérieur de l'île
@@ -775,6 +777,11 @@ export class WorldMap {
       if (this.bushes.some((b) => dist2(x, y, b.x, b.y) < 100 ** 2)) continue;
       this.dens.push({ x, y });
     }
+  }
+
+  /** Parchemin laissé par le géant de cette grotte, à côté de son coffre (au fond de la grotte). */
+  scrollPos(c: Cave): Pt {
+    return { x: c.inside.x + 95, y: c.inside.y - 175 };
   }
 
   /** Près de l'épave du bout de l'île (rien n'y pousse ni n'y apparaît). */
