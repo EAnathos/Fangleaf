@@ -24,6 +24,8 @@ export interface Profile {
   alphas: { s: number; lvl: number; wakeAt?: number; legend?: boolean; rest?: boolean }[]; // rest : rangé à la Tanière // wakeAt : éveil en cours (horodatage ms)
   village_found: boolean; // village déjà découvert : on y apparaît directement
   class: string | null; // classe choisie à la forge
+  spec?: string | null; // spécialisation de l'arme (Grande forge ; absente avant la migration 019)
+  specs?: Record<string, string>; // spécialisation déjà prise pour chaque classe (migration 020)
   pack: number[]; // meute ordinaire : espèce de chaque monstre apprivoisé
   seen: number[]; // espèces déjà croisées (bestiaire)
   stats?: Partial<Stats>; // tableau du village : géants battus, monstres apprivoisés, dons à l'entrepôt
@@ -139,7 +141,7 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   if (!db) return null;
   const { data, error } = await db
     .from('progress')
-    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, armed, scrolls, essences, alphas, village_found, class, pack, seen, stats')
+    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, armed, scrolls, essences, alphas, village_found, class, spec, specs, pack, seen, stats')
     .eq('user_id', userId)
     .eq('village_code', code)
     .maybeSingle();

@@ -1,8 +1,8 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, type ClassId, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
-  BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WEAPON_NAMES, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
+  ALPHA_EQUIP_MAX, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
+  BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
 import type { BoardRow, PlayerState, UnitTuple } from '../../shared/protocol.ts';
@@ -125,7 +125,7 @@ const duration = (sec: number) => (sec < 60 ? `${sec} s` : `${Math.floor(sec / 6
 export class Hud {
   private mini = $<HTMLCanvasElement>('minimap').getContext('2d')!;
   private miniBg: HTMLCanvasElement;
-  private last = { party: '', den: '', cls: '', travel: '', bestiary: '', market: '', hall: '', members: '', elder: '' };
+  private last = { party: '', den: '', cls: '', spec: '', travel: '', bestiary: '', market: '', hall: '', members: '', elder: '' };
   private denTab: 'alphas' | 'bestiary' = 'alphas';
   private form: BestiaryForm = 'wild'; // forme montrée par le bestiaire
   private beasts: Portrait[] = [];
@@ -144,6 +144,7 @@ export class Hud {
   onQuit = () => {};
   onReset = () => {};
   onClass = (_cls: ClassId) => {};
+  onSpec = (_spec: SpecId) => {};
   onTravel = (_to: number) => {};
   onEstablish = (_site: number) => {};
   onBuild = (_b: BuildingId) => {};
@@ -319,6 +320,7 @@ export class Hud {
       this.last.bestiary = '';
     }));
     $('weapon-buy').onclick = () => this.onUpgrade('weapon');
+    $('forge2-go').onclick = () => this.onBuild('forge2');
     $('armor-buy').onclick = () => this.onUpgrade('armor');
     $('torch-buy').onclick = () => this.onUpgrade('torch');
     $('boots-buy').onclick = () => this.onUpgrade('boots');
@@ -1108,7 +1110,7 @@ export class Hud {
         }),
       );
     }
-    const weaponNames = classOf(me.cls).weapons;
+    this.updateSpecs(me);
     const next = (a: string, b: string, maxed: boolean) => (maxed ? a : `${a} → <span class="up">${b}</span>`);
     const buy = (id: string, maxed: boolean, cost: number, verb = 'Améliorer') => {
       const btn = $<HTMLButtonElement>(id);
@@ -1116,11 +1118,11 @@ export class Hud {
       btn.textContent = maxed ? 'Niveau maximum' : me.gold < cost ? `Il manque ${cost - me.gold} or` : `${verb} · ${cost} or`;
     };
 
-    const w = me.weapon, wMax = w >= WEAPON_MAX;
-    const k = classOf(me.cls).dmg;
-    $('weapon-name').textContent = `${weaponNames[w]} · niv. ${w}`;
-    $('weapon-dmg').innerHTML = next(String(Math.round(weaponDmg(w) * k)), String(Math.round(weaponDmg(w + 1) * k)), wMax);
-    $('weapon-next').textContent = wMax ? '—' : weaponNames[w + 1];
+    const w = me.weapon, wMax = w >= WEAPON_MAX, hero = heroOf(me.cls, me.spec);
+    const k = hero.dmg, locked = w >= SPEC_LVL && !me.spec; // au-delà du niveau 10 : une spécialisation d'abord
+    $('weapon-name').textContent = `${weaponName(me.cls, me.spec, w)} · niv. ${w}`;
+    $('weapon-dmg').innerHTML = next(String(Math.round(weaponDmg(w) * k)), String(Math.round(weaponDmg(w + 1) * k)), wMax || locked);
+    $('weapon-next').textContent = wMax ? '—' : locked ? 'Spécialisation à choisir' : weaponName(me.cls, me.spec, w + 1);
     // Icône d'arme selon la classe (épée, arc ou bâton), teintée selon le niveau.
     const icon = $('weapon-icon');
     for (const g of icon.querySelectorAll<SVGGElement>('g[data-cls]')) g.toggleAttribute('hidden', g.dataset.cls !== (me.cls ?? 'warrior'));
@@ -1128,10 +1130,15 @@ export class Hud {
     icon.querySelectorAll('.tier').forEach((el) => el.setAttribute('fill', me.cls === 'mage' && w < 3 ? '#D9C6FF' : tier));
     icon.querySelectorAll('.tier-stroke').forEach((el) => el.setAttribute('stroke', tier));
     buy('weapon-buy', wMax, weaponCost(w));
+    if (locked && !wMax) {
+      const btn = $<HTMLButtonElement>('weapon-buy');
+      btn.disabled = true;
+      btn.textContent = this.buildings.includes('forge2') ? 'Choisis une spécialisation' : 'Grande forge requise';
+    }
 
     const a = me.armor, aMax = a >= ARMOR_MAX;
     $('armor-name').textContent = `${ARMOR_NAMES[a]} · niv. ${a}`;
-    const hpK = classOf(me.cls).hp; // PV selon la classe (guerrier +25 %, archer −10 %, mage −15 %)
+    const hpK = heroOf(me.cls, me.spec).hp; // PV selon la classe (guerrier +25 %, archer −10 %, mage −15 %) et la spécialisation
     $('armor-hp').innerHTML = next(String(Math.round(armorMaxHp(a) * hpK)), String(Math.round(armorMaxHp(a + 1) * hpK)), aMax);
     $('armor-red').innerHTML = next(pct(armorReduction(a)), pct(armorReduction(a + 1)), aMax);
     // Icône d'armure : tunique (robe à capuche pour le mage), cuir (clouté au niveau 2), puis métal.
@@ -1160,6 +1167,43 @@ export class Hud {
     $('boots-shape').setAttribute('fill', b ? armorColor(b) : '#8B5E3C');
     $('boots-icon').style.opacity = b ? '1' : '0.45';
     buy('boots-buy', bMax, bootsCost(b), b ? 'Améliorer' : 'Acheter');
+  }
+
+  /**
+   * Grande forge : à construire pour le village (Hôtel de ville niv. 4), puis les deux spécialisations de sa classe,
+   * à choisir une fois l'arme au niveau 10 (la première gratuitement, ensuite contre de l'or).
+   */
+  private updateSpecs(me: PlayerState) {
+    const built = this.buildings.includes('forge2'), b = BUILDINGS.forge2, cost = buildingCost('forge2'), funds = this.funds(me);
+    $('forge2-build').hidden = built;
+    $('specs').hidden = !built;
+    $('spec-title').textContent = built ? (me.spec ? `Spécialisation · ${SPECS[me.spec].name}` : 'Spécialisation') : b.name;
+    $('spec-hint').textContent = !built ? `Hôtel de ville niv. ${b.hall}` : !me.cls ? 'Choisis d\'abord ta classe' : me.weapon < SPEC_LVL ? `Arme niv. ${SPEC_LVL} requise` : me.spec ? '' : 'Le premier choix est gratuit';
+    if (!built) {
+      this.costChips('forge2-cost', funds, cost);
+      const btn = $<HTMLButtonElement>('forge2-go');
+      btn.disabled = this.hall < b.hall || !canPay(funds, cost);
+      btn.textContent = this.hall < b.hall ? `Hôtel de ville niv. ${b.hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : 'Améliorer la forge pour le village';
+      return;
+    }
+    const price = me.spec === null ? 0 : SPEC_CHANGE_COST, ready = !!me.cls && me.weapon >= SPEC_LVL;
+    const key = `${me.cls}|${me.spec}|${ready}|${me.gold >= price}`;
+    if (key === this.last.spec) return;
+    this.last.spec = key;
+    $('specs').replaceChildren(
+      ...SPEC_IDS.filter((id) => SPECS[id].cls === (me.cls ?? 'warrior')).map((id) => {
+        const s = SPECS[id], on = me.spec === id;
+        const el = document.createElement('button');
+        el.className = `class-card${on ? ' on' : ''}`;
+        el.disabled = on || !ready || me.gold < price;
+        el.innerHTML = '<b></b><span></span><span class="tag"></span>';
+        el.querySelector('b')!.textContent = s.name;
+        el.querySelector('span')!.textContent = s.desc;
+        el.querySelector('.tag')!.textContent = on ? 'Spécialisation actuelle' : !ready ? 'Pas encore' : price ? `Choisir · ${price} or` : 'Choisir · gratuit';
+        el.onclick = () => this.onSpec(id);
+        return el;
+      }),
+    );
   }
 
   /**

@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { BOAT_STAGES, SWORD_PULLS, SWORD_REACH, SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, resRoll, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold } from '../shared/config.ts';
+import { BOAT_STAGES, SWORD_PULLS, SWORD_REACH, SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, resRoll, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold , weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX } from '../shared/config.ts';
 import { BEACH, WorldMap } from '../shared/worldmap.ts';
 import { DAY_MS, sky } from '../shared/weather.ts';
 import { Room } from '../server/room.ts';
@@ -201,6 +201,60 @@ const noop = () => {};
   r.onUpgrade(p, 'weapon');
   r.onUpgrade(p, 'armor');
   check(p.weapon === 2 && p.armor === 1, `arme niv. ${p.weapon}, armure niv. ${p.armor}`);
+}
+
+{
+  // Arme : les dégâts suivent les monstres, au-delà du niveau 10 une spécialisation (Grande forge) est nécessaire.
+  check(weaponDmg(0) === 8 && weaponDmg(10) > 50 && weaponDmg(17) > 200 && weaponDmg(20) > 400, `dégâts d'arme : ${[0, 10, 17, 20].map(weaponDmg).join(', ')}`);
+  check(weaponCost(0) > 25 && weaponCost(9) > 1718 && weaponCost(19) > weaponCost(10), `prix d'arme plus chers : ${[0, 9, 10, 19].map(weaponCost).join(', ')}`);
+  check(BUILDINGS.forge2.hall === 4 && BUILDINGS.forge2.needs === 'forge', 'Grande forge : Hôtel de ville niv. 4, après la forge');
+  const r = room();
+  const p = r.addPlayer('a', noop);
+  [p.x, p.y] = [r.map.forge.x, r.map.forge.y];
+  p.gold = 1e6;
+  r.onClass(p, 'warrior');
+  r.onSpec(p, 'berserker');
+  check(p.spec === null, 'arme pas encore au niveau 10 : pas de spécialisation');
+  for (let i = 0; i < 15; i++) r.onUpgrade(p, 'weapon');
+  check(p.weapon === SPEC_LVL, `bloqué au niveau ${SPEC_LVL} sans spécialisation (niv. ${p.weapon})`);
+  r.onSpec(p, 'sniper');
+  check(p.spec === null, 'spécialisation d\'une autre classe : refusée');
+  const gold = p.gold, hp0 = p.hp;
+  r.onSpec(p, 'guardian');
+  check(p.spec === 'guardian' && p.gold === gold && p.hp > hp0, 'première spécialisation gratuite, PV du Gardien en plus');
+  r.onSpec(p, 'berserker');
+  check(p.spec === 'berserker' && p.gold === gold - SPEC_CHANGE_COST, `changer de spécialisation : ${SPEC_CHANGE_COST} or`);
+  for (let i = 0; i < 15; i++) r.onUpgrade(p, 'weapon');
+  check(p.weapon === WEAPON_MAX && r.profileOf(p).spec === 'berserker', `arme niv. ${WEAPON_MAX}, spécialisation sauvegardée`);
+  check(weaponName('warrior', 'berserker', WEAPON_MAX) === SPECS.berserker.weapons[9] && weaponName('warrior', null, 12) === 'Fangleaf +2', 'noms d\'armes de la spécialisation');
+  r.onClass(p, 'mage');
+  check(p.spec === null && p.weapon === WEAPON_MAX, 'nouvelle classe : pas encore de spécialisation, niveau gardé');
+  r.onSpec(p, 'druid');
+  const g2 = p.gold;
+  r.onClass(p, 'warrior');
+  check(p.spec === 'berserker' && p.gold === g2 - CLASS_CHANGE_COST, 'retour au guerrier : on retrouve le Berserker');
+  r.onSpec(p, 'guardian');
+  check(p.spec === 'guardian' && p.gold === g2 - CLASS_CHANGE_COST - SPEC_CHANGE_COST, 'changer la spécialisation d\'une classe déjà spécialisée reste payant');
+  r.onClass(p, 'mage');
+  check(p.spec === 'druid' && r.profileOf(p).specs.warrior === 'guardian' && r.profileOf(p).specs.mage === 'druid', 'chaque spécialisation retenue et sauvegardée par classe');
+  const back = new Room('TESTS', r.seed, { buildings: [...BUILDING_IDS] }).addPlayer('b', noop, { userId: 'u', profile: { ...r.profileOf(p), class: 'archer', spec: 'pyromancer' } });
+  check(back.spec === null, 'spécialisation qui ne va pas avec la classe : ignorée au chargement');
+  // sans Grande forge : pas de choix
+  const r2 = new Room('TEST3', undefined, { buildings: ['forge'], hall: HALL_MAX });
+  const q = r2.addPlayer('c', noop) as any;
+  [q.x, q.y, q.gold, q.cls, q.weapon] = [r2.map.forge.x, r2.map.forge.y, 1e6, 'archer', SPEC_LVL];
+  r2.onSpec(q, 'sniper');
+  check(q.spec === null, 'sans Grande forge : pas de spécialisation');
+  // Druide : une part des dégâts infligés revient en PV ; Gardien : moins de dégâts reçus.
+  [p.cls, p.spec, p.atkCd] = ['mage', 'druid', 0];
+  r.units.clear();
+  const w = r.createUnit(0, false, p.x + 150, p.y);
+  w.maxHp = w.hp = 1e6;
+  r.grid.clear();
+  r.grid.insert(w);
+  p.hp = 10;
+  r.playerAttack(p);
+  check(p.hp > 10, `druide : soigné en frappant (${Math.round(p.hp)} PV)`);
 }
 
 {
@@ -1300,6 +1354,11 @@ const noop = () => {};
   // Gibier passif : il n'attaque jamais, mange aux buissons à fruits et fuit qui le frappe.
   const r = room();
   const s = SPECIES.findIndex((sp) => sp.passive);
+  // en plein jour : la nuit, le lièvre dort
+  const realNow = Date.now, t0 = realNow();
+  let day = t0;
+  for (let t = t0; t < t0 + DAY_MS && sky(r.seed, day).light < 1; t += 10_000) day = t;
+  Date.now = () => day;
   // un buisson dans un coin dégagé (le lièvre doit pouvoir y aller puis s'enfuir)
   const open = (x: number, y: number) => [0, 1, 2, 3, 4, 5, 6, 7].every((k) => !r.map.blocked(x + Math.cos(k) * 160, y + Math.sin(k) * 160)) && !r.map.blocked(x, y);
   const bush = r.map.bushes.find((b: { x: number; y: number; zone: number }) => b.zone <= 3 && open(b.x + 120, b.y) && r.map.clearLine(b.x + 120, b.y, b.x, b.y + 14))!; // loin du désert (et de ses tempêtes)
@@ -1325,6 +1384,7 @@ const noop = () => {};
   const d0 = Math.hypot(hare.x - p.x, hare.y - p.y);
   for (let i = 0; i < 20; i++) r.step(), (p.atkCd = 999);
   check(Math.hypot(hare.x - p.x, hare.y - p.y) > d0 + 60, 'frappé, il s\'enfuit');
+  Date.now = realNow;
 }
 
 {
@@ -1463,25 +1523,56 @@ const noop = () => {};
   r.updateSpawns();
   check(flies() === 0, 'au lever du jour, les lucioles sauvages s\'en vont');
 
-  // Sangliers sauvages : ils dorment la nuit (même un dompteur collé à eux), un coup les réveille.
+  // Le lièvre dort la nuit, l'ours le jour (même un dompteur collé à lui) ; un coup les réveille.
+  // Le sanglier, bête de nuit, reste éveillé ; les suricates passent la nuit dans leur tanière.
   Date.now = () => night;
   r.tick = 0;
   r.updateSpawns();
-  const boar = [...r.units.values()].find((u: any) => SPECIES[u.s].key === 'boar' && !u.owner);
+  const wildOf = (key: string) => {
+    const s = SPECIES.findIndex((sp) => sp.key === key);
+    return [...r.units.values()].find((u: any) => u.s === s && !u.owner) ?? r.createUnit(s, false, r.map.village.x + 900, r.map.village.y);
+  };
+  const bear = wildOf('bear'), hare = wildOf('hare'), boar = wildOf('boar');
   const p = r.addPlayer('nuit', noop);
-  [p.x, p.y] = [boar.x + 30, boar.y];
   r.time += 30;
+  r.wildAI(bear);
+  r.wildAI(hare);
   r.wildAI(boar);
-  check(boar.asleep && boar.target === 0, 'la nuit, le sanglier sauvage dort et ignore le dompteur à côté');
-  r.damage(boar, 1, p, true);
-  r.wildAI(boar);
-  check(!boar.asleep && boar.target === p.id, 'frappé, il se réveille et s\'en prend au dompteur');
+  check(hare.asleep && !bear.asleep && !boar.asleep, 'la nuit, le lièvre dort ; l\'ours et le sanglier sont éveillés');
+  const meerkat = wildOf('meerkat');
+  r.players.clear();
+  meerkat.surfaceUntil = 0;
+  for (let i = 0; i < 400 && !meerkat.hidden; i++) r.wildAI(meerkat), (r.time += DT);
+  check(meerkat.hidden, 'la nuit, le suricate dort dans sa tanière');
+  r.players.set(p.id, p);
   Date.now = () => day;
   r.tick = 0;
   r.updateSpawns();
   r.time += 60;
-  r.wildAI(boar);
-  check(!boar.asleep, 'le jour, il est réveillé');
+  [p.x, p.y] = [bear.x + 30, bear.y];
+  r.wildAI(bear);
+  r.wildAI(hare);
+  check(bear.asleep && bear.target === 0 && !hare.asleep, 'le jour, l\'ours dort (il ignore le dompteur à côté), le lièvre est réveillé');
+  r.damage(bear, 1, p, true);
+  r.wildAI(bear);
+  check(!bear.asleep && bear.target === p.id, 'frappé, l\'ours se réveille et s\'en prend au dompteur');
+
+  // Escargot : il rentre dans sa coquille (intouchable) si un dompteur s'approche sans fruit en main, et file sous la pluie.
+  const snail = wildOf('snail');
+  r.players.set(p.id, p);
+  [p.x, p.y, p.holding] = [snail.x + 60, snail.y, false];
+  r.wildAI(snail);
+  check(snail.hidden && !r.isWild(snail) && !r.isFeedable(snail), 'dompteur sans fruit tout près : l\'escargot rentre dans sa coquille');
+  [p.fruits, p.holding] = [5, true];
+  r.time += 5;
+  r.wildAI(snail);
+  check(!snail.hidden, 'fruit en main : il ressort de sa coquille');
+  r.rain = 1;
+  r.wildAI(snail);
+  check(snail.speed === SPECIES[snail.s].speed * 1.5, `sous la pluie, il va plus vite (${snail.speed} px/s)`);
+  r.rain = 0;
+  r.wildAI(snail);
+  check(snail.speed === SPECIES[snail.s].speed, 'au sec, il reprend son allure');
   Date.now = realNow;
 }
 

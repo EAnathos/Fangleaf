@@ -1092,10 +1092,10 @@ export class World {
   }
 
   /** Bâtiment construit, ou son chantier (piquets, corde et prix) : dessiné en coordonnées du village (ctx centré dessus). */
-  drawBuilding(ctx: CanvasRenderingContext2D, b: Plot, built: boolean, hall: number, cleared = true) {
+  drawBuilding(ctx: CanvasRenderingContext2D, b: Plot, built: boolean, hall: number, cleared = true, grand = false) {
     if (!cleared) return this.drawWildPlot(ctx, b);
     if (!built) return this.drawPlot(ctx, b, hall);
-    if (b === 'forge') this.drawForge(ctx);
+    if (b === 'forge') this.drawForge(ctx, grand);
     else if (b === 'den') this.drawDen(ctx);
     else this.drawMarket(ctx);
   }
@@ -1306,8 +1306,18 @@ export class World {
     ctx.fillText('Tanière', x, y - 86);
   }
 
-  private drawForge(ctx: CanvasRenderingContext2D) {
+  /** grand : la Grande forge (cheminée de pierre, braises plus vives, bannière dorée). */
+  private drawForge(ctx: CanvasRenderingContext2D, grand = false) {
     const fx = FORGE_OFFSET.x, fy = FORGE_OFFSET.y;
+    if (grand) {
+      // cheminée de pierre au-dessus du toit, avec ses braises
+      ctx.fillStyle = '#6E7570';
+      ctx.fillRect(fx - 20, fy - 66, 18, 30);
+      ctx.fillStyle = '#5A5F66';
+      ctx.fillRect(fx - 23, fy - 70, 24, 6);
+      ctx.fillStyle = 'rgba(232,105,63,0.8)';
+      ctx.fillRect(fx - 16, fy - 74, 10, 4);
+    }
     ctx.fillStyle = 'rgba(8,14,12,0.25)';
     ctx.fillRect(fx - 66, fy + 40, 76, 10);
     ctx.fillStyle = '#4B4F55';
@@ -1316,8 +1326,20 @@ export class World {
     ctx.fillRect(fx - 74, fy - 40, 76, 14);
     ctx.fillStyle = '#E8693F';
     ctx.fillRect(fx - 56, fy - 10, 40, 22);
-    ctx.fillStyle = '#F0B64A';
+    ctx.fillStyle = grand ? '#FFE08A' : '#F0B64A';
     ctx.fillRect(fx - 48, fy - 2, 24, 10);
+    if (grand) {
+      // bannière dorée sur la façade
+      ctx.fillStyle = '#F0B64A';
+      ctx.beginPath();
+      ctx.moveTo(fx - 68, fy - 24);
+      ctx.lineTo(fx - 60, fy - 24);
+      ctx.lineTo(fx - 60, fy - 2);
+      ctx.lineTo(fx - 64, fy - 6);
+      ctx.lineTo(fx - 68, fy - 2);
+      ctx.closePath();
+      ctx.fill();
+    }
     // enclume
     ctx.fillStyle = '#2D3035';
     ctx.fillRect(fx + 22, fy + 22, 16, 18);
@@ -1332,7 +1354,7 @@ export class World {
     ctx.font = '700 16px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#F0B64A';
-    ctx.fillText('Forge', fx - 36, fy - 50);
+    ctx.fillText(grand ? 'Grande forge' : 'Forge', fx - 36, grand ? fy - 78 : fy - 50);
   }
 
   /**

@@ -798,6 +798,7 @@ export class WorldMap {
   buildingPos(b: BuildingId): Pt {
     if (b === 'stone') return this.stones[0];
     if (b === 'palisade') return this.village;
+    if (b === 'forge2') return this.forge; // la Grande forge : la forge améliorée, sur place
     return this[(b.startsWith('plot_') ? b.slice(5) : b) as 'forge' | 'den' | 'market'];
   }
 

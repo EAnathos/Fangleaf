@@ -197,6 +197,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .class-card.on .tag { color: var(--ally); }
 .class-card:disabled:not(.on) { opacity: 0.6; cursor: not-allowed; }
 @media (max-width: 640px) { .classes { grid-template-columns: 1fr; } }
+.specs { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
+.spec-card #forge2-build { gap: 10px; }
+@media (max-width: 640px) { .specs { grid-template-columns: 1fr; } }
 .forge-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .card { background: var(--night); border: 2px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .card .big { font-size: 19px; }

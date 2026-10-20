@@ -18,7 +18,7 @@ export const MARKET_OFFSET = { x: -168, y: -185 };
 export const BUILDING_REACH = 110;
 // Bâtiments du village : construits par n'importe quel membre contre de l'or, une fois pour tout le village.
 // Il faut aussi du bois et de la pierre (récoltés sur la carte), et parfois un Hôtel de ville assez développé.
-export type BuildingId = 'forge' | 'den' | 'market' | 'stone' | 'palisade' | 'plot_forge' | 'plot_den' | 'plot_market';
+export type BuildingId = 'forge' | 'den' | 'market' | 'stone' | 'palisade' | 'plot_forge' | 'plot_den' | 'plot_market' | 'forge2';
 export interface Cost {
   gold: number;
   wood: number;
@@ -35,6 +35,8 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: n
   den: { name: 'Tanière', cost: 20, wood: 20, stone: 15, hall: 0, desc: 'Éveille, renforce et range tes Alphas. Bestiaire des espèces croisées.', needs: 'plot_den' },
   market: { name: 'Marché', cost: 50, wood: 25, stone: 10, hall: 1, desc: 'Vends les monstres de ta meute, achète des monstres des espèces déjà croisées.', needs: 'plot_market' },
   stone: { name: 'Pierre de passage', cost: 200, wood: 10, stone: 40, hall: 2, desc: 'Voyage instantané entre le village et les camps établis.' },
+  // amélioration de la forge (à la forge, pas d'emplacement à part) : au-delà du niveau 10, l'arme suit une spécialisation
+  forge2: { name: 'Grande forge', cost: 2500, wood: 400, stone: 450, hall: 4, desc: 'Au-delà du niveau 10, choisis la spécialisation de ton arme.', needs: 'forge' },
 };
 /** « 20 or · 15 bois · 10 pierre » (les montants nuls sont omis). */
 export const costText = (c: Cost) => [c.gold && `${c.gold} or`, c.wood && `${c.wood} bois`, c.stone && `${c.stone} pierre`].filter(Boolean).join(' · ');
@@ -51,7 +53,7 @@ export const HALL: (Cost & { unlock: string })[] = [
   { gold: 20, wood: 15, stone: 10, unlock: 'Porte du village : la suite de la Lisière (zone 1) · Marché' },
   { gold: 200, wood: 60, stone: 50, unlock: 'Porte des Bois profonds (zone 2) · Pierre de passage' },
   { gold: 500, wood: 160, stone: 140, unlock: 'Porte des Landes (zone 3)' },
-  { gold: 1500, wood: 350, stone: 300, unlock: 'Porte des Ruines moussues (zone 4)' },
+  { gold: 1500, wood: 350, stone: 300, unlock: 'Porte des Ruines moussues (zone 4) · Grande forge' },
   { gold: 3000, wood: 600, stone: 550, unlock: 'Porte des Lacs brumeux (zone 5)' },
   { gold: 6000, wood: 1000, stone: 900, unlock: 'Porte de la Mer de sable (zone 6)' },
 ];
@@ -180,13 +182,85 @@ export const armorMaxHp = (lvl: number) => 60 + 20 * lvl;
 export const armorReduction = (lvl: number) => 0.03 * lvl;
 export const armorCost = (lvl: number) => Math.round(20 * Math.pow(1.6, lvl));
 
-export const WEAPON_MAX = 10;
+// Arme : niveaux 0 à 10 propres à la classe, puis 11 à 20 dans une spécialisation (Grande forge).
+// Les dégâts suivent la force des monstres (×2,5 environ d'une zone à l'autre) : +23 % par niveau,
+// à peu près trois niveaux par zone (niv. 10 vers les Ruines moussues, 17 dans la Mer de sable).
+export const WEAPON_MAX = 20;
+export const SPEC_LVL = 10; // au-delà, il faut une spécialisation
 export const WEAPON_NAMES = [
   'Bâton', 'Coutelas', 'Épée courte', 'Épée longue', 'Lame dentée', 'Sabre',
   'Croc-lame', 'Lame runique', 'Fendeur', 'Crocs jumeaux', 'Fangleaf',
 ];
-export const weaponDmg = (lvl: number) => Math.round((10 + 4 * lvl) * 0.75); // −25 % sur les dégâts du héros
-export const weaponCost = (lvl: number) => Math.round(25 * Math.pow(1.6, lvl));
+export const weaponDmg = (lvl: number) => Math.round(7.5 * Math.pow(1.23, lvl)); // 8, 9, 11, 14… 59 (niv. 10)… 473 (niv. 20)
+/** Pioche : elle ne profite pas de la spécialisation (sinon les filons tomberaient d'un coup). */
+export const mineDmg = (lvl: number) => weaponDmg(Math.min(lvl, SPEC_LVL));
+// Prix : ×1,6 par niveau jusqu'au 10, puis ×1,12 (l'or des monstres augmente moins vite que leur force) ; arrondi à 5.
+export const weaponCost = (lvl: number) => Math.round((40 * Math.pow(1.6, Math.min(lvl, 9)) * Math.pow(1.12, Math.max(0, lvl - 9))) / 5) * 5;
+
+// Spécialisations : une fois l'arme au niveau 10, la Grande forge permet de choisir une voie de sa classe.
+// Multiplicateurs (dmg, cd, hp, splash), portée en plus (range), part des dégâts reçus évitée (guard),
+// part des dégâts infligés rendue en PV (leech). weapons : noms des niveaux 11 à 20.
+export type SpecId = 'berserker' | 'guardian' | 'sniper' | 'ranger' | 'pyromancer' | 'druid';
+export interface Spec {
+  cls: ClassId;
+  name: string;
+  desc: string;
+  dmg?: number;
+  cd?: number;
+  hp?: number;
+  range?: number;
+  splash?: number;
+  guard?: number;
+  leech?: number;
+  weapons: string[];
+}
+export const SPECS: Record<SpecId, Spec> = {
+  berserker: {
+    cls: 'warrior', name: 'Berserker', desc: '+30 % de dégâts, frappe 15 % plus vite, −10 % de PV', dmg: 1.3, cd: 0.85, hp: 0.9,
+    weapons: ['Hache de guerre', 'Hache dentée', 'Fend-crâne', 'Hache sanglante', 'Grande hache', 'Hache-tempête', 'Croc du fauve', 'Hache runique', 'Dévoreuse', 'Rage de Fangleaf'],
+  },
+  guardian: {
+    cls: 'warrior', name: 'Gardien', desc: '+35 % de PV, −15 % de dégâts reçus', hp: 1.35, guard: 0.15,
+    weapons: ['Épée et écu', 'Lame du rempart', 'Épée bastion', 'Lame de chêne', 'Épée-roc', 'Lame du serment', 'Épée gardienne', 'Lame d\'écorce runique', 'Rempart vivant', 'Écu de Fangleaf'],
+  },
+  sniper: {
+    cls: 'archer', name: 'Tireur d\'élite', desc: '+40 % de dégâts, +120 de portée, tire 15 % moins vite', dmg: 1.4, range: 120, cd: 1.15,
+    weapons: ['Arc de visée', 'Long arc d\'if', 'Arc du faucon', 'Arc-aiguille', 'Arc de l\'aigle', 'Arc perce-cœur', 'Arc du guetteur', 'Grand arc runique', 'Œil de l\'orage', 'Œil de Fangleaf'],
+  },
+  ranger: {
+    cls: 'archer', name: 'Rôdeur', desc: 'Tire 35 % plus vite, +10 % de PV', cd: 0.65, hp: 1.1,
+    weapons: ['Arc léger', 'Arc de ronce', 'Arc véloce', 'Arc du vent', 'Arc-griffe', 'Arc de la meute', 'Arc-éclair', 'Arc runique vif', 'Bourrasque', 'Vent de Fangleaf'],
+  },
+  pyromancer: {
+    cls: 'mage', name: 'Pyromancien', desc: '+20 % de dégâts, explosion 50 % plus large', dmg: 1.2, splash: 1.5,
+    weapons: ['Bâton de braise', 'Sceptre ardent', 'Orbe de feu', 'Bâton-brasier', 'Sceptre de lave', 'Orbe solaire', 'Bâton du volcan', 'Sceptre runique ardent', 'Cœur de flamme', 'Brasier de Fangleaf'],
+  },
+  druid: {
+    cls: 'mage', name: 'Druide', desc: '+20 % de PV, rend 12 % des dégâts infligés en PV', hp: 1.2, leech: 0.12,
+    weapons: ['Bâton de saule', 'Sceptre de mousse', 'Bâton de lierre', 'Orbe de sève', 'Bâton des racines', 'Sceptre du chêne', 'Orbe de rosée', 'Bâton sylvestre runique', 'Cœur de la forêt', 'Racine de Fangleaf'],
+  },
+};
+export const SPEC_IDS = Object.keys(SPECS) as SpecId[];
+export const SPEC_CHANGE_COST = 1500; // la première spécialisation de chaque classe est gratuite ; elle est retenue si on change de classe
+/** Spécialisation valable pour cette classe (une spécialisation d'une autre classe ne compte pas). */
+export const specOf = (cls: ClassId | null, spec: SpecId | null) => (cls && spec && SPECS[spec]?.cls === cls ? SPECS[spec] : null);
+/** Classe et spécialisation réunies : ce qui sert au combat. */
+export function heroOf(cls: ClassId | null, spec: SpecId | null) {
+  const c = classOf(cls), s = specOf(cls, spec);
+  return {
+    ...c,
+    dmg: c.dmg * (s?.dmg ?? 1),
+    cd: c.cd * (s?.cd ?? 1),
+    hp: c.hp * (s?.hp ?? 1),
+    range: c.range + (s?.range ?? 0),
+    splash: c.splash && c.splash * (s?.splash ?? 1),
+    guard: s?.guard ?? 0,
+    leech: s?.leech ?? 0,
+  };
+}
+/** Nom de l'arme à ce niveau : celui de la classe jusqu'au 10, puis celui de la spécialisation. */
+export const weaponName = (cls: ClassId | null, spec: SpecId | null, lvl: number) =>
+  lvl <= SPEC_LVL ? classOf(cls).weapons[lvl] : specOf(cls, spec)?.weapons[lvl - SPEC_LVL - 1] ?? `${classOf(cls).weapons[SPEC_LVL]} +${lvl - SPEC_LVL}`;
 
 // Torche : on n'y voit rien la nuit sans elle. Achetée au niveau 1, puis de plus en plus de lumière.
 export const TORCH_MAX = 5;
@@ -359,10 +433,12 @@ export interface Species {
   swim?: boolean; // sauvage, il ne quitte jamais l'eau (apprivoisé, il suit son dompteur sur terre et dans l'eau)
   amphibious?: boolean; // apprivoisé, il suit son dompteur dans l'eau (sauvage, il reste à terre)
   night?: boolean; // n'apparaît que la nuit (il s'envole au lever du jour)
-  sleeps?: boolean; // sauvage, il dort la nuit : ni aggro ni errance, jusqu'à ce qu'on le frappe
+  sleeps?: 'night' | 'day'; // sauvage, il dort la nuit (lièvre) ou le jour (ours) : ni aggro ni errance, jusqu'à ce qu'on le frappe
+  shell?: boolean; // sauvage, il rentre dans sa coquille (intouchable) quand un dompteur sans fruit en main approche
+  rainSpeed?: number; // sauvage, sa vitesse sous une grosse averse (multiplicateur ; l'escargot aime la pluie)
   burrows?: boolean; // sauvage, il file sous le sable (intouchable) et surgit sous sa cible (cercle annoncé), puis reste exposé
   flies?: boolean; // sauvage, il tourne au-dessus de sa cible (hors d'atteinte), pique là où tombe son ombre (cercle annoncé), puis reste un moment au sol
-  shy?: boolean; // gibier craintif : un dompteur sans fruit en main ou un vautour approche, et la colonie court se cacher dans sa tanière
+  shy?: boolean; // gibier craintif : un dompteur sans fruit en main ou un vautour approche, et la colonie court se cacher dans sa tanière (elle y passe aussi la nuit)
   passive?: boolean; // sauvage, il n'attaque jamais : il broute les buissons à fruits et s'enfuit quand on le frappe
 }
 
@@ -385,11 +461,11 @@ export const ARC_FLIGHT_S = 0.9;
 export const SPECIES: Species[] = [
   { key: 'slime', name: 'Gluant', color: '#7FCB5B', r: 14, hp: 25, dmg: 2, speed: 70, atkCd: 1.2, gold: 2, zone: 1, population: 57, pack: [2, 4] },
   { key: 'wolf', name: 'Loup', color: '#8A93A8', r: 19, hp: 70, dmg: 9, speed: 135, atkCd: 0.8, gold: 5, zone: 2, population: 43, pack: [2, 4] },
-  { key: 'boar', name: 'Sanglier', color: '#8B5E3C', r: 20, hp: 180, dmg: 18, speed: 95, atkCd: 1.1, gold: 10, zone: 3, population: 34, pack: [1, 3], sleeps: true },
+  { key: 'boar', name: 'Sanglier', color: '#8B5E3C', r: 20, hp: 180, dmg: 18, speed: 95, atkCd: 1.1, gold: 10, zone: 3, population: 34, pack: [1, 3] }, // bête de nuit : il ne dort pas
   { key: 'golem', name: 'Golem de mousse', color: '#5F7A5A', r: 24, hp: 450, dmg: 32, speed: 60, atkCd: 1.4, gold: 20, zone: 4, population: 30, pack: [1, 2] },
   { key: 'sporelin', name: 'Sporelin', color: '#C8553D', r: 13, hp: 18, dmg: 5, speed: 95, atkCd: 1.0, gold: 2, zone: 1, population: 38, pack: [3, 5] },
   { key: 'spider', name: 'Araignée sylvestre', color: '#6A4E7E', r: 17, hp: 55, dmg: 11, speed: 155, atkCd: 0.9, gold: 5, zone: 2, population: 30, pack: [1, 3] },
-  { key: 'bear', name: 'Ours des fourrés', color: '#6B4A33', r: 24, hp: 240, dmg: 15, speed: 80, atkCd: 1.3, gold: 12, zone: 3, population: 24, pack: [1, 1] },
+  { key: 'bear', name: 'Ours des fourrés', color: '#6B4A33', r: 24, hp: 240, dmg: 15, speed: 80, atkCd: 1.3, gold: 12, zone: 3, population: 24, pack: [1, 1], sleeps: 'day' }, // il chasse la nuit, dort le jour
   { key: 'wisp', name: 'Feu follet', color: '#6FB7FF', r: 18, hp: 300, dmg: 40, speed: 110, atkCd: 1.2, gold: 22, zone: 4, population: 21, pack: [1, 2] },
   // Mini-boss des grottes : la version géante de chaque espèce. Leur « essence » est leur âme.
   // (ordre conservé : les index servent dans les sauvegardes)
@@ -412,8 +488,8 @@ export const SPECIES: Species[] = [
   { key: 'mist_hydra', name: 'Hydre des brumes', color: '#3E8290', r: 57, hp: 23400, dmg: 95, speed: 205, atkCd: 1.2, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Brumentine aux Trois Têtes', sprite: 'serpent', base: 'serpent' },
   { key: 'titan_crab', name: 'Crabe Titan', color: '#B9532F', r: 63, hp: 34580, dmg: 110, speed: 185, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Pince-d’Acier le Titan', sprite: 'crab', base: 'crab' },
   // Gibier passif : il broute les buissons à fruits et s'enfuit quand on le frappe (pas de géant). S'apprivoise surtout aux baies.
-  { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 30, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 3, population: 20, pack: [1, 3], passive: true },
-  { key: 'snail', name: 'Escargot des mousses', color: '#C99A5B', r: 12, hp: 22, dmg: 1, speed: 32, atkCd: 1.4, gold: 2, zone: 1, population: 20, pack: [1, 2], passive: true },
+  { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 30, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 3, population: 20, pack: [1, 3], passive: true, sleeps: 'night' },
+  { key: 'snail', name: 'Escargot des mousses', color: '#C99A5B', r: 12, hp: 22, dmg: 1, speed: 32, atkCd: 1.4, gold: 2, zone: 1, population: 20, pack: [1, 2], passive: true, shell: true, rainSpeed: 1.5 },
   // Gibier de nuit : il n'apparaît qu'une fois la nuit tombée, et s'en va au lever du jour.
   { key: 'firefly', name: 'Luciole', color: '#E4F07A', r: 11, hp: 20, dmg: 1, speed: 70, atkCd: 1.4, gold: 4, zone: 2, population: 24, pack: [3, 5], passive: true, night: true },
   // Zone 6 (Mer de sable) : suricates craintifs autour de leurs tanières, vers fouisseurs, vautours ; chacals fantômes la nuit.

@@ -2,12 +2,12 @@
 
 import {
   bossMelee, sleeperBlocks,
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, classOf, type ClassId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
-  armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, weaponCost, weaponDmg, type SpeciesId,
+  armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, mineDmg, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
@@ -60,7 +60,7 @@ interface Unit {
   windup: number; // tireur : charge son tir (s restantes), immobile
   shotAt: number; // cible visée pendant la charge
   dormant: boolean; // géant qui attend qu'un dompteur vienne lui parler : ni cible ni menace
-  asleep?: boolean; // sauvage endormi pour la nuit (sanglier) : il ne bouge plus jusqu'à ce qu'on le frappe
+  asleep?: boolean; // sauvage endormi (lièvre la nuit, ours le jour) : il ne bouge plus jusqu'à ce qu'on le frappe
   hidden?: boolean; // hors d'atteinte : ni cible ni touché (ver sous le sable, vautour en vol, suricate dans sa tanière)
   emerging?: boolean; // ver : sa sortie est annoncée au sol
   surfaceUntil?: number; // ver sorti, vautour posé : exposé jusqu'à ; suricate : reste à la tanière jusqu'à
@@ -152,6 +152,8 @@ export interface Player {
   villageFound: boolean; // a déjà atteint le village : on y apparaît directement ensuite
   slowUntil: number; // ralenti par une toile jusqu'à
   cls: ClassId | null; // classe choisie à la forge (null : pas encore)
+  spec: SpecId | null; // spécialisation de l'arme, choisie à la Grande forge (null : pas encore)
+  specs: Partial<Record<ClassId, SpecId>>; // spécialisation retenue pour chaque classe (on la retrouve en y revenant)
   resting: { s: number; lvl: number; legend: boolean }[]; // Alphas rangés à la Tanière (pas sur le terrain)
   wiped?: boolean; // progression effacée : plus sauvegardé
   seen: Set<number>; // espèces déjà croisées (bestiaire de la Tanière)
@@ -231,7 +233,7 @@ export interface VillageState {
   banned: { id: string; name: string }[]; // comptes expulsés par le fondateur
 }
 
-const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * classOf(p.cls).hp);
+const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * heroOf(p.cls, p.spec).hp);
 
 const WORM_STRIKE_R = 110; // ver : il remonte quand il est à cette distance (sous) sa cible
 const WORM_WARN_S = 0.9; // annonce de sa sortie
@@ -242,9 +244,11 @@ const VULTURE_CIRCLE_S = 3; // vautour : il tourne au-dessus de sa cible, puis p
 const VULTURE_WARN_S = 1; // annonce du piqué
 const VULTURE_LANDED_S = 3; // posé (frappable) avant de redécoller
 const SHY_HIDE_S = 6; // temps à la tanière après l'alerte
+const SHELL_R = 150; // escargot : un dompteur sans fruit plus près, et il rentre dans sa coquille
+const SHELL_S = 4; // il en ressort ce temps-là après que la voie est libre
 const STORM_HARM = 0.4; // tempête assez forte pour blesser (et cacher vers, vautours et suricates)
 const STORM_DPS = 0.02; // part des PV max perdue chaque seconde en plein dedans (l'armure en réduit une partie)
-const WAKE_S = 20; // sanglier réveillé par un coup : il reste debout tant de secondes après le dernier
+const WAKE_S = 20; // dormeur (lièvre la nuit, ours le jour) réveillé par un coup : il reste debout tant de secondes après le dernier
 
 export class Room {
   readonly seed: number;
@@ -338,7 +342,7 @@ export class Room {
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
       hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, stats: { bosses: 0, tamed: 0, given: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
-      sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, resting: [], seen: new Set(),
+      sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], seen: new Set(),
     };
     const prof = account?.profile;
     if (prof) {
@@ -353,6 +357,8 @@ export class Room {
       p.torch = clamp(Math.floor(prof.torch ?? 0), 0, TORCH_MAX);
       p.boots = clamp(Math.floor(prof.boots ?? 0), 0, BOOTS_MAX);
       p.cls = CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as ClassId) : null;
+      for (const s of [...Object.values(prof.specs ?? {}), prof.spec]) if (SPEC_IDS.includes(s as SpecId)) p.specs[SPECS[s as SpecId].cls] = s as SpecId;
+      p.spec = (p.cls && p.specs[p.cls]) || null;
       p.essences = SPECIES.map((_, i) => prof.essences[i] ?? 0);
       // Bestiaire : ce qui a été vu, plus (pour les anciennes sauvegardes) tout ce qu'on a déjà chassé ou possédé.
       for (const s of [...(prof.seen ?? []), ...(prof.pack ?? []), ...prof.alphas.map((a) => a.s)]) if (s in SPECIES && !SPECIES[s].boss) p.seen.add(s);
@@ -549,7 +555,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, pack, seen: [...p.seen], stats: { ...p.stats } };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats } };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -748,6 +754,7 @@ export class Room {
     if (what === 'weapon') {
       const cost = weaponCost(p.weapon);
       if (p.weapon >= WEAPON_MAX || p.gold < cost) return;
+      if (p.weapon >= SPEC_LVL && !p.spec) return; // au-delà du niveau 10 : une spécialisation d'abord (Grande forge)
       p.gold -= cost;
       p.weapon++;
     } else if (what === 'armor') {
@@ -775,9 +782,28 @@ export class Room {
     p.gold -= cost;
     const ratio = p.hp / maxHpOf(p);
     p.cls = cls;
+    p.spec = p.specs[cls] ?? null; // on retrouve la spécialisation déjà prise pour cette classe
     p.hp = Math.round(maxHpOf(p) * ratio);
     p.dirty = true;
     this.events.push({ e: 'class', id: p.id, cls });
+  }
+
+  /**
+   * Choisir la spécialisation de son arme, à la Grande forge, une fois l'arme au niveau 10 et la classe choisie :
+   * la première fois gratuitement, ensuite contre de l'or.
+   */
+  onSpec(p: Player, spec: SpecId) {
+    if (!SPEC_IDS.includes(spec) || p.spec === spec || !p.cls || SPECS[spec].cls !== p.cls) return;
+    if (p.weapon < SPEC_LVL || !this.at(p, 'forge2')) return;
+    const cost = p.specs[p.cls] ? SPEC_CHANGE_COST : 0; // gratuite seulement la première fois pour cette classe
+    if (p.gold < cost) return;
+    p.gold -= cost;
+    const ratio = p.hp / maxHpOf(p);
+    p.spec = spec;
+    p.specs[p.cls] = spec;
+    p.hp = Math.round(maxHpOf(p) * ratio);
+    p.dirty = true;
+    this.events.push({ e: 'spec', id: p.id, spec });
   }
 
   /** Alpha équipé (unité sur le terrain) de cette espèce, s'il y en a un. */
@@ -1228,6 +1254,7 @@ export class Room {
     const sky = this.sky();
     this.night = sky.light < 0.5;
     this.storm = sky.storm;
+    this.rain = sky.rain;
     // Au lever du jour, les bêtes de nuit sauvages s'en vont, hors de la vue des dompteurs (on ne les voit pas disparaître).
     if (!this.isNight()) {
       for (const u of [...this.units.values()]) {
@@ -1240,6 +1267,7 @@ export class Room {
   /** Nuit au village (même ciel que celui qu'affichent les clients). */
   private night = false; // mis à jour 2 fois par seconde
   private storm = 0; // tempête de sable (Mer de sable), mise à jour 2 fois par seconde
+  private rain = 0; // force de l'averse (0 à 1), mise à jour 2 fois par seconde
   private sky() {
     return sky(this.seed, Date.now());
   }
@@ -1384,7 +1412,7 @@ export class Room {
     if (p.holding) return this.feed(p); // fruit en main : on nourrit, on ne frappe pas
     if (p.sword < SWORD_PULLS) return p.manual ? undefined : this.mine(p); // pas encore d'arme : on ne se bat pas
     if (p.manual) return this.time <= p.orderUntil ? this.aimedAttack(p) : undefined; // attaque au clic : rien sans ordre
-    const cls = classOf(p.cls);
+    const cls = heroOf(p.cls, p.spec);
     const reach = PLAYER_R + cls.range;
     const t = this.nearest(p.x, p.y, reach + 50, this.isWild) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (reach + t.r) ** 2) return this.mine(p);
@@ -1398,8 +1426,8 @@ export class Room {
         if (this.isWild(e) && this.alive(e) && dist2(e.x, e.y, t.x, t.y) <= (cls.splash! + e.r) ** 2) hit.push(e as Unit);
       });
       // pleins dégâts au point d'impact, de moins en moins vers le bord de l'explosion
-      for (const e of hit) this.damage(e, dmg * (1 - (1 - MAGE_SPLASH_EDGE) * Math.min(1, Math.sqrt(dist2(e.x, e.y, t.x, t.y)) / cls.splash)), p);
-    } else this.damage(t, dmg, p);
+      for (const e of hit) this.strike(p, e, dmg * (1 - (1 - MAGE_SPLASH_EDGE) * Math.min(1, Math.sqrt(dist2(e.x, e.y, t.x, t.y)) / cls.splash)), cls.leech);
+    } else this.strike(p, t, dmg, cls.leech);
   }
 
   /**
@@ -1409,7 +1437,7 @@ export class Room {
    * Rien touché au corps à corps : il récolte le filon ou le tas à portée.
    */
   private aimedAttack(p: Player) {
-    const cls = classOf(p.cls);
+    const cls = heroOf(p.cls, p.spec);
     const reach = PLAYER_R + cls.range;
     const d = Math.hypot(p.aimX - p.x, p.aimY - p.y) || 1, ux = (p.aimX - p.x) / d, uy = (p.aimY - p.y) / d;
     const dmg = weaponDmg(p.weapon) * cls.dmg * (1 + this.rallyOf(p)); // Alpha suricate : il l'encourage
@@ -1421,7 +1449,7 @@ export class Room {
       this.events.push({ e: 'boom', x: Math.round(bx), y: Math.round(by), r: cls.splash!, kind: 'orb' });
       const hit: Ent[] = [];
       this.grid.query(bx, by, cls.splash! + 40, (e) => prey(e) && dist2(e.x, e.y, bx, by) <= (cls.splash! + e.r) ** 2 && hit.push(e));
-      for (const e of hit) this.damage(e, dmg * (1 - (1 - MAGE_SPLASH_EDGE) * Math.min(1, Math.sqrt(dist2(e.x, e.y, bx, by)) / cls.splash!)), p);
+      for (const e of hit) this.strike(p, e, dmg * (1 - (1 - MAGE_SPLASH_EDGE) * Math.min(1, Math.sqrt(dist2(e.x, e.y, bx, by)) / cls.splash!)), cls.leech);
       return;
     }
     if (p.cls === 'archer') {
@@ -1435,7 +1463,7 @@ export class Room {
         if (Math.hypot(e.x - p.x - ux * t, e.y - p.y - uy * t) <= e.r + 6) [best, bt] = [e, t];
       });
       this.events.push({ e: 'shot', by: p.id, x: p.x, y: p.y, tx: Math.round(p.x + ux * bt), ty: Math.round(p.y + uy * bt), cls: 'archer' });
-      if (best) this.damage(best, dmg, p);
+      if (best) this.strike(p, best, dmg, cls.leech);
       return;
     }
     // guerrier : coup en arc (±65°) devant lui, sur le plus proche
@@ -1448,7 +1476,13 @@ export class Room {
     });
     if (!best) return this.mine(p);
     p.atkCd = cls.cd;
-    this.damage(best, dmg, p);
+    this.strike(p, best, dmg, cls.leech);
+  }
+
+  /** Coup du dompteur : leech, part des dégâts qui lui revient en PV (spécialisation Druide). */
+  private strike(p: Player, e: Ent, dmg: number, leech: number) {
+    this.damage(e, dmg, p);
+    if (leech > 0 && !p.dead) p.hp = Math.min(maxHpOf(p), p.hp + dmg * leech);
   }
 
   /** Cueillir les baies du buisson garni le plus proche (devant lui). */
@@ -1512,7 +1546,7 @@ export class Room {
     if (best < 0) return;
     const o = this.map.ores[best];
     p.atkCd = PLAYER_ATK_CD;
-    this.oreHp[best] -= weaponDmg(p.weapon);
+    this.oreHp[best] -= mineDmg(p.weapon);
     const done = this.oreHp[best] <= 0;
     this.events.push({ e: 'mine', by: p.id, id: best, done });
     if (!done) return;
@@ -2066,14 +2100,17 @@ export class Room {
       u.target = 0;
       return;
     }
-    // La nuit, le sanglier sauvage dort : il ne voit personne. Un coup le réveille (pour un bon moment).
-    u.asleep = !!SPECIES[u.s].sleeps && this.night && this.time - u.lastHitAt > WAKE_S;
+    const sp = SPECIES[u.s];
+    if (sp.rainSpeed) u.speed = sp.speed * (1 + (sp.rainSpeed - 1) * this.rain); // l'escargot file sous la pluie
+    // Le lièvre dort la nuit, l'ours le jour : endormis, ils ne voient personne. Un coup les réveille (pour un bon moment).
+    u.asleep = !!sp.sleeps && (sp.sleeps === 'night') === this.night && this.time - u.lastHitAt > WAKE_S;
     if (u.asleep) {
       u.target = u.lastAttacker = 0;
       u.windup = 0;
       return;
     }
     if (SPECIES[u.s].shy && this.hideAI(u)) return;
+    if (sp.shell && this.shellAI(u)) return;
     if (SPECIES[u.s].passive) return this.grazeAI(u);
     // Priorité au plus proche, dompteurs et monstres de meute confondus (réévalué à chaque tick).
     let t: Ent | undefined = this.nearest(u.x, u.y, this.aggroOf(u), this.isAllyOfPlayers);
@@ -2156,13 +2193,29 @@ export class Room {
   }
 
   /**
-   * Suricate : un dompteur sans fruit en main, un vautour qui tourne au-dessus, ou un coup, et la colonie entière
+   * Escargot : un dompteur sans fruit en main s'approche (ou un coup), et il rentre dans sa coquille, sur place
+   * (intouchable) ; il en ressort un peu après que la voie est libre. Vrai : il est dans sa coquille.
+   */
+  private shellAI(u: Unit) {
+    const threat = this.time - u.lastHitAt < 1 || [...this.players.values()].some((p) => !p.dead && !p.holding && dist2(p.x, p.y, u.x, u.y) < SHELL_R ** 2);
+    if (threat) u.surfaceUntil = this.time + SHELL_S;
+    if (this.time >= (u.surfaceUntil ?? 0)) {
+      u.hidden = false;
+      return false;
+    }
+    u.hidden = true;
+    u.target = u.lastAttacker = 0;
+    return true;
+  }
+
+  /**
+   * Suricate (la nuit, la colonie dort dans sa tanière) : un dompteur sans fruit en main, un vautour qui tourne au-dessus, ou un coup, et la colonie entière
    * court se cacher dans sa tanière (intouchable) ; elle ressort quand la voie est libre. Vrai : il est occupé à fuir.
    */
   private hideAI(u: Unit) {
     const d = this.map.denNear(u.homeX, u.homeY), den = d >= 0 ? this.map.dens[d] : { x: u.homeX, y: u.homeY };
     const near = (x: number, y: number, r: number) => dist2(x, y, u.x, u.y) < r * r;
-    let threat = this.storm >= STORM_HARM || this.time - u.lastHitAt < 1 || [...this.players.values()].some((p) => !p.dead && !p.holding && near(p.x, p.y, SHY_R));
+    let threat = this.night || this.storm >= STORM_HARM || this.time - u.lastHitAt < 1 || [...this.players.values()].some((p) => !p.dead && !p.holding && near(p.x, p.y, SHY_R));
     if (!threat) for (const o of this.units.values()) if (!o.owner && SPECIES[o.s].flies && near(o.x, o.y, VULTURE_SCARE_R)) threat = true;
     if (threat) {
       // l'alerte gagne toute la colonie de la tanière
@@ -2383,7 +2436,7 @@ export class Room {
         amount -= share;
         if (amount <= 0) return;
       }
-      const dmg = Math.max(1, Math.round(amount * (1 - armorReduction(t.armor) - this.guardOf(t))));
+      const dmg = Math.max(1, Math.round(amount * (1 - armorReduction(t.armor) - this.guardOf(t) - heroOf(t.cls, t.spec).guard)));
       t.hp -= dmg;
       this.events.push({ e: 'hit', a: by.id, b: t.id, dmg, ...m });
       if (t.hp <= 0) this.killPlayer(t);
@@ -2714,7 +2767,7 @@ export class Room {
     for (const p of this.players.values()) {
       const st: PlayerState = {
         id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: Math.round(p.fx * 100) / 100, fy: Math.round(p.fy * 100) / 100,
-        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, sword: p.sword, scrolls: p.scrolls.length, cls: p.cls, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
+        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, sword: p.sword, scrolls: p.scrolls.length, cls: p.cls, spec: p.spec, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
         essences: p.essences, saved: !!p.userId, dead: p.dead,
         respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
         revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),

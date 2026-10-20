@@ -1,6 +1,6 @@
 // Messages échangés sur le WebSocket (JSON).
 
-import type { BuildingId, ClassId, Gear } from './config.ts';
+import type { BuildingId, ClassId, Gear, SpecId } from './config.ts';
 
 /** Statistiques d'un dompteur dans son village (tableau du village). */
 export interface Stats {
@@ -25,6 +25,7 @@ export type ClientMsg =
   | { t: 'alphaEquip'; s: number; equip: boolean } // l'emmener sur le terrain, ou le ranger à la Tanière
   | { t: 'alphaCreate'; s: number }
   | { t: 'class'; cls: ClassId } // choisir sa classe à la forge
+  | { t: 'spec'; spec: SpecId } // choisir la spécialisation de son arme (Grande forge, arme niv. 10)
   | { t: 'legend'; s: number } // rendre légendaire l'Alpha de cette espèce avec l'âme de son géant
   | { t: 'mount'; id: number } // 0 = descendre
   | { t: 'cave'; id: number; enter: boolean } // entrer dans une grotte / en sortir
@@ -73,6 +74,7 @@ export interface PlayerState {
   sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
   scrolls: number; // parchemins dans son sac (à donner au vieil homme)
   cls: ClassId | null; // classe (null : pas encore choisie)
+  spec: SpecId | null; // spécialisation de l'arme (null : pas encore)
   gold: number;
   fruits: number; // baies dans son sac
   holding: boolean; // tend un fruit (il ne se bat plus, il nourrit)
@@ -155,6 +157,7 @@ export type GameEvent =
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire
   | { e: 'shot'; by: number; x: number; y: number; tx: number; ty: number; cls: ClassId } // flèche ou orbe
   | { e: 'class'; id: number; cls: ClassId }
+  | { e: 'spec'; id: number; spec: SpecId }
   | { e: 'awaken'; id: number; by: number; s: number } // Alpha éveillé à la tanière
   | { e: 'revive'; id: number }
   | { e: 'heal'; id: number; n: number } // un Alpha lièvre soigne son dompteur

@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -82,6 +82,7 @@ export class Game {
     this.hud.onCave = (id, enter) => net.send({ t: 'cave', id, enter });
     this.hud.onLegend = (s) => net.send({ t: 'legend', s });
     this.hud.onClass = (cls) => net.send({ t: 'class', cls });
+    this.hud.onSpec = (spec) => net.send({ t: 'spec', spec });
     this.hud.onTravel = (to) => net.send({ t: 'travel', to });
     this.hud.onEstablish = (site) => net.send({ t: 'establish', site });
     this.hud.onBuild = (b) => net.send({ t: 'build', b });
@@ -795,6 +796,13 @@ export class Game {
       case 'shot':
         this.fx.shot(e.by === this.myId ? this.me.x : e.x, e.by === this.myId ? this.me.y : e.y, e.tx, e.ty, e.cls);
         break;
+      case 'spec':
+        if (e.id === this.myId) {
+          this.hud.toast(`Spécialisation : ${SPECS[e.spec].name} !`, 'good');
+          this.fx.ring(this.me.x, this.me.y, '#F0B64A', 10, 70);
+          sound.play('fanfare');
+        }
+        break;
       case 'class':
         if (e.id === this.myId) {
           this.hud.toast(`Tu es désormais ${CLASSES[e.cls].name.toLowerCase()} !`, 'good');
@@ -902,7 +910,7 @@ export class Game {
         this.fx.ring(pos.x, pos.y, '#F0B64A', 20, 140, 1.2);
         this.fx.burst(pos.x, pos.y, '#F0B64A', 30, 180);
         this.hud.toast(e.by === this.myId ? `Nouveau bâtiment pour tout le village : ${BUILDINGS[e.b].name} !` : `${name(e.by)} a construit : ${BUILDINGS[e.b].name}`, 'good');
-        if (e.by === this.myId) this.hud.setPanel(null);
+        if (e.by === this.myId && e.b !== 'forge2') this.hud.setPanel(null); // la Grande forge : on reste à la forge, pour choisir
         break;
       }
       case 'unlock': {
@@ -1227,7 +1235,7 @@ export class Game {
     ctx.translate(village.x, village.y);
     this.world.drawCampfire(ctx, this.time);
     // bâtiments : construits, ou leur chantier avec son prix
-    for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall, this.hud.buildings.includes(`plot_${b}`));
+    for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall, this.hud.buildings.includes(`plot_${b}`), b === 'forge' && this.hud.buildings.includes('forge2'));
     this.world.drawHall(ctx, this.hud.hall, this.time);
     this.world.drawStore(ctx, this.hud.stock);
     this.world.drawBoard(ctx);
@@ -1354,8 +1362,12 @@ export class Game {
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
       const boss = SPECIES[s].boss && owner === 0;
       if (flags & UNIT_FLAG_HIDDEN) {
-        // hors d'atteinte : vautour qui plane (au-dessus de tout, son ombre au sol), ver sous le sable, suricate à la tanière
-        if (SPECIES[s].flies) {
+        // hors d'atteinte : vautour qui plane (au-dessus de tout, son ombre au sol), ver sous le sable, suricate à la tanière,
+        // escargot rentré dans sa coquille (sur place)
+        if (SPECIES[s].shell) {
+          const face = this.faces.get(id)?.face ?? 1;
+          list.push({ y, draw: () => drawUnit(ctx, { x, y, r, species: s, alpha, wild: owner === 0, face, t: 0, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, shell: true }) });
+        } else if (SPECIES[s].flies) {
           list.push({ y: y - 1000, draw: () => drawSoaringShadow(ctx, x, y, r) });
           air.push({ y, draw: () => { // en pleine tempête : il monte très haut, à peine visible dans le sable
             ctx.save();
@@ -1396,7 +1408,7 @@ export class Game {
         draw: () => {
           this.drawUnitCached(ctx, id, look(), pose);
           if (boss && flags & UNIT_FLAG_DORMANT) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
-          if (flags & UNIT_FLAG_ASLEEP) this.snore(x + r * 0.6, y - r * 1.2, 12, id); // sanglier qui dort la nuit
+          if (flags & UNIT_FLAG_ASLEEP) this.snore(x + r * 0.6, y - r * 1.2, 12, id); // lièvre qui dort la nuit, ours le jour
           if (boss) {
             // Mini-boss : nom et grande barre de vie, toujours visibles.
             ctx.font = '700 15px "Pixelify Sans", sans-serif';

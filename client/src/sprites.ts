@@ -50,6 +50,7 @@ export interface UnitLook {
   moving?: boolean; // il se déplace (les gluants avancent par bonds)
   air?: number; // hauteur au-dessus du sol (bond d'un géant) : le corps monte, l'ombre reste au sol et rétrécit
   squash?: number; // écrasement vertical (> 1 : étiré, < 1 : aplati), pour l'élan et l'atterrissage
+  shell?: boolean; // escargot rentré dans sa coquille : seule la coquille, posée au sol
 }
 
 /** Décalage de la couronne (Alpha, géant) vers la tête, en rayons, pour les espèces dont la tête est loin devant. */
@@ -1651,6 +1652,14 @@ function hare(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
 function snail(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   const crawl = Math.sin(u.t * 3 + u.seed) * 0.05;
   const body = u.flash ? '#FFFFFF' : '#C9B79A';
+  if (u.shell) {
+    // rentré dans sa coquille : elle repose au sol, un peu plus bas
+    ctx.save();
+    ctx.translate(0.2 * r, 0.3 * r);
+    shellOf(ctx, r, fill, u);
+    ctx.restore();
+    return;
+  }
   // corps (pied) allongé
   ctx.fillStyle = body;
   ctx.beginPath();
@@ -1679,7 +1688,11 @@ function snail(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.arc((ex + crawl) * r, ey * r, 0.08 * r, 0, TAU);
     ctx.fill();
   }
-  // coquille en spirale
+  shellOf(ctx, r, fill, u);
+}
+
+/** Coquille en spirale de l'escargot. */
+function shellOf(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   ctx.fillStyle = fill;
   ctx.beginPath();
   ctx.arc(-0.2 * r, -0.05 * r, 0.62 * r, 0, TAU);
