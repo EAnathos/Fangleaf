@@ -3137,7 +3137,6 @@ export function drawTorch(ctx: Ctx, x: number, y: number, lvl: number, t: number
 /** Souche d'un arbre abattu : il repoussera. */
 export function drawStump(ctx: Ctx, x: number, y: number, r: number) {
   const w = Math.max(9, r * 0.9);
-  shadow(ctx, x, y + 2, w);
   ctx.fillStyle = '#5B3F2C';
   ctx.fillRect(x - w, y - w * 0.55, w * 2, w * 0.6);
   ctx.beginPath();
