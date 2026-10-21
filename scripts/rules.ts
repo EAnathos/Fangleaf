@@ -1423,11 +1423,15 @@ const noop = () => {};
   const chopDown = (z: number) => {
     const { d, t, x, y } = spot(z);
     [p.x, p.y] = [x, y];
+    // seul cet arbre est à portée de hache (un voisin plus proche serait abattu à sa place)
+    const others = r.map.treesNear(x, y, 200).filter((i: number) => i !== d.id && !r.map.treeDown.has(i));
+    for (const i of others) r.map.treeDown.add(i);
     const w0 = p.wood;
     for (let i = 0; i < 20 * 30 && !r.map.treeDown.has(d.id); i++) {
       for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
       r.step();
     }
+    for (const i of others) r.map.treeDown.delete(i);
     return { d, t, got: p.wood - w0 };
   };
   {
@@ -1453,11 +1457,14 @@ const noop = () => {};
   {
     const { d, x, y } = spot(TREANT_ZONE);
     [p.x, p.y] = [x, y];
+    const others = r.map.treesNear(x, y, 200).filter((i: number) => i !== d.id && !r.map.treeDown.has(i));
+    for (const i of others) r.map.treeDown.add(i); // seul cet arbre est à portée de hache
     r.treeHp.set(d.id, 1); // dernier coup de hache
     Math.random = () => 0; // le Tréant se réveille à coup sûr
     p.atkCd = 0;
     r.step();
     Math.random = rand;
+    for (const i of others) r.map.treeDown.delete(i);
     const treant = SPECIES.findIndex((sp) => sp.key === 'treant');
     check(r.map.treeDown.has(d.id) && [...r.units.values()].some((u: { s: number; owner: number }) => u.s === treant && !u.owner), 'Bois profonds : un arbre abattu peut réveiller un Tréant');
     check(SPECIES[treant].hp > Math.max(...SPECIES.filter((sp) => sp.zone === TREANT_ZONE && !sp.boss && !sp.passive && sp.population).map((sp) => sp.hp)), 'le Tréant est plus solide que les autres monstres des Bois profonds');
