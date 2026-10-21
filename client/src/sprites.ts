@@ -2269,59 +2269,115 @@ export function drawBurrow(ctx: Ctx, x: number, y: number, r: number, worm: bool
   }
 }
 
-/** Tréant : un tronc trapu sur pattes-racines, deux branches en bras, une touffe de sapin sur la tête. */
+/**
+ * Tréant (la sentinelle des sapins) : trois étages de sapin en capuche, le visage dans leur ombre (deux yeux verts
+ * qui luisent), des bras-branches hérissés d'aiguilles, du lichen sur le tronc et des pattes-racines qui marchent.
+ */
 function treant(ctx: Ctx, r: number, fill: string, u: UnitLook) {
-  const sway = Math.sin(u.t * 3 + u.seed) * r * 0.08;
-  // racines-pattes
-  ctx.strokeStyle = u.flash ? '#FFFFFF' : '#4A3826';
-  ctx.lineWidth = r * 0.22;
+  const t = u.t + u.seed, sway = Math.sin(t * 2) * r * 0.08, white = u.flash ? '#FFFFFF' : null;
+  // pattes-racines (avec une radicelle chacune)
+  ctx.strokeStyle = white ?? '#3E2C1C';
   ctx.lineCap = 'round';
-  ctx.beginPath();
-  for (const s of [-1, 0, 1]) {
-    ctx.moveTo(s * r * 0.35, r * 0.5);
-    ctx.quadraticCurveTo(s * r * 0.7, r * 0.7, s * r * 0.85 + (s === 0 ? r * 0.15 : 0), r * 0.78);
+  for (let i = 0; i < 4; i++) {
+    const s = -1 + (2 * i) / 3, lift = Math.max(0, Math.sin(t * 6 + i * 2)) * (u.moving ? 0.12 : 0.03) * r;
+    ctx.lineWidth = r * (0.2 - Math.abs(s) * 0.04);
+    ctx.beginPath();
+    ctx.moveTo(s * r * 0.4, r * 0.35);
+    ctx.quadraticCurveTo(s * r * 0.75, r * 0.55 - lift, s * r, r * 0.8 - lift);
+    ctx.stroke();
+    ctx.lineWidth = r * 0.06;
+    ctx.beginPath();
+    ctx.moveTo(s * r * 0.85, r * 0.72 - lift);
+    ctx.lineTo(s * r * 1.15 + 2, r * 0.68 - lift);
+    ctx.stroke();
   }
-  ctx.stroke();
-  // bras-branches
-  ctx.lineWidth = r * 0.18;
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.6, -r * 0.1);
-  ctx.quadraticCurveTo(-r * 1.1, -r * 0.3 + sway, -r * 1.25, -r * 0.75 + sway);
-  ctx.moveTo(r * 0.6, -r * 0.1);
-  ctx.quadraticCurveTo(r * 1.1, -r * 0.3 - sway, r * 1.25, -r * 0.75 - sway);
-  ctx.stroke();
+  // bras-branches hérissés d'aiguilles
+  for (const s of [-1, 1]) {
+    ctx.strokeStyle = white ?? '#3E2C1C';
+    ctx.lineWidth = r * 0.16;
+    ctx.beginPath();
+    ctx.moveTo(s * r * 0.5, r * 0.05);
+    ctx.quadraticCurveTo(s * r * 1.05, 0, s * r * 1.25, -r * 0.3 + sway * s);
+    ctx.stroke();
+    ctx.strokeStyle = white ?? '#2F5A3A';
+    ctx.lineWidth = r * 0.05;
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) {
+      const a = 0.35 + k * 0.12, bx = s * r * (0.5 + 0.75 * a), by = r * 0.05 - r * 0.35 * a * a + sway * s * a;
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + s * r * 0.08, by - r * 0.16);
+      ctx.moveTo(bx, by);
+      ctx.lineTo(bx + s * r * 0.1, by + r * 0.1);
+    }
+    ctx.stroke();
+  }
   ctx.lineCap = 'butt';
-  // tronc
+  // tronc, ses sillons d'écorce et son lichen
   ctx.fillStyle = fill;
   ctx.beginPath();
-  ctx.roundRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.35, r * 0.35);
+  ctx.roundRect(-r * 0.55, -r * 0.45, r * 1.1, r * 1.05, r * 0.25);
   ctx.fill();
   ink(ctx, r);
-  // écorce
-  ctx.strokeStyle = 'rgba(30,20,12,0.35)';
-  ctx.lineWidth = Math.max(1, r * 0.06);
+  ctx.strokeStyle = 'rgba(30,20,10,0.5)';
+  ctx.lineWidth = Math.max(1, r * 0.05);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    const x = -r * 0.45 + (r * 0.9 * (i + 0.5)) / 4, w = Math.sin(i * 2.7) * r * 0.08;
+    ctx.beginPath();
+    ctx.moveTo(x, -r * 0.2 + Math.abs(Math.sin(i)) * r * 0.15);
+    ctx.bezierCurveTo(x + w, r * 0.06, x - w, r * 0.29, x + w * 0.5, r * 0.55);
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+  ctx.fillStyle = white ?? 'rgba(170,200,150,0.55)';
+  for (const [lx, ly] of [[-0.38, 0.3], [-0.3, 0.38], [0.4, 0.05]]) {
+    ctx.beginPath();
+    ctx.arc(lx * r, ly * r, r * 0.06, 0, TAU);
+    ctx.fill();
+  }
+  // capuche de sapin : un étage, le visage dans son ombre, puis les deux autres
+  const tier = (y: number, w: number, h: number, dark: string, light: string) => {
+    ctx.fillStyle = white ?? dark;
+    ctx.beginPath();
+    ctx.moveTo(-w, y);
+    ctx.lineTo(0, y - h);
+    ctx.lineTo(w, y);
+    for (let i = 4; i >= 0; i--) ctx.lineTo(-w + (2 * w * i) / 4, y + (i % 2 ? r * 0.08 : 0));
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = white ?? light;
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.15, y - h * 0.75);
+    ctx.lineTo(0, y - h);
+    ctx.lineTo(-w * 0.55, y - h * 0.1);
+    ctx.closePath();
+    ctx.fill();
+  };
+  tier(-r * 0.15, r * 0.95, r * 0.75, '#23462E', '#3B6B47');
+  ctx.fillStyle = 'rgba(10,16,12,0.55)';
   ctx.beginPath();
-  ctx.moveTo(-r * 0.4, r * 0.1);
-  ctx.lineTo(-r * 0.35, r * 0.55);
-  ctx.moveTo(r * 0.35, r * 0.05);
-  ctx.lineTo(r * 0.42, r * 0.5);
-  ctx.stroke();
-  // feuillage de sapin sur la tête
-  ctx.fillStyle = u.flash ? '#FFFFFF' : '#2F5A3A';
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.85, -r * 0.6);
-  ctx.lineTo(0, -r * 1.55);
-  ctx.lineTo(r * 0.85, -r * 0.6);
-  ctx.closePath();
+  ctx.ellipse(0, -r * 0.18, r * 0.5, r * 0.18, 0, 0, Math.PI);
   ctx.fill();
-  ctx.fillStyle = u.flash ? '#FFFFFF' : '#3F7449';
+  // yeux qui luisent (violets pour un Alpha)
+  const eye = u.alpha ? '#B48CFF' : '#96E678', glow = 0.25 + Math.sin(t * 4) * 0.1;
+  for (const s of [-1, 1]) {
+    ctx.globalAlpha = glow;
+    ctx.fillStyle = eye;
+    ctx.beginPath();
+    ctx.arc(s * r * 0.2, -r * 0.06, r * 0.18, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.arc(s * r * 0.2, -r * 0.06, r * 0.07, 0, TAU);
+    ctx.fill();
+  }
+  tier(-r * 0.6 + sway * 0.3, r * 0.75, r * 0.7, '#2A5236', '#447A50');
+  tier(-r * 1.05 + sway * 0.6, r * 0.52, r * 0.65, '#2F5A3A', '#4E8A5A');
+  // une pomme de pin accrochée
+  ctx.fillStyle = white ?? '#7A5230';
   ctx.beginPath();
-  ctx.moveTo(-r * 0.55, -r * 1.0);
-  ctx.lineTo(0, -r * 1.75);
-  ctx.lineTo(r * 0.55, -r * 1.0);
-  ctx.closePath();
+  ctx.ellipse(r * 0.55, -r * 0.2, r * 0.07, r * 0.1, 0.3, 0, TAU);
   ctx.fill();
-  eyes(ctx, 0, -r * 0.2, r * 0.28, r * 0.12, u.alpha ? '#B48CFF' : '#E6C35C', u.wild);
 }
 
 const DRAWERS: Record<string, (ctx: Ctx, r: number, fill: string, u: UnitLook) => void> = {

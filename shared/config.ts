@@ -518,7 +518,7 @@ export const SPECIES: Species[] = [
   { key: 'vulture_king', name: 'Roi-Vautour', color: '#3A2C24', r: 60, hp: 54000, dmg: 215, speed: 200, atkCd: 1.2, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Charognard, le Roi des Cieux', sprite: 'vulture', base: 'vulture' },
   { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 50000, dmg: 205, speed: 220, atkCd: 0.9, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Anubeth, le Chacal de la Lune', sprite: 'jackal', base: 'jackal' },
   // Bois profonds : le Tréant dort dans un arbre ; il en sort parfois quand on l'abat (jamais d'apparition ailleurs).
-  { key: 'treant', name: 'Tréant', color: '#6B5A3A', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1] },
+  { key: 'treant', name: 'Tréant', color: '#6B4E30', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1] },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);
