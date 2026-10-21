@@ -568,6 +568,24 @@ export function drawElder(ctx: Ctx, x: number, y: number, t: number, lx = 1, ly 
   ctx.fillText(name, x, cy - r - 10);
 }
 
+/** Point d'exclamation doré au-dessus d'un personnage qui a quelque chose à nous dire : il flotte doucement. */
+export function drawQuestMark(ctx: Ctx, x: number, y: number, t: number) {
+  const by = y + Math.sin(t * 3) * 3;
+  ctx.save();
+  ctx.font = '800 30px Outfit, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = 'rgba(16,24,26,0.9)';
+  ctx.strokeText('!', x, by);
+  ctx.shadowColor = 'rgba(246,210,122,0.8)';
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = '#F6D27A';
+  ctx.fillText('!', x, by);
+  ctx.restore();
+}
+
 /** Épée du guerrier : pommeau, poignée gainée, garde recourbée, lame à gouttière ; elle s'orne avec le niveau d'arme. */
 function drawSword(ctx: Ctx, r: number, lvl: number) {
   const steel = lvl >= 9 ? '#F6D27A' : lvl >= 6 ? '#E6ECF2' : '#D4DAE0', edge = lvl >= 9 ? '#FFF1C4' : '#FFFFFF';
@@ -2251,8 +2269,63 @@ export function drawBurrow(ctx: Ctx, x: number, y: number, r: number, worm: bool
   }
 }
 
+/** Tréant : un tronc trapu sur pattes-racines, deux branches en bras, une touffe de sapin sur la tête. */
+function treant(ctx: Ctx, r: number, fill: string, u: UnitLook) {
+  const sway = Math.sin(u.t * 3 + u.seed) * r * 0.08;
+  // racines-pattes
+  ctx.strokeStyle = u.flash ? '#FFFFFF' : '#4A3826';
+  ctx.lineWidth = r * 0.22;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (const s of [-1, 0, 1]) {
+    ctx.moveTo(s * r * 0.35, r * 0.5);
+    ctx.quadraticCurveTo(s * r * 0.7, r * 0.7, s * r * 0.85 + (s === 0 ? r * 0.15 : 0), r * 0.78);
+  }
+  ctx.stroke();
+  // bras-branches
+  ctx.lineWidth = r * 0.18;
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.6, -r * 0.1);
+  ctx.quadraticCurveTo(-r * 1.1, -r * 0.3 + sway, -r * 1.25, -r * 0.75 + sway);
+  ctx.moveTo(r * 0.6, -r * 0.1);
+  ctx.quadraticCurveTo(r * 1.1, -r * 0.3 - sway, r * 1.25, -r * 0.75 - sway);
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+  // tronc
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.roundRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.35, r * 0.35);
+  ctx.fill();
+  ink(ctx, r);
+  // écorce
+  ctx.strokeStyle = 'rgba(30,20,12,0.35)';
+  ctx.lineWidth = Math.max(1, r * 0.06);
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.4, r * 0.1);
+  ctx.lineTo(-r * 0.35, r * 0.55);
+  ctx.moveTo(r * 0.35, r * 0.05);
+  ctx.lineTo(r * 0.42, r * 0.5);
+  ctx.stroke();
+  // feuillage de sapin sur la tête
+  ctx.fillStyle = u.flash ? '#FFFFFF' : '#2F5A3A';
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.85, -r * 0.6);
+  ctx.lineTo(0, -r * 1.55);
+  ctx.lineTo(r * 0.85, -r * 0.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = u.flash ? '#FFFFFF' : '#3F7449';
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.55, -r * 1.0);
+  ctx.lineTo(0, -r * 1.75);
+  ctx.lineTo(r * 0.55, -r * 1.0);
+  ctx.closePath();
+  ctx.fill();
+  eyes(ctx, 0, -r * 0.2, r * 0.28, r * 0.12, u.alpha ? '#B48CFF' : '#E6C35C', u.wild);
+}
+
 const DRAWERS: Record<string, (ctx: Ctx, r: number, fill: string, u: UnitLook) => void> = {
-  slime, wolf, boar, golem,
+  slime, wolf, boar, golem, treant,
   sporelin, spider, bear, wisp,
   watcher, toad, serpent, crab,
   hare, snail, firefly,
@@ -3003,4 +3076,27 @@ export function drawTorch(ctx: Ctx, x: number, y: number, lvl: number, t: number
   ctx.globalAlpha = 1;
   ctx.fillStyle = frame;
   ctx.fillRect(x - 0.6, y - 12.5, 1.2, 8.5);
+}
+
+/** Souche d'un arbre abattu : il repoussera. */
+export function drawStump(ctx: Ctx, x: number, y: number, r: number) {
+  const w = Math.max(9, r * 0.9);
+  shadow(ctx, x, y + 2, w);
+  ctx.fillStyle = '#5B3F2C';
+  ctx.fillRect(x - w, y - w * 0.55, w * 2, w * 0.6);
+  ctx.beginPath();
+  ctx.ellipse(x, y + 0.05 * w, w, w * 0.4, 0, 0, TAU);
+  ctx.fill();
+  // le dessus, coupé net, et ses cernes
+  ctx.fillStyle = '#C9A36E';
+  ctx.beginPath();
+  ctx.ellipse(x, y - w * 0.55, w, w * 0.4, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(110,75,45,0.7)';
+  ctx.lineWidth = 1;
+  for (const k of [0.65, 0.35]) {
+    ctx.beginPath();
+    ctx.ellipse(x, y - w * 0.55, w * k, w * 0.4 * k, 0, 0, TAU);
+    ctx.stroke();
+  }
 }

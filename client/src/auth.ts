@@ -45,12 +45,12 @@ export async function myVillages(): Promise<MyVillage[]> {
   if (!authEnabled) return [];
   const { data, error } = await (await sb())
     .from('progress')
-    .select('village_code, name, updated_at, villages(name, hall, beaten)')
+    .select('village_code, name, updated_at, villages(name, hall, told)')
     .order('updated_at', { ascending: false });
   if (error || !data) return [];
   return data.map((d) => {
-    const v = (Array.isArray(d.villages) ? d.villages[0] : d.villages) as { name?: string; hall?: number; beaten?: number[] } | null;
-    return { code: String(d.village_code), village: String(v?.name ?? ''), name: String(d.name ?? ''), zones: zonesOpen(Number(v?.hall ?? 0), (v?.beaten ?? []).map(Number)), updated: new Date(d.updated_at) };
+    const v = (Array.isArray(d.villages) ? d.villages[0] : d.villages) as { name?: string; hall?: number; told?: number[] } | null;
+    return { code: String(d.village_code), village: String(v?.name ?? ''), name: String(d.name ?? ''), zones: zonesOpen(Number(v?.hall ?? 0), (v?.told ?? []).map(Number)), updated: new Date(d.updated_at) };
   });
 }
 

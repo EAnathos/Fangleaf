@@ -15,7 +15,7 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBrokenEgg, drawElder, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
@@ -50,6 +50,7 @@ export class Game {
   private chestOpen = new Map<number, number>(); // coffre → moment où on l'a ouvert (animation du couvercle)
   private chestSeen = new Map<number, number>(); // coffre → première apparition (il tombe en rebondissant)
   private fades = new Map<object, number>();
+  private chopAt = new Map<number, number>(); // arbre → dernier coup de hache (il tremble)
   private gatesOpen: boolean[] | null = null; // état des portes au dernier snapshot (null : pas encore connu)
   private gateToast = -99; // dernier rappel « porte fermée » // arbre → opacité de son feuillage (1 : opaque)
   private tools = new Map<number, { kind: Tool['kind']; at: number; tx: number; ty: number }>(); // dompteur → dernier coup d'outil (récolte)
@@ -436,7 +437,7 @@ export class Game {
   }
 
   private gateOpen(k: number) {
-    return gateOpen(k, this.hud.hall, this.hud.beaten);
+    return gateOpen(k, this.hud.hall, this.hud.told);
   }
 
   /** Ce qui manque pour ouvrir la porte k. */
@@ -445,6 +446,8 @@ export class Game {
     if (this.hud.hall < gateHall(k)) need.push(`Hôtel de ville niv. ${gateHall(k)}`);
     const left = k === 0 ? [] : zoneBosses(k).filter((b) => !this.hud.beaten.includes(b));
     if (left.length) need.push(`vaincre ${left.map(bossName).join(', ')}`);
+    const unread = k === 0 ? [] : zoneBosses(k).filter((b) => this.hud.beaten.includes(b) && !this.hud.told.includes(b));
+    if (unread.length) need.push(`rapporter à Aubin ${unread.length > 1 ? 'les parchemins' : 'le parchemin'} de ${unread.map(bossName).join(', ')}`);
     return need.join(' · ');
   }
 
@@ -545,6 +548,11 @@ export class Game {
         if (o) sound.play(o.res === 'wood' ? 'chop' : 'pick', e.by === me ? 1 : near(o.x, o.y) * 0.6);
         break;
       }
+      case 'chop': {
+        const d = this.map.decor[e.id];
+        if (d) sound.play('chop', e.by === me ? 1 : near(d.x, d.y) * 0.6);
+        break;
+      }
       case 'chest':
         if (e.to === me) sound.play('chest');
         break;
@@ -630,7 +638,7 @@ export class Game {
         break;
       case 'soul':
         if (e.to === this.myId) {
-          this.fx.essence(e.x, e.y - 50, SPECIES[e.s].color, '+1 âme');
+          this.fx.essence(e.x, e.y - 50, SPECIES[e.s].color, '+1 âme', 2.2);
           this.hud.toast(`Âme de ${SPECIES[e.s].name} obtenue : double éveil de ton Alpha ${SPECIES.find((b) => b.key === SPECIES[e.s].base)?.name ?? ''} à la Tanière !`, 'alpha');
         }
         break;
@@ -814,6 +822,16 @@ export class Game {
         if (!o) break;
         this.fx.burst(o.x, o.y - 8, o.res === 'wood' ? '#B88A5A' : o.res === 'stone' ? '#9AA39E' : '#F0B64A', e.done ? 22 : 5, e.done ? 150 : 70);
         this.tools.set(e.by, { kind: o.res === 'wood' ? 'axe' : 'pick', at: this.time, tx: o.x, ty: o.y });
+        break;
+      }
+      case 'chop': {
+        const d = this.map.decor[e.id];
+        if (!d) break;
+        const t = this.map.trunkOf(d);
+        this.chopAt.set(e.id, this.time);
+        this.fx.burst(t.x, t.y - 10, '#B88A5A', e.done ? 24 : 5, e.done ? 160 : 70);
+        if (e.done) this.fx.burst(t.x, t.y - 50, this.map.styleZone(d.x, d.y) === 6 ? '#7FA65A' : '#4F8A45', 26, 140); // le feuillage s'éparpille
+        this.tools.set(e.by, { kind: 'axe', at: this.time, tx: t.x, ty: t.y });
         break;
       }
       case 'boss': {
@@ -1283,23 +1301,48 @@ export class Game {
       this.world.gatePosts.forEach((g, k) => inView(g.x, g.y, 60) && list.push({ y: g.y, draw: () => this.world.drawGatePost(ctx, k, this.time) }));
     }
     // Arbres de la carte : triés avec les créatures, feuillage transparent quand on passe dessous.
-    const trees = here ? [] : this.map.decorIn(camX - hw - 60, camY - hh - 60, camX + hw + 60, camY + hh + 140).filter((d) => d.kind === 0);
+    // Abattus : une souche (on passe à travers, comme sur le serveur) jusqu'à ce qu'ils repoussent.
+    const treeState = new Map(this.net.latest?.trees ?? []);
+    for (const [id, hp] of treeState) if (hp <= 0) this.map.treeDown.add(id);
+    const all = here ? [] : this.map.decorIn(camX - hw - 60, camY - hh - 60, camX + hw + 60, camY + hh + 140).filter((d) => d.kind === 0);
+    for (const d of all) if (!treeState.has(d.id) || treeState.get(d.id)! > 0) this.map.treeDown.delete(d.id);
+    const trees = all.filter((d) => !this.map.treeDown.has(d.id));
+    for (const d of all) {
+      if (!this.map.treeDown.has(d.id)) continue;
+      const t = this.map.trunkOf(d);
+      list.push({ y: t.y, draw: () => drawStump(ctx, t.x, t.y, t.r) });
+    }
     for (const d of trees) this.world.treeShadow(ctx, d.x, d.y);
     for (const d of trees) {
       const s = this.world.treeSize(d.x, d.y);
+      const hitK = Math.max(0, 1 - (this.time - (this.chopAt.get(d.id) ?? -9)) / 0.3), shake = Math.sin(this.time * 70) * 3 * hitK; // il tremble sous la hache
       const under = Math.hypot(this.me.x - d.x, this.me.y - (d.y - s * 0.6)) < s + 14 && this.me.y < d.y + s * 0.5;
       const fade = this.fades.get(d) ?? 1, target = under ? 0.3 : 1;
       const next = fade + Math.sign(target - fade) * Math.min(Math.abs(target - fade), 0.08); // fondu en quelques images
       if (next === 1) this.fades.delete(d);
       else this.fades.set(d, next);
-      list.push({ y: d.y + s * 0.5, draw: () => this.world.tree(ctx, d.x, d.y, this.map.styleZone(d.x, d.y), next, false) });
+      list.push({
+        y: d.y + s * 0.5,
+        draw: () => {
+          if (shake) ctx.translate(shake, 0);
+          this.world.tree(ctx, d.x, d.y, this.map.styleZone(d.x, d.y), next, false);
+          if (shake) ctx.translate(-shake, 0);
+        },
+      });
     }
     // le vieil homme, près du feu : il regarde le dompteur qui s'approche, sinon le feu
     const { elder } = this.map;
     if (inView(elder.x, elder.y, 60)) {
       const near = Math.hypot(this.me.x - elder.x, this.me.y - elder.y) < 220;
       const tx = near ? this.me.x : this.map.village.x, ty = near ? this.me.y : this.map.village.y, d = Math.hypot(tx - elder.x, ty - elder.y) || 1;
-      list.push({ y: elder.y, draw: () => drawElder(ctx, elder.x, elder.y, this.time, (tx - elder.x) / d, (ty - elder.y) / d, elderName(this.hud.lore[0])) });
+      const calls = this.hud.elderCalls;
+      list.push({
+        y: elder.y,
+        draw: () => {
+          drawElder(ctx, elder.x, elder.y, this.time, (tx - elder.x) / d, (ty - elder.y) / d, elderName(this.hud.lore[0]));
+          if (calls) drawQuestMark(ctx, elder.x, elder.y - 62, this.time);
+        },
+      });
     }
     // les autres œufs du village : visibles une fois qu'Aubin s'en souvient, ils éclosent un par un
     const eggs = eggsOf(this.hud.lore[0]);

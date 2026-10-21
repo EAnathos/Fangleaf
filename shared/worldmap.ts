@@ -61,7 +61,7 @@ export interface Ore {
   x: number;
   y: number;
   zone: number;
-  res: Resource; // filon d'or, rocher (pierre) ou bois mort
+  res: Resource; // filon d'or ou rocher (pierre) ; le bois vient des arbres
 }
 
 export interface Bush {
@@ -72,6 +72,7 @@ export interface Bush {
 }
 
 export interface Decor {
+  id: number; // index dans decor (un arbre abattu se désigne ainsi)
   kind: 0 | 1; // arbre, rocher
   x: number;
   y: number;
@@ -164,6 +165,8 @@ export class WorldMap {
   private water = new Uint8Array(N * N); // 0 libre, 1 eau, 2 solide, 3 forêt, 4 filon ou tas à récolter (voir oreCell)
   private oreCell = new Int32Array(N * N).fill(-1); // case occupée par un filon ou un tas : son index dans ores
   readonly oreDown = new Set<number>(); // filons et tas épuisés : ils ont disparu (on passe à travers) jusqu'à leur retour
+  private treeCell = new Int32Array(N * N).fill(-1); // case occupée par un tronc : son index dans decor
+  readonly treeDown = new Set<number>(); // arbres abattus (index dans decor) : on passe à travers jusqu'à ce qu'ils repoussent
   private cdist = new Float32Array(N * N).fill(1e9); // distance à la colonne
   private arc = new Float32Array(N * N); // abscisse (le long de la colonne) du point de colonne le plus proche
   private shore = new Float32Array(N * N).fill(1e9); // distance à la côte : négative dans l'île, positive en mer
@@ -702,7 +705,7 @@ export class WorldMap {
         const treeP = [0, 0.1, 0.3, 0.09, 0.05, 0.07, 0.025][z] * forest; // Bois profonds : forêt dense de sapins ; désert : de rares cactus
         if (h >= treeP) continue; // les rochers ronds d'autrefois ont disparu : la pierre vient des rochers à casser
         if (this.pathDist(x, y) < 30) continue;
-        const d: Decor = { kind: 0, x, y, zone: z };
+        const d: Decor = { id: this.decor.length, kind: 0, x, y, zone: z };
         const key = Math.floor(x / BUCKET) * 100000 + Math.floor(y / BUCKET);
         let b = this.buckets.get(key);
         if (!b) this.buckets.set(key, (b = []));
@@ -732,8 +735,8 @@ export class WorldMap {
   }
 
   /**
-   * Bois mort et rochers à casser, à la suite des filons (hasard à part : le reste de la carte ne change pas).
-   * Quelques-uns entre la plage et le village, pour construire avant même de passer la porte.
+   * Rochers à casser, à la suite des filons (hasard à part : le reste de la carte ne change pas).
+   * Quelques-uns entre la plage et le village, pour construire avant même de passer la porte. Le bois vient des arbres.
    */
   private buildHarvest() {
     const rand = rng(this.seed ^ 0x5707e);
@@ -741,7 +744,7 @@ export class WorldMap {
       for (let a = 0; a < 8; a++) if (this.blocked(x + Math.cos(a) * 36, y + Math.sin(a) * 36)) return false;
       return !this.blocked(x, y);
     };
-    for (const res of ['wood', 'stone'] as const) {
+    for (const res of ['stone'] as const) {
       let early = 0, total = 0;
       for (let tries = 0; tries < 8000 && total < 70; tries++) {
         // les 4 premiers entre le camp et le village, les autres tout le long du couloir
@@ -865,10 +868,47 @@ export class WorldMap {
     }
   }
 
-  /** Case infranchissable (un filon épuisé ne l'est plus). */
+  /** Case infranchissable (un filon épuisé ou un arbre abattu ne l'est plus). */
   private solid(k: number) {
     const v = this.water[k];
-    return v !== 0 && !(v === 4 && this.oreDown.has(this.oreCell[k]));
+    return v !== 0 && !(v === 4 && this.oreDown.has(this.oreCell[k])) && !(v === 5 && this.treeDown.has(this.treeCell[k]));
+  }
+
+  /** Tronc d'un arbre, à abattre : solide tant qu'il est debout (voir treeDown). */
+  private solidTree(i: number) {
+    const d = this.decor[i], s = this.decorSize(d), x = d.x, y = d.y + s * 0.15, r = s * 0.45;
+    for (let j = Math.floor((y - r + WORLD_HALF) / MAP_CELL); j <= Math.floor((y + r + WORLD_HALF) / MAP_CELL); j++) {
+      for (let c = Math.floor((x - r + WORLD_HALF) / MAP_CELL); c <= Math.floor((x + r + WORLD_HALF) / MAP_CELL); c++) {
+        if (c < 0 || j < 0 || c >= N || j >= N) continue;
+        const cx = -WORLD_HALF + (c + 0.5) * MAP_CELL, cy = -WORLD_HALF + (j + 0.5) * MAP_CELL, k = j * N + c;
+        if ((cx - x) ** 2 + (cy - y) ** 2 <= r * r && this.water[k] === 0) {
+          this.water[k] = 5;
+          this.treeCell[k] = i;
+        }
+      }
+    }
+  }
+
+  /** Tronc d'un arbre (pour l'abattre) : centre et rayon. */
+  trunkOf(d: Decor) {
+    const s = this.decorSize(d);
+    return { x: d.x, y: d.y + s * 0.15, r: s * 0.45 };
+  }
+
+  /** Arbres (index dans decor) dont le tronc est à moins de r de (x, y). */
+  treesNear(x: number, y: number, r: number) {
+    const out: number[] = [];
+    for (let bx = Math.floor((x - r - 40) / BUCKET); bx <= Math.floor((x + r + 40) / BUCKET); bx++) {
+      for (let by = Math.floor((y - r - 40) / BUCKET); by <= Math.floor((y + r + 40) / BUCKET); by++) {
+        for (const i of this.buckets.get(bx * 100000 + by) ?? []) {
+          const d = this.decor[i];
+          if (d.kind !== 0) continue;
+          const t = this.trunkOf(d);
+          if ((t.x - x) ** 2 + (t.y - y) ** 2 <= (r + t.r) ** 2) out.push(i);
+        }
+      }
+    }
+    return out;
   }
 
   private solidRect(x0: number, y0: number, x1: number, y1: number) {
@@ -881,11 +921,10 @@ export class WorldMap {
 
   private buildSolids() {
     // arbres (tronc et bas du feuillage) et rochers
-    for (const d of this.decor) {
-      const s = this.decorSize(d);
-      if (d.kind === 0) this.solidDisc(d.x, d.y + s * 0.15, s * 0.45);
-      else this.solidDisc(d.x, d.y, s * 0.85);
-    }
+    this.decor.forEach((d, i) => {
+      if (d.kind === 0) this.solidTree(i);
+      else this.solidDisc(d.x, d.y, this.decorSize(d) * 0.85);
+    });
     for (const o of this.ores) this.solidOre(o);
     // palissade du village, avec ses 4 portes : ses cases ne deviennent solides qu'une fois construite (setPalisade)
     const v = this.village;

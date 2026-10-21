@@ -2,11 +2,12 @@
 
 import {
   bossMelee, sleeperBlocks,
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, ALPHA_CREATE_COST,
+  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
   ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, ARMY_CAP, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
+  treeHp, treeWood, TREE_RESPAWN_S, TREE_STILL_S, TREANT_CHANCE, TREANT_ZONE,
   armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, mineDmg, weaponCost, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
@@ -129,6 +130,7 @@ export interface Player {
   stone: number;
   fruits: number; // baies cueillies
   holding: boolean; // tend un fruit : il nourrit au lieu de frapper
+  movedAt: number; // dernier déplacement (temps de simulation) : on n'abat un arbre qu'arrêté devant
   manual: boolean; // attaque au clic : il ne frappe (ni ne récolte) que sur ordre
   orderUntil: number; // attaque au clic : ordre valable jusqu'à ce temps de simulation
   aimX: number; // point visé par le dernier clic
@@ -246,6 +248,8 @@ const VULTURE_LANDED_S = 3; // posé (frappable) avant de redécoller
 const SHY_HIDE_S = 6; // temps à la tanière après l'alerte
 const SHELL_R = 150; // escargot : un dompteur sans fruit plus près, et il rentre dans sa coquille
 const SHELL_S = 4; // il en ressort ce temps-là après que la voie est libre
+const TREE_HEAL_S = 30; // arbre entamé puis laissé : il cicatrise
+const SKITTISH_R = 210; // lièvre : un dompteur sans fruit plus près, et il détale
 const STORM_HARM = 0.4; // tempête assez forte pour blesser (et cacher vers, vautours et suricates)
 const STORM_DPS = 0.02; // part des PV max perdue chaque seconde en plein dedans (l'armure en réduit une partie)
 const WAKE_S = 20; // dormeur (lièvre la nuit, ours le jour) réveillé par un coup : il reste debout tant de secondes après le dernier
@@ -262,6 +266,8 @@ export class Room {
   private nextSpawn = SPECIES.map(() => 0);
   private oreHp: number[] = [];
   private oreBack: number[] = []; // temps de simulation où un filon épuisé réapparaît
+  private treeHp = new Map<number, number>(); // arbres entamés ou abattus (index dans decor) : leurs PV ; absents : intacts
+  private treeBack = new Map<number, number>(); // arbres abattus : temps de simulation où ils repoussent
   private caveBoss: number[] = []; // id du mini-boss de chaque grotte (0 : vaincu)
   private caveBack: number[] = []; // temps de simulation de son retour
   private hazards: Hazard[] = [];
@@ -340,7 +346,7 @@ export class Room {
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, stats: { bosses: 0, tamed: 0, given: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: { bosses: 0, tamed: 0, given: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], seen: new Set(),
     };
@@ -419,6 +425,7 @@ export class Room {
       name: prof.name, color: PLAYER_COLORS[Math.abs(hash) % PLAYER_COLORS.length], armor: clamp(Number(prof.armor) || 0, 0, ARMOR_MAX),
       cls: CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as string) : '', x: at.x, y: at.y, pack, stats: statsOf(prof.stats),
     });
+    this.scaleBosses();
   }
 
   /** Les monstres éveillés des dormeurs flânent tranquillement dans le village. */
@@ -488,7 +495,7 @@ export class Room {
   /** Fondateur du village (sans compte enregistré, en test : tout le monde). */
   /** Un membre a quitté le village depuis le lobby : il ne dort plus au village. */
   removeSleeper(userId: string) {
-    this.sleepers.delete(userId);
+    if (this.sleepers.delete(userId)) this.scaleBosses();
   }
 
   isFounder(p: Player) {
@@ -532,11 +539,13 @@ export class Room {
       const g = this.map.gateCrossed(p.x, p.y, x, y);
       return g < 0 || this.gateIsOpen(g);
     };
+    const [px, py] = [p.x, p.y];
     if (ok(nx, ny)) {
       p.x = nx;
       p.y = ny;
     } else if (ok(nx, p.y)) p.x = nx;
     else if (ok(p.x, ny)) p.y = ny;
+    if (Math.abs(p.x - px) + Math.abs(p.y - py) > 1) p.movedAt = this.time;
     const fl = Math.hypot(fx, fy);
     if (fl > 0.01 && Number.isFinite(fl)) {
       p.fx = fx / fl;
@@ -706,9 +715,9 @@ export class Room {
     this.events.push({ e: 'info', text: `${p.name} a renommé le village « ${n} »` });
   }
 
-  /** Porte k ouverte pour le village (Hôtel de ville assez haut, géants de la zone vaincus). */
+  /** Porte k ouverte pour le village (Hôtel de ville assez haut, parchemins des géants de la zone rapportés à Aubin). */
   private gateIsOpen(k: number) {
-    return gateOpen(k, this.hall, this.beaten);
+    return gateOpen(k, this.hall, this.told);
   }
 
   /** Débloquer une grotte pour tout le village, devant son entrée : 150 or × niveau de sa zone. */
@@ -892,9 +901,9 @@ export class Room {
   }
 
   onAlphaCreate(p: Player, s: number) {
-    if (!(s in SPECIES) || isBoss(s) || !this.at(p, 'den') || p.essences[s] < ALPHA_CREATE_COST) return;
+    if (!(s in SPECIES) || isBoss(s) || !this.at(p, 'den') || p.essences[s] < alphaCreateCost(s)) return;
     if (p.awakening.has(s) || this.fieldAlpha(p, s) || p.resting.some((r) => r.s === s)) return;
-    p.essences[s] -= ALPHA_CREATE_COST;
+    p.essences[s] -= alphaCreateCost(s);
     p.awakening.set(s, Date.now() + alphaAwakenS(s) * 1000);
     p.dirty = true;
     this.events.push({ e: 'info', text: `${p.name} commence l'éveil d'un Alpha ${SPECIES[s].name}` });
@@ -1240,6 +1249,25 @@ export class Room {
       this.oreHp[i] = oreHp(o.zone);
       this.map.oreDown.delete(i);
     });
+    // les arbres abattus repoussent (eux aussi quand la place est libre) ; un arbre entamé finit par cicatriser
+    for (const [i, hp] of this.treeHp) {
+      const at = this.treeBack.get(i) ?? 0;
+      if (this.time < at) continue;
+      if (hp > 0) {
+        this.treeHp.delete(i);
+        this.treeBack.delete(i);
+        continue;
+      }
+      const t = this.map.trunkOf(this.map.decor[i]);
+      let free = true;
+      this.grid.query(t.x, t.y, 80, (e) => {
+        if (dist2(e.x, e.y, t.x, t.y) < (e.r + t.r + 6) ** 2) free = false;
+      });
+      if (!free) continue;
+      this.treeHp.delete(i);
+      this.treeBack.delete(i);
+      this.map.treeDown.delete(i);
+    }
     this.map.caves.forEach((c, i) => {
       if (this.caveBoss[i] || this.time < this.caveBack[i]) return;
       this.caveBoss[i] = this.spawnBoss(i);
@@ -1534,7 +1562,10 @@ export class Room {
     if (p.fruits <= 0) p.holding = false;
   }
 
-  /** Aucun monstre à portée : le dompteur récolte le filon, le rocher ou le bois mort le plus proche. */
+  /**
+   * Aucun monstre à portée : le dompteur récolte le filon ou le rocher le plus proche, ou abat l'arbre devant lui
+   * (en attaque auto, seulement arrêté : on ne rase pas la forêt en la traversant).
+   */
   private mine(p: Player) {
     const reach = PLAYER_R + PLAYER_RANGE + ORE_R;
     let best = -1, bd = reach * reach;
@@ -1542,6 +1573,16 @@ export class Room {
       if (this.oreHp[o.id] <= 0) continue;
       const d = dist2(p.x, p.y, o.x, o.y);
       if (d < bd) [bd, best] = [d, o.id];
+    }
+    if (best < 0 && (p.manual || this.time - p.movedAt >= TREE_STILL_S)) {
+      let tree = -1, td = Infinity;
+      for (const i of this.map.treesNear(p.x, p.y, PLAYER_R + PLAYER_RANGE * 0.6)) {
+        if (this.map.treeDown.has(i)) continue;
+        const t = this.map.trunkOf(this.map.decor[i]), d = dist2(p.x, p.y, t.x, t.y);
+        if (d < td) [td, tree] = [d, i];
+      }
+      if (tree >= 0) this.chop(p, tree);
+      return;
     }
     if (best < 0) return;
     const o = this.map.ores[best];
@@ -1563,6 +1604,33 @@ export class Room {
     p.wood += wood;
     p.stone += stone;
     this.events.push({ e: 'res', to: p.id, wood, stone, x: o.x, y: o.y - (o.res === 'gold' ? 30 : 10) });
+  }
+
+  /** Un coup de hache : abattu, l'arbre donne un peu de bois et disparaît jusqu'à ce qu'il repousse (Bois profonds : parfois un Tréant). */
+  private chop(p: Player, i: number) {
+    const d = this.map.decor[i], full = treeHp(d.zone);
+    p.atkCd = PLAYER_ATK_CD;
+    const hp = (this.treeHp.get(i) ?? full) - mineDmg(p.weapon);
+    this.treeHp.set(i, Math.max(0, hp));
+    const done = hp <= 0;
+    this.events.push({ e: 'chop', by: p.id, id: i, done });
+    if (!done) {
+      this.treeBack.set(i, this.time + TREE_HEAL_S); // laissé là, il cicatrise
+      return;
+    }
+    this.treeBack.set(i, this.time + TREE_RESPAWN_S);
+    this.map.treeDown.add(i);
+    const wood = resRoll(treeWood(d.zone)), t = this.map.trunkOf(d);
+    p.wood += wood;
+    p.dirty = true;
+    this.events.push({ e: 'res', to: p.id, wood, stone: 0, x: t.x, y: t.y - 40 });
+    if (d.zone === TREANT_ZONE && Math.random() < TREANT_CHANCE) {
+      const s = SPECIES.findIndex((sp) => sp.key === 'treant'), at = this.map.freeNear(t.x, t.y);
+      const u = this.createUnit(s as SpeciesId, false, at.x, at.y);
+      u.target = p.id; // il en veut à celui qui a abattu son arbre
+      u.lastAttacker = p.id;
+      u.lastHitAt = this.time;
+    }
   }
 
   // ───────────────────────── Attaques spéciales des mini-boss ─────────────────────────
@@ -1843,9 +1911,9 @@ export class Room {
     return u.id;
   }
 
-  /** PV des géants multipliés par le nombre de dompteurs en ligne dans le village (au moins ×1). */
+  /** PV des géants multipliés par le nombre de membres du village, en ligne ou endormis près du feu (au moins ×1). */
   private bossHpMult() {
-    return Math.max(1, this.players.size);
+    return Math.max(1, this.players.size + this.sleepers.size);
   }
 
   /** Quelqu'un arrive ou s'en va : chaque géant garde sa part de PV, sur un total recalculé. */
@@ -2194,10 +2262,11 @@ export class Room {
 
   /**
    * Escargot : un dompteur sans fruit en main s'approche (ou un coup), et il rentre dans sa coquille, sur place
-   * (intouchable) ; il en ressort un peu après que la voie est libre. Vrai : il est dans sa coquille.
+   * (intouchable) ; il en ressort un peu après que la voie est libre. Apeuré, il ne se laisse plus amadouer :
+   * tant que quelqu'un reste près de lui, même un fruit à la main, il reste dedans. Vrai : il est dans sa coquille.
    */
   private shellAI(u: Unit) {
-    const threat = this.time - u.lastHitAt < 1 || [...this.players.values()].some((p) => !p.dead && !p.holding && dist2(p.x, p.y, u.x, u.y) < SHELL_R ** 2);
+    const threat = this.time - u.lastHitAt < 1 || [...this.players.values()].some((p) => !p.dead && (!p.holding || u.hidden) && dist2(p.x, p.y, u.x, u.y) < SHELL_R ** 2);
     if (threat) u.surfaceUntil = this.time + SHELL_S;
     if (this.time >= (u.surfaceUntil ?? 0)) {
       u.hidden = false;
@@ -2307,6 +2376,15 @@ export class Room {
       return;
     }
     u.target = 0;
+    // Le lièvre détale devant un dompteur qui approche les mains vides.
+    if (SPECIES[u.s].skittish) {
+      const foe = this.nearest(u.x, u.y, SKITTISH_R, (e) => e.kind === 'p' && !e.dead && !e.holding);
+      if (foe) {
+        const dx = u.x - foe.x, dy = u.y - foe.y, d = Math.hypot(dx, dy) || 1;
+        this.move(u, u.x + (dx / d) * 80, u.y + (dy / d) * 80, u.speed * 1.15, 0);
+        return;
+      }
+    }
     // Un dompteur tend un fruit pas loin : il s'approche, sans se presser.
     for (const p of this.players.values()) {
       if (p.dead || !p.holding || p.fruits <= 0 || dist2(p.x, p.y, u.x, u.y) > LURE_R ** 2) continue;
@@ -2754,6 +2832,7 @@ export class Room {
       case 'die': case 'shot': case 'boom': return e;
       case 'move': case 'charge': case 'feed': case 'revive': case 'heal': return ent(e.id) ?? null;
       case 'mine': return this.map.ores[e.id] ?? null;
+      case 'chop': return this.map.decor[e.id] ?? null;
       case 'eat': case 'pick': return this.map.bushes[e.bush] ?? null;
       case 'gold': case 'essence': case 'soul': case 'res': case 'chest': case 'full': case 'seen': case 'trade': case 'scroll': return e.to;
       case 'mount': return e.by;
@@ -2810,6 +2889,11 @@ export class Room {
       }
       const bare: number[] = [];
       for (const b of this.map.bushes) if (this.bushBack[b.id] > this.time && dist2(b.x, b.y, viewer.x, viewer.y) <= vr2) bare.push(b.id);
+      const trees: [number, number][] = [];
+      for (const [i, hp] of this.treeHp) {
+        const d = this.map.decor[i];
+        if (dist2(d.x, d.y, viewer.x, viewer.y) <= vr2) trees.push([i, Math.round((100 * hp) / treeHp(d.zone))]);
+      }
       const chests: [number, number, number, number][] = [];
       for (const ch of this.chests) {
         if (ch.eligible.has(viewer.id) && dist2(ch.x, ch.y, viewer.x, viewer.y) <= vr2) chests.push([ch.id, Math.round(ch.x), Math.round(ch.y), ch.opened.has(viewer.id) ? 1 : 0]);
@@ -2838,7 +2922,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev });
     }
   }
 }

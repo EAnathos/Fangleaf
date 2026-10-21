@@ -1,6 +1,6 @@
 // Tests des règles de simulation, sans réseau. Usage : npm run test:rules
 
-import { BOAT_STAGES, SWORD_PULLS, SWORD_REACH, SHORE_R, ALPHA_CREATE_COST, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, resRoll, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold , weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX } from '../shared/config.ts';
+import { BOAT_STAGES, SWORD_PULLS, SWORD_REACH, SHORE_R, alphaCreateCost, ARMY_CAP, SHOT_KINDS, DT, PLAYER_RESPAWN_S, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, BOSS_RESPAWN_S, BUILDING_IDS, mountSpeedOf, DEATH_GOLD_LOSS, BERRIES_PICKED, fruitTameChance, HALL, HALL_MAX, gateHall, gateOpen, zoneBosses, resYield, oreStone, resRoll, BUSH_REGROW_S, CHEST_GOLD, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, CAMP_R, RECALL_R, SPECIES, WORLD_HALF, alphaAwakenS, alphaStats, alphaUpCost, oreGold , weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE } from '../shared/config.ts';
 import { BEACH, WorldMap } from '../shared/worldmap.ts';
 import { DAY_MS, sky } from '../shared/weather.ts';
 import { Room } from '../server/room.ts';
@@ -29,8 +29,8 @@ const check = (ok: boolean, label: string) => {
 const ALL_CAVES = Array.from({ length: 64 }, (_, i) => i);
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ALL_BOSSES = SPECIES.map((sp, i) => (sp.boss ? i : -1)).filter((i) => i >= 0);
-// (toutes les portes ouvertes : Hôtel de ville au maximum, tous les géants vaincus)
-const room = (): any => new Room('TEST', undefined, { buildings: [...BUILDING_IDS], unlocked: ALL_CAVES, hall: HALL_MAX, beaten: ALL_BOSSES });
+// (toutes les portes ouvertes : Hôtel de ville au maximum, tous les géants vaincus et leurs parchemins rapportés)
+const room = (): any => new Room('TEST', undefined, { buildings: [...BUILDING_IDS], unlocked: ALL_CAVES, hall: HALL_MAX, beaten: ALL_BOSSES, told: ALL_BOSSES });
 // Un dompteur sans compte arrive sans arme (l'épée est plantée sur la plage) : les tests le veulent armé, sauf celui de l'épée.
 const unarmedAdd = Room.prototype.addPlayer;
 Room.prototype.addPlayer = function (this: Room, ...args: Parameters<Room['addPlayer']>) {
@@ -42,6 +42,7 @@ Room.prototype.addPlayer = function (this: Room, ...args: Parameters<Room['addPl
 {
   // Les parchemins des géants, les souvenirs du vieil homme et son bateau.
   const r = room(), m = r.map;
+  r.told = []; // aucun souvenir rendu
   let saved: { told: number[]; boat: number; boatAt: number } = { told: [], boat: 0, boatAt: 0 };
   r.onVillage = (v: typeof saved) => (saved = v);
   const p = r.addPlayer('lecteur', () => {});
@@ -118,7 +119,7 @@ const noop = () => {};
   const p = r.addPlayer('a', noop);
   p.x = r.map.den.x;
   p.y = r.map.den.y;
-  p.essences[1] = ALPHA_CREATE_COST;
+  p.essences[1] = alphaCreateCost(1);
   r.onAlphaCreate(p, 1);
   r.onCheat(p);
   r.step();
@@ -263,13 +264,13 @@ const noop = () => {};
   const p = r.addPlayer('a', noop);
   p.x = r.map.den.x;
   p.y = r.map.den.y;
-  p.essences[1] = ALPHA_CREATE_COST - 1;
+  p.essences[1] = alphaCreateCost(1) - 1;
   r.onAlphaCreate(p, 1);
   check(p.army.length === 0, 'pas assez d\'essences : pas d\'éveil');
-  p.essences[1] = ALPHA_CREATE_COST * 2;
+  p.essences[1] = alphaCreateCost(1) * 2;
   r.onAlphaCreate(p, 1);
   r.onAlphaCreate(p, 1);
-  check(p.army.length === 0 && p.awakening.has(1) && p.essences[1] === ALPHA_CREATE_COST, `éveil lancé, pas encore là (${alphaAwakenS(1)} s pour un Loup)`);
+  check(p.army.length === 0 && p.awakening.has(1) && p.essences[1] === alphaCreateCost(1), `éveil lancé, pas encore là (${alphaAwakenS(1)} s pour un Loup)`);
   r.step();
   check(p.army.length === 0, 'toujours en éveil au tick suivant');
   p.awakening.set(1, Date.now() - 1); // le temps est écoulé
@@ -294,7 +295,7 @@ const noop = () => {};
   }
   check(r.armySize(p) === ARMY_CAP, 'limite de meute hors Alphas');
 
-  p.essences[2] = ALPHA_CREATE_COST;
+  p.essences[2] = alphaCreateCost(2);
   r.onAlphaCreate(p, 2);
   const prof = r.profileOf(p);
   check(prof.alphas.some((a: { s: number; wakeAt?: number }) => a.s === 2 && a.wakeAt), 'éveil en cours sauvegardé dans le profil');
@@ -321,9 +322,9 @@ const noop = () => {};
   // Les 8 espèces apparaissent sur la carte, deux par zone.
   const r = room();
   const seen = new Set([...r.units.values()].map((u: { s: number }) => u.s));
-  check(SPECIES.every((sp, i) => seen.has(i) || sp.night), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement (de jour, sauf les bêtes de nuit)`);
+  check(SPECIES.every((sp, i) => seen.has(i) || sp.night || (!sp.boss && !sp.population)), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement (de jour, sauf les bêtes de nuit et le Tréant, caché dans les arbres)`);
   const zones = new Map<number, number>();
-  for (const sp of SPECIES) if (!sp.boss && !sp.passive) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
+  for (const sp of SPECIES) if (!sp.boss && !sp.passive && sp.population) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
   check([1, 2, 3].every((z) => zones.get(z) === 2) && zones.get(4) === 3 && zones.get(5) === 3, 'deux espèces hostiles par zone, trois en zones 4 et 5');
 }
 
@@ -333,14 +334,14 @@ const noop = () => {};
   const p = r.addPlayer('a', noop);
   p.x = r.map.den.x;
   p.y = r.map.den.y;
-  p.essences[0] = ALPHA_CREATE_COST;
+  p.essences[0] = alphaCreateCost(0);
   r.onAlphaCreate(p, 0);
   r.onCheat(p);
   r.step();
   const slimeAlpha = r.units.get(p.army[0]);
   r.onMount(p, slimeAlpha.id);
   check(p.mount === 0, 'un Alpha Gluant ne se chevauche pas');
-  p.essences[1] = ALPHA_CREATE_COST;
+  p.essences[1] = alphaCreateCost(1);
   r.onAlphaCreate(p, 1);
   r.onCheat(p);
   r.step();
@@ -495,7 +496,7 @@ const noop = () => {};
   const perZone = [1, 2, 3, 4, 5, 6].map((z) => r.map.caves.filter((cv: { zone: number }) => cv.zone === z).length).join('');
   check(r.map.caves.length === 15 && perZone === '222333' && r.map.caves.every((cv: { boss: number; zone: number }) => SPECIES[cv.boss].boss && SPECIES[cv.boss].zone === cv.zone),
     `15 grottes (${perZone} par zone), un géant par espèce`);
-  check(SPECIES.filter((sp) => !sp.boss && !sp.passive).every((sp) => SPECIES.some((b) => b.boss && b.base === sp.key)), 'chaque espèce hostile a son géant (âme → Alpha légendaire)');
+  check(SPECIES.filter((sp) => !sp.boss && !sp.passive && sp.population).every((sp) => SPECIES.some((b) => b.boss && b.base === sp.key)), 'chaque espèce hostile a son géant (âme → Alpha légendaire ; sauf le Tréant, caché dans les arbres)');
   const f = r.createUnit(0, false, 0, 0);
   f.owner = p.id;
   p.army.push(f.id);
@@ -527,7 +528,7 @@ const noop = () => {};
   r.onAlphaCreate(p, c.boss);
   check(!p.awakening.has(c.boss), 'pas d\'Alpha de boss : l\'âme sert à l\'évolution');
   const base = SPECIES.findIndex((sp) => sp.key === SPECIES[c.boss].base);
-  p.essences[base] = ALPHA_CREATE_COST;
+  p.essences[base] = alphaCreateCost(base);
   r.onAlphaCreate(p, base);
   r.onCheat(p);
   r.step();
@@ -690,7 +691,7 @@ const noop = () => {};
   [p.x, p.y] = [r.map.den.x, r.map.den.y];
   const kinds = [0, 1, 2, 3, 4, 5, 6];
   for (const s of kinds) {
-    p.essences[s] = ALPHA_CREATE_COST;
+    p.essences[s] = alphaCreateCost(s);
     r.onAlphaCreate(p, s);
   }
   r.onCheat(p);
@@ -922,7 +923,7 @@ const noop = () => {};
   const p = r.addPlayer('a', noop);
   [p.x, p.y] = [r.map.den.x, r.map.den.y];
   for (const s of [0, 1, 2]) {
-    p.essences[s] = ALPHA_CREATE_COST;
+    p.essences[s] = alphaCreateCost(s);
     r.onAlphaCreate(p, s);
   }
   r.onCheat(p);
@@ -1366,7 +1367,7 @@ const noop = () => {};
   for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id); // seuls le lièvre et le dompteur
   const hare = r.createUnit(s, false, bush.x + 120, bush.y);
   const p = r.addPlayer('a', noop);
-  [p.x, p.y] = [hare.x + 40, hare.y];
+  [p.x, p.y] = [hare.x + 260, hare.y]; // assez loin : il ne détale pas devant le dompteur
   p.hp = 999;
   p.atkCd = 999; // il ne frappe pas : on observe le lièvre
   let ate = false;
@@ -1379,20 +1380,89 @@ const noop = () => {};
   check(ate, 'il va manger les fruits du buisson voisin');
   r.time += BUSH_REGROW_S + 1;
   check(r.bushBack[bush.id] <= r.time, 'les fruits repoussent');
-  [hare.x, hare.y] = [p.x + 30, p.y];
+  [hare.x, hare.y] = [bush.x + 120, bush.y];
+  [p.x, p.y] = [hare.x + 30, hare.y]; // il s'enfuira vers le buisson, par le coin dégagé
   r.damage(hare, 1, p);
   const d0 = Math.hypot(hare.x - p.x, hare.y - p.y);
   for (let i = 0; i < 20; i++) r.step(), (p.atkCd = 999);
   check(Math.hypot(hare.x - p.x, hare.y - p.y) > d0 + 60, 'frappé, il s\'enfuit');
+  // Il détale devant un dompteur qui approche les mains vides ; un fruit à la main, il vient à lui.
+  r.time += 10; // il a oublié le coup
+  [hare.x, hare.y] = [bush.x + 120, bush.y];
+  [p.x, p.y] = [hare.x + 100, hare.y];
+  r.bushBack[bush.id] = r.time + 999; // plus de fruits : il ne file pas au buisson
+  for (let i = 0; i < 20; i++) r.step(), (p.atkCd = 999);
+  check(Math.hypot(hare.x - p.x, hare.y - p.y) > 160, 'approché les mains vides : il détale');
+  [hare.x, hare.y] = [bush.x + 120, bush.y];
+  [p.x, p.y] = [hare.x + 100, hare.y];
+  p.fruits = 3;
+  r.onHold(p, true);
+  for (let i = 0; i < 20; i++) r.step(), (p.atkCd = 999);
+  check(Math.hypot(hare.x - p.x, hare.y - p.y) < 100, 'un fruit à la main : il vient à lui');
   Date.now = realNow;
 }
 
 {
-  // Récolte : bois mort → bois, rocher → pierre, filon → or et un peu de pierre ; sauvegardés sur le compte.
+  // Récolte : arbre → bois, rocher → pierre, filon → or et un peu de pierre ; sauvegardés sur le compte.
   const r = room();
   r.units.clear();
   const p = r.addPlayer('a', noop);
-  for (const res of ['wood', 'stone', 'gold'] as const) {
+  check(!r.map.ores.some((o: { res: string }) => o.res === 'wood'), 'plus de tas de bois mort sur la carte : le bois vient des arbres');
+  // Un arbre dégagé (une place libre devant son tronc), dans les Bois profonds pour le Tréant.
+  const spot = (z: number) => {
+    for (const d of r.map.decor) {
+      if (d.kind !== 0 || d.zone !== z) continue;
+      const t = r.map.trunkOf(d);
+      for (let a = 0; a < 8; a++) {
+        const x = t.x + Math.cos(a) * (t.r + 22), y = t.y + Math.sin(a) * (t.r + 22);
+        if (!r.map.blocked(x, y)) return { d, t, x, y };
+      }
+    }
+    throw new Error('pas d\'arbre');
+  };
+  const chopDown = (z: number) => {
+    const { d, t, x, y } = spot(z);
+    [p.x, p.y] = [x, y];
+    const w0 = p.wood;
+    for (let i = 0; i < 20 * 30 && !r.map.treeDown.has(d.id); i++) {
+      for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
+      r.step();
+    }
+    return { d, t, got: p.wood - w0 };
+  };
+  {
+    const { d, t, x, y } = spot(1);
+    [p.x, p.y] = [x, y];
+    for (let i = 0; i < 40; i++) {
+      p.movedAt = r.time; // il marche : il traverse la forêt sans l'abattre
+      r.step();
+    }
+    check(!r.treeHp.has(d.id), 'attaque auto en marchant : on n\'abat pas les arbres qu\'on frôle');
+    check(r.map.blocked(t.x, t.y), 'un arbre debout bloque le passage');
+  }
+  const felled = chopDown(1);
+  const lo = resRoll(treeWood(1), 0), hi = resRoll(treeWood(1), 1);
+  check(r.map.treeDown.has(felled.d.id) && felled.got >= lo && felled.got <= hi, `arbre abattu (zone 1) : +${felled.got} bois (entre ${lo} et ${hi})`);
+  check(!r.map.blocked(felled.t.x, felled.t.y), 'abattu : on passe à travers sa souche');
+  [p.x, p.y] = [felled.t.x + 400, felled.t.y];
+  r.time += TREE_RESPAWN_S + 1;
+  r.tick = 9;
+  r.step();
+  check(!r.map.treeDown.has(felled.d.id) && !r.treeHp.has(felled.d.id), `il repousse (${TREE_RESPAWN_S} s)`);
+  const rand = Math.random;
+  {
+    const { d, x, y } = spot(TREANT_ZONE);
+    [p.x, p.y] = [x, y];
+    r.treeHp.set(d.id, 1); // dernier coup de hache
+    Math.random = () => 0; // le Tréant se réveille à coup sûr
+    p.atkCd = 0;
+    r.step();
+    Math.random = rand;
+    const treant = SPECIES.findIndex((sp) => sp.key === 'treant');
+    check(r.map.treeDown.has(d.id) && [...r.units.values()].some((u: { s: number; owner: number }) => u.s === treant && !u.owner), 'Bois profonds : un arbre abattu peut réveiller un Tréant');
+    check(SPECIES[treant].hp > Math.max(...SPECIES.filter((sp) => sp.zone === TREANT_ZONE && !sp.boss && !sp.passive && sp.population).map((sp) => sp.hp)), 'le Tréant est plus solide que les autres monstres des Bois profonds');
+  }
+  for (const res of ['stone', 'gold'] as const) {
     const o = r.map.ores.find((x: { res: string }) => x.res === res);
     [p.x, p.y] = [o.x + 30, o.y];
     const [w0, s0, g0] = [p.wood, p.stone, p.gold];
@@ -1403,7 +1473,7 @@ const noop = () => {};
     const got = { wood: p.wood - w0, stone: p.stone - s0, gold: p.gold - g0 };
     // quantité au hasard autour de la moyenne : entre le tirage le plus bas et le plus haut
     const base = res === 'gold' ? oreStone(o.zone) : resYield(o.zone), lo = resRoll(base, 0), hi = resRoll(base, 1);
-    const n = res === 'wood' ? got.wood : got.stone, other = res === 'wood' ? got.stone : got.wood;
+    const n = got.stone, other = got.wood;
     check(n >= lo && n <= hi && other === 0 && (res !== 'gold' ? got.gold === 0 : got.gold > 0), `${res} (zone ${o.zone}) : +${got.wood} bois, +${got.stone} pierre, +${got.gold} or (entre ${lo} et ${hi})`);
   }
   const prof = r.profileOf(p);
@@ -1476,7 +1546,7 @@ const noop = () => {};
   [p.x, p.y] = [map.hall.x, map.hall.y + 60];
   check(r.hall === 1 && p.gold === 0 && r.stock.wood === 0 && r.stock.stone === 0 && saved.hall === 1, `niveau 1 pour ${HALL[0].gold} or, ${HALL[0].wood} bois, ${HALL[0].stone} pierre, sauvegardé`);
   check(walk(before, after), 'niveau 1 : la porte du village s\'ouvre');
-  // Porte de la zone 2 : Hôtel de ville niv. 3 et tous les géants de la zone 1.
+  // Porte de la zone 2 : Hôtel de ville niv. 3 et les parchemins de tous les géants de la zone 1 rapportés à Aubin.
   const [b1, a1] = across(1);
   r.hall = gateHall(1);
   check(!walk(b1, a1, 1), 'géants de la zone 1 pas encore vaincus : porte de la zone 2 fermée');
@@ -1486,10 +1556,14 @@ const noop = () => {};
     r.killUnit(u, p);
   }
   check(saved.beaten.includes(g1) && saved.beaten.includes(g2), 'géants vaincus retenus pour le village');
+  check(!walk(b1, a1, 1), 'géants vaincus mais parchemins pas rapportés à Aubin : porte de la zone 2 fermée');
+  r.told.push(g1);
+  check(!walk(b1, a1, 1), 'un seul des deux parchemins rapporté : toujours fermée');
+  r.told.push(g2);
   r.hall = gateHall(1) - 1;
-  check(!walk(b1, a1, 1), `géants vaincus mais Hôtel de ville niv. ${gateHall(1) - 1} : toujours fermée`);
+  check(!walk(b1, a1, 1), `parchemins rapportés mais Hôtel de ville niv. ${gateHall(1) - 1} : toujours fermée`);
   r.hall = gateHall(1);
-  check(walk(b1, a1, 1), `géants vaincus et Hôtel de ville niv. ${gateHall(1)} : porte de la zone 2 ouverte`);
+  check(walk(b1, a1, 1), `parchemins rapportés et Hôtel de ville niv. ${gateHall(1)} : porte de la zone 2 ouverte`);
   // On peut toujours revenir en arrière, même par une porte fermée.
   r.hall = 0;
   [p.x, p.y] = [a1.x, a1.y];
@@ -1566,7 +1640,15 @@ const noop = () => {};
   [p.fruits, p.holding] = [5, true];
   r.time += 5;
   r.wildAI(snail);
-  check(!snail.hidden, 'fruit en main : il ressort de sa coquille');
+  check(snail.hidden && !r.isFeedable(snail), 'apeuré : même un fruit à la main, il reste dans sa coquille (pas de fruit à lui donner)');
+  [p.x, p.y] = [snail.x + 400, snail.y];
+  r.wildAI(snail);
+  r.time += 5;
+  r.wildAI(snail);
+  check(!snail.hidden, 'on s\'éloigne : il ressort de sa coquille');
+  [p.x, p.y] = [snail.x + 60, snail.y];
+  r.wildAI(snail);
+  check(!snail.hidden && r.isFeedable(snail), 'on revient doucement, un fruit à la main : il reste dehors');
   r.rain = 1;
   r.wildAI(snail);
   check(snail.speed === SPECIES[snail.s].speed * 1.5, `sous la pluie, il va plus vite (${snail.speed} px/s)`);
@@ -1578,12 +1660,12 @@ const noop = () => {};
 
 {
   // Ordre des espèces figé : leur index sert dans les sauvegardes (essences, Alphas). On n'ajoute qu'à la fin.
-  const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal';
+  const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant';
   check(SPECIES.map((sp) => sp.key).join(' ') === order, `ordre des ${SPECIES.length} espèces inchangé (sauvegardes intactes)`);
 }
 
 {
-  // Mer de sable (zone 6) : porte après les Lacs brumeux, Hôtel de ville niveau 6 et géants de la zone 5 vaincus.
+  // Mer de sable (zone 6) : porte après les Lacs brumeux, Hôtel de ville niveau 6 et parchemins des géants de la zone 5 rapportés.
   const z5 = zoneBosses(5), z6 = zoneBosses(6);
   check(gateHall(5) === 6 && HALL_MAX >= 6 && !gateOpen(5, 6, []) && gateOpen(5, 6, z5) && !gateOpen(5, 5, z5) && z6.length === 3,
     `porte de la Mer de sable : Hôtel de ville niv. 6 et les ${z5.length} géants des Lacs ; ${z6.length} géants dans le désert`);
@@ -2043,7 +2125,7 @@ const noop = () => {};
 }
 
 {
-  // PV des géants : multipliés par le nombre de dompteurs en ligne, en gardant leur part de PV.
+  // PV des géants : multipliés par le nombre de membres du village (en ligne ou endormis au village), en gardant leur part de PV.
   const r = room();
   const boss = r.units.get(r.caveBoss[0]);
   const base = SPECIES[boss.s].hp;
@@ -2054,7 +2136,11 @@ const noop = () => {};
   check(boss.maxHp === base * 2 && Math.abs(boss.hp - base) < 1e-6, `deux dompteurs : PV doublés (${boss.hp}/${boss.maxHp}), toujours à moitié`);
   const q = r.addPlayer('c', noop);
   r.removePlayer(q.id);
-  check(boss.maxHp === base * 2, 'un dompteur s\'en va : on revient au total pour deux');
+  check(boss.maxHp === base * 3, 'un dompteur se déconnecte : il dort au village, il compte toujours (trois membres)');
+  r.addSleeper('absent', { name: 'Absent', armor: 0, class: null, alphas: [], pack: [], stats: {} });
+  check(boss.maxHp === base * 4, 'un membre déconnecté de plus (chargé au démarrage) : quatre membres');
+  r.removeSleeper('absent');
+  check(boss.maxHp === base * 3, 'un membre quitte le village : on revient à trois');
 }
 
 {

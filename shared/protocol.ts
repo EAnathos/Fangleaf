@@ -145,6 +145,7 @@ export type GameEvent =
   | { e: 'essence'; to: number; s: number; x: number; y: number }
   | { e: 'soul'; to: number; s: number; x: number; y: number } // âme de mini-boss
   | { e: 'mine'; by: number; id: number; done: boolean } // coup de pioche sur un filon (done : épuisé)
+  | { e: 'chop'; by: number; id: number; done: boolean } // coup de hache sur un arbre (id : index dans decor ; done : abattu)
   | { e: 'boss'; cave: number; s: number; down: boolean } // mini-boss vaincu (down) ou de retour
   | { e: 'move'; id: number; kind: string } // un mini-boss lance une attaque spéciale
   | { e: 'challenge'; cave: number; id: number; by: number } // un dompteur a provoqué le géant : le combat commence
@@ -197,6 +198,7 @@ export interface Snapshot {
   sleepers: SleeperTuple[]; // dompteurs déconnectés qui dorment au village
   dozers: DozerTuple[]; // leurs monstres, qui flânent ou dorment autour d'eux
   bare: number[]; // buissons proches dont les fruits ont été mangés (ils repoussent)
+  trees: [number, number][]; // arbres proches entamés ou abattus : [index dans decor, pv %] (absents : intacts)
   caves: number[]; // par grotte : secondes avant le retour du mini-boss (0 = présent)
   camps: number[]; // emplacements de camp établis par le village
   buildings: BuildingId[]; // bâtiments construits au village

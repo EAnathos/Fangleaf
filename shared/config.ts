@@ -43,7 +43,8 @@ export const costText = (c: Cost) => [c.gold && `${c.gold} or`, c.wood && `${c.w
 export const buildingCost = (b: BuildingId): Cost => ({ gold: BUILDINGS[b].cost, wood: BUILDINGS[b].wood, stone: BUILDINGS[b].stone });
 
 // Hôtel de ville : on l'améliore (or, bois, pierre) pour débloquer le reste du village et du monde.
-// HALL[n] : passage au niveau n + 1. La porte de la zone z + 1 demande aussi d'avoir vaincu les géants de la zone z.
+// HALL[n] : passage au niveau n + 1. La porte de la zone z + 1 demande aussi d'avoir rapporté à Aubin les parchemins
+// des géants de la zone z (chaque géant vaincu laisse le sien dans sa grotte).
 export const HALL_OFFSET = { x: 185, y: 138 };
 // Entrepôt : chacun y dépose le bois et la pierre de son sac ; constructions et Hôtel de ville puisent dans cette réserve commune.
 export const STORE_OFFSET = { x: -270, y: -55 };
@@ -58,22 +59,29 @@ export const HALL: (Cost & { unlock: string })[] = [
   { gold: 6000, wood: 1000, stone: 900, unlock: 'Porte de la Mer de sable (zone 6)' },
 ];
 export const HALL_MAX = HALL.length;
-/** Géants d'une zone (index d'espèce) : il faut tous les vaincre pour ouvrir la porte de la zone suivante. */
+/** Géants d'une zone (index d'espèce) : il faut rapporter tous leurs parchemins pour ouvrir la porte de la zone suivante. */
 export const zoneBosses = (z: number) => SPECIES.map((sp, i) => (sp.boss && sp.zone === z ? i : -1)).filter((i) => i >= 0);
 /** Niveau d'Hôtel de ville pour ouvrir la porte k (0 : sortie du village vers la zone 1 ; k ≥ 1 : vers la zone k + 1). */
 export const gateHall = (k: number) => (k === 0 ? 1 : k + 1);
-/** Porte k ouverte : Hôtel de ville au niveau requis et, après la première, géants de la zone k tous vaincus. */
-export const gateOpen = (k: number, hall: number, beaten: number[]) => hall >= gateHall(k) && (k === 0 || zoneBosses(k).every((b) => beaten.includes(b)));
+/** Porte k ouverte : Hôtel de ville au niveau requis et, après la première, parchemins des géants de la zone k tous lus par Aubin. */
+export const gateOpen = (k: number, hall: number, told: number[]) => hall >= gateHall(k) && (k === 0 || zoneBosses(k).every((b) => told.includes(b)));
 /** Zones découvertes par le village : la Lisière, puis chaque zone dont la porte est ouverte. */
-export const zonesOpen = (hall: number, beaten: number[]) => {
+export const zonesOpen = (hall: number, told: number[]) => {
   let z = 1;
-  while (z < ZONES && gateOpen(z, hall, beaten)) z++;
+  while (z < ZONES && gateOpen(z, hall, told)) z++;
   return z;
 };
 
-// Récolte : filons d'or (or et un peu de pierre), rochers (pierre) et bois mort (bois).
+// Récolte : filons d'or (or et un peu de pierre), rochers (pierre) et arbres à abattre (bois).
 export type Resource = 'gold' | 'wood' | 'stone';
-export const resYield = (zone: number) => 4 + 2 * zone; // bois ou pierre d'un tas épuisé (en moyenne)
+export const resYield = (zone: number) => 4 + 2 * zone; // pierre d'un rocher cassé (en moyenne)
+export const treeHp = (zone: number) => 15 + 15 * zone; // coups de hache (dégâts de pioche) pour abattre un arbre
+export const treeWood = (zone: number) => 1 + Math.round(zone / 2); // bois d'un arbre abattu (en moyenne) : peu, mais il y en a partout
+export const TREE_RESPAWN_S = 240; // l'arbre repousse
+export const TREE_STILL_S = 0.4; // attaque auto : on n'abat un arbre qu'arrêté devant (pas en traversant la forêt)
+/** Bois profonds : un arbre abattu réveille parfois un Tréant, qui attaque. */
+export const TREANT_CHANCE = 0.06;
+export const TREANT_ZONE = 2;
 export const oreStone = (zone: number) => 1 + zone; // pierre en plus de l'or d'un filon (en moyenne)
 export const RES_SPREAD = 0.4; // la récolte varie de ± 40 % autour de la moyenne
 /** Quantité réellement récoltée : un tirage autour de la moyenne n (r : hasard entre 0 et 1), jamais moins de 1. */
@@ -331,7 +339,14 @@ export const ORE_R = 16;
 export const oreHp = (zone: number) => 30 + 30 * zone;
 export const oreGold = (zone: number) => 12 * zone + 6;
 export const ORE_RESPAWN_S = 180;
-export const ALPHA_CREATE_COST = 15;
+/**
+ * Essences pour éveiller l'Alpha d'une espèce : de 15 (Lisière) à 40 (Mer de sable), le double pour un monstre
+ * sauvage agressif (le gibier passif, lui, se laisse amadouer).
+ */
+export const alphaCreateCost = (species: number) => {
+  const sp = SPECIES[species], base = Math.round(15 + (25 * (sp.zone - 1)) / (ZONES - 1));
+  return sp.passive ? base : base * 2;
+};
 /** Temps d'éveil d'un Alpha après avoir payé ses essences : plus l'espèce est forte, plus c'est long. */
 export const alphaAwakenS = (species: number) => 30 * SPECIES[species].zone;
 export const ESSENCE_DROP = 0.35; // chance, pour chaque dompteur proche, qu'un monstre vaincu lâche une essence
@@ -439,6 +454,7 @@ export interface Species {
   burrows?: boolean; // sauvage, il file sous le sable (intouchable) et surgit sous sa cible (cercle annoncé), puis reste exposé
   flies?: boolean; // sauvage, il tourne au-dessus de sa cible (hors d'atteinte), pique là où tombe son ombre (cercle annoncé), puis reste un moment au sol
   shy?: boolean; // gibier craintif : un dompteur sans fruit en main ou un vautour approche, et la colonie court se cacher dans sa tanière (elle y passe aussi la nuit)
+  skittish?: boolean; // sauvage, il détale devant un dompteur qui approche sans fruit en main (lièvre)
   passive?: boolean; // sauvage, il n'attaque jamais : il broute les buissons à fruits et s'enfuit quand on le frappe
 }
 
@@ -488,7 +504,7 @@ export const SPECIES: Species[] = [
   { key: 'mist_hydra', name: 'Hydre des brumes', color: '#3E8290', r: 57, hp: 23400, dmg: 95, speed: 205, atkCd: 1.2, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Brumentine aux Trois Têtes', sprite: 'serpent', base: 'serpent' },
   { key: 'titan_crab', name: 'Crabe Titan', color: '#B9532F', r: 63, hp: 34580, dmg: 110, speed: 185, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Pince-d’Acier le Titan', sprite: 'crab', base: 'crab' },
   // Gibier passif : il broute les buissons à fruits et s'enfuit quand on le frappe (pas de géant). S'apprivoise surtout aux baies.
-  { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 30, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 3, population: 20, pack: [1, 3], passive: true, sleeps: 'night' },
+  { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 30, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 3, population: 20, pack: [1, 3], passive: true, sleeps: 'night', skittish: true },
   { key: 'snail', name: 'Escargot des mousses', color: '#C99A5B', r: 12, hp: 22, dmg: 1, speed: 32, atkCd: 1.4, gold: 2, zone: 1, population: 20, pack: [1, 2], passive: true, shell: true, rainSpeed: 1.5 },
   // Gibier de nuit : il n'apparaît qu'une fois la nuit tombée, et s'en va au lever du jour.
   { key: 'firefly', name: 'Luciole', color: '#E4F07A', r: 11, hp: 20, dmg: 1, speed: 70, atkCd: 1.4, gold: 4, zone: 2, population: 24, pack: [3, 5], passive: true, night: true },
@@ -501,6 +517,8 @@ export const SPECIES: Species[] = [
   { key: 'sand_queen', name: 'Reine des sables', color: '#A87A4A', r: 66, hp: 62000, dmg: 230, speed: 190, atkCd: 1.4, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Dunebouche, la Reine des Sables', sprite: 'sandworm', base: 'sandworm' },
   { key: 'vulture_king', name: 'Roi-Vautour', color: '#3A2C24', r: 60, hp: 54000, dmg: 215, speed: 200, atkCd: 1.2, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Charognard, le Roi des Cieux', sprite: 'vulture', base: 'vulture' },
   { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 50000, dmg: 205, speed: 220, atkCd: 0.9, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Anubeth, le Chacal de la Lune', sprite: 'jackal', base: 'jackal' },
+  // Bois profonds : le Tréant dort dans un arbre ; il en sort parfois quand on l'abat (jamais d'apparition ailleurs).
+  { key: 'treant', name: 'Tréant', color: '#6B5A3A', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1] },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);

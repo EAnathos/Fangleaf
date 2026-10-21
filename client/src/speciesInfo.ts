@@ -1,13 +1,13 @@
 // Descriptions des espèces : bestiaire de la Tanière.
 
 export const SPECIES_DESC: Record<string, string> = {
-  hare: 'Gibier des Landes qui grignote les baies des buissons. Il ne se bat pas : frappé, il détale. Tends-lui un fruit (T) pour l\'apprivoiser.',
+  hare: 'Gibier des Landes qui grignote les baies des buissons. Il ne se bat pas : il détale devant qui approche les mains vides. Avance un fruit à la main (T) pour l\'apprivoiser.',
   meerkat: 'Vit en colonie autour de sa tanière, dans la Mer de sable. Quand un dompteur sans fruit ou un vautour approche, tout le monde court s’y cacher. Avance doucement, un fruit à la main (T).',
   sandworm: 'File sous le sable, intouchable : on ne voit qu’une bosse qui avance. Un cercle au sol annonce sa sortie : écarte-toi, puis frappe-le avant qu’il replonge.',
   vulture: 'Tourne au-dessus de toi, hors d’atteinte, puis pique là où tombe son ombre : un cercle au sol l’annonce. Frappe-le pendant qu’il est posé, avant qu’il redécolle.',
   jackal: 'Ne chasse que la nuit, en grande meute. Décharné, rapide, les yeux comme des braises : ne traverse pas le désert seul une fois le soleil couché.',
   firefly: 'Ne sort qu’à la nuit tombée, dans les Bois profonds. Inoffensive, elle grignote les baies : tends-lui un fruit (T) avant le lever du jour.',
-  snail: 'Lent et paisible, il bouffe les baies de la Lisière. Tends-lui un fruit (T) pour essayer de l’apprivoiser.',
+  snail: 'Lent et paisible, il bouffe les baies de la Lisière. Approche-le un fruit à la main (T) : apeuré, il reste dans sa coquille tant qu’on est à côté.',
   slime: 'Lent et mou : la première proie du dompteur.',
   sporelin: 'Petit champignon sauteur. Fragile mais vif : il arrive en groupe.',
   wolf: 'Rapide, chasse en meute.',
@@ -19,6 +19,7 @@ export const SPECIES_DESC: Record<string, string> = {
   watcher: 'Sentinelle de pierre moussue (tireur). Son œil se charge, puis un trait runique lent part vers toi : écarte-toi.',
   toad: 'Crapaud des Lacs brumeux (tireur). Gonfle sa gorge et crache en cloche : sors du cercle annoncé au sol.',
   serpent: 'Nage dans les lacs sans jamais en sortir (tireur). Se dresse, puis tire un jet d\'eau rapide. À frapper depuis la rive ou à distance.',
+  treant: 'Il dort dans un sapin des Bois profonds. Abats le mauvais arbre, et il se réveille de très mauvaise humeur.',
   crab: 'Carapace épaisse, marche de côté et pince fort. Le tank des Lacs brumeux, qui protège les tireurs.',
 };
 

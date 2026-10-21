@@ -8,7 +8,7 @@ const MAX_FLOATERS = 140; // grosse mêlée : les plus anciens chiffres s'efface
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number }
 interface Floater { x: number; y: number; text: string; color: string; life: number; max: number; size: number }
 interface Slash { x: number; y: number; ang: number; life: number }
-interface Essence { x: number; y: number; color: string; life: number; max: number; label: string }
+interface Essence { x: number; y: number; color: string; life: number; max: number; label: string; scale: number }
 interface Shot { x: number; y: number; tx: number; ty: number; life: number; max: number; kind: string }
 interface Ring { x: number; y: number; r0: number; r1: number; life: number; max: number; color: string }
 /** Éclat de roche : tombe, rebondit au sol (z : hauteur), tourne sur lui-même. */
@@ -114,10 +114,11 @@ export class Fx {
     this.rings.push({ x, y, r0, r1, life, max: life, color });
   }
 
-  /** Essence lâchée : un cristal de la couleur de l'espèce qui jaillit, tourne et s'élève avec « +1 ». */
-  essence(x: number, y: number, color: string, label = '+1') {
-    this.essences.push({ x, y, color, life: label === '+1' ? 1.6 : 2.2, max: label === '+1' ? 1.6 : 2.2, label });
-    this.burst(x, y + 10, '#B48CFF', 8, 70);
+  /** Essence lâchée : un cristal de la couleur de l'espèce qui jaillit, tourne et s'élève avec « +1 » (scale : plus gros, pour une âme). */
+  essence(x: number, y: number, color: string, label = '+1', scale = 1) {
+    const max = (label === '+1' ? 1.6 : 2.2) * (scale > 1 ? 1.4 : 1);
+    this.essences.push({ x, y, color, life: max, max, label, scale });
+    this.burst(x, y + 10, '#B48CFF', Math.round(8 * scale), 70 * scale);
   }
 
   /** Flèche (archer) ou orbe (mage) qui file vers sa cible ; l'orbe explose à l'arrivée. */
@@ -307,13 +308,13 @@ export class Fx {
     for (const e of this.essences) {
       const k = 1 - e.life / e.max; // 0 → 1
       const pop = k < 0.15 ? k / 0.15 : 1; // apparition en « pop »
-      const y = e.y - 46 * Math.sin(Math.min(1, k * 1.4) * Math.PI * 0.5);
+      const y = e.y - 46 * e.scale * Math.sin(Math.min(1, k * 1.4) * Math.PI * 0.5);
       const a = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
       const spin = Math.cos(k * Math.PI * 4); // le cristal tourne sur lui-même
       ctx.globalAlpha = a;
       ctx.save();
-      ctx.translate(e.x - 10, y);
-      ctx.scale(Math.max(0.2, Math.abs(spin)) * pop * 1.15, pop * 1.15);
+      ctx.translate(e.x - 10 * e.scale, y);
+      ctx.scale(Math.max(0.2, Math.abs(spin)) * pop * 1.15 * e.scale, pop * 1.15 * e.scale);
       // lueur : un losange plus grand et translucide (pas de shadowBlur, très lent sous Firefox)
       ctx.fillStyle = 'rgba(180,140,255,0.35)';
       ctx.beginPath();
@@ -335,13 +336,14 @@ export class Fx {
       ctx.fill();
       ctx.stroke();
       ctx.restore();
-      ctx.font = `700 ${Math.round(17 * pop)}px "Pixelify Sans", sans-serif`;
+      ctx.font = `700 ${Math.round(17 * pop * Math.sqrt(e.scale))}px "Pixelify Sans", sans-serif`;
       ctx.textAlign = 'left';
       ctx.lineWidth = 4;
       ctx.strokeStyle = 'rgba(16,24,26,0.85)';
-      ctx.strokeText(e.label, e.x + 2, y + 6);
+      const lx = e.x + 2 * e.scale, ly = y + 6 * Math.sqrt(e.scale);
+      ctx.strokeText(e.label, lx, ly);
       ctx.fillStyle = '#B48CFF';
-      ctx.fillText(e.label, e.x + 2, y + 6);
+      ctx.fillText(e.label, lx, ly);
     }
     ctx.globalAlpha = 1;
     ctx.textAlign = 'center';

@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, ALPHA_CREATE_COST, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
@@ -65,11 +65,12 @@ type Funds = { gold: number; wood: number; stone: number };
 const canPay = (f: Funds, c: Cost) => f.gold >= c.gold && f.wood >= c.wood && f.stone >= c.stone;
 /** Point d'interaction (touche E) à portée : bâtiments (ou leur chantier), Pierres de passage, emplacements de camp, grottes. */
 export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView): Spot | undefined => {
-  const offer = (b: BuildingId, pos: { x: number; y: number }, verb: string): Spot => ({ panel: 'buy', pos, buy: { b }, label: `E — ${verb} : ${BUILDINGS[b].name}` }); // le prix : dans le panneau qui s'ouvre
+  // le prix : dans le panneau qui s'ouvre ; name : le nom affiché (pour un emplacement, celui du bâtiment, plus court)
+  const offer = (b: BuildingId, pos: { x: number; y: number }, verb: string, name = BUILDINGS[b].name): Spot => ({ panel: 'buy', pos, buy: { b }, label: `E — ${verb} : ${name}` });
   // un emplacement à défricher passe avant le bâtiment
   const building = (b: BuildingId, pos: { x: number; y: number }, open: Spot): Spot => {
     const needs = BUILDINGS[b].needs;
-    if (needs && !v.buildings.includes(needs)) return offer(needs, pos, 'Défricher');
+    if (needs && !v.buildings.includes(needs)) return offer(needs, pos, 'Défricher', BUILDINGS[b].name);
     return v.buildings.includes(b) ? open : offer(b, pos, 'Construire');
   };
   const spots: Spot[] = [
@@ -103,7 +104,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     ]),
     ...v.chests.filter((c) => !c[3]).map((c): Spot => ({ chest: c[0], pos: { x: c[1], y: c[2] }, label: 'E — Ouvrir le coffre' })),
     ...map.bushes.filter((b) => !v.bare.includes(b.id) && Math.hypot(x - b.x, y - b.y) < BUSH_PICK_R)
-      .map((b): Spot => ({ pick: true, pos: b, reach: BUSH_PICK_R, label: 'E — Cueillir des baies' })),
+      .map((b): Spot => ({ pick: true, pos: b, reach: BUSH_PICK_R, label: 'E — Cueillir' })),
     ...v.sleepers.map((z): Spot => ({ panel: 'talk', pos: z, at: z.cave, reach: z.r + BOSS_TALK_R, label: `E — Parler à ${SPECIES[map.caves[z.cave].boss].name}` })),
   ];
   return spots.find((b) => Math.hypot(x - b.pos.x, y - b.pos.y) < (b.reach ?? BUILDING_REACH));
@@ -189,6 +190,12 @@ export class Hud {
   private elderView: 'talk' | 'boat' | 'scrolls' = 'talk';
   told: number[] = []; // parchemins lus par Aubin (géant de chacun), dans l'ordre
   private myScrolls = 0; // parchemins dans mon sac
+  private elderMet = true; // déjà parlé au vieil homme dans ce village (retenu sur cet appareil)
+  private elderKey = '';
+  /** Point d'exclamation au-dessus du vieil homme : jamais venu lui parler, ou des parchemins à lui rapporter. */
+  get elderCalls() {
+    return !this.elderMet || this.myScrolls > 0;
+  }
   lore: [number, number, number] = [0, 0, 0]; // souvenirs retrouvés, étapes du bateau, secondes avant la fin de l'étape en cours
   scrollCaves: number[] = []; // grottes dont le parchemin m'attend // portrait du géant à qui l'on parle
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
@@ -212,6 +219,10 @@ export class Hud {
       drawUnit(ctx, { x: 0, y: 0, r, species: s, alpha: false, legend: false, wild: false, face: 1, t: 0, seed: s, flash: false });
     });
     $('code-label').textContent = code;
+    this.elderKey = `fangleaf.elder.${code}`;
+    try {
+      this.elderMet = !!localStorage.getItem(this.elderKey);
+    } catch { /* stockage indisponible : on ne le signale pas */ }
     const revive = $('revive-prompt');
     revive.onpointerdown = (e) => {
       revive.setPointerCapture(e.pointerId);
@@ -383,6 +394,10 @@ export class Hud {
       this.showNpc();
     }
     if (panel === 'elder') {
+      this.elderMet = true;
+      try {
+        localStorage.setItem(this.elderKey, '1');
+      } catch { /* stockage indisponible */ }
       // des parchemins à lui donner : il les réclame ; sinon il salue (et reprend depuis le début)
       this.elderView = 'talk';
       this.elderSay(this.myScrolls ? ['Oh ! Ce que tu tiens là… ce sont des parchemins ? Fais voir, fais voir !'] : elderGreeting(this.lore[0], this.map.caves.length, this.lore[1], BOAT_STAGES.length));
@@ -986,7 +1001,7 @@ export class Hud {
 
   /** Zone ouverte pour le village : la zone 1, puis chaque zone dont la porte est ouverte. */
   private zoneOpen(z: number) {
-    return z <= 1 || gateOpen(z - 1, this.hall, this.beaten);
+    return z <= 1 || gateOpen(z - 1, this.hall, this.told);
   }
 
   private funds(me: PlayerState): Funds {
@@ -1296,7 +1311,7 @@ export class Hud {
         // stats affichées avec le bonus de collection (en comptant cet Alpha s'il n'est pas encore là)
         const stat = (l: number) => alphaStats(s, l, a ? count : count + 1, a?.legend);
         const maxed = !!a && lvl >= ALPHA_LVL_MAX;
-        const cost = a ? alphaUpCost(lvl) : ALPHA_CREATE_COST;
+        const cost = a ? alphaUpCost(lvl) : alphaCreateCost(s);
         const unit = 'essences';
         const have = me.essences[s];
         const el = document.createElement('div');
@@ -1458,10 +1473,10 @@ export class Hud {
     $('explored').textContent = `${Math.round(this.fog.progress * 100)} % de la carte explorée`;
   }
 
-  /** Grottes déjà repérées (hors brouillard) : arche sombre, avec un sablier tant que son géant n'est pas revenu. */
+  /** Grottes déjà repérées (hors brouillard, dans une zone ouverte) : arche sombre, avec un sablier tant que son géant n'est pas revenu. */
   private drawCaves(ctx: CanvasRenderingContext2D, m: (v: number) => number, size: number) {
     for (const c of this.map.caves) {
-      if (!this.fog.isExplored(c.entrance.x, c.entrance.y)) continue;
+      if (!this.zoneOpen(c.zone) || !this.fog.isExplored(c.entrance.x, c.entrance.y)) continue;
       const x = m(c.entrance.x), y = m(c.entrance.y);
       ctx.fillStyle = '#2A2E2D';
       ctx.strokeStyle = '#C9CFC2';
@@ -1592,7 +1607,7 @@ function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; 
     perk?.kind === 'rally' ? `Encourage son dompteur : +${pctLabel(perk.value)} de dégâts infligés (plus en le renforçant).` : '',
     perk?.kind === 'heal' ? `Soigne son dompteur et sa meute proche : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s (plus en le renforçant).` : '',
     legend && boss >= 0 ? `Âme de ${SPECIES[boss].title ?? SPECIES[boss].name} : il hérite de ses attaques (${(BOSS_MOVES[SPECIES[boss].key] ?? []).map((m) => MOVE_NAMES[m.kind].toLowerCase()).join(', ')}).` : '',
-    !legend ? `Éveil : ${ALPHA_CREATE_COST} essences, puis ${duration(alphaAwakenS(s))}.` : '',
+    !legend ? `Éveil : ${alphaCreateCost(s)} essences, puis ${duration(alphaAwakenS(s))}.` : '',
   ].filter(Boolean).join(' ');
   return { name: legend ? `${sp.name} légendaire` : `${sp.name} alpha`, tag: legend ? `Aura dorée · ×${String(LEGEND_MULT.hp).replace('.', ',')} PV et dégâts` : traits, stats: `niv. 0 · ${st.hp} PV · ${st.dmg} dégâts`, desc: powers };
 }
