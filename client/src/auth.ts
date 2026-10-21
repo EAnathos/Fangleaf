@@ -47,6 +47,7 @@ export async function myVillages(): Promise<MyVillage[]> {
     .from('progress')
     .select('village_code, name, updated_at, villages(name, hall, told)')
     .order('updated_at', { ascending: false });
+  if (error) console.warn('Villages introuvables :', error.message); // ex. colonne non lisible (droits Supabase)
   if (error || !data) return [];
   return data.map((d) => {
     const v = (Array.isArray(d.villages) ? d.villages[0] : d.villages) as { name?: string; hall?: number; told?: number[] } | null;
