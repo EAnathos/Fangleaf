@@ -33,8 +33,12 @@ export function initInput(canvas: HTMLCanvasElement, onAction: (code: string, ke
     codes.clear();
     typed.clear();
     aim.down = false;
+    stick.active = false; // on quitte l'appli le doigt posé : le personnage ne continue pas à avancer
     onRelease('', ''); // touche relâchée hors de la fenêtre : on la considère lâchée
   });
+
+  // Sur mobile, passer à une autre appli ne déclenche pas toujours « blur » : on lâche aussi le déplacement là.
+  document.addEventListener('visibilitychange', () => void (document.hidden && (stick.active = false)));
 
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture(e.pointerId);

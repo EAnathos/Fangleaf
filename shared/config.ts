@@ -331,6 +331,7 @@ export const BOSS_TALK_R = 140; // distance (depuis le bord du géant) pour lui 
 export const BOSS_SOUL_DROP = 0.35;
 // Coffre du géant vaincu : chaque dompteur l'ouvre une fois, pour un montant d'or tiré au hasard (× l'or du géant).
 export const CHEST_GOLD: [number, number] = [0.75, 2]; // chance, pour chaque dompteur présent, d'obtenir l'âme
+export const CAVE_CD = 1; // s entre deux passages d'entrée ou de sortie de grotte (un double clic ne fait pas ressortir)
 export const CAVE_RX = 560; // intérieur elliptique des grottes
 export const CAVE_RY = 400;
 

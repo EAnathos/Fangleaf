@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, ARMY_CAP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg,
 } from '../../shared/config.ts';
@@ -117,6 +117,19 @@ const setText = (el: HTMLElement, v: string) => void (el.textContent !== v && (e
 const setHidden = (el: HTMLElement, v: boolean) => void (el.hidden !== v && (el.hidden = v));
 const setClass = (el: HTMLElement, v: string) => void (el.className !== v && (el.className = v));
 const setStyle = (el: HTMLElement, k: 'width' | 'color', v: string) => void (el.style[k] !== v && (el.style[k] = v));
+/**
+ * Bouton du jeu : au doigt, il agit dès que le doigt se pose. Un autre doigt qui tient le déplacement n'empêche rien
+ * (le navigateur ne déclenche pas de clic pendant un geste à deux doigts) ; le clic qui suit est ignoré.
+ */
+const tapAt = new WeakMap<HTMLElement, number>();
+const onTap = (el: HTMLElement, fn: () => void) => {
+  el.onpointerdown = (e) => {
+    if (e.pointerType === 'mouse') return;
+    tapAt.set(el, performance.now());
+    fn();
+  };
+  el.onclick = () => void (performance.now() - (tapAt.get(el) ?? -Infinity) > 700 && fn());
+};
 const pct = (n: number) => `${Math.round(n * 100)} %`;
 /** 0.033 → « 3,3 % » (une décimale au plus). */
 const pctLabel = (n: number) => `${(Math.round(n * 1000) / 10).toLocaleString('fr-FR')} %`;
@@ -133,7 +146,7 @@ export class Hud {
   private portraits: Portrait[] = []; // Alphas de la Tanière
   private wares: Portrait[] = []; // monstres du Marché
   panel: Panel = null;
-  private promptTapAt = -Infinity; // dernier appui au doigt sur le bouton d'action
+  private promptAfter = 0; // passage de grotte : pas de bouton d'action avant cette date (le double clic ne fait rien)
   onUpgrade = (_what: Gear) => {};
   onAlphaUp = (_species: number) => {};
   onAlphaEquip = (_species: number, _equip: boolean) => {};
@@ -280,8 +293,8 @@ export class Hud {
       else if (e.key === 'Escape') (e.target as HTMLInputElement).blur(); // les touches reviennent au jeu
     });
     this.initSettings(founder);
-    $('hold-btn').onclick = () => this.onHold();
-    $('mount-btn').onclick = () => this.onRide();
+    onTap($('hold-btn'), () => this.onHold());
+    onTap($('mount-btn'), () => this.onRide());
     $('talk-later').onclick = () => this.setPanel(null);
     // un nouveau-né : on se parle à tour de rôle, une réplique après l'autre
     $('npc-next').onclick = () => {
@@ -364,6 +377,7 @@ export class Hud {
 
   /** Transition d'entrée ou de sortie de grotte : noir, puis l'image s'ouvre en iris (le lieu s'annonce par la bannière). */
   caveFade() {
+    this.promptAfter = performance.now() + CAVE_CD * 1000;
     const el = $('cave-fade');
     el.hidden = false;
     el.style.animation = 'none';
@@ -489,20 +503,13 @@ export class Hud {
     // Bâtiments.
     const b = me.dead ? undefined : buildingNear(this.map, myPos.x, myPos.y, this);
     const prompt = $('build-prompt');
-    setHidden(prompt, !b || !!this.panel);
+    setHidden(prompt, !b || !!this.panel || performance.now() < this.promptAfter);
     if (b) {
       // au doigt, pas de touche à rappeler ; sur PC, la touche réglée pour « interagir »
       setText(prompt, b.label.replace(/^E — /, touchOnly ? '' : `${keyLabel('interact')} — `));
       setClass(prompt, `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick || b.sword || b.scroll !== undefined ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`);
       const act = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
-      // Au doigt, on agit dès que le doigt se pose : un autre doigt qui tient le déplacement n'empêche rien
-      // (le navigateur ne déclenche pas de clic pendant un geste à deux doigts). Le clic qui suit est ignoré.
-      prompt.onpointerdown = (e) => {
-        if (e.pointerType === 'mouse') return;
-        this.promptTapAt = performance.now();
-        act();
-      };
-      prompt.onclick = () => void (performance.now() - this.promptTapAt > 700 && act());
+      onTap(prompt, act);
     }
     const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board'].includes(this.panel);
     if (building && b?.panel !== this.panel) this.setPanel(null);
@@ -770,8 +777,8 @@ export class Hud {
   private initSettings(founder: boolean) {
     this.founder = founder;
     $('settings-open').onclick = () => this.setPanel('settings');
-    $('menu-open').onclick = () => this.setPanel(this.panel === 'quit' ? null : 'quit');
-    $('chat-open').onclick = () => this.setPanel(this.panel === 'chat' ? null : 'chat');
+    onTap($('menu-open'), () => this.setPanel(this.panel === 'quit' ? null : 'quit'));
+    onTap($('chat-open'), () => this.setPanel(this.panel === 'chat' ? null : 'chat'));
     $('chat-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const input = $<HTMLInputElement>('chat-input');
