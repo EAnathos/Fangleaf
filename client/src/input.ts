@@ -5,7 +5,7 @@ import { matches, settings } from './settings.ts';
 const codes = new Set<string>(); // codes physiques enfoncés
 const typed = new Set<string>(); // lettres enfoncées (pour les touches réglées par lettre)
 
-export const stick = { active: false, ox: 0, oy: 0, x: 0, y: 0 };
+export const stick = { active: false, ox: 0, oy: 0, x: 0, y: 0, id: -1 }; // id : le doigt qui le tient
 const STICK_MAX = 60;
 /** Clic gauche maintenu (mode « attaque au clic ») : position du pointeur à l'écran. */
 export const aim = { down: false, x: 0, y: 0 };
@@ -43,18 +43,20 @@ export function initInput(canvas: HTMLCanvasElement, onAction: (code: string, ke
       Object.assign(aim, { down: true, x: e.clientX, y: e.clientY });
       return;
     }
+    if (stick.active) return; // un second doigt ne reprend pas le déplacement
     stick.active = true;
+    stick.id = e.pointerId;
     stick.ox = stick.x = e.clientX;
     stick.oy = stick.y = e.clientY;
   });
   canvas.addEventListener('pointermove', (e) => {
     [aim.x, aim.y] = [e.clientX, e.clientY];
-    if (!stick.active) return;
+    if (!stick.active || e.pointerId !== stick.id) return;
     stick.x = e.clientX;
     stick.y = e.clientY;
   });
-  const end = () => {
-    stick.active = false;
+  const end = (e: PointerEvent) => {
+    if (e.pointerId === stick.id) stick.active = false;
     aim.down = false;
   };
   canvas.addEventListener('pointerup', end);

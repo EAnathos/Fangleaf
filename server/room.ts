@@ -58,6 +58,7 @@ interface Unit {
   pathAt: number; // date du dernier calcul de détour
   pathGoalX: number;
   pathGoalY: number;
+  spooked?: boolean; // lièvre en train de détaler : il ne s'arrête qu'à SKITTISH_FAR
   windup: number; // tireur : charge son tir (s restantes), immobile
   shotAt: number; // cible visée pendant la charge
   dormant: boolean; // géant qui attend qu'un dompteur vienne lui parler : ni cible ni menace
@@ -250,6 +251,8 @@ const SHELL_R = 150; // escargot : un dompteur sans fruit plus près, et il rent
 const SHELL_S = 4; // il en ressort ce temps-là après que la voie est libre
 const TREE_HEAL_S = 30; // arbre entamé puis laissé : il cicatrise
 const SKITTISH_R = 210; // lièvre : un dompteur sans fruit plus près, et il détale
+const CAVE_CD = 1.5; // s entre deux passages d'entrée ou de sortie de grotte
+const SKITTISH_FAR = 460; // … et il ne s'arrête qu'une fois à cette distance
 const STORM_HARM = 0.4; // tempête assez forte pour blesser (et cacher vers, vautours et suricates)
 const STORM_DPS = 0.02; // part des PV max perdue chaque seconde en plein dedans (l'armure en réduit une partie)
 const WAKE_S = 20; // dormeur (lièvre la nuit, ours le jour) réveillé par un coup : il reste debout tant de secondes après le dernier
@@ -270,6 +273,7 @@ export class Room {
   private treeBack = new Map<number, number>(); // arbres abattus : temps de simulation où ils repoussent
   private caveBoss: number[] = []; // id du mini-boss de chaque grotte (0 : vaincu)
   private caveBack: number[] = []; // temps de simulation de son retour
+  private caveAt = new WeakMap<Player, number>(); // dernier passage de chaque dompteur (un double clic ne le fait pas ressortir aussitôt)
   private hazards: Hazard[] = [];
   private shots: Shot[] = [];
   private chests: Chest[] = [];
@@ -867,7 +871,7 @@ export class Room {
     const u = this.fieldAlpha(p, s), r = p.resting.find((x) => x.s === s);
     const lvl = u?.level ?? r?.lvl;
     if (lvl === undefined || lvl >= ALPHA_LVL_MAX) return;
-    const cost = alphaUpCost(lvl);
+    const cost = alphaUpCost(s, lvl);
     if (p.essences[s] < cost) return;
     p.essences[s] -= cost;
     if (u) this.setAlphaLevel(u, lvl + 1);
@@ -1935,6 +1939,8 @@ export class Room {
     if (enter && !this.unlocked.includes(id)) return; // grotte pas encore débloquée
     const from = enter ? c.entrance : c.exit;
     if (dist2(p.x, p.y, from.x, from.y) > (BUILDING_REACH + 40) ** 2) return;
+    if (this.time - (this.caveAt.get(p) ?? -Infinity) < CAVE_CD) return;
+    this.caveAt.set(p, this.time);
     const to = enter ? { x: c.exit.x, y: c.exit.y - 50 } : { x: c.entrance.x, y: c.entrance.y + 70 };
     const at = this.map.freeNear(to.x, to.y);
     p.x = at.x;
@@ -2378,7 +2384,8 @@ export class Room {
     u.target = 0;
     // Le lièvre détale devant un dompteur qui approche les mains vides.
     if (SPECIES[u.s].skittish) {
-      const foe = this.nearest(u.x, u.y, SKITTISH_R, (e) => e.kind === 'p' && !e.dead && !e.holding);
+      const foe = this.nearest(u.x, u.y, u.spooked ? SKITTISH_FAR : SKITTISH_R, (e) => e.kind === 'p' && !e.dead && !e.holding);
+      u.spooked = !!foe;
       if (foe) {
         const dx = u.x - foe.x, dy = u.y - foe.y, d = Math.hypot(dx, dy) || 1;
         this.move(u, u.x + (dx / d) * 80, u.y + (dy / d) * 80, u.speed * 1.15, 0);

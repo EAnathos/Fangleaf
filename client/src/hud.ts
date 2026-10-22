@@ -133,6 +133,7 @@ export class Hud {
   private portraits: Portrait[] = []; // Alphas de la Tanière
   private wares: Portrait[] = []; // monstres du Marché
   panel: Panel = null;
+  private promptTapAt = -Infinity; // dernier appui au doigt sur le bouton d'action
   onUpgrade = (_what: Gear) => {};
   onAlphaUp = (_species: number) => {};
   onAlphaEquip = (_species: number, _equip: boolean) => {};
@@ -493,7 +494,15 @@ export class Hud {
       // au doigt, pas de touche à rappeler ; sur PC, la touche réglée pour « interagir »
       setText(prompt, b.label.replace(/^E — /, touchOnly ? '' : `${keyLabel('interact')} — `));
       setClass(prompt, `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick || b.sword || b.scroll !== undefined ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`);
-      prompt.onclick = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
+      const act = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
+      // Au doigt, on agit dès que le doigt se pose : un autre doigt qui tient le déplacement n'empêche rien
+      // (le navigateur ne déclenche pas de clic pendant un geste à deux doigts). Le clic qui suit est ignoré.
+      prompt.onpointerdown = (e) => {
+        if (e.pointerType === 'mouse') return;
+        this.promptTapAt = performance.now();
+        act();
+      };
+      prompt.onclick = () => void (performance.now() - this.promptTapAt > 700 && act());
     }
     const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board'].includes(this.panel);
     if (building && b?.panel !== this.panel) this.setPanel(null);
@@ -588,7 +597,6 @@ export class Hud {
   }
 
   private updateCamp(me: PlayerState) {
-    $('camp-gold').textContent = String(me.gold);
     $('camp-title').textContent = `Emplacement · ${campName(this.spotAt)}`;
     const btn = $<HTMLButtonElement>('camp-buy');
     btn.disabled = me.gold < CAMP_COST;
@@ -1311,7 +1319,7 @@ export class Hud {
         // stats affichées avec le bonus de collection (en comptant cet Alpha s'il n'est pas encore là)
         const stat = (l: number) => alphaStats(s, l, a ? count : count + 1, a?.legend);
         const maxed = !!a && lvl >= ALPHA_LVL_MAX;
-        const cost = a ? alphaUpCost(lvl) : alphaCreateCost(s);
+        const cost = a ? alphaUpCost(s, lvl) : alphaCreateCost(s);
         const unit = 'essences';
         const have = me.essences[s];
         const el = document.createElement('div');

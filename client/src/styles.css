@@ -17,7 +17,7 @@
   --body: 'Outfit', system-ui, sans-serif;
 }
 
-* { box-sizing: border-box; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; } /* pas de halo bleu au toucher sur mobile */
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--night); color: var(--text); font-family: var(--body); }
 button { font: inherit; color: inherit; cursor: pointer; }
 [hidden] { display: none !important; }

@@ -340,12 +340,12 @@ export const oreHp = (zone: number) => 30 + 30 * zone;
 export const oreGold = (zone: number) => 12 * zone + 6;
 export const ORE_RESPAWN_S = 180;
 /**
- * Essences pour éveiller l'Alpha d'une espèce : de 15 (Lisière) à 40 (Mer de sable), le double pour un monstre
- * sauvage agressif (le gibier passif, lui, se laisse amadouer).
+ * Essences pour éveiller l'Alpha d'une espèce : de 15 (Lisière) à 30 (Mer de sable), le double pour un monstre
+ * sauvage agressif (le gibier passif, lui, se laisse amadouer). Une espèce rare peut fixer son propre prix.
  */
 export const alphaCreateCost = (species: number) => {
-  const sp = SPECIES[species], base = Math.round(15 + (25 * (sp.zone - 1)) / (ZONES - 1));
-  return sp.passive ? base : base * 2;
+  const sp = SPECIES[species], base = Math.round(15 + (15 * (sp.zone - 1)) / (ZONES - 1));
+  return sp.awaken ?? (sp.passive ? base : base * 2);
 };
 /** Temps d'éveil d'un Alpha après avoir payé ses essences : plus l'espèce est forte, plus c'est long. */
 export const alphaAwakenS = (species: number) => 30 * SPECIES[species].zone;
@@ -353,7 +353,9 @@ export const ESSENCE_DROP = 0.35; // chance, pour chaque dompteur proche, qu'un 
 export const alphaLevelMult = (lvl: number) => 1 + 0.15 * lvl; // +15 % de PV et de dégâts par niveau
 /** Résurrection d'un Alpha : plus son espèce est forte (zone), plus elle est longue. Le niveau n'y change rien. */
 export const alphaReviveS = (species: number) => 10 + 8 * SPECIES[species].zone;
-export const alphaUpCost = (lvl: number) => Math.round(10 * Math.pow(1.6, lvl)); // 10, 16, 26, 41, 66…
+/** Essences pour renforcer un Alpha de ce niveau au suivant : ×1,6 par niveau, +15 % par zone après la Lisière. */
+export const alphaUpCost = (species: number, lvl: number) =>
+  Math.round(10 * (1 + 0.15 * (SPECIES[species].zone - 1)) * Math.pow(1.6, lvl)); // Lisière : 10, 16, 26, 41, 66…
 export const isBoss = (species: number) => !!SPECIES[species]?.boss;
 /** Boss géant d'une espèce (dont l'âme rend légendaire l'Alpha de cette espèce), ou -1. */
 export const bossOf = (species: number) => SPECIES.findIndex((b) => b.boss && b.base === SPECIES[species]?.key);
@@ -455,6 +457,7 @@ export interface Species {
   flies?: boolean; // sauvage, il tourne au-dessus de sa cible (hors d'atteinte), pique là où tombe son ombre (cercle annoncé), puis reste un moment au sol
   shy?: boolean; // gibier craintif : un dompteur sans fruit en main ou un vautour approche, et la colonie court se cacher dans sa tanière (elle y passe aussi la nuit)
   skittish?: boolean; // sauvage, il détale devant un dompteur qui approche sans fruit en main (lièvre)
+  awaken?: number; // essences pour éveiller son Alpha, si elles ne suivent pas la règle (espèce rare)
   passive?: boolean; // sauvage, il n'attaque jamais : il broute les buissons à fruits et s'enfuit quand on le frappe
 }
 
@@ -518,7 +521,7 @@ export const SPECIES: Species[] = [
   { key: 'vulture_king', name: 'Roi-Vautour', color: '#3A2C24', r: 60, hp: 54000, dmg: 215, speed: 200, atkCd: 1.2, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Charognard, le Roi des Cieux', sprite: 'vulture', base: 'vulture' },
   { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 50000, dmg: 205, speed: 220, atkCd: 0.9, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Anubeth, le Chacal de la Lune', sprite: 'jackal', base: 'jackal' },
   // Bois profonds : le Tréant dort dans un arbre ; il en sort parfois quand on l'abat (jamais d'apparition ailleurs).
-  { key: 'treant', name: 'Tréant', color: '#6B4E30', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1] },
+  { key: 'treant', name: 'Tréant', color: '#6B4E30', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1], awaken: 20 }, // rare : éveil moins cher
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);

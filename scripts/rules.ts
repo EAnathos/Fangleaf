@@ -280,12 +280,14 @@ const noop = () => {};
   const a = r.units.get(p.army[0]);
   const hp0 = a.maxHp;
   check(a.maxHp === Math.round(SPECIES[1].hp * 2.5 * 1.05) && a.dmg === Math.round(SPECIES[1].dmg * 2.5 * 1.05), `Alpha niv. 0 = 2,5× le Loup, +5 % de collection (PV ${a.maxHp}, dégâts ${a.dmg})`);
-  p.essences[1] = alphaUpCost(0);
+  p.essences[1] = alphaUpCost(1, 0);
   r.onAlphaUp(p, a.s);
   check(a.level === 1 && a.maxHp > hp0 && p.essences[1] === 0, `Alpha renforcé (PV ${hp0} → ${a.maxHp})`);
   r.onAlphaUp(p, a.s);
   check(a.level === 1, 'pas assez d\'essences : refusé');
-  check(alphaUpCost(1) > alphaUpCost(0) && alphaUpCost(5) > 3 * alphaUpCost(1), `coûts croissants : ${[0, 1, 2, 3, 4, 5].map(alphaUpCost).join(', ')}…`);
+  check(alphaUpCost(0, 1) > alphaUpCost(0, 0) && alphaUpCost(0, 5) > 3 * alphaUpCost(0, 1), `coûts croissants : ${[0, 1, 2, 3, 4, 5].map((l) => alphaUpCost(0, l)).join(', ')}…`);
+  const jackal = SPECIES.findIndex((sp) => sp.key === 'jackal');
+  check(alphaUpCost(1, 0) > alphaUpCost(0, 0) && alphaUpCost(jackal, 0) > alphaUpCost(1, 0), `un peu plus cher à chaque zone (niv. 0 : ${alphaUpCost(0, 0)}, ${alphaUpCost(1, 0)}, ${alphaUpCost(jackal, 0)})`);
 
   // Les Alphas ne comptent pas dans la limite de meute.
   for (let i = 0; i < ARMY_CAP; i++) {
@@ -519,9 +521,12 @@ const noop = () => {};
   check(!!chest && Math.hypot(chest.x - c.inside.x, chest.y - (c.inside.y - 190)) < 60, 'le coffre apparaît au fond de la grotte, derrière la place du géant');
   check(r.caveBoss[c.id] === 0 && r.caveBack[c.id] > r.time + BOSS_RESPAWN_S - 1, 'le mini-boss reviendra après le délai');
   check(!p.army.some((id: number) => r.units.get(id)?.s === c.boss), 'un mini-boss ne s\'apprivoise pas');
+  r.time += 2; // le passage d'entrée est loin
   [p.x, p.y] = [c.exit.x, c.exit.y];
   r.onCave(p, c.id, false);
   check(!r.map.caveAt(p.x, p.y) && Math.hypot(p.x - c.entrance.x, p.y - c.entrance.y) < 200, 'sortie : retour devant l\'entrée');
+  r.onCave(p, c.id, true);
+  check(!r.map.caveAt(p.x, p.y), 'double clic sur « Sortir » : on ne rentre pas aussitôt');
 
   // Âme → l'Alpha de l'espèce devient légendaire.
   [p.x, p.y] = [r.map.den.x, r.map.den.y];
