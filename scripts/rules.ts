@@ -19,6 +19,10 @@ Math.random = () => {
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
+// Horloge figée aussi : le jour, la nuit et la météo suivent l'heure réelle, et un test lancé au crépuscule
+// ou sous l'averse pouvait échouer en CI et passer en local. Les tests qui veulent un ciel précis avancent Date.now eux-mêmes.
+const TEST_NOW = Number(process.env.TEST_NOW ?? Date.parse('2026-01-01T12:00:00Z'));
+Date.now = () => TEST_NOW;
 
 let failed = false;
 const check = (ok: boolean, label: string) => {
@@ -2330,5 +2334,5 @@ const noop = () => {};
 
 check(caveUnlockCost(1) === 150 && caveUnlockCost(3) === 450 && caveUnlockCost(4) === 1500 && caveUnlockCost(5) === 3000, 'grottes des dernières zones bien plus chères (1500 et 3000 or)');
 
-console.log(failed ? `\nÉCHEC (TEST_SEED=${TEST_SEED})` : '\nOK');
+console.log(failed ? `\nÉCHEC (TEST_SEED=${TEST_SEED} TEST_NOW=${TEST_NOW})` : '\nOK');
 process.exit(failed ? 1 : 0);
