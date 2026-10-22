@@ -3,7 +3,7 @@
 MVP d'un jeu coop façon *Wild Tamer* : chasse des monstres, apprivoise-les, fais apparaître des Alphas
 qui ressuscitent, améliore ton armure à la forge du village. Jusqu'à 4 joueurs par village.
 
-Plan, périmètre et choix techniques : [docs/PLAN.md](docs/PLAN.md).
+Choix techniques, arborescence et flux réseau : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Lancer en local
 
@@ -66,7 +66,7 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 | `npm run typecheck` | Vérification TypeScript |
 | `npm run db:migrate` | Applique les migrations Supabase manquantes (`DATABASE_URL` requis) |
 | `npm run smoke` | Test bot (autorise les invités via `ALLOW_GUESTS=1`, réservé aux tests) : création, 4 joueurs max, combat, or, forge, anti-téléportation |
-| `npm run test:rules` | Règles : dispersion de la meute, rappel, régénération, forge, éveil et renforcement des Alphas, profil |
+| `npm run test:rules` | Règles de la simulation, sans réseau (`node:test`) : un fichier par thème dans `tests/rules/` (monde, combat, meute, Alphas, géants, faune, village, réseau). Un seul fichier : `npx tsx --test tests/rules/geants.test.ts` ; un seul test : `--test-name-pattern="Marché"` ; autre graine ou autre heure : `TEST_SEED=…`, `TEST_NOW=…` |
 
 ## Contrôles
 
@@ -109,7 +109,8 @@ shared/   règles et équilibrage (config.ts), protocole réseau, maths
 server/   HTTP + WebSocket + salons (index.ts), simulation d'un village (room.ts), sauvegarde Supabase (persist.ts)
 supabase/ schéma SQL des profils
 client/   lobby, boucle de jeu, rendu Canvas procédural, HUD HTML, minicarte
-scripts/  test de fumée multi-clients
+scripts/  test de fumée multi-clients, migrations
+tests/    tests de règles par thème (tests/rules/*.test.ts) et leurs outils communs (helpers.ts)
 ```
 
 Tout l'équilibrage (PV, dégâts, zones, chance d'apprivoisement, coût de la forge…) est dans
