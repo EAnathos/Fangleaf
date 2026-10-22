@@ -12,7 +12,7 @@
     "start": "NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit",
     "smoke": "tsx scripts/smoke.ts",
-    "test:rules": "tsx scripts/rules.ts",
+    "test:rules": "tsx --test tests/rules/*.test.ts",
     "db:migrate": "tsx scripts/migrate.ts"
   },
   "dependencies": {

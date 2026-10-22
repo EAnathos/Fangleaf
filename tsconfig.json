@@ -11,5 +11,5 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["shared", "server", "client/src", "scripts", "vite.config.ts"]
+  "include": ["shared", "server", "client/src", "scripts", "tests", "vite.config.ts"]
 }
