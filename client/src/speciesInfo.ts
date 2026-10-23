@@ -46,4 +46,5 @@ export const BOSS_LINES: Record<string, { intro: string; cry: string }> = {
   salamander_queen: { intro: 'Mes petits ont faim. Et toi, tu sens bon le roussi.', cry: 'À la braise, mes enfants !' },
   ash_lord: { intro: 'Ici, la lumière, c\'est la lave. Et moi, j\'aime le noir.', cry: 'Que la cendre t\'ensevelisse !' },
   mountain_tortoise: { intro: 'Hmm… Un visiteur. Le dernier, c\'était il y a mille ans. Je l\'ai pris pour un caillou.', cry: 'La montagne se réveille !' },
+  kraken: { intro: 'Un bateau… Il y a si longtemps qu\'aucun bateau n\'avait osé sortir. Je vais le ramener par le fond, comme les autres.', cry: 'Par le fond !' },
 };

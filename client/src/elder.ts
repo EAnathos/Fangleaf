@@ -105,7 +105,7 @@ export function elderGreeting(told: number, total: number, boat: number, stages:
   }
   if (boat < stages) return ['Alors, on s\'y remet, à ce bateau ?'];
   // le cœur volcanique : la dernière étape (1 : pris sur son autel, 2 : installé dans le bateau)
-  if (heart >= 2) return ['Le cœur bat dans la coque : le bateau est prêt à prendre la mer.', 'Pour la suite… on verra bien. Une chose à la fois.'];
+  if (heart >= 2) return ['Le cœur bat dans la coque : le bateau est prêt à prendre la mer, cap sur le Colisée.', 'Mais méfie-toi, au large. Les vieux marins parlaient d\'une bête énorme, toute en tentacules, qui garde le passage.'];
   if (heart === 1) return ['Tu l\'as trouvé ! Je le sens d\'ici, ce cœur, il chauffe comme une forge.', 'Va le poser dans le bateau, au bout de l\'île. Une Pierre de passage t\'y mène.'];
   return [
     'La coque est finie. Mais un bateau sans cœur ne va nulle part : il lui faut de quoi fendre la mer.',

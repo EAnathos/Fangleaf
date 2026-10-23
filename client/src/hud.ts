@@ -3,7 +3,7 @@
 import {
   ALPHA_EQUIP_MAX, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, armyCap, LESSONS, LESSONS_PER_TOME, LESSON_MS, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
-  armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
+  armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
 import type { BoardRow, PlayerState, UnitTuple } from '../../shared/protocol.ts';
 import { HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
@@ -104,11 +104,23 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
       ? { cave: { id: HALL_ID, enter: true }, pos: map.volcanoMouth, label: 'E — Descendre dans le volcan' }
       : { pos: map.volcanoMouth, label: 'Scellée : vaincs les géants de la Mer de sable' },
     { cave: { id: HALL_ID, enter: false }, pos: map.depths.exit, label: 'E — Remonter à la surface' },
+    // la haute mer : on prend la mer depuis le bateau prêt ; à bord, on peut faire demi-tour, et une fois le Kraken
+    // vaincu, la route du Colisée est libre
+    ...(() => {
+      const c = map.voyage;
+      if (!c) return [];
+      const free = v.beaten.includes(c.boss);
+      return [
+        ...(v.lore[1] >= BOAT_STAGES.length && v.heart >= HEART_IN_BOAT
+          ? [{ cave: { id: c.id, enter: true }, pos: c.entrance, reach: BOAT_REACH, label: free ? 'E — Prendre la mer (cap sur le Colisée)' : 'E — Prendre la mer' }]
+          : []),
+        { cave: { id: c.id, enter: false }, pos: c.exit, label: 'E — Faire demi-tour (retour au port)' },
+        ...(free ? [{ pos: { x: c.inside.x + DECK_RX - 130, y: c.inside.y }, reach: 150, label: 'Cap sur le Colisée : la suite arrive bientôt' }] : []),
+      ];
+    })(),
     // le bateau rebâti : il lui faut encore son cœur, dernière étape avant de prendre la mer
-    ...(v.lore[1] >= BOAT_STAGES.length
-      ? [v.heart >= HEART_IN_BOAT
-        ? { pos: map.shipwreck, reach: BOAT_REACH, label: 'Le bateau est prêt à prendre la mer' }
-        : v.heart === HEART_TAKEN
+    ...(v.lore[1] >= BOAT_STAGES.length && v.heart < HEART_IN_BOAT
+      ? [v.heart === HEART_TAKEN
           ? { heart: true, pos: map.shipwreck, reach: BOAT_REACH, label: 'E — Installer le cœur volcanique dans le bateau' }
           : { pos: map.shipwreck, reach: BOAT_REACH, label: 'Il manque au bateau un cœur pour naviguer' }]
       : []),
@@ -119,7 +131,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
         ? { pos: map.depths.inside, reach: HEART_REACH + 40, label: `Scellé : encore ${left} géant${left > 1 ? 's' : ''} du volcan à vaincre` }
         : { heart: true, pos: map.depths.inside, reach: HEART_REACH, label: 'E — Prendre le cœur volcanique' }];
     })(),
-    ...map.caves.flatMap((c): Spot[] => [
+    ...map.caves.filter((c) => c.zone !== VOYAGE_ZONE).flatMap((c): Spot[] => [
       v.unlocked.includes(c.id)
         ? {
           cave: { id: c.id, enter: true }, pos: c.entrance,
@@ -131,7 +143,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     ...v.chests.filter((c) => !c[3]).map((c): Spot => ({ chest: c[0], pos: { x: c[1], y: c[2] }, label: 'E — Ouvrir le coffre' })),
     ...map.bushes.filter((b) => !v.bare.includes(b.id) && Math.hypot(x - b.x, y - b.y) < BUSH_PICK_R)
       .map((b): Spot => ({ pick: true, pos: b, reach: BUSH_PICK_R, label: 'E — Cueillir' })),
-    ...v.sleepers.map((z): Spot => ({ panel: 'talk', pos: z, at: z.cave, reach: z.r + BOSS_TALK_R, label: `E — Parler à ${SPECIES[map.caves[z.cave].boss].name}` })),
+    ...v.sleepers.filter((z) => map.caves[z.cave]?.zone !== VOYAGE_ZONE).map((z): Spot => ({ panel: 'talk', pos: z, at: z.cave, reach: z.r + BOSS_TALK_R, label: `E — Parler à ${SPECIES[map.caves[z.cave].boss].name}` })),
   ];
   return spots.find((b) => Math.hypot(x - b.pos.x, y - b.pos.y) < (b.reach ?? BUILDING_REACH));
 };
@@ -1563,7 +1575,7 @@ export class Hud {
   private drawCaves(ctx: CanvasRenderingContext2D, m: (v: number) => number, size: number) {
     this.drawVolcanoMark(ctx, m);
     for (const c of this.map.caves) {
-      if (c.entrance.x >= WORLD_HALF) continue; // antre sous le volcan : hors de la carte
+      if (c.entrance.x >= WORLD_HALF || c.zone === VOYAGE_ZONE) continue; // antre sous le volcan (hors de la carte), ou le bateau
       if (!this.zoneOpen(c.zone) || !this.fog.isExplored(c.entrance.x, c.entrance.y)) continue;
       const x = m(c.entrance.x), y = m(c.entrance.y);
       ctx.fillStyle = '#2A2E2D';

@@ -17,7 +17,7 @@
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = mer profonde).
 
-import { CAVE_RX, CAVE_RY, HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
+import { CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -61,6 +61,8 @@ export interface Cave {
   exit: Pt; // sortie, en bas de l'intérieur
   rx?: number; // demi-axes de l'intérieur, s'ils ne sont pas ceux d'une grotte (CAVE_RX, CAVE_RY)
   ry?: number;
+  home?: Pt; // où se tient son géant, s'il n'est pas au fond (le Kraken, dans l'eau contre le bateau)
+  spots?: Pt[]; // d'autres places où il peut resurgir (le Kraken, entre deux phases : bâbord, tribord, proue)
 }
 /** Demi-axes de l'intérieur d'une grotte (ou de la salle du volcan). */
 export const caveRadii = (c: Cave) => ({ rx: c.rx ?? CAVE_RX, ry: c.ry ?? CAVE_RY });
@@ -325,6 +327,7 @@ export class WorldMap {
     }
 
     this.placeLairs(bosses.filter((b) => SPECIES[b].zone === VOLCANO_ZONE));
+    this.placeVoyage(bosses.filter((b) => SPECIES[b].zone === VOYAGE_ZONE));
 
     // Filons d'or : éparpillés sur l'île, hors de l'eau, du village, des camps et des chemins.
     for (let tries = 0; tries < 8000 && this.ores.length < 120; tries++) {
@@ -1025,7 +1028,7 @@ export class WorldMap {
     // butte rocheuse des grottes (l'ouverture, devant, reste libre)
     for (const c of this.caves) {
       const { x, y } = c.entrance;
-      if (x >= WORLD_HALF) continue; // antre dans la salle du volcan : sa butte est hors de la grille (hallSolid)
+      if (x >= WORLD_HALF || c.zone === VOYAGE_ZONE) continue; // antre du volcan (hors de la grille) ou bateau : pas de butte
       this.solidDisc(x - 68, y - 20, 42);
       this.solidDisc(x + 68, y - 20, 42);
       this.solidRect(x - 60, y - 88, x + 60, y - 42);
@@ -1040,6 +1043,41 @@ export class WorldMap {
       return nx * nx + ny * ny < caveEdge(c, Math.atan2(ny, nx)) ** 2;
     };
     return inside(this.depths) ? this.depths : this.caves.find(inside);
+  }
+
+  /**
+   * La haute mer : prendre le bateau mène sur son pont, au large (une « grotte » hors de l'île, dont l'entrée est le
+   * bateau rebâti, côté terre de l'épave). Autour du pont, la mer ; le Kraken attend contre le flanc, dans l'eau.
+   */
+  private placeVoyage(bosses: number[]) {
+    const sw = this.shipwreck, bs = this.boatStone;
+    for (const boss of bosses) {
+      const id = this.caves.length, inside = { x: WORLD_HALF + 1400 + id * CAVE_GAP, y: 0 };
+      this.caves.push({
+        id, zone: VOYAGE_ZONE, boss, rx: SEA_RX, ry: SEA_RY, inside,
+        entrance: { x: sw.x + (bs.x - sw.x) * 0.45, y: sw.y + (bs.y - sw.y) * 0.45 },
+        exit: { x: inside.x - DECK_RX + 110, y: inside.y + 20 }, // à la poupe
+        home: { x: inside.x + 90, y: inside.y - DECK_RY - 75 }, // contre le flanc, côté bâbord
+        spots: [
+          { x: inside.x + 90, y: inside.y - DECK_RY - 75 }, // bâbord
+          { x: inside.x - 140, y: inside.y + DECK_RY + 75 }, // tribord
+          { x: inside.x + DECK_RX + 110, y: inside.y + 10 }, // devant la proue (jamais à la poupe : on y fait demi-tour)
+        ],
+      });
+    }
+  }
+
+  /** Le voyage en haute mer (ou undefined s'il n'y en a pas). */
+  get voyage() {
+    return this.caves.find((c) => c.zone === VOYAGE_ZONE);
+  }
+
+  /** Sur le pont du bateau : coque pointue vers la proue (à droite), mât au milieu. */
+  onDeck(c: Cave, x: number, y: number) {
+    const dx = (x - c.inside.x) / DECK_RX, dy = (y - c.inside.y) / DECK_RY;
+    if (dist2(x, y, c.inside.x + 40, c.inside.y) < 26 ** 2) return false; // le mât
+    const taper = dx > 0 ? 1 - dx * dx * dx * 0.75 : 1; // la proue s'affine
+    return Math.abs(dx) ** 2.6 + (dy / taper) ** 2 < 1;
   }
 
   /** Dans la salle du volcan : mares de lave, autel du cœur et buttes des antres (les seuls obstacles). */
@@ -1171,6 +1209,7 @@ export class WorldMap {
   blocked(x: number, y: number) {
     if (x <= -WORLD_HALF || y <= -WORLD_HALF || x >= WORLD_HALF || y >= WORLD_HALF) {
       const c = this.caveAt(x, y);
+      if (c?.zone === VOYAGE_ZONE) return !this.onDeck(c, x, y); // au large : tout sauf le pont, c'est la mer
       return !c || (c === this.depths && this.hallSolid(x, y));
     }
     return this.solid(Math.floor((y + WORLD_HALF) / MAP_CELL) * N + Math.floor((x + WORLD_HALF) / MAP_CELL));

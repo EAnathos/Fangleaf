@@ -56,7 +56,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
       const zones = [1, 2, 3, 4, 5, 6].map((z) => { const q = m.spineAt((m.zoneFrom(z) + m.zoneTo(z)) / 2); return m.zoneAt(q.x, q.y); }).join('');
       const end = m.spineAt(m.length - 250);
       const reachEnd = m.findPath(stone.x, stone.y + 50, end.x, end.y, 600000);
-      check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '123456' && m.caves.filter((c) => c.zone <= 6).length === 15 && m.caves.filter((c) => c.zone === 7).length === 3,
+      check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '123456' && m.caves.filter((c) => c.zone <= 6).length === 15 && m.caves.filter((c) => c.zone === 7).length === 3 && m.caves.filter((c) => c.zone === 8).length === 1,
         `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de l'île (Mer de sable) atteignable, 15 grottes sur l'île et 3 antres sous le volcan`);
       const mid = m.length / 2, c = m.spineAt(mid), nv = m.normalAt(mid), far = m.halfWidth(mid) + 1700;
       let shallow = false;
@@ -97,7 +97,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     const a = new WorldMap(99), b = new WorldMap(99);
     check(a.village.x === b.village.x && a.sites[0].x === b.sites[0].x && a.isWater(500, 500) === b.isWater(500, 500) && a.zoneAt(2000, -1500) === b.zoneAt(2000, -1500), 'carte déterministe');
     const r = room();
-    check(![...r.units.values()].some((u: { s: number; x: number; y: number }) => !SPECIES[u.s].swim && r.map.blocked(u.x, u.y)), 'aucun monstre dans l\'eau (sauf les serpents)');
+    check(![...r.units.values()].some((u: { s: number; x: number; y: number }) => !SPECIES[u.s].swim && !SPECIES[u.s].anchored && r.map.blocked(u.x, u.y)), 'aucun monstre dans l\'eau (sauf les serpents et le Kraken)');
     const all = [...r.units.values()] as { s: number; x: number; y: number }[];
     const inZone = all.filter((u) => r.map.zoneAt(u.x, u.y) === SPECIES[u.s].zone).length / all.length;
     check(inZone > 0.9, `monstres dans leur zone (${Math.round(inZone * 100)} %, ${all.length} au total)`);
@@ -171,7 +171,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
   });
 
   rule('Ordre des espèces figé : leur index sert dans les sauvegardes (essences, Alphas). On n\'ajoute qu\'à la fin.', () => {
-    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise';
+    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise kraken_tentacle kraken';
     check(SPECIES.map((sp) => sp.key).join(' ') === order, `ordre des ${SPECIES.length} espèces inchangé (sauvegardes intactes)`);
   });
 

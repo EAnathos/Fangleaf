@@ -15,6 +15,7 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 - [Grottes et géants](#grottes-et-géants)
 - [Le volcan et le cœur volcanique](#le-volcan-et-le-cœur-volcanique)
 - [Le vieil homme et le bateau](#le-vieil-homme-et-le-bateau)
+- [La haute mer et le Kraken](#la-haute-mer-et-le-kraken)
 - [Jour, nuit et météo](#jour-nuit-et-météo)
 - [Jouer à plusieurs](#jouer-à-plusieurs)
 
@@ -176,7 +177,21 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Tous ses souvenirs retrouvés, il reconstruit le **bateau** échoué au bout de l'île, en plusieurs étapes payées en
   or et avec la réserve du village. Une fois fini, une Pierre de passage y mène.
 - Il lui manque encore son **cœur** : celui du volcan. On le pose dans la coque (**E** devant le bateau), et le
-  bateau est prêt à prendre la mer, vers d'autres terres (à venir).
+  bateau est prêt à prendre la mer, cap sur le Colisée.
+
+## La haute mer et le Kraken
+
+- **E** devant le bateau prêt : on prend la mer avec sa meute, et on se retrouve sur le pont, au large. À la poupe,
+  **E** pour faire demi-tour et rentrer au port.
+- Quelques secondes après qu'on est monté à bord, le **Kraken** surgit contre le flanc du bateau. Il ne quitte pas
+  l'eau, mais ses coups de tentacule s'abattent sur tout le pont (couloirs annoncés), et ses tentacules s'agrippent
+  au bastingage (ils ne rapportent rien, mais frappent ce qui passe à portée).
+- **Trois phases** : chaque fois qu'on le vainc, il replonge, intouchable, file sous l'eau (ses bulles le trahissent)
+  et resurgit ailleurs autour du bateau (bâbord, tribord ou devant la proue), avec toute sa vie et de
+  nouvelles attaques (nuages d'encre qui ralentissent, pluie d'eau, plus de tentacules ; à la dernière, il frappe
+  plus souvent).
+- Tant qu'il n'est pas vaincu, on ne va pas plus loin. Vaincu, il laisse un coffre, et la route du Colisée est libre
+  (le Colisée arrive bientôt). S'il ne reste plus personne à bord, il replonge, guéri.
 
 ## Jour, nuit et météo
 

@@ -427,11 +427,11 @@ export function alphaStats(species: number, lvl: number, alphaCount: number, leg
 
 // ───────────────────────── Attaques spéciales des mini-boss ─────────────────────────
 // Chaque attaque est annoncée au sol (zone rouge) avant de frapper : on peut l'esquiver.
-export type BossMove =
+export type BossMove = (
   | { kind: 'leap'; cd: number } // bondit sur une cible et écrase la zone d'arrivée
   | { kind: 'split'; at: number[]; n: number } // se divise en petits monstres à ces seuils de PV
   | { kind: 'spores'; cd: number } // nuages de spores sous les dompteurs : dégâts dans la durée
-  | { kind: 'summon'; cd: number; n: number; max: number } // appelle des renforts de son espèce
+  | { kind: 'summon'; cd: number; n: number; max: number; minion?: string } // appelle des renforts de son espèce (ou de l'espèce minion)
   | { kind: 'charge'; cd: number } // charge en ligne droite
   | { kind: 'web'; cd: number } // toiles qui ralentissent
   | { kind: 'slam'; cd: number; power?: number } // onde de choc tout autour de lui (power : multiplicateur des dégâts, 1,5 par défaut)
@@ -441,7 +441,10 @@ export type BossMove =
   | { kind: 'volley'; cd: number; n: number; shot: 'bolt' | 'jet' } // salve de projectiles en éventail (esquivable)
   | { kind: 'mortar'; cd: number; n: number } // pluie de tirs en cloche, cercles annoncés au sol
   | { kind: 'trail'; cd: number; dur: number } // pendant dur secondes, il laisse derrière lui des flaques de lave qui brûlent
-  | { kind: 'spin'; cd: number; arms: number; dur: number }; // il s'arrête : des jets de flammes tournent autour de lui (annoncés au sol)
+  | { kind: 'spin'; cd: number; arms: number; dur: number } // il s'arrête : des jets de flammes tournent autour de lui (annoncés au sol)
+  | { kind: 'lash'; cd: number; n: number } // coups de tentacule : des couloirs annoncés vers ses cibles, qui s'abattent d'un coup
+  | { kind: 'ink'; cd: number } // nuages d'encre sous les dompteurs : ils brûlent et ralentissent
+) & { from?: number }; // from : phase de combat à partir de laquelle il s'en sert (géant à plusieurs phases)
 
 export const BOSS_MOVES: Record<string, BossMove[]> = {
   slime_queen: [{ kind: 'leap', cd: 6 }, { kind: 'split', at: [0.66, 0.33], n: 3 }],
@@ -464,6 +467,12 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   // piqués, tourbillon de flammes, il disparaît dans la cendre, sa nuée
   ash_lord: [{ kind: 'leap', cd: 5 }, { kind: 'spin', cd: 9, arms: 3, dur: 3.5 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
   // son volcan crache, ses jets de flammes tournent, il sème la lave, il fait trembler le sol
+  // Le Kraken, en haute mer : trois phases (chaque fois vaincu, il replonge et revient avec toute sa vie, plus redoutable)
+  kraken: [
+    { kind: 'lash', cd: 4, n: 2 }, { kind: 'summon', cd: 10, n: 2, max: 4, minion: 'kraken_tentacle' },
+    { kind: 'ink', cd: 7, from: 2 }, { kind: 'lash', cd: 3, n: 3, from: 2 },
+    { kind: 'mortar', cd: 6, n: 6, from: 3 }, { kind: 'summon', cd: 8, n: 3, max: 6, minion: 'kraken_tentacle', from: 3 },
+  ],
   mountain_tortoise: [{ kind: 'mortar', cd: 5, n: 6 }, { kind: 'spin', cd: 10, arms: 4, dur: 4 }, { kind: 'trail', cd: 12, dur: 5 }, { kind: 'slam', cd: 7, power: 3 }, { kind: 'enrage', below: 0.3 }],
 };
 /** Coup ordinaire d'un géant : une seule cible (deux pour la reine des Gluants et l'ours), dégâts multipliés. */
@@ -472,7 +481,7 @@ export const bossMelee = (key: string) => BOSS_MELEE[key] ?? { targets: 1, mult:
 export const MOVE_NAMES: Record<BossMove['kind'], string> = {
   leap: 'Bond écrasant', split: 'Division', spores: 'Nuages de spores', summon: 'Renforts', charge: 'Charge',
   web: 'Toiles', slam: 'Onde de choc', enrage: 'Rage', rocks: 'Pluie de rochers', blink: 'Clignement',
-  volley: 'Salve', mortar: 'Pluie de mortiers', trail: 'Traînée de lave', spin: 'Tourbillon de flammes',
+  volley: 'Salve', mortar: 'Pluie de mortiers', trail: 'Traînée de lave', spin: 'Tourbillon de flammes', lash: 'Coup de tentacule', ink: 'Nuage d\'encre',
 };
 // Les géants poursuivent : quand leur cible s'éloigne, ils accélèrent (impossible de les tuer en reculant).
 export const BOSS_CHASE_R = 0; // dès que sa cible n'est plus au contact
@@ -496,6 +505,9 @@ export interface Species {
   population: number;
   pack: [number, number];
   boss?: boolean; // mini-boss de grotte : n'apparaît que dans sa grotte, ne s'apprivoise pas, lâche son âme
+  phases?: number; // géant à plusieurs phases : vaincu, il reprend toute sa vie jusqu'à la dernière
+  anchored?: boolean; // ne se déplace pas (le Kraken dans l'eau, ses tentacules accrochés au bateau)
+  minion?: boolean; // renfort d'un géant seulement : ni or, ni essence, ni bestiaire
   base?: string; // boss : espèce dont il est la version géante (son âme rend légendaire l'Alpha de cette espèce)
   title?: string; // boss : son nom propre (affiché en entrant dans sa grotte et quand on lui parle)
   sprite?: string; // apparence à réutiliser (par défaut : key)
@@ -583,12 +595,15 @@ export const SPECIES: Species[] = [
   { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Pyrrha, la Mère des Braises', sprite: 'salamander', base: 'salamander' },
   { key: 'ash_lord', name: 'Seigneur des cendres', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Noctembre, l\'Aile de Cendre', sprite: 'ash_bat', base: 'ash_bat' },
   { key: 'mountain_tortoise', name: 'Tortue-Montagne', color: '#40342E', r: 70, hp: 170000, dmg: 520, speed: 185, atkCd: 1.5, gold: 5000, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Cratère, la Montagne qui Marche', sprite: 'lava_tortoise', base: 'lava_tortoise' },
+  // Haute mer : le Kraken attaque le bateau sur la route du Colisée ; ses tentacules s'accrochent au pont.
+  { key: 'kraken_tentacle', name: 'Tentacule du Kraken', color: '#7A4A8A', r: 32, hp: 9000, dmg: 260, speed: 0, atkCd: 1.3, gold: 0, zone: 8, population: 0, pack: [1, 1], anchored: true, minion: true },
+  { key: 'kraken', name: 'Kraken', color: '#6A3E7E', r: 100, hp: 130000, dmg: 480, speed: 0, atkCd: 1.6, gold: 7000, zone: 8, population: 0, pack: [1, 1], boss: true, title: 'Léviathys, le Kraken des Abysses', anchored: true, phases: 3 },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);
 
 /** Espèces triées par zone (pour l'affichage : Tanière, bestiaire). */
-export const SPECIES_BY_ZONE = SPECIES.map((_, i) => i).sort((a, b) => SPECIES[a].zone - SPECIES[b].zone || a - b);
+export const SPECIES_BY_ZONE = SPECIES.map((_, i) => i).filter((i) => !SPECIES[i].minion).sort((a, b) => SPECIES[a].zone - SPECIES[b].zone || a - b);
 
 // Le monde est une île (voir worldmap.ts) découpée en ZONES zones successives, de plus en plus loin de la plage d'arrivée.
 export const ZONES = 6; // la Mer de sable va jusqu'au bout de l'île
@@ -597,7 +612,15 @@ export const ZONE_WEIGHTS = [1, 1, 1, 1, 1, 1.6];
 // Sous le volcan de la Mer de sable : une zone de plus, souterraine (une grande salle hors de l'île), ses monstres et
 // trois antres de géants. Les trois vaincus, le cœur volcanique se libère au centre de la salle.
 export const VOLCANO_ZONE = ZONES + 1;
-export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable', 'Entrailles du volcan'];
+export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable', 'Entrailles du volcan', 'Haute mer'];
+// En haute mer : une fois le bateau prêt, on prend la mer vers le Colisée ; le Kraken attaque le bateau en chemin.
+// Le pont du bateau est une « grotte » hors de l'île (son entrée : le bateau, au bout de l'île).
+export const VOYAGE_ZONE = VOLCANO_ZONE + 1;
+export const DECK_RX = 520; // pont du bateau (le reste, autour, c'est la mer)
+export const DECK_RY = 150;
+export const SEA_RX = 950; // la mer visible autour du bateau
+export const SEA_RY = 620;
+export const KRAKEN_DELAY_S = 3; // à bord depuis ce temps-là : le Kraken surgit
 export const VOLCANO_R = 460; // le volcan, sur l'île : demi-largeur de sa base (une ellipse aplatie, VOLCANO_RY) ; il tient à l'écran
 export const VOLCANO_RY = 0.55;
 export const HALL_RX = 950; // la salle sous le volcan (ellipse irrégulière, comme une grotte) : depuis sa sortie, on voit l'autel

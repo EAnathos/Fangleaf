@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, armyCap, lessonBonus, LESSON_KINDS, LESSONS, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, armyCap, lessonBonus, LESSON_KINDS, LESSONS, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
@@ -12,7 +12,7 @@ import {
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
-import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
+import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { HALL_ID, WorldMap } from '../shared/worldmap.ts';
 import { sky } from '../shared/weather.ts';
@@ -49,6 +49,9 @@ interface Unit {
   legend: boolean; // Alpha légendaire
   // mini-boss
   castUntil: number; // immobile pendant qu'il prépare une attaque
+  phase?: number; // géant à plusieurs phases (le Kraken) : la phase en cours, de 1 à SPECIES.phases
+  resurface?: number; // entre deux phases, il a plongé : il remonte à ce temps-là
+  diveTo?: { x: number; y: number }; // … ailleurs autour du bateau : il y file sous l'eau (ses bulles le trahissent)
   trailUntil?: number; // traînée de lave : il en sème jusqu'à ce temps-là
   trailX?: number; // dernière flaque posée
   trailY?: number;
@@ -923,6 +926,7 @@ export class Room {
   private wantsSoul(p: Player, boss: number) {
     if (p.essences[boss] >= LEGEND_SOULS) return false;
     const base = SPECIES.findIndex((sp) => sp.key === SPECIES[boss].base);
+    if (base < 0) return false; // le Kraken : pas d'Alpha à rendre légendaire
     return !(this.fieldAlpha(p, base)?.legend || p.resting.some((r) => r.s === base && r.legend));
   }
 
@@ -1077,6 +1081,7 @@ export class Room {
     this.updateRevives();
     this.updateRespawns();
     this.clearEmptyCaves();
+    this.updateVoyage();
     this.updateAwakenings();
     this.updateSleepers();
     if (this.tick % TICK_HZ === 0) {
@@ -1126,7 +1131,7 @@ export class Room {
     for (const p of this.players.values()) {
       if (p.dead) continue;
       this.grid.query(p.x, p.y, 520, (e) => {
-        if (e.kind !== 'u' || e.owner || isBoss(e.s) || p.seen.has(e.s) || dist2(p.x, p.y, e.x, e.y) > 520 ** 2) return;
+        if (e.kind !== 'u' || e.owner || isBoss(e.s) || SPECIES[e.s].minion || p.seen.has(e.s) || dist2(p.x, p.y, e.x, e.y) > 520 ** 2) return;
         p.seen.add(e.s);
         p.dirty = true;
         this.events.push({ e: 'seen', to: p.id, s: e.s });
@@ -1728,6 +1733,28 @@ export class Room {
     this.hazards.push({ x2: h.x, y2: h.y, start: this.time, until: h.at, fired: false, nextTick: 0, boss, ...h });
   }
 
+  /**
+   * En haute mer : quelques secondes après qu'un dompteur est monté à bord, le Kraken surgit et attaque le bateau
+   * (pas besoin de lui parler). S'il n'y a plus personne à bord, il se rendort (clearEmptyCaves).
+   */
+  private voyageSince = 0;
+  private updateVoyage() {
+    const c = this.map.voyage;
+    if (!c || this.tick % 5 !== 0) return;
+    const u = this.units.get(this.caveBoss[c.id]);
+    const aboard = [...this.players.values()].filter((p) => !p.dead && this.map.caveAt(p.x, p.y) === c);
+    if (!aboard.length || !u || !u.dormant) {
+      this.voyageSince = 0;
+      return;
+    }
+    this.voyageSince ||= this.time;
+    if (this.time - this.voyageSince < KRAKEN_DELAY_S) return;
+    const p = aboard[0];
+    u.dormant = false;
+    u.target = p.id;
+    this.events.push({ e: 'challenge', cave: c.id, id: u.id, by: p.id });
+  }
+
   /** Plus aucun dompteur debout dans la grotte (sorti, mort ou parti) : les renforts du boss disparaissent. */
   private clearEmptyCaves() {
     if (this.tick % 5 !== 0) return;
@@ -1751,7 +1778,7 @@ export class Room {
     this.hazards = this.hazards.filter((h) => h.boss !== u);
     Object.assign(u, {
       dormant: true, hitters: new Set(), hp: u.maxHp, x: u.homeX, y: u.homeY, target: 0, lastAttacker: 0, castUntil: 0, windup: 0,
-      splitDone: 0, enraged: false, atkCdBase: sp.atkCd, speed: sp.speed, path: null,
+      splitDone: 0, enraged: false, atkCdBase: sp.atkCd, speed: sp.speed, path: null, phase: 1, resurface: 0, diveTo: undefined, hidden: false,
     });
   }
 
@@ -1812,14 +1839,18 @@ export class Room {
     this.events.push({ e: 'challenge', cave, id: u.id, by: p.id });
   }
 
-  private summonMinions(u: Unit, n: number, max: number) {
-    const base = SPECIES.findIndex((sp) => sp.key === SPECIES[u.s].base);
+  private summonMinions(u: Unit, n: number, max: number, minion?: string) {
+    const base = SPECIES.findIndex((sp) => sp.key === (minion ?? SPECIES[u.s].base));
     if (base < 0) return;
     let alive = 0;
     for (const m of this.units.values()) if (m.summoner === u.id && !m.owner) alive++;
+    const deck = SPECIES[base].anchored ? this.map.caveAt(u.x, u.y) : undefined;
     for (let i = 0; i < Math.min(n, max - alive); i++) {
       const a = Math.random() * Math.PI * 2;
-      const at = this.map.freeNear(u.x + Math.cos(a) * (u.r + 30), u.y + Math.sin(a) * (u.r + 30));
+      // un tentacule surgit de la mer et s'accroche au bastingage, n'importe où autour du pont
+      const at = deck?.zone === VOYAGE_ZONE
+        ? this.map.freeNear(deck.inside.x + Math.cos(a) * DECK_RX * 0.78, deck.inside.y + Math.sin(a) * DECK_RY * 0.72)
+        : this.map.freeNear(u.x + Math.cos(a) * (u.r + 30), u.y + Math.sin(a) * (u.r + 30));
       const m = this.createUnit(base, false, at.x, at.y);
       m.summoner = u.id;
       [m.homeX, m.homeY] = [u.homeX, u.homeY];
@@ -1875,8 +1906,8 @@ export class Room {
         this.events.push({ e: 'move', id: u.id, kind: m.kind });
       }
     });
-    // Une seule attaque à recharge à la fois : la première prête.
-    const i = moves.findIndex((m, k) => 'cd' in m && u.moveCd[k] <= 0);
+    // Une seule attaque à recharge à la fois : la première prête (et déjà de sa phase, pour un géant à plusieurs phases).
+    const i = moves.findIndex((m, k) => 'cd' in m && u.moveCd[k] <= 0 && (m.from ?? 1) <= (u.phase ?? 1));
     if (i < 0) return false;
     const m = moves[i] as Extract<BossMove, { cd: number }>;
     u.moveCd[i] = m.cd;
@@ -1906,7 +1937,22 @@ export class Room {
         }
         break;
       case 'summon':
-        this.summonMinions(u, m.n, m.max);
+        this.summonMinions(u, m.n, m.max, m.minion);
+        break;
+      case 'lash': {
+        // coups de tentacule : un couloir annoncé vers chaque cible (jusqu'à n), qui s'abat d'un coup
+        const targets = this.targetsNear(u, u.x, u.y, 900).sort(() => Math.random() - 0.5).slice(0, m.n);
+        for (const e of targets) {
+          const ang = Math.atan2(e.y - u.y, e.x - u.x), len = Math.min(760, Math.hypot(e.x - u.x, e.y - u.y) + 140);
+          this.hazard(u, { kind: 1, style: 'tentacle', x: u.x, y: u.y, x2: u.x + Math.cos(ang) * len, y2: u.y + Math.sin(ang) * len, r: 40, at: this.time + 1.1, dmg: d * 1.4 });
+        }
+        break;
+      }
+      case 'ink':
+        // nuages d'encre sous les dompteurs : ils brûlent et ralentissent ceux qui y restent
+        for (const p of u.owner ? [t] : this.alliesNear(u.x, u.y, 1200).filter((e) => e.kind === 'p').slice(0, MAX_PLAYERS)) {
+          this.hazard(u, { kind: 2, style: 'ink', x: p.x, y: p.y, r: 105, at: this.time + 0.9, until: this.time + 6, dmg: d * 0.5 });
+        }
         break;
       case 'charge': {
         // Charge : couloir annoncé, puis le boss le traverse d'un coup.
@@ -2014,7 +2060,10 @@ export class Room {
       }
       if (h.fired && h.kind === 2 && this.time < h.until && this.time >= h.nextTick) {
         h.nextTick = this.time + 0.5;
-        for (const e of this.targetsNear(h.boss, h.x, h.y, h.r)) this.damage(e, h.dmg * 0.5, h.boss);
+        for (const e of this.targetsNear(h.boss, h.x, h.y, h.r)) {
+          this.damage(e, h.dmg * 0.5, h.boss);
+          if (h.style === 'ink' && e.kind === 'p') e.slowUntil = this.time + 0.7; // l'encre colle
+        }
       }
     }
     this.hazards = this.hazards.filter((h) => this.units.has(h.boss.id) && (!h.fired || (h.kind === 2 && this.time < h.until) || (!!h.spin && this.time < h.spin.end) || this.time < h.at + 0.3));
@@ -2047,8 +2096,10 @@ export class Room {
   private spawnBoss(cave: number) {
     const c = this.map.caves[cave];
     if (!c) return 0;
-    const u = this.createUnit(c.boss as SpeciesId, false, c.inside.x, c.inside.y - 60);
+    const at = c.home ?? { x: c.inside.x, y: c.inside.y - 60 };
+    const u = this.createUnit(c.boss as SpeciesId, false, at.x, at.y);
     u.maxHp = u.hp = SPECIES[u.s].hp * this.bossHpMult();
+    u.phase = 1;
     u.dormant = true; // il attend qu'on vienne lui parler
     return u.id;
   }
@@ -2075,7 +2126,9 @@ export class Room {
     if (!c || p.dead) return;
     if (this.swimming(p)) return; // pas de grotte à la nage
     // grotte pas encore débloquée ; le volcan, lui, s'ouvre une fois vaincus les géants de la Mer de sable
-    if (enter && !(id === HALL_ID ? volcanoOpen(this.beaten) : this.unlocked.includes(id))) return;
+    // le large, lui, s'ouvre quand le bateau est prêt (rebâti, son cœur volcanique installé)
+    const open = id === HALL_ID ? volcanoOpen(this.beaten) : c.zone === VOYAGE_ZONE ? boatReady(this.boat, this.heart) : this.unlocked.includes(id);
+    if (enter && !open) return;
     const from = enter ? c.entrance : c.exit;
     if (dist2(p.x, p.y, from.x, from.y) > (BUILDING_REACH + 40) ** 2) return;
     if (this.time - (this.caveAt.get(p) ?? -Infinity) < CAVE_CD) return;
@@ -2275,6 +2328,16 @@ export class Room {
   private tryAttack(u: Unit, t: Ent) {
     if (SPECIES[u.s].ranged && !isBoss(u.s)) return this.rangedAttack(u, t);
     const range = u.r + t.r + 8;
+    if (SPECIES[u.s].anchored) {
+      // il ne bouge pas (le Kraken dans l'eau, un tentacule accroché au pont) : il frappe ce qui passe à portée
+      if (isBoss(u.s)) return this.bossMelee(u);
+      u.atkCd -= DT;
+      if (u.atkCd <= 0 && dist2(u.x, u.y, t.x, t.y) <= (range + 4) ** 2) {
+        u.atkCd = u.atkCdBase;
+        this.damage(t, u.dmg, u, true);
+      }
+      return;
+    }
     // Un géant accélère quand sa cible s'éloigne : on ne le tue pas en reculant (arc, mage).
     const chase = isBoss(u.s) && dist2(u.x, u.y, t.x, t.y) > (range + BOSS_CHASE_R) ** 2 ? BOSS_CHASE_MULT : 1;
     const arrived = this.navTo(u, t.x, t.y, u.speed * chase, range - 2);
@@ -2301,6 +2364,17 @@ export class Room {
 
   private wildAI(u: Unit) {
     if (u.dormant) return; // géant qui attend qu'on lui parle
+    if (u.resurface) {
+      // entre deux phases : il a plongé ; à mi-chemin il file sous l'eau vers sa nouvelle place, puis remonte, plus furieux
+      if (u.diveTo && this.time >= u.resurface - 1.5) {
+        [u.x, u.y] = [u.diveTo.x, u.diveTo.y];
+        u.diveTo = undefined;
+      }
+      if (this.time < u.resurface) return;
+      u.resurface = 0;
+      u.hidden = false;
+      this.events.push({ e: 'phase', id: u.id, s: u.s, phase: u.phase ?? 1, up: true });
+    }
     if (u.returning) {
       if (this.move(u, u.homeX, u.homeY, u.speed * 1.3, 20)) {
         u.returning = false;
@@ -2355,6 +2429,7 @@ export class Room {
 
   /** Errance autour du point d'origine. */
   private wander(u: Unit) {
+    if (SPECIES[u.s].anchored) return;
     u.wanderT -= DT;
     if (u.wanderT <= 0) {
       u.wanderT = 2 + Math.random() * 4;
@@ -2675,7 +2750,36 @@ export class Room {
     t.lastAttacker = by.id;
     t.lastHitAt = this.time;
     this.events.push({ e: 'hit', a: by.id, b: t.id, dmg: Math.round(amount * 100) / 100, ...m }); // 2 décimales
+    if (t.hp <= 0 && !t.owner && (t.phase ?? 1) < (SPECIES[t.s].phases ?? 1)) return this.nextPhase(t);
     if (t.hp <= 0) this.killUnit(t, by);
+  }
+
+  /**
+   * Géant à plusieurs phases, vaincu avant la dernière : il plonge (intouchable), ses tentacules et ses attaques en cours
+   * disparaissent ; il remonte avec toute sa vie, et de nouvelles attaques.
+   */
+  private nextPhase(u: Unit) {
+    u.phase = (u.phase ?? 1) + 1;
+    u.hp = u.maxHp;
+    u.hidden = true;
+    u.resurface = this.time + 3;
+    // il resurgit ailleurs autour du bateau (jamais là où il a plongé)
+    const spots = (this.map.caveAt(u.x, u.y)?.spots ?? []).filter((p) => dist2(p.x, p.y, u.x, u.y) > 100 ** 2);
+    u.diveTo = spots.length ? spots[Math.floor(Math.random() * spots.length)] : undefined;
+    u.castUntil = 0;
+    u.trailUntil = 0;
+    this.hazards = this.hazards.filter((h) => h.boss !== u);
+    for (const m of [...this.units.values()]) {
+      if (m.summoner !== u.id || m.owner) continue;
+      this.units.delete(m.id);
+      this.events.push({ e: 'die', x: m.x, y: m.y, s: m.s, alpha: false });
+    }
+    if (u.phase >= (SPECIES[u.s].phases ?? 1) && !u.enraged) {
+      // dernière phase : il frappe plus souvent
+      u.enraged = true;
+      u.atkCdBase *= 0.7;
+    }
+    this.events.push({ e: 'phase', id: u.id, s: u.s, phase: u.phase, up: false });
   }
 
   /** Alpha équipé et debout de cette espèce à pouvoir (escargot, lièvre), s'il y en a un. */
@@ -2809,6 +2913,7 @@ export class Room {
     const gold = sp.gold;
     const boss = isBoss(u.s);
     for (const p of this.players.values()) {
+      if (sp.minion) break; // un tentacule ne rapporte rien
       if (p.dead || dist2(p.x, p.y, u.x, u.y) > GOLD_SHARE_R ** 2) continue;
       if (!boss) p.gold += gold; // l'or d'un géant est dans son coffre
       if (boss && !this.wantsSoul(p, u.s)) continue; // Alpha déjà légendaire, ou déjà 3 âmes : pas d'âme en plus
@@ -2889,14 +2994,17 @@ export class Room {
         const d = Math.sqrt(d2) || 0.01;
         const push = (min - d) * 0.5;
         const nx = d2 ? dx / d : Math.random() - 0.5, ny = d2 ? dy / d : Math.random() - 0.5;
+        // un géant endormi ou une bête ancrée (le Kraken, ses tentacules) ne se laisse pas pousser
+        const fixed = (e: Ent) => e.kind === 'u' && (e.dormant || !!SPECIES[e.s].anchored);
         if (o.kind === 'p') {
-          if (u.dormant) return; // géant endormi : on ne le pousse pas, il reste au centre de sa grotte
+          if (fixed(u)) return;
           u.x += nx * push * 2;
           u.y += ny * push * 2;
-        } else if (u.dormant || (o as Unit).dormant) {
-          // un géant endormi ne bouge pas : c'est l'autre qui s'écarte de toute la distance
-          const k = u.dormant ? -2 : 2;
-          const m = u.dormant ? o : u;
+        } else if (fixed(u) || fixed(o)) {
+          if (fixed(u) && fixed(o)) return;
+          // c'est l'autre qui s'écarte de toute la distance
+          const k = fixed(u) ? -2 : 2;
+          const m = fixed(u) ? o : u;
           m.x += nx * push * k;
           m.y += ny * push * k;
         } else {
@@ -3018,7 +3126,7 @@ export class Room {
       for (const u of this.units.values()) {
         if (u.reviveAt || dist2(u.x, u.y, viewer.x, viewer.y) > vr2) continue;
         units.push([
-          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0), Math.round(u.x), Math.round(u.y),
+          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0) | ((u.phase ?? 1) === 2 ? UNIT_FLAG_PHASE2 : (u.phase ?? 1) >= 3 ? UNIT_FLAG_PHASE3 : 0), Math.round(u.x), Math.round(u.y),
           Math.round((100 * Math.max(0, u.hp)) / u.maxHp), u.owner,
         ]);
       }

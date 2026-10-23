@@ -1,9 +1,9 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf, SCHOOL_CAMP, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, volcanoOpen, HEART_IN_BOAT } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf, SCHOOL_CAMP, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
-import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
+import { HAZARD_STYLES, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
 import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST } from './anim.ts';
 import { type Ambience, sound } from './audio.ts';
@@ -21,6 +21,7 @@ import { desertMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
 import { HALL_ID, WorldMap } from '../../shared/worldmap.ts';
 import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts';
+import { drawSubmerged, drawVoyage } from './voyage.ts';
 
 /** Dégâts affichés arrondis à 2 décimales, à la française : 6,4 · 12 · 4,85. */
 /** Nom propre d'un géant (sinon le nom de son espèce). */
@@ -312,6 +313,7 @@ export class Game {
       this.hud.banner(campName(site), ''); // juste le nom du camp, établi ou non
     }
     else if (cave?.id === HALL_ID) this.hud.banner(ZONE_NAMES[VOLCANO_ZONE - 1], '', true);
+    else if (cave?.zone === VOYAGE_ZONE) this.hud.banner(ZONE_NAMES[VOYAGE_ZONE - 1], this.hud.beaten.includes(cave.boss) ? 'La route du Colisée est libre' : 'Cap sur le Colisée', true);
     else if (cave) {
       const boss = SPECIES[cave.boss];
       this.hud.banner(boss.title ?? boss.name, '', true); // le nom du géant qui habite la grotte
@@ -660,7 +662,20 @@ export class Game {
           this.fx.ring(b.x, b.y, '#E8693F', 20, 160, 0.8);
         }
         this.shake = 0.35;
-        if (e.by !== this.myId) this.hud.toast(`${name(e.by)} a réveillé ${bossName(this.map.caves[e.cave]?.boss ?? 0)} !`);
+        if (this.map.caves[e.cave]?.zone === VOYAGE_ZONE) this.hud.toast(`${bossName(this.map.caves[e.cave].boss)} surgit des flots et s'attaque au bateau !`);
+        else if (e.by !== this.myId) this.hud.toast(`${name(e.by)} a réveillé ${bossName(this.map.caves[e.cave]?.boss ?? 0)} !`);
+        break;
+      }
+      case 'phase': {
+        const b = this.posOf(e.id, players);
+        if (b) {
+          this.fx.ring(b.x, b.y, '#6FB7FF', 30, 260, 1.2);
+          this.fx.burst(b.x, b.y, '#C9F0FF', 40, 260);
+        }
+        this.shake = Math.max(this.shake, 0.4);
+        sound.play('roar');
+        const max = SPECIES[e.s]?.phases ?? 3;
+        this.hud.toast(e.up ? `${bossName(e.s)} remonte, plus furieux que jamais ! (phase ${e.phase}/${max})` : `${bossName(e.s)} replonge… il va revenir, toute sa vie retrouvée !`, e.up ? '' : 'good');
         break;
       }
       case 'chest':
@@ -735,7 +750,8 @@ export class Game {
       case 'beaten': {
         this.hud.toast(`Première victoire du village sur ${bossName(e.s)} !`, 'good');
         const zone = SPECIES[e.s].zone, beaten = [...this.hud.beaten, e.s];
-        if (zone === VOLCANO_ZONE) {
+        if (zone === VOYAGE_ZONE) this.hud.toast('Le Kraken sombre dans les abysses : la route du Colisée est libre !', 'good');
+        else if (zone === VOLCANO_ZONE) {
           const left = this.map.caves.filter((c) => c.zone === VOLCANO_ZONE && !beaten.includes(c.boss)).length;
           this.hud.toast(left ? `Une flamme de l'autel du volcan s'éteint. Encore ${left} géant${left > 1 ? 's' : ''}.` : 'La dernière flamme s\'éteint : le cœur volcanique est libéré, au centre des entrailles !', left ? '' : 'good');
         } else this.hud.toast('Il a laissé tomber un parchemin, au fond de sa grotte.');
@@ -1285,7 +1301,8 @@ export class Game {
       // les entrailles du volcan : dessinées à chaque image (la lave bouge), avec les sceaux de l'autel
       const sealed = this.map.caves.filter((c) => c.zone === VOLCANO_ZONE).map((c) => !this.hud.beaten.includes(c.boss));
       drawDepths(ctx, this.map, this.time, sealed, !!this.hud.heart);
-    } else if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
+    } else if (here?.zone === VOYAGE_ZONE) drawVoyage(ctx, here, this.time, camX, camY, hw, hh);
+    else if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
     if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id]);
     const cs = this.world.campSize;
     ctx.drawImage(this.world.camp, spawn.x - cs / 2, spawn.y - cs / 2);
@@ -1318,7 +1335,7 @@ export class Game {
     const list = this.drawList; // réutilisée d'une image à l'autre
     list.length = 0;
     for (const c of this.map.caves) {
-      if (!inView(c.entrance.x, c.entrance.y, 160)) continue;
+      if (c.zone === VOYAGE_ZONE || !inView(c.entrance.x, c.entrance.y, 160)) continue; // le large : on y part depuis le bateau
       list.push({ y: c.entrance.y + 20, draw: () => this.world.drawCaveEntrance(ctx, c, this.time, !this.hud.caves[c.id]) });
     }
     const sc = this.map.school;
@@ -1454,6 +1471,11 @@ export class Game {
       const legend = (flags & UNIT_FLAG_LEGEND) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
       const boss = SPECIES[s].boss && owner === 0;
+      if (SPECIES[s].anchored && boss && flags & (UNIT_FLAG_HIDDEN | UNIT_FLAG_DORMANT)) {
+        // le Kraken sous l'eau (avant de surgir, ou entre deux phases) : remous et bulles, rien d'autre
+        list.push({ y: y - 400, draw: () => drawSubmerged(ctx, x, y, r, this.time, (flags & UNIT_FLAG_HIDDEN) !== 0) });
+        continue;
+      }
       if (flags & UNIT_FLAG_HIDDEN) {
         // hors d'atteinte : vautour qui plane (au-dessus de tout, son ombre au sol), ver sous le sable, suricate à la tanière,
         // escargot rentré dans sa coquille (sur place)
@@ -1512,6 +1534,14 @@ export class Game {
             ctx.fillStyle = '#F0B64A';
             ctx.fillText(SPECIES[s].title ?? SPECIES[s].name, x, y - r * 1.6 - 14);
             hpBar(ctx, x, y - r * 1.6 - 8, 90, hp, '#E8693F');
+            if (SPECIES[s].phases) {
+              const ph = flags & UNIT_FLAG_PHASE3 ? 3 : flags & UNIT_FLAG_PHASE2 ? 2 : 1;
+              ctx.font = '700 13px "Pixelify Sans", sans-serif';
+              ctx.lineWidth = 4;
+              ctx.strokeText(`Phase ${ph}/${SPECIES[s].phases}`, x, y - r * 1.6 + 12);
+              ctx.fillStyle = '#EEE7D7';
+              ctx.fillText(`Phase ${ph}/${SPECIES[s].phases}`, x, y - r * 1.6 + 12);
+            }
           } else if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
         },
       });

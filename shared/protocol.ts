@@ -122,7 +122,7 @@ export type UnitTuple = [number, number, number, number, number, number, number]
  */
 export type HazardTuple = [number, number, number, number, number, number, number, number, number, number, number];
 /** Attaque d'où vient une zone annoncée au sol (le client l'anime : bond, rocher lancé, onde de choc…). */
-export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores', 'lava', 'flame'] as const; // n'ajouter qu'à la fin
+export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores', 'lava', 'flame', 'tentacle', 'ink'] as const; // n'ajouter qu'à la fin
 export type HazardStyle = (typeof HAZARD_STYLES)[number];
 /**
  * Projectile de tireur : [id, type, x, y, a, b, c, dompteur] — type 0 trait (bolt), 1 en cloche (arc), 2 jet.
@@ -142,6 +142,8 @@ export const UNIT_FLAG_LEGEND = 4; // Alpha légendaire
 export const UNIT_FLAG_DORMANT = 8; // géant qui attend qu'on vienne lui parler (ni cible ni menace)
 export const UNIT_FLAG_ASLEEP = 16; // bête sauvage qui dort la nuit (sanglier) : on peut la surprendre
 export const UNIT_FLAG_HIDDEN = 32; // sous le sable (ver qui file, suricate au terrier) : intouchable, on ne voit qu'une bosse ou un trou
+export const UNIT_FLAG_PHASE2 = 64; // géant à plusieurs phases (le Kraken) : deuxième phase
+export const UNIT_FLAG_PHASE3 = 128; // … troisième phase
 
 export type GameEvent =
   | { e: 'hit'; a: number; b: number; dmg: number; m?: 1 } // m : coup au corps à corps
@@ -156,6 +158,7 @@ export type GameEvent =
   | { e: 'move'; id: number; kind: string } // un mini-boss lance une attaque spéciale
   | { e: 'challenge'; cave: number; id: number; by: number } // un dompteur a provoqué le géant : le combat commence
   | { e: 'chest'; id: number; to: number; gold: number; x: number; y: number; book?: number } // coffre ouvert : or tiré au hasard, parfois un livre (bookIndex)
+  | { e: 'phase'; id: number; s: number; phase: number; up: boolean } // le Kraken plonge (up : false), puis remonte pour sa phase suivante
   | { e: 'heart'; by: number; installed: boolean } // le cœur volcanique a été pris (ou installé dans le bateau), pour tout le village
   | { e: 'learn'; by: number; kind: number; lesson: number; done: boolean } // École des dompteurs : une leçon commence (by) ou s'achève (done)
   | { e: 'eat'; id: number; bush: number } // du gibier mange les fruits d'un buisson
