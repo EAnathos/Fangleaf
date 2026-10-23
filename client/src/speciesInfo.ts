@@ -21,6 +21,9 @@ export const SPECIES_DESC: Record<string, string> = {
   serpent: 'Nage dans les lacs sans jamais en sortir (tireur). Se dresse, puis tire un jet d\'eau rapide. À frapper depuis la rive ou à distance.',
   treant: 'Il dort dans un sapin des Bois profonds. Abats le mauvais arbre, et il se réveille de très mauvaise humeur.',
   crab: 'Carapace épaisse, marche de côté et pince fort. Le tank des Lacs brumeux, qui protège les tireurs.',
+  salamander: 'Lézard noir dont le dos rougeoie comme une braise. Vive et nerveuse, elle chasse en bande au ras de la lave : ses morsures brûlent.',
+  ash_bat: 'Chauve-souris aux ailes de cendre, qui laisse une traînée d\'étincelles. Elle arrive en nuée et frappe vite : garde ta meute serrée.',
+  lava_tortoise: 'Tortue géante qui porte un petit volcan sur sa carapace (tireur). Il gronde, puis crache de la lave en cloche : sors du cercle annoncé au sol.',
 };
 
 /** Ce que dit chaque géant quand on vient lui parler (intro), puis son cri quand le combat commence. */
@@ -40,4 +43,7 @@ export const BOSS_LINES: Record<string, { intro: string; cry: string }> = {
   sand_queen: { intro: 'Tu marches sur mon toit. Personne ne marche sur mon toit.', cry: 'Je vais te faire mordre la poussière !' },
   vulture_king: { intro: 'Je t\'observe depuis trois dunes. Tu as l\'air… appétissant.', cry: 'À table !' },
   moon_jackal: { intro: 'La lune m\'a prévenu de ta venue. Elle m\'a dit aussi comment ça finirait.', cry: 'Hurlons à la lune !' },
+  salamander_queen: { intro: 'Mes petits ont faim. Et toi, tu sens bon le roussi.', cry: 'À la braise, mes enfants !' },
+  ash_lord: { intro: 'Ici, la lumière, c\'est la lave. Et moi, j\'aime le noir.', cry: 'Que la cendre t\'ensevelisse !' },
+  mountain_tortoise: { intro: 'Hmm… Un visiteur. Le dernier, c\'était il y a mille ans. Je l\'ai pris pour un caillou.', cry: 'La montagne se réveille !' },
 };

@@ -28,13 +28,15 @@ export type ClientMsg =
   | { t: 'spec'; spec: SpecId } // choisir la spécialisation de son arme (Grande forge, arme niv. 10)
   | { t: 'legend'; s: number } // rendre légendaire l'Alpha de cette espèce avec l'âme de son géant
   | { t: 'mount'; id: number } // 0 = descendre
-  | { t: 'cave'; id: number; enter: boolean } // entrer dans une grotte / en sortir
+  | { t: 'cave'; id: number; enter: boolean } // entrer dans une grotte / en sortir (id -1 : le volcan)
   | { t: 'challenge'; cave: number } // parler au géant endormi de sa grotte : le combat commence
   | { t: 'chest'; id: number } // ouvrir le coffre laissé par un géant vaincu (une fois par dompteur)
   | { t: 'establish'; site: number } // établir le camp de cet emplacement (pour tout le village)
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, -2 = bateau, sinon index du camp
   | { t: 'scroll'; cave: number } // ramasser le parchemin laissé par le géant de cette grotte
   | { t: 'scrollGive' } // donner ses parchemins au vieil homme : il retrouve des souvenirs
+  | { t: 'heart' } // cœur volcanique : le prendre sur son autel (géants du volcan vaincus), ou l'installer dans le bateau rebâti
+  | { t: 'learn'; kind: number } // École des dompteurs : commencer la leçon suivante de cette discipline (index dans LESSON_KINDS)
   | { t: 'boat' } // donner au vieil homme les ressources de l'étape suivante du bateau
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
   | { t: 'rename'; name: string } // renommer le village, devant l'Hôtel de ville (une fois construit)
@@ -93,6 +95,10 @@ export interface PlayerState {
   reviveBy: number; // id du coéquipier qui le relève (0 = personne)
   army: ArmySlot[]; // détail de la meute : envoyé à son seul dompteur (vide pour les autres)
   pack: number; // taille de la meute (tout le monde la voit)
+  tomes: number[]; // livres d'apprentissage dans le sac, par bookIndex(discipline, tome) (envoyé à son seul dompteur)
+  learned: number[]; // leçons apprises à l'École des dompteurs, par discipline
+  readKind: number; // discipline de la leçon en cours
+  reading: number; // secondes avant la fin de la leçon en cours (0 : aucune)
 }
 
 /** Résumé d'un membre de la meute pour le HUD. */
@@ -149,7 +155,9 @@ export type GameEvent =
   | { e: 'boss'; cave: number; s: number; down: boolean } // mini-boss vaincu (down) ou de retour
   | { e: 'move'; id: number; kind: string } // un mini-boss lance une attaque spéciale
   | { e: 'challenge'; cave: number; id: number; by: number } // un dompteur a provoqué le géant : le combat commence
-  | { e: 'chest'; id: number; to: number; gold: number; x: number; y: number } // coffre ouvert : or tiré au hasard
+  | { e: 'chest'; id: number; to: number; gold: number; x: number; y: number; book?: number } // coffre ouvert : or tiré au hasard, parfois un livre (bookIndex)
+  | { e: 'heart'; by: number; installed: boolean } // le cœur volcanique a été pris (ou installé dans le bateau), pour tout le village
+  | { e: 'learn'; by: number; kind: number; lesson: number; done: boolean } // École des dompteurs : une leçon commence (by) ou s'achève (done)
   | { e: 'eat'; id: number; bush: number } // du gibier mange les fruits d'un buisson
   | { e: 'pick'; by: number; bush: number; n: number } // baies cueillies
   | { e: 'sword'; by: number; n: number } // un coup pour déterrer l'épée (n : coups donnés ; SWORD_PULLS : elle est sortie)
@@ -209,6 +217,7 @@ export interface Snapshot {
   lore: [number, number, number]; // souvenirs retrouvés par le vieil homme, étapes du bateau achevées, secondes avant la fin de l'étape en cours (0 : aucune)
   stock: [number, number]; // réserve du village : [bois, pierre]
   beaten: number[]; // géants (espèce) déjà vaincus par le village : ils ouvrent les portes des zones
+  heart: number; // cœur volcanique : 0 sous le volcan, 1 pris, 2 installé dans le bateau
   unlocked: number[]; // grottes débloquées par le village
   hazards: HazardTuple[]; // attaques spéciales visibles
   shots: ShotTuple[]; // projectiles des tireurs (esquivables)

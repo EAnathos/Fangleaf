@@ -12,10 +12,12 @@
 //   (feu qui soigne, point de réapparition, Pierre de passage pour voyager entre camps).
 // - Lacs dans l'île, en laissant toujours libre une voie centrale.
 // - Une grotte par espèce (deux ou trois par zone), gardée par la version géante de l'espèce (entrée sur la carte, intérieur hors du monde).
+// - Un volcan dans la Mer de sable ; sa bouche mène à ses entrailles (zone 7, une grande salle hors du monde) et aux
+//   antres de ses trois géants.
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = mer profonde).
 
-import { CAVE_RX, CAVE_RY, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
+import { CAVE_RX, CAVE_RY, HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -24,8 +26,9 @@ const LAKE_THRESHOLD = 0.64;
 const LAKE_THRESHOLD_LAKES = 0.54; // zone 5 (Lacs brumeux) : bien plus d'eau
 const LAKE_THRESHOLD_DESERT = 0.8; // zone 6 (Mer de sable) : de rares oasis
 const SPINE_STEP = 100;
-const ISLAND_LEN: [number, number] = [16000, 23000]; // longueur de la colonne : l'île est plus ou moins grande
+const ISLAND_LEN: [number, number] = [17600, 25300]; // longueur de la colonne : l'île est plus ou moins grande
 const HALF_W: [number, number] = [1600, 3000]; // demi-largeur de l'île (avant le bruit de la côte)
+const DESERT_WIDEN = 0.3; // la Mer de sable est plus large (son volcan y tient, à l'écart de la voie centrale)
 const COAST_NOISE = 900; // la côte s'écarte de ± la moitié de ceci
 export const SEA_SHALLOW = 520; // mer peu profonde le long de la côte (le serpent y nage), puis mer profonde
 export const BEACH = 190; // largeur de la plage, côté terre
@@ -41,6 +44,8 @@ const CAVE_GAP = 4000; // > VIEW_R + 2 × CAVE_RX + la demi-largeur de l'écran
 const VILLAGE_ARC = 800; // abscisse du village le long de la colonne
 const ZONE1_EXTRA = VILLAGE_ARC + VILLAGE_R; // la zone 1 commence par la plage et le village : elle est plus longue
 const TAU = Math.PI * 2;
+/** ZONE_CUM[z] : parts de zone cumulées jusqu'à la fin de la zone z. */
+const ZONE_CUM = ZONE_WEIGHTS.reduce((acc, w) => [...acc, acc[acc.length - 1] + w], [0]);
 
 export interface Pt {
   x: number;
@@ -48,13 +53,18 @@ export interface Pt {
 }
 
 export interface Cave {
-  id: number;
+  id: number; // index dans caves ; -1 (HALL_ID) : la salle sous le volcan (map.depths)
   zone: number;
   boss: number; // index de l'espèce du mini-boss
   entrance: Pt; // sur la carte
   inside: Pt; // centre de l'intérieur (hors du monde)
   exit: Pt; // sortie, en bas de l'intérieur
+  rx?: number; // demi-axes de l'intérieur, s'ils ne sont pas ceux d'une grotte (CAVE_RX, CAVE_RY)
+  ry?: number;
 }
+/** Demi-axes de l'intérieur d'une grotte (ou de la salle du volcan). */
+export const caveRadii = (c: Cave) => ({ rx: c.rx ?? CAVE_RX, ry: c.ry ?? CAVE_RY });
+export const HALL_ID = -1;
 
 export interface Ore {
   id: number;
@@ -101,7 +111,7 @@ function makeSpine(seed: number): Pt[] {
   const rand = rng(seed ^ 0x1234567);
   const len = ISLAND_LEN[0] + rand() * (ISLAND_LEN[1] - ISLAND_LEN[0]);
   const ang = rand() * TAU, wob = 400 + rand() * 1400, waves = 0.6 + rand() * 1.2, ph = rand() * TAU, bend = (rand() - 0.5) * 0.5;
-  const dx = Math.cos(ang), dy = Math.sin(ang), room = WORLD_HALF - HALF_W[1] - COAST_NOISE / 2 - SEA_SHALLOW - 400;
+  const dx = Math.cos(ang), dy = Math.sin(ang), room = WORLD_HALF - HALF_W[1] * (1 + DESERT_WIDEN) - COAST_NOISE / 2 - SEA_SHALLOW - 400;
   for (let scale = 1; ; scale -= 0.04) {
     const L = len * scale;
     // courbe dense, puis points tous les SPINE_STEP px le long de la courbe
@@ -148,11 +158,17 @@ export class WorldMap {
   readonly sword: Pt; // épée plantée dans le sable, un peu plus haut sur la plage
   readonly gates: number[] = []; // portes : abscisse le long du couloir ([0] sortie du village, puis début de chaque zone)
   readonly wreck: { boat: Pt; out: number; planks: { x: number; y: number; a: number; l: number }[] } = { boat: { x: 0, y: 0 }, out: 0, planks: [] }; // épave sur la plage d'arrivée (décalages depuis le point d'arrivée)
-  readonly zoneLen: number; // longueur (le long de la colonne) des zones 2 à 6 ; la zone 1 a en plus la plage et le village
+  readonly zoneLen: number; // longueur (le long de la colonne) d'une part de zone (ZONE_WEIGHTS) ; la zone 1 a en plus la plage et le village
   readonly sites: Pt[] = []; // emplacements de camp (un au bout de chaque série de 4 zones)
   private siteArcs: number[] = []; // abscisse de chaque emplacement le long du couloir
   readonly siteLayout: { tents: Pt[]; flag: Pt }[] = []; // décalages depuis le feu, à l'écart de la piste qui arrive
   readonly stones: Pt[] = []; // Pierres de passage : [0] au village, puis une par emplacement de camp
+  volcano: Pt = { x: 0, y: 0 }; // centre de la base du volcan (Mer de sable)
+  volcanoMouth: Pt = { x: 0, y: 0 }; // son entrée, au pied du volcan (devant, en bas à l'écran)
+  /** La salle sous le volcan : une grotte (hors du monde) de la zone VOLCANO_ZONE, plus grande, sans géant à elle. */
+  depths: Cave = { id: HALL_ID, zone: VOLCANO_ZONE, boss: -1, entrance: { x: 0, y: 0 }, inside: { x: 0, y: 0 }, exit: { x: 0, y: 0 }, rx: HALL_RX, ry: HALL_RY };
+  readonly lavaPools: { x: number; y: number; r: number }[] = []; // mares de lave de la salle (infranchissables)
+  school: Pt = { x: 0, y: 0 }; // École des dompteurs, dans le premier camp (sur le côté de la piste)
   readonly caves: Cave[] = [];
   readonly ores: Ore[] = [];
   readonly decor: Decor[] = [];
@@ -178,7 +194,7 @@ export class WorldMap {
     const rand = rng(seed ^ 0x5f3759df);
     this.spine = makeSpine(seed);
     this.length = (this.spine.length - 1) * SPINE_STEP;
-    this.zoneLen = (this.length - ZONE1_EXTRA) / ZONES;
+    this.zoneLen = (this.length - ZONE1_EXTRA) / ZONE_CUM[ZONES];
     this.stampIsland();
 
     // Arrivée sur la plage du bout de l'île : on part de la colonne vers le large jusqu'au sable.
@@ -232,6 +248,8 @@ export class WorldMap {
 
     this.buildPath();
     this.indexPaths();
+    this.placeSchool();
+    this.placeVolcano();
 
     // Lacs : seulement dans l'île, hors de la voie centrale, de la plage, du village et des emplacements de camp.
     const keepDry = new Uint8Array(N * N); // cases qui doivent rester au sec (le nettoyage de l'eau n'y touche pas)
@@ -251,6 +269,7 @@ export class WorldMap {
           dist2(p.x, p.y, this.spawn.x, this.spawn.y) < 320 ** 2 ||
           dist2(p.x, p.y, this.shipwreck.x, this.shipwreck.y) < 260 ** 2 ||
           this.sites.some((c) => dist2(p.x, p.y, c.x, c.y) < 380 ** 2) ||
+          this.nearVolcano(p.x, p.y, 320) || this.volcanoTrail(p.x, p.y) < 160 ||
           this.pathDist(p.x, p.y) < 130
         ) {
           keepDry[k] = 1;
@@ -279,7 +298,7 @@ export class WorldMap {
       return !this.blocked(x, y);
     };
     const bosses = SPECIES.map((sp, i) => (sp.boss ? i : -1)).filter((i) => i >= 0).sort((x, y) => SPECIES[x].zone - SPECIES[y].zone || x - y);
-    for (const boss of bosses) {
+    for (const boss of bosses.filter((b) => SPECIES[b].zone <= ZONES)) {
       const z = SPECIES[boss].zone;
       const lo = z === 1 ? VILLAGE_ARC + VILLAGE_R + 600 : this.zoneFrom(z) + 300, hi = this.zoneTo(z) - 300;
       // Écart entre grottes assoupli si la zone est trop encombrée (lacs, camp) : jamais de géant manquant.
@@ -294,6 +313,7 @@ export class WorldMap {
           if (this.zoneAt(x, y) !== z || !free(x, y, 120) || !free(x, y + 70, 40)) continue;
           if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < gap ** 2)) continue;
           if (this.sites.some((c) => dist2(x, y, c.x, c.y) < 700 ** 2) || this.nearWreck(x, y, 450)) continue; // pas au pied d'un camp ni de l'épave
+          if (this.nearVolcano(x, y, 500)) continue;
           if (!this.findPath(sx, sy, x, y + 70, 20000)) continue;
           const id = this.caves.length;
           // intérieurs alignés hors du monde, assez espacés pour qu'aucun ne soit visible (ni ses monstres envoyés) depuis un autre
@@ -304,6 +324,8 @@ export class WorldMap {
       }
     }
 
+    this.placeLairs(bosses.filter((b) => SPECIES[b].zone === VOLCANO_ZONE));
+
     // Filons d'or : éparpillés sur l'île, hors de l'eau, du village, des camps et des chemins.
     for (let tries = 0; tries < 8000 && this.ores.length < 120; tries++) {
       const s = 500 + rand() * (this.length - 500);
@@ -313,7 +335,7 @@ export class WorldMap {
       if (!free(x, y, 40) || this.inVillage(x, y, 200) || dist2(x, y, this.spawn.x, this.spawn.y) < 300 ** 2 || this.nearWreck(x, y, 240)) continue;
       if (this.sites.some((c) => dist2(x, y, c.x, c.y) < 350 ** 2)) continue;
       if (this.ores.some((o) => dist2(x, y, o.x, o.y) < 480 ** 2)) continue;
-      if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 250 ** 2)) continue;
+      if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 250 ** 2) || this.nearVolcano(x, y, 250)) continue;
       if (this.pathDist(x, y) < 60) continue;
       this.ores.push({ id: this.ores.length, x, y, zone: this.zoneAt(x, y), res: 'gold' });
     }
@@ -353,7 +375,9 @@ export class WorldMap {
   /** Demi-largeur de l'île à l'abscisse s (avant le bruit de la côte) : de larges renflements et des étranglements. */
   halfWidth(s: number) {
     const taper = Math.min(1, 0.55 + (0.45 * Math.min(s, this.length - s)) / 1800); // les deux bouts s'affinent
-    return clamp(2300 + (fbm(s / 2800, 0.5, this.seed + 91, 2) - 0.5) * 2200, HALF_W[0], HALF_W[1]) * taper;
+    // la Mer de sable s'élargit, en douceur à l'approche de sa frontière
+    const d = clamp((s - this.zoneFrom(ZONES) + 1200) / 2400, 0, 1), widen = 1 + DESERT_WIDEN * d * d * (3 - 2 * d);
+    return clamp(2300 + (fbm(s / 2800, 0.5, this.seed + 91, 2) - 0.5) * 2200, HALF_W[0], HALF_W[1]) * widen * taper;
   }
 
   /** Distance et abscisse de la colonne pour chaque case, côte bruitée, puis mer : peu profonde (1), profonde (3). */
@@ -596,10 +620,14 @@ export class WorldMap {
 
   /** Début et fin (abscisses le long de la colonne) de la zone z ; la zone 1 commence à la plage. */
   zoneFrom(z: number) {
-    return z <= 1 ? 0 : ZONE1_EXTRA + (z - 1) * this.zoneLen;
+    return z <= 1 ? 0 : ZONE1_EXTRA + ZONE_CUM[Math.min(z, ZONES) - 1] * this.zoneLen;
   }
   zoneTo(z: number) {
-    return ZONE1_EXTRA + z * this.zoneLen;
+    return ZONE1_EXTRA + ZONE_CUM[Math.min(z, ZONES)] * this.zoneLen;
+  }
+  /** Longueur de la zone z le long de l'île (la zone 1 sans la plage ni le village). */
+  zoneSpan(z: number) {
+    return (ZONE_WEIGHTS[Math.min(z, ZONES) - 1] ?? 1) * this.zoneLen;
   }
 
   private cellOf(x: number, y: number) {
@@ -697,6 +725,7 @@ export class WorldMap {
         if (this.sites.some((c) => Math.hypot(x - c.x, y - c.y) < 300)) continue;
         if (this.isWater(x, y) || this.isWater(x + 24, y) || this.isWater(x - 24, y) || this.isWater(x, y + 24)) continue;
         if (this.caves.some((c) => Math.hypot(x - c.entrance.x, y - c.entrance.y) < 190)) continue;
+        if (this.nearVolcano(x, y, 140) || this.volcanoTrail(x, y) < 90) continue;
         if (this.ores.some((o) => Math.hypot(x - o.x, y - o.y) < 50)) continue;
         const z = this.zoneAt(x, y);
         const f = fbm(x / 700, y / 700, this.seed + 55, 3);
@@ -730,6 +759,7 @@ export class WorldMap {
       if (dist2(x, y, this.spawn.x, this.spawn.y) < 260 ** 2 || this.nearWreck(x, y, 240) || this.sites.some((c) => dist2(x, y, c.x, c.y) < 320 ** 2)) continue;
       if (this.pathDist(x, y) < 40 || this.bushes.some((b) => dist2(x, y, b.x, b.y) < 300 ** 2)) continue;
       if (this.ores.some((o) => dist2(x, y, o.x, o.y) < 90 ** 2) || this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 220 ** 2)) continue;
+      if (this.nearVolcano(x, y, 200)) continue;
       this.bushes.push({ id: this.bushes.length, x, y, zone: this.zoneAt(x, y) });
     }
   }
@@ -756,7 +786,7 @@ export class WorldMap {
         if (!free(x, y) || this.inVillage(x, y, 150) || dist2(x, y, this.spawn.x, this.spawn.y) < 260 ** 2 || this.nearWreck(x, y, 240)) continue;
         if (this.sites.some((c) => dist2(x, y, c.x, c.y) < 350 ** 2) || this.pathDist(x, y) < 50) continue;
         if (this.ores.some((o) => dist2(x, y, o.x, o.y) < (first ? 160 : 300) ** 2) || this.bushes.some((b) => dist2(x, y, b.x, b.y) < 70 ** 2)) continue;
-        if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 250 ** 2)) continue;
+        if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 250 ** 2) || this.nearVolcano(x, y, 250)) continue;
         this.ores.push({ id: this.ores.length, x, y, zone: this.zoneAt(x, y), res });
         this.solidOre(this.ores[this.ores.length - 1]);
         total++;
@@ -777,6 +807,7 @@ export class WorldMap {
       if (this.zoneAt(x, y) !== 6 || this.blocked(x, y) || this.blocked(x + 40, y) || this.blocked(x - 40, y) || this.blocked(x, y + 30)) continue;
       if (this.pathDist(x, y) < 90 || this.nearWreck(x, y, 300) || this.dens.some((d) => dist2(x, y, d.x, d.y) < 700 ** 2)) continue;
       if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 400 ** 2) || this.ores.some((o) => dist2(x, y, o.x, o.y) < 120 ** 2)) continue;
+      if (this.nearVolcano(x, y, 400)) continue;
       if (this.bushes.some((b) => dist2(x, y, b.x, b.y) < 100 ** 2)) continue;
       this.dens.push({ x, y });
     }
@@ -792,6 +823,40 @@ export class WorldMap {
     return dist2(x, y, this.shipwreck.x, this.shipwreck.y) < r * r;
   }
 
+  /**
+   * École des dompteurs, dans le premier camp : la place la plus proche du feu où la maison (dessinée droite, quel que
+   * soit le sens de la piste) ne touche ni le feu, ni une tente, ni le fanion, ni la Pierre de passage, ni la piste,
+   * et ne monte pas sur le nom du camp.
+   */
+  private placeSchool() {
+    const site = this.sites[0];
+    if (!site) return;
+    const lay = this.siteLayout[0], st = this.stones[1];
+    type Box = [number, number, number, number]; // x0, y0, x1, y1 autour d'un point
+    const at = (x: number, y: number, b: Box): Box => [x + b[0], y + b[1], x + b[2], y + b[3]];
+    const others: Box[] = [
+      at(0, 0, [-34, -34, 34, 24]), // feu
+      ...lay.tents.map((t) => at(t.x, t.y, [-42, -30, 42, 34])),
+      at(lay.flag.x, lay.flag.y, [-6, -54, 40, 10]),
+      at(st.x - site.x, st.y - site.y, [-22, -64, 22, 14]),
+      [-110, -190, 110, -150], // nom du camp
+    ];
+    const house: Box = [-54, -96, 54, 12];
+    const free = (x: number, y: number, gap: number) =>
+      others.every((o) => { const h = at(x, y, house); return h[2] < o[0] || h[0] > o[2] || h[3] < o[1] || h[1] > o[3]; }) &&
+      this.pathDist(site.x + x, site.y + y) > gap;
+    // d'abord bien à l'écart de la piste, puis un peu plus près si le camp est trop serré
+    for (const gap of [70, 50, 35]) {
+      for (let r = 90; r <= 190; r += 10) {
+        for (let k = 0; k < 48; k++) {
+          const ang = (k / 48) * Math.PI * 2, x = Math.cos(ang) * r, y = Math.sin(ang) * r * 0.75;
+          if (free(x, y, gap)) return void (this.school = { x: site.x + x, y: site.y + y });
+        }
+      }
+    }
+    this.school = { x: site.x, y: site.y + 150 }; // (jamais vu) : sous le feu
+  }
+
   /** Palissade construite (solide) ou non (on passe). Seules ses cases encore libres changent. */
   setPalisade(up: boolean) {
     for (const c of this.palisadeCells) if (this.water[c] === 0 || this.water[c] === 2) this.water[c] = up ? 2 : 0;
@@ -802,6 +867,7 @@ export class WorldMap {
     if (b === 'stone') return this.stones[0];
     if (b === 'palisade') return this.village;
     if (b === 'forge2') return this.forge; // la Grande forge : la forge améliorée, sur place
+    if (b === 'school') return this.school;
     return this[(b.startsWith('plot_') ? b.slice(5) : b) as 'forge' | 'den' | 'market'];
   }
 
@@ -955,9 +1021,11 @@ export class WorldMap {
     // emplacements de camp : cercle de pierres du feu ; Pierres de passage
     for (const c of this.sites) this.solidDisc(c.x, c.y, 26);
     for (const st of this.stones) this.solidDisc(st.x, st.y, 18);
+    this.solidRect(this.school.x - 44, this.school.y - 22, this.school.x + 44, this.school.y + 6); // l'école (même pas encore bâtie : son estrade)
     // butte rocheuse des grottes (l'ouverture, devant, reste libre)
     for (const c of this.caves) {
       const { x, y } = c.entrance;
+      if (x >= WORLD_HALF) continue; // antre dans la salle du volcan : sa butte est hors de la grille (hallSolid)
       this.solidDisc(x - 68, y - 20, 42);
       this.solidDisc(x + 68, y - 20, 42);
       this.solidRect(x - 60, y - 88, x + 60, y - 42);
@@ -965,12 +1033,118 @@ export class WorldMap {
   }
 
   /** Grotte dont l'intérieur contient ce point, s'il y en a une. */
-  caveAt(x: number, y: number) {
+  caveAt(x: number, y: number): Cave | undefined {
     if (x < WORLD_HALF) return undefined;
-    return this.caves.find((c) => {
-      const nx = (x - c.inside.x) / CAVE_RX, ny = (y - c.inside.y) / CAVE_RY;
+    const inside = (c: Cave) => {
+      const { rx, ry } = caveRadii(c), nx = (x - c.inside.x) / rx, ny = (y - c.inside.y) / ry;
       return nx * nx + ny * ny < caveEdge(c, Math.atan2(ny, nx)) ** 2;
+    };
+    return inside(this.depths) ? this.depths : this.caves.find(inside);
+  }
+
+  /** Dans la salle du volcan : mares de lave, autel du cœur et buttes des antres (les seuls obstacles). */
+  private hallSolid(x: number, y: number) {
+    const h = this.depths.inside;
+    if (dist2(x, y, h.x, h.y) < 34 ** 2) return true; // l'autel
+    if (this.lavaPools.some((p) => dist2(x, y, p.x, p.y) < p.r * p.r)) return true;
+    return this.caves.some((c) => {
+      if (c.zone !== VOLCANO_ZONE) return false;
+      const { x: ex, y: ey } = c.entrance;
+      return dist2(x, y, ex - 68, ey - 20) < 42 ** 2 || dist2(x, y, ex + 68, ey - 20) < 42 ** 2 || (x > ex - 60 && x < ex + 60 && y > ey - 88 && y < ey - 42);
     });
+  }
+
+  /** Près du volcan : dans sa base (agrandie de margin), ou devant son entrée. */
+  nearVolcano(x: number, y: number, margin: number) {
+    const v = this.volcano, nx = (x - v.x) / (VOLCANO_R + margin), ny = (y - v.y) / (VOLCANO_R * VOLCANO_RY + margin);
+    return nx * nx + ny * ny < 1 || dist2(x, y, this.volcanoMouth.x, this.volcanoMouth.y) < (margin + 150) ** 2;
+  }
+
+  /** Distance à la piste qui va de la voie centrale à l'entrée du volcan (gardée au sec et dégagée). */
+  volcanoTrail(x: number, y: number) {
+    const a = this.volcanoMouth, b = this.volcanoTrailEnd, dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1;
+    const t = clamp(((x - a.x) * dx + (y - a.y) * dy) / l2, 0, 1);
+    return Math.hypot(x - a.x - t * dx, y - a.y - t * dy);
+  }
+  private volcanoTrailEnd: Pt = { x: 0, y: 0 };
+
+  /**
+   * Le volcan : dans la Mer de sable, d'un côté de la voie centrale, sa base entière sur la terre ferme et loin de la
+   * côte ; son entrée devant (en bas à l'écran), reliée à la voie centrale. Sa base devient un obstacle solide.
+   */
+  private placeVolcano() {
+    const rand = rng(this.seed ^ 0x701ca0);
+    const R = VOLCANO_R, RY = R * VOLCANO_RY, z0 = this.zoneFrom(ZONES), span = this.zoneTo(ZONES) - z0;
+    const fits = (cx: number, cy: number, coast: number) => {
+      for (let k = 0; k < 32; k++) {
+        const a = (k / 32) * TAU, x = cx + Math.cos(a) * R * 1.2, y = cy + Math.sin(a) * RY * 1.2;
+        if (this.shoreAt(x, y) > -coast || this.cdist[this.cellOf(x, y)] < LANE + 260) return false;
+      }
+      const m = { x: cx, y: cy + RY + 60 };
+      return this.shoreAt(m.x, m.y) < -coast && !this.nearWreck(cx, cy, 1800) && !this.sites.some((c) => dist2(cx, cy, c.x, c.y) < 2000 ** 2);
+    };
+    let best: Pt | null = null;
+    for (const coast of [450, 250, 80]) {
+      for (let tries = 0; tries < 600 && !best; tries++) {
+        const s = z0 + (0.25 + rand() * 0.55) * span, side = rand() < 0.5 ? -1 : 1;
+        const lo = R + LANE + 350, hi = this.halfWidth(s) - RY - coast;
+        if (hi < lo) continue;
+        const off = side * (lo + rand() * (hi - lo)), c = this.spineAt(s), n = this.normalAt(s);
+        const x = c.x + n.x * off, y = c.y + n.y * off;
+        if (fits(x, y, coast)) best = { x, y };
+      }
+      if (best) break;
+    }
+    // (petite île, jamais vu) : au milieu du désert, au bord de la voie centrale
+    if (!best) {
+      const s = z0 + span * 0.5, c = this.spineAt(s), n = this.normalAt(s);
+      best = { x: c.x + n.x * (R + LANE + 200), y: c.y + n.y * (R + LANE + 200) };
+    }
+    this.volcano = best;
+    this.volcanoMouth = { x: best.x, y: best.y + RY + 60 };
+    // la piste : de l'entrée au point le plus proche de la voie centrale
+    const s = this.arc[this.cellOf(this.volcanoMouth.x, this.volcanoMouth.y)];
+    this.volcanoTrailEnd = this.spineAt(s);
+    // base du volcan : solide (même en vol, on le contourne)
+    for (let j = Math.floor((best.y - RY + WORLD_HALF) / MAP_CELL); j <= Math.floor((best.y + RY + WORLD_HALF) / MAP_CELL); j++) {
+      for (let i = Math.floor((best.x - R + WORLD_HALF) / MAP_CELL); i <= Math.floor((best.x + R + WORLD_HALF) / MAP_CELL); i++) {
+        if (i < 0 || j < 0 || i >= N || j >= N) continue;
+        const x = -WORLD_HALF + (i + 0.5) * MAP_CELL, y = -WORLD_HALF + (j + 0.5) * MAP_CELL;
+        if (((x - best.x) / R) ** 2 + ((y - best.y) / RY) ** 2 < 1 && this.water[j * N + i] !== 3) this.water[j * N + i] = 2;
+      }
+    }
+    // la salle, sous le volcan : hors du monde, sous la rangée des grottes (assez loin pour ne rien en voir)
+    const inside = { x: WORLD_HALF + 1400 + HALL_RX * 1.1, y: CAVE_RY + HALL_RY * 1.1 + 4600 };
+    this.depths = { ...this.depths, entrance: this.volcanoMouth, inside, exit: { x: inside.x, y: inside.y + HALL_RY - 110 } };
+  }
+
+  /**
+   * Antres des géants du volcan, dans la salle : en arc dans sa moitié haute, l'intérieur de chacun hors du monde comme
+   * une grotte ordinaire. Puis les mares de lave, à l'écart du centre, de la sortie, des antres et des passages qui y mènent.
+   */
+  private placeLairs(bosses: number[]) {
+    const h = this.depths.inside;
+    bosses.forEach((boss, k) => {
+      const a = -Math.PI / 2 + (k - (bosses.length - 1) / 2) * 0.95;
+      const entrance = { x: h.x + Math.cos(a) * HALL_RX * 0.66, y: h.y + Math.sin(a) * HALL_RY * 0.66 + 60 };
+      const id = this.caves.length, inside = { x: WORLD_HALF + 1400 + id * CAVE_GAP, y: 0 };
+      this.caves.push({ id, zone: VOLCANO_ZONE, boss, entrance, inside, exit: { x: inside.x, y: inside.y + CAVE_RY - 90 } });
+    });
+    const rand = rng(this.seed ^ 0x1a7a);
+    const lanes = [this.depths.exit, ...this.caves.filter((c) => c.zone === VOLCANO_ZONE).map((c) => ({ x: c.entrance.x, y: c.entrance.y + 70 }))];
+    const toLane = (x: number, y: number) =>
+      Math.min(...lanes.map((a) => {
+        const dx = h.x - a.x, dy = h.y - a.y, l2 = dx * dx + dy * dy || 1, t = clamp(((x - a.x) * dx + (y - a.y) * dy) / l2, 0, 1);
+        return Math.hypot(x - a.x - t * dx, y - a.y - t * dy);
+      }));
+    for (let tries = 0; tries < 600 && this.lavaPools.length < 7; tries++) {
+      const a = rand() * TAU, k = Math.sqrt(rand()) * 0.82, r = 50 + rand() * 55;
+      const x = h.x + Math.cos(a) * HALL_RX * k * caveEdge(this.depths, a), y = h.y + Math.sin(a) * HALL_RY * k * caveEdge(this.depths, a);
+      if (dist2(x, y, h.x, h.y) < (r + 220) ** 2 || toLane(x, y) < r + 90) continue;
+      if (lanes.some((l) => dist2(x, y, l.x, l.y) < (r + 190) ** 2)) continue;
+      if (this.lavaPools.some((p) => dist2(x, y, p.x, p.y) < (r + p.r + 120) ** 2)) continue;
+      this.lavaPools.push({ x, y, r });
+    }
   }
 
   /** Bruit des lacs : coordonnées tournées et déformées pour des rives organiques, pas alignées sur la grille. */
@@ -989,7 +1163,10 @@ export class WorldMap {
 
   /** Infranchissable : eau, obstacle solide (arbre, rocher, mur) ou hors du monde. */
   blocked(x: number, y: number) {
-    if (x <= -WORLD_HALF || y <= -WORLD_HALF || x >= WORLD_HALF || y >= WORLD_HALF) return !this.caveAt(x, y);
+    if (x <= -WORLD_HALF || y <= -WORLD_HALF || x >= WORLD_HALF || y >= WORLD_HALF) {
+      const c = this.caveAt(x, y);
+      return !c || (c === this.depths && this.hallSolid(x, y));
+    }
     return this.solid(Math.floor((y + WORLD_HALF) / MAP_CELL) * N + Math.floor((x + WORLD_HALF) / MAP_CELL));
   }
 
@@ -1008,7 +1185,11 @@ export class WorldMap {
   /** Position continue le long des zones : 1,5 = milieu de la zone 1, 2,0 = frontière entre les zones 1 et 2. */
   private zonePos(x: number, y: number) {
     const warp = (fbm(x / 1400, y / 1400, this.seed + 31, 2) - 0.5) * 1000;
-    return 1 + (this.arcAt(x, y) + warp - ZONE1_EXTRA) / this.zoneLen;
+    const u = (this.arcAt(x, y) + warp - ZONE1_EXTRA) / this.zoneLen; // en parts de zone
+    if (u <= 0) return 1 + u;
+    let z = 1;
+    while (z < ZONES && u >= ZONE_CUM[z]) z++;
+    return z + (u - ZONE_CUM[z - 1]) / ZONE_WEIGHTS[z - 1];
   }
 
   /**

@@ -13,6 +13,7 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 - [Village et bâtiments](#village-et-bâtiments)
 - [Camps et voyages](#camps-et-voyages)
 - [Grottes et géants](#grottes-et-géants)
+- [Le volcan et le cœur volcanique](#le-volcan-et-le-cœur-volcanique)
 - [Le vieil homme et le bateau](#le-vieil-homme-et-le-bateau)
 - [Jour, nuit et météo](#jour-nuit-et-météo)
 - [Jouer à plusieurs](#jouer-à-plusieurs)
@@ -48,7 +49,8 @@ s'éloigne de la plage :
 3. **Landes** : Sangliers, Ours des fourrés (ils chassent la nuit, dorment le jour), Lièvres des ronces.
 4. **Ruines moussues** : Golems de mousse, Feux follets, Guetteurs runiques.
 5. **Lacs brumeux** : Crapauds-mortiers, Serpents des brumes (dans l'eau), Crabes des berges.
-6. **Mer de sable** : Suricates, Vers des sables, Vautours ; Chacals fantômes la nuit ; tempêtes de sable.
+6. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Chacals fantômes la nuit ; tempêtes de sable. Un grand volcan s'y dresse.
+7. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles crachent de la lave en cloche) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
 la zone suivante, il faut à la fois l'**Hôtel de ville** au bon niveau et avoir vaincu **tous les géants** de la
@@ -136,6 +138,13 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Un **emplacement de camp** attend au bout de la zone 4. Le village l'établit contre de l'or (un seul membre
   paie) : feu qui soigne, réapparition sur place, Pierre de passage.
 - **E** devant une Pierre de passage : voyager d'un camp à l'autre avec sa meute.
+- **École des dompteurs** : une fois le Camp avancé établi, le village peut bâtir l'école dans le camp. Les coffres
+  des géants cachent parfois un **livre d'apprentissage**, d'une discipline au hasard :
+  **Meute** (une place de plus), **Apprivoisement**, **Essences** ou **Récolte** (meilleures chances, plus de bois et
+  de pierre). Son tome dépend de la zone du géant (I : Lisière et Bois profonds ; II : Landes et Ruines moussues ;
+  III : Lacs brumeux et Mer de sable). On n'a qu'**un exemplaire de chaque tome** : il enseigne une leçon de sa
+  discipline, et les tomes se lisent dans l'ordre (trois leçons par discipline, soit trois places de meute en plus au
+  total). À l'école, **E** pour lire une leçon : elle prend un moment (même hors ligne), une seule à la fois. Un coffre ne donne jamais un tome qu'on a déjà, ni un tome déjà lu.
 
 ## Grottes et géants
 
@@ -148,12 +157,26 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   la première fois, un **parchemin** pour le vieil homme. Il revient après un délai. Si tout le monde sort, il se
   rendort, guéri.
 
+## Le volcan et le cœur volcanique
+
+- Un grand volcan se dresse dans la Mer de sable. Sa bouche, à son pied, reste scellée par une croûte d'obsidienne
+  tant que le village n'a pas vaincu les trois géants de la Mer de sable ; ensuite, **E** pour y descendre, de jour
+  comme de nuit et par tous les temps.
+- Les **entrailles du volcan** sont une grande salle souterraine (zone 7) : mares de lave infranchissables,
+  créatures de lave, et trois antres de géants à débloquer comme les autres grottes.
+- Au centre, l'**autel du cœur** : une flamme brûle par géant du volcan encore debout. Les trois vaincus, le cœur
+  se libère : **E** sur l'autel pour le prendre, une fois pour tout le village. C'est la dernière étape du bateau
+  (voir plus bas).
+- Les géants du volcan ne laissent pas de parchemin pour le vieil homme.
+
 ## Le vieil homme et le bateau
 
 - Près du feu du village, un vieil homme qui ne se souvient plus de rien (**E** pour lui parler).
 - Chaque **parchemin** rapporté lui rend un souvenir de l'histoire de l'île, dans l'ordre.
 - Tous ses souvenirs retrouvés, il reconstruit le **bateau** échoué au bout de l'île, en plusieurs étapes payées en
   or et avec la réserve du village. Une fois fini, une Pierre de passage y mène.
+- Il lui manque encore son **cœur** : celui du volcan. On le pose dans la coque (**E** devant le bateau), et le
+  bateau est prêt à prendre la mer, vers d'autres terres (à venir).
 
 ## Jour, nuit et météo
 

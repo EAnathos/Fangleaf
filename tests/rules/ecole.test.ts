@@ -1,0 +1,111 @@
+// École des dompteurs : livres d'apprentissage des coffres de géants (plusieurs disciplines), leçons de 30 minutes. Lancer : npm run test:rules
+
+import { describe } from 'node:test';
+import { rule, check, room, noop } from '../helpers.ts';
+import { ARMY_CAP, armyCap, BOOKS, bookIndex, BUILDING_IDS, DISCIPLINES, HALL_MAX, LESSON_KINDS, LESSON_MS, LESSONS, lessonBonus, SPECIES, tomeOfZone, TOMES } from '../../shared/config.ts';
+import { Room } from '../../server/room.ts';
+
+describe('École des dompteurs', () => {
+  rule('L\'école se bâtit au Camp avancé, une fois le camp établi.', () => {
+    const r = new Room('TEST', undefined, { buildings: BUILDING_IDS.filter((b) => b !== 'school'), hall: HALL_MAX });
+    const p = r.addPlayer('maçon', noop), m = r.map;
+    p.gold = 1e6;
+    Object.assign(r.stock, { wood: 1e5, stone: 1e5 });
+    [p.x, p.y] = [m.school.x, m.school.y + 50];
+    check(Math.hypot(m.school.x - m.sites[0].x, m.school.y - m.sites[0].y) < 200, 'l\'école est dans le camp, près du feu');
+    check(m.pathDist(m.school.x, m.school.y) > 60, 'elle ne barre pas la piste qui traverse le camp');
+    r.onBuild(p, 'school');
+    check(!r.buildings.includes('school'), 'camp pas encore établi : pas d\'école');
+    r.camps.push(0);
+    r.onBuild(p, 'school');
+    check(r.buildings.includes('school'), 'camp établi : l\'école est bâtie, pour tout le village');
+  });
+
+  rule('Un coffre de géant cache parfois un livre, du tome de sa zone, d\'une discipline au hasard, jamais inutile.', () => {
+    check(tomeOfZone(1) === 0 && tomeOfZone(2) === 0 && tomeOfZone(3) === 1 && tomeOfZone(4) === 1 && tomeOfZone(5) === 2 && tomeOfZone(6) === 2, 'tome I : zones 1-2, II : 3-4, III : 5-6');
+    const r = room();
+    const c = r.map.caves.find((k: { boss: number }) => SPECIES[k.boss].zone === 3);
+    const p = r.addPlayer('chanceux', noop);
+    const open = () => {
+      const boss = r.units.get(r.caveBoss[c.id]);
+      [p.x, p.y] = [boss.x + boss.r + 20, boss.y];
+      r.damage(boss, boss.hp, p);
+      const ch = r.chests.find((k: { cave: number }) => k.cave === c.id);
+      [p.x, p.y] = [ch.x + 30, ch.y];
+      const rnd = Math.random;
+      Math.random = () => 0; // le livre tombe à coup sûr
+      r.onChest(p, ch.id);
+      Math.random = rnd;
+      r.chests = r.chests.filter((k: { id: number }) => k.id !== ch.id);
+      r.time = r.caveBack[c.id] + 1;
+      r.tick = 0;
+      r.updateSpawns();
+    };
+    const pack = bookIndex(0, 1), tame = bookIndex(1, 1);
+    open();
+    check(p.tomes[pack] === 1 && p.tomes.reduce((a: number, b: number) => a + b) === 1 && r.profileOf(p).tomes[pack] === 1, 'géant des Landes : un tome II, sauvegardé');
+    open();
+    check(p.tomes[pack] === 1 && p.tomes[tame] === 1, 'un seul exemplaire de chaque tome : le livre suivant est d\'une autre discipline');
+    p.learned[2] = 2; // tome II des essences déjà lu
+    p.learned[3] = 2; // tome II de la récolte aussi
+    open();
+    check(p.tomes.reduce((a: number, b: number) => a + b) === 2, 'plus de tome II à trouver : le coffre n\'en donne plus');
+    check(p.tomes.length === BOOKS && BOOKS === LESSON_KINDS.length * TOMES && LESSON_KINDS.length >= 4, `${LESSON_KINDS.length} disciplines de ${TOMES} tomes`);
+  });
+
+  rule('Une leçon : un livre, 30 minutes à l\'école (même déconnecté), et sa discipline progresse.', () => {
+    const r = room();
+    r.camps.push(0);
+    const p = r.addPlayer('élève', noop), m = r.map;
+    const none = LESSON_KINDS.map(() => 0), all = LESSON_KINDS.map(() => LESSONS);
+    check(LESSONS === TOMES && armyCap(none) === ARMY_CAP && armyCap(all) === ARMY_CAP + 3, `meute : ${ARMY_CAP} places, +1 par tome lu (${armyCap(all)} une fois les trois lus)`);
+    check(lessonBonus(all, 'tame') === DISCIPLINES.tame.per * LESSONS && lessonBonus(none, 'essence') === 0, 'apprivoisement et essences : un gain par leçon');
+    p.tomes = Array(BOOKS).fill(0);
+    p.tomes[bookIndex(0, 1)] = 1;
+    [p.x, p.y] = [m.school.x, m.school.y + 50];
+    r.onLearn(p, 0);
+    check(!p.readAt && p.tomes[bookIndex(0, 1)] === 1, 'première leçon : il faut un tome I, pas un tome II');
+    p.tomes[bookIndex(1, 0)] = 1;
+    r.onLearn(p, 0);
+    check(!p.readAt, 'un livre d\'une autre discipline n\'apprend rien à celle-ci');
+    p.tomes[bookIndex(0, 0)] = 1;
+    [p.x, p.y] = [m.village.x, m.village.y];
+    r.onLearn(p, 0);
+    check(!p.readAt, 'loin de l\'école : rien');
+    [p.x, p.y] = [m.school.x, m.school.y + 50];
+    r.onLearn(p, 0);
+    check(p.readAt === Date.now() + LESSON_MS && p.tomes[bookIndex(0, 0)] === 1, 'à l\'école : le livre est ouvert, la leçon commence');
+    const at = p.readAt;
+    r.onLearn(p, 1);
+    check(p.readAt === at && p.tomes[bookIndex(1, 0)] === 1, 'une leçon à la fois');
+    for (let i = 0; i < 25; i++) r.step();
+    check(p.learned[0] === 0, 'pas avant la fin des 30 minutes');
+    // il se déconnecte pendant la lecture : à son retour, la leçon est apprise
+    const prof = r.profileOf(p);
+    const now = Date.now;
+    Date.now = () => now() + LESSON_MS + 1;
+    const r2 = room();
+    const back = r2.addPlayer('élève', noop, { userId: 'u', profile: prof });
+    check(back.learned[0] === 1 && !back.readAt && back.tomes[bookIndex(1, 0)] === 1, 'leçon finie pendant son absence : elle compte au retour');
+    check(r2.profileOf(back).learned[0] === 1, 'leçon sauvegardée');
+    Date.now = now;
+    for (let i = 0; i < 25; i++) r.step();
+    check(p.learned[0] === 0, 'en ligne, la leçon attend toujours l\'heure');
+    p.readAt = Date.now() - 1;
+    for (let i = 0; i < 25; i++) r.step();
+    check(p.learned[0] === 1 && p.tomes[bookIndex(0, 0)] === 0, 'en ligne : la leçon s\'achève à l\'heure ; le tome I est lu, il quitte le sac');
+    p.tomes[bookIndex(0, 0)] = 1;
+    p.tomes[bookIndex(0, 1)] = 0;
+    r.onLearn(p, 0);
+    check(!p.readAt, 'un tome déjà lu n\'apprend plus rien : la suite demande le tome II');
+    p.tomes[bookIndex(0, 1)] = 1;
+    r.onLearn(p, 0);
+    check(!!p.readAt, '… et avec lui, elle commence');
+    p.readAt = 0;
+    [p.x, p.y] = [m.market.x, m.market.y + 40];
+    p.gold = 1e6;
+    p.seen.add(0);
+    for (let i = 0; i < ARMY_CAP + 4; i++) r.onBuy(p, 0);
+    check(r.armySize(p) === ARMY_CAP + 1, `un tome de meute lu : ${ARMY_CAP + 1} places`);
+  });
+});

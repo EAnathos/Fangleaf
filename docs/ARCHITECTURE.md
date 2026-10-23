@@ -28,7 +28,7 @@ Pistes d'évolution : Pixi ou Phaser pour le rendu si de vrais sprites arrivent,
 
 ```
 shared/    config.ts      règles et équilibrage (espèces, coûts, zones, bâtiments)
-           worldmap.ts    l'île générée par graine : zones, lacs, grottes, obstacles, chemins
+           worldmap.ts    l'île générée par graine : zones, lacs, grottes, volcan et ses entrailles, obstacles, chemins
            protocol.ts    messages du WebSocket
            snapshot.ts    envoi différentiel des snapshots (même règle des deux côtés)
            weather.ts     jour, nuit, averses et tempêtes, tirés de l'heure et de la graine du village
@@ -43,7 +43,7 @@ client/    index.html     lobby, HUD et panneaux
            src/game.ts    boucle de jeu : prédiction locale, rendu, événements
            src/net.ts     WebSocket et interpolation
            src/hud.ts     HUD et panneaux (forge, Tanière, marché, Hôtel de ville…)
-           src/world.ts, sprites.ts, caves.ts, fx.ts, anim.ts, sky.ts, fog.ts   rendu
+           src/world.ts, sprites.ts, caves.ts, volcano.ts, fx.ts, anim.ts, sky.ts, fog.ts   rendu
            src/audio.ts, music.ts, sfx.ts                                      son
 supabase/  migrations SQL (npm run db:migrate)
 tests/     tests de règles par thème (tests/rules/*.test.ts) et leurs outils (helpers.ts)

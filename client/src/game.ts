@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf, SCHOOL_CAMP, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, volcanoOpen, HEART_IN_BOAT } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { HAZARD_STYLES, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -19,7 +19,8 @@ import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, draw
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
-import { WorldMap } from '../../shared/worldmap.ts';
+import { HALL_ID, WorldMap } from '../../shared/worldmap.ts';
+import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts';
 
 /** Dégâts affichés arrondis à 2 décimales, à la française : 6,4 · 12 · 4,85. */
 /** Nom propre d'un géant (sinon le nom de son espèce). */
@@ -86,6 +87,7 @@ export class Game {
     this.hud.onSpec = (spec) => net.send({ t: 'spec', spec });
     this.hud.onTravel = (to) => net.send({ t: 'travel', to });
     this.hud.onEstablish = (site) => net.send({ t: 'establish', site });
+    this.hud.onLearn = (kind) => net.send({ t: 'learn', kind });
     this.hud.onBuild = (b) => net.send({ t: 'build', b });
     this.hud.onUnlock = (cave) => net.send({ t: 'unlock', cave });
     this.hud.onSell = (id) => net.send({ t: 'sell', id });
@@ -102,6 +104,7 @@ export class Game {
     this.hud.onRide = () => this.toggleMount();
     this.hud.onSword = () => net.send({ t: 'sword' });
     this.hud.onScroll = (cave) => net.send({ t: 'scroll', cave });
+    this.hud.onHeart = () => net.send({ t: 'heart' });
     this.hud.onScrollGive = () => net.send({ t: 'scrollGive' });
     this.hud.onBoat = () => net.send({ t: 'boat' });
     this.hud.onReset = () => net.send({ t: 'reset' });
@@ -223,6 +226,7 @@ export class Game {
       else if (st && !st.dead && b?.pick) this.net.send({ t: 'pick' });
       else if (st && !st.dead && b?.sword) this.net.send({ t: 'sword' });
       else if (st && !st.dead && b?.scroll !== undefined) this.net.send({ t: 'scroll', cave: b.scroll });
+      else if (st && !st.dead && b?.heart) this.net.send({ t: 'heart' });
       else if (st && !st.dead && b?.chest !== undefined) this.net.send({ t: 'chest', id: b.chest });
       else if (st && !st.dead && b?.cave) this.net.send({ t: 'cave', id: b.cave.id, enter: b.cave.enter });
     } else if (key === 'Escape') {
@@ -307,6 +311,7 @@ export class Game {
     else if (area.startsWith('site')) {
       this.hud.banner(campName(site), ''); // juste le nom du camp, établi ou non
     }
+    else if (cave?.id === HALL_ID) this.hud.banner(ZONE_NAMES[VOLCANO_ZONE - 1], '', true);
     else if (cave) {
       const boss = SPECIES[cave.boss];
       this.hud.banner(boss.title ?? boss.name, '', true); // le nom du géant qui habite la grotte
@@ -665,7 +670,18 @@ export class Game {
           this.fx.ring(e.x, e.y - 10, '#F0B64A', 10, 110, 0.9);
           this.fx.text(e.x, e.y - 70, `+${e.gold} or`, '#F0B64A', 26, 2);
           this.hud.toast(`Coffre ouvert : +${e.gold} or !`, 'good');
+          if (e.book !== undefined) {
+            this.fx.text(e.x, e.y - 100, bookName(e.book), '#B48CFF', 18, 2.4);
+            this.hud.toast(`Un livre au fond du coffre : ${bookName(e.book)} ! À lire à l'École des dompteurs, au Camp avancé.`, 'alpha');
+          }
         }
+        break;
+      case 'learn':
+        if (e.by === this.myId) {
+          sound.play(e.done ? 'fanfare' : 'chime');
+          const d = DISCIPLINES[LESSON_KINDS[e.kind]];
+          this.hud.toast(e.done ? `Leçon de ${d.name.toLowerCase()} apprise : ${d.desc} !` : 'Tu ouvres le livre… La leçon prendra un moment, même si tu t\'en vas.', e.done ? 'good' : '');
+        } else if (e.done) this.hud.toast(`${name(e.by)} a appris une leçon à l'École des dompteurs`);
         break;
       case 'res':
         if (e.to !== this.myId) break;
@@ -716,10 +732,26 @@ export class Game {
         this.fx.burst(this.map.store.x, this.map.store.y - 20, '#D2A06A', 14, 120);
         break;
       }
-      case 'beaten':
+      case 'beaten': {
         this.hud.toast(`Première victoire du village sur ${bossName(e.s)} !`, 'good');
-        this.hud.toast('Il a laissé tomber un parchemin, au fond de sa grotte.');
+        const zone = SPECIES[e.s].zone, beaten = [...this.hud.beaten, e.s];
+        if (zone === VOLCANO_ZONE) {
+          const left = this.map.caves.filter((c) => c.zone === VOLCANO_ZONE && !beaten.includes(c.boss)).length;
+          this.hud.toast(left ? `Une flamme de l'autel du volcan s'éteint. Encore ${left} géant${left > 1 ? 's' : ''}.` : 'La dernière flamme s\'éteint : le cœur volcanique est libéré, au centre des entrailles !', left ? '' : 'good');
+        } else this.hud.toast('Il a laissé tomber un parchemin, au fond de sa grotte.');
+        if (zone === VOLCANO_ZONE - 1 && volcanoOpen(beaten) && !volcanoOpen(this.hud.beaten)) this.hud.toast('Un grondement dans la Mer de sable : la bouche du volcan s\'est ouverte !', 'good');
         break;
+      }
+      case 'heart': {
+        const h = e.installed ? this.map.shipwreck : { x: this.map.depths.inside.x, y: this.map.depths.inside.y - 86 };
+        this.fx.ring(h.x, h.y, '#FF8A3D', 20, 220, 1.4);
+        this.fx.burst(h.x, h.y, '#FFD27A', 50, 260);
+        this.shake = Math.max(this.shake, 0.3);
+        sound.play('fanfare');
+        if (e.installed) this.hud.toast(e.by === this.myId ? 'Le cœur volcanique bat dans la coque : le bateau est prêt à prendre la mer !' : `${name(e.by)} a installé le cœur volcanique : le bateau est prêt à prendre la mer !`, 'good');
+        else this.hud.toast(e.by === this.myId ? 'Tu tiens le cœur volcanique ! Va le poser dans le bateau, au bout de l\'île.' : `${name(e.by)} a pris le cœur volcanique ! Il reste à le poser dans le bateau, au bout de l'île.`, 'good');
+        break;
+      }
       case 'scroll': {
         sound.play('chime', 0.6);
         this.hud.toast('Un vieux parchemin… Le vieil homme du village saura peut-être le lire.', 'good');
@@ -1041,6 +1073,7 @@ export class Game {
     if (palisade !== this.palisadeUp) this.map.setPalisade((this.palisadeUp = palisade)); // solide une fois construite (comme côté serveur)
     this.hud.bare = this.net.latest?.bare ?? [];
     this.hud.beaten = this.net.latest?.beaten ?? [];
+    this.hud.heart = this.net.latest?.heart ?? 0;
     this.watchGates();
     this.hud.sleepers = (view?.units ?? []).flatMap((u) => {
       const cave = u[2] & UNIT_FLAG_DORMANT ? this.map.caveAt(u[3], u[4]) : undefined;
@@ -1194,6 +1227,11 @@ export class Game {
     const { village, spawn } = this.map;
     L.light(village.x, village.y, 420, fire, flick(0));
     L.light(spawn.x, spawn.y, 300, fire, flick(1));
+    // le cratère du volcan, et sa bouche une fois ouverte
+    const vc = this.map.volcano;
+    L.light(vc.x, vc.y - VOLCANO_H, 520, '255,120,60', 0.75 * flick(5));
+    if (this.hud.heart >= HEART_IN_BOAT) L.light(this.map.shipwreck.x, this.map.shipwreck.y - 20, 240, '255,150,80', 0.8 * flick(7));
+    if (volcanoOpen(this.hud.beaten)) L.light(this.map.volcanoMouth.x, this.map.volcanoMouth.y - 40, 260, '255,140,70', 0.8 * flick(6));
     this.map.sites.forEach((c, i) => camps.includes(i) && L.light(c.x, c.y, 280, fire, flick(i + 2)));
     this.map.stones.forEach((st, k) => {
       const active = k === 0 ? this.hud.buildings.includes('stone') : camps.includes(k - 1);
@@ -1243,7 +1281,11 @@ export class Game {
     const inView = (x: number, y: number, m: number) => Math.abs(x - camX) < hw + m && Math.abs(y - camY) < hh + m;
     // seulement la grotte où l'on se trouve : jamais celle d'à côté
     const here = this.map.caveAt(camX, camY);
-    if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
+    if (here === this.map.depths) {
+      // les entrailles du volcan : dessinées à chaque image (la lave bouge), avec les sceaux de l'autel
+      const sealed = this.map.caves.filter((c) => c.zone === VOLCANO_ZONE).map((c) => !this.hud.beaten.includes(c.boss));
+      drawDepths(ctx, this.map, this.time, sealed, !!this.hud.heart);
+    } else if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
     if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id]);
     const cs = this.world.campSize;
     ctx.drawImage(this.world.camp, spawn.x - cs / 2, spawn.y - cs / 2);
@@ -1279,12 +1321,20 @@ export class Game {
       if (!inView(c.entrance.x, c.entrance.y, 160)) continue;
       list.push({ y: c.entrance.y + 20, draw: () => this.world.drawCaveEntrance(ctx, c, this.time, !this.hud.caves[c.id]) });
     }
+    const sc = this.map.school;
+    if (inView(sc.x, sc.y, 120)) list.push({ y: sc.y, draw: () => this.world.drawSchool(ctx, camps.includes(SCHOOL_CAMP), this.hud.buildings.includes('school'), this.time) });
+    // le volcan de la Mer de sable : trié par le devant de sa base (on passe devant, on disparaît derrière)
+    const vc = this.map.volcano;
+    if (!here && inView(vc.x, vc.y - VOLCANO_H / 2, VOLCANO_R + 700)) list.push({ y: vc.y + VOLCANO_R * VOLCANO_RY, draw: () => drawVolcano(ctx, this.map, this.time, volcanoOpen(this.hud.beaten)) });
     this.map.stones.forEach((st, k) => {
       // celle du village se construit ; celles des camps s'éveillent avec leur camp
       const active = k === 0 ? this.hud.buildings.includes('stone') : camps.includes(k - 1);
       const label = k === 0 && !active ? BUILDINGS.stone.name : undefined; // le prix : dans le panneau de construction
       if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
+    // le cœur volcanique, une fois installé dans le bateau
+    const sw = this.map.shipwreck;
+    if (this.hud.heart >= HEART_IN_BOAT && inView(sw.x, sw.y, 200)) list.push({ y: sw.y + 30, draw: () => drawBoatHeart(ctx, sw.x, sw.y, this.time) });
     // Pierre de passage du bateau : elle apparaît une fois le bateau reconstruit
     const bs = this.map.boatStone;
     if (this.hud.lore[1] >= BOAT_STAGES.length && inView(bs.x, bs.y, 100)) list.push({ y: bs.y, draw: () => this.world.drawStone(ctx, bs.x, bs.y, true, this.time) });

@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, ARMY_CAP, BUILDING_REACH, DT,
+  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, armyCap, lessonBonus, LESSON_KINDS, LESSONS, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
@@ -14,7 +14,7 @@ import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
 import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
-import { WorldMap } from '../shared/worldmap.ts';
+import { HALL_ID, WorldMap } from '../shared/worldmap.ts';
 import { sky } from '../shared/weather.ts';
 import { Grid } from './grid.ts';
 import type { Profile } from './persist.ts';
@@ -163,6 +163,10 @@ export interface Player {
   close?: () => void; // coupe sa connexion (expulsion)
   chatAt?: number; // dernier message envoyé (anti-spam)
   stats: Stats; // tableau du village
+  tomes: number[]; // livres d'apprentissage dans le sac, 0 ou 1 par tome (index : bookIndex(discipline, tome))
+  learned: number[]; // leçons apprises à l'École des dompteurs, par discipline (LESSON_KINDS)
+  readAt: number; // fin de la leçon en cours (Date.now en ms ; 0 : aucune)
+  readKind: number; // discipline de la leçon en cours
 }
 
 type Ent = Unit | Player;
@@ -231,6 +235,7 @@ export interface VillageState {
   boat: number; // étapes du bateau achevées
   boatAt: number; // fin de l'étape en cours (horodatage ms ; 0 : aucune)
   beaten: number[]; // géants (espèce) déjà vaincus au moins une fois
+  heart: number; // cœur volcanique : 0 sous le volcan, HEART_TAKEN pris sur son autel, HEART_IN_BOAT installé dans le bateau
   wood: number; // réserve commune (entrepôt)
   stone: number;
   banned: { id: string; name: string }[]; // comptes expulsés par le fondateur
@@ -288,6 +293,7 @@ export class Room {
   told: number[] = []; // parchemins donnés au vieil homme, dans l'ordre (un souvenir chacun)
   boat = 0; // étapes du bateau achevées (BOAT_STAGES.length : le bateau est prêt)
   boatAt = 0; // fin de l'étape en cours (Date.now en ms ; 0 : aucune)
+  heart = 0; // cœur volcanique : 0 sur son autel, HEART_TAKEN pris par le village, HEART_IN_BOAT installé dans le bateau
   private renamedAt?: number; // dernier changement de nom (anti-spam)
   readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
   readonly stock = { wood: 0, stone: 0 }; // réserve commune de l'entrepôt
@@ -310,6 +316,7 @@ export class Room {
     this.told = (saved.told ?? []).map(Number).filter((s, i, all) => s in SPECIES && SPECIES[s].boss && all.indexOf(s) === i);
     this.boat = clamp(Math.floor(Number(saved.boat) || 0), 0, BOAT_STAGES.length);
     this.boatAt = this.boat < BOAT_STAGES.length ? Math.max(0, Number(saved.boatAt) || 0) : 0;
+    this.heart = clamp(Math.floor(Number(saved.heart) || 0), 0, HEART_IN_BOAT);
     // Village d'avant l'île (déjà lancé) : son camp est considéré comme installé (palissade, emplacements défrichés).
     if ((this.hall > 0 || this.buildings.length) && !this.buildings.includes('palisade')) {
       for (const b of ['palisade', 'plot_forge', 'plot_den', 'plot_market'] as const) if (!this.buildings.includes(b)) this.buildings.push(b);
@@ -351,7 +358,7 @@ export class Room {
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
       hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: { bosses: 0, tamed: 0, given: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
-      sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], seen: new Set(),
+      sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], seen: new Set(), tomes: Array(BOOKS).fill(0), learned: LESSON_KINDS.map(() => 0), readAt: 0, readKind: 0,
     };
     const prof = account?.profile;
     if (prof) {
@@ -361,6 +368,11 @@ export class Room {
       p.fruits = Math.max(0, Math.floor(prof.fruits ?? 0));
       p.scrolls = (prof.scrolls ?? []).map(Number).filter((s, i, all) => s in SPECIES && SPECIES[s].boss && all.indexOf(s) === i);
       p.stats = statsOf(prof.stats);
+      p.tomes = Array.from({ length: BOOKS }, (_, i) => (Number(prof.tomes?.[i]) > 0 ? 1 : 0)); // un exemplaire au plus de chaque tome
+      p.learned = LESSON_KINDS.map((_, k) => clamp(Math.floor(Number(prof.learned?.[k]) || 0), 0, LESSONS));
+      p.readKind = clamp(Math.floor(Number(prof.read_kind) || 0), 0, LESSON_KINDS.length - 1);
+      p.readAt = p.learned[p.readKind] < LESSONS ? Math.max(0, Number(prof.read_at) || 0) : 0;
+      this.finishLesson(p); // une leçon finie pendant qu'il était déconnecté compte déjà
       p.weapon = clamp(prof.weapon, 0, WEAPON_MAX);
       p.armor = clamp(prof.armor, 0, ARMOR_MAX);
       p.torch = clamp(Math.floor(prof.torch ?? 0), 0, TORCH_MAX);
@@ -387,7 +399,7 @@ export class Room {
         this.spawnAlpha(p, a.s, clamp(a.lvl, 0, ALPHA_LVL_MAX), !!a.legend);
       }
       // La meute ordinaire revient avec son dompteur.
-      for (const s of (prof.pack ?? []).slice(0, ARMY_CAP)) {
+      for (const s of (prof.pack ?? []).slice(0, armyCap(p.learned))) {
         if (!(s in SPECIES) || SPECIES[s].boss) continue;
         const u = this.createUnit(s as SpeciesId, false, p.x, p.y);
         this.makeTamed(u, p);
@@ -409,7 +421,7 @@ export class Room {
    * Membre déconnecté : il dort près du feu du village, ses Alphas équipés et sa meute autour de lui
    * (un sur trois dort aussi, les autres flânent dans le village).
    */
-  addSleeper(key: string, prof: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats'>) {
+  addSleeper(key: string, prof: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats' | 'learned'>) {
     if (this.sleepers.has(key) || [...this.players.values()].some((p) => p.userId === key)) return;
     const v = this.map.village, k = this.sleepers.size;
     const a = 0.9 + k * 2.1, at = this.map.freeNear(v.x + Math.cos(a) * 95, v.y + Math.sin(a) * 70 + 10);
@@ -417,7 +429,7 @@ export class Room {
     for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
     const species = [
       ...(prof.alphas ?? []).filter((x) => !x.rest && !x.wakeAt && x.s in SPECIES).map((x) => ({ s: x.s, alpha: true, legend: !!x.legend })),
-      ...(prof.pack ?? []).filter((s) => s in SPECIES && !SPECIES[s].boss).slice(0, ARMY_CAP).map((s) => ({ s, alpha: false, legend: false })),
+      ...(prof.pack ?? []).filter((s) => s in SPECIES && !SPECIES[s].boss).slice(0, armyCap((prof.learned ?? []).map(Number))).map((s) => ({ s, alpha: false, legend: false })),
     ];
     const pack = species.map((m, i): Dozer => {
       const b = (i / Math.max(1, species.length)) * Math.PI * 2, d = 40 + (i % 3) * 18;
@@ -567,7 +579,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats } };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats }, tomes: [...p.tomes], learned: [...p.learned], read_at: p.readAt, read_kind: p.readKind };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -606,7 +618,7 @@ export class Room {
   }
 
   private saveVillage() {
-    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, beaten: [...this.beaten], ...this.stock, banned: [...this.banned] });
+    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, beaten: [...this.beaten], heart: this.heart, ...this.stock, banned: [...this.banned] });
   }
 
   /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
@@ -614,6 +626,7 @@ export class Room {
     if (!BUILDING_IDS.includes(b) || this.buildings.includes(b) || !this.near(p, this.posOf(b))) return;
     const needs = BUILDINGS[b].needs;
     if (needs && !this.buildings.includes(needs)) return; // emplacement à défricher d'abord
+    if (b === 'school' && !this.camps.includes(SCHOOL_CAMP)) return; // l'école se bâtit au Camp avancé, une fois établi
     if (this.hall < BUILDINGS[b].hall || !this.pay(p, buildingCost(b))) return;
     this.buildings.push(b);
     if (b === 'palisade') {
@@ -636,7 +649,7 @@ export class Room {
 
   /** Grottes dont le parchemin attend ce dompteur : géant déjà vaincu par le village, souvenir pas encore rendu, pas déjà dans son sac. */
   private scrollCaves(p: Player) {
-    return this.map.caves.filter((c) => this.beaten.includes(c.boss) && !this.told.includes(c.boss) && !p.scrolls.includes(c.boss)).map((c) => c.id);
+    return this.map.caves.filter((c) => c.zone < VOLCANO_ZONE && this.beaten.includes(c.boss) && !this.told.includes(c.boss) && !p.scrolls.includes(c.boss)).map((c) => c.id);
   }
 
   /** Ramasser le parchemin laissé par le géant de cette grotte (chacun le sien, tant que le vieil homme ne l'a pas lu). */
@@ -681,8 +694,31 @@ export class Room {
     this.events.push({ e: 'boat', by: 0, stage: this.boat - 1, done: true });
   }
 
+  /** Géants dont le vieil homme attend le parchemin : ceux de l'île (pas ceux du volcan). */
   private bossCount() {
-    return this.map.caves.length;
+    return this.map.caves.filter((c) => c.zone < VOLCANO_ZONE).length;
+  }
+
+  /** Grotte par son id, ou la salle sous le volcan (HALL_ID). */
+  private caveById(id: number) {
+    return id === HALL_ID ? this.map.depths : this.map.caves[id];
+  }
+
+  /**
+   * Le cœur volcanique, pour tout le village : sur son autel, une fois vaincus les trois géants du volcan, on le prend ;
+   * devant le bateau rebâti, on l'installe dans sa coque. C'est la dernière étape : le bateau peut alors prendre la mer.
+   */
+  onHeart(p: Player) {
+    if (p.dead) return;
+    const altar = this.map.depths.inside, boat = this.map.shipwreck;
+    if (this.heart === 0 && dist2(p.x, p.y, altar.x, altar.y) <= HEART_REACH ** 2) {
+      if (!zoneBosses(VOLCANO_ZONE).every((b) => this.beaten.includes(b))) return;
+      this.heart = HEART_TAKEN;
+    } else if (this.heart === HEART_TAKEN && this.boat >= BOAT_STAGES.length && dist2(p.x, p.y, boat.x, boat.y) <= BOAT_REACH ** 2) {
+      this.heart = HEART_IN_BOAT;
+    } else return;
+    this.saveVillage();
+    this.events.push({ e: 'heart', by: p.id, installed: this.heart === HEART_IN_BOAT });
   }
 
   /** Tirer sur l'épée plantée dans le sable, à côté d'elle : au bout de SWORD_PULLS coups, elle est sortie. */
@@ -750,7 +786,7 @@ export class Room {
 
   /** Marché : acheter un monstre ordinaire d'une espèce déjà croisée (dans la limite de la meute). */
   onBuy(p: Player, s: number) {
-    if (!this.at(p, 'market') || !(s in SPECIES) || isBoss(s) || !p.seen.has(s) || this.armySize(p) >= ARMY_CAP) return;
+    if (!this.at(p, 'market') || !(s in SPECIES) || isBoss(s) || !p.seen.has(s) || this.armySize(p) >= armyCap(p.learned)) return;
     const gold = monsterBuyPrice(s);
     if (p.gold < gold) return;
     p.gold -= gold;
@@ -1039,7 +1075,10 @@ export class Room {
     this.clearEmptyCaves();
     this.updateAwakenings();
     this.updateSleepers();
-    if (this.tick % TICK_HZ === 0) this.updateBoat();
+    if (this.tick % TICK_HZ === 0) {
+      this.updateBoat();
+      this.updateLessons();
+    }
     for (const p of this.players.values()) {
       if (p.villageFound || p.dead || !this.map.inVillage(p.x, p.y)) continue;
       p.villageFound = true; // découvert : la prochaine fois, on arrivera ici
@@ -1328,6 +1367,7 @@ export class Room {
 
   /** Zone ouverte au village : la zone 1, puis chaque zone dont la porte s'est ouverte. */
   private zoneOpen(z: number) {
+    if (z === VOLCANO_ZONE) return volcanoOpen(this.beaten);
     return z <= 1 || this.gateIsOpen(z - 1);
   }
 
@@ -1343,6 +1383,12 @@ export class Room {
         // suricates : une colonie autour d'une tanière
         const den = map.dens[Math.floor(Math.random() * map.dens.length)];
         [cx, cy] = [den.x + (Math.random() - 0.5) * 60, den.y + (Math.random() - 0.5) * 60];
+      } else if (sp.zone === VOLCANO_ZONE) {
+        // créature de lave : dans la salle sous le volcan, loin de sa sortie, de l'autel et des antres
+        const h = map.depths, a = Math.random() * Math.PI * 2, k = Math.sqrt(Math.random()) * 0.85;
+        [cx, cy] = [h.inside.x + Math.cos(a) * (h.rx ?? 0) * k, h.inside.y + Math.sin(a) * (h.ry ?? 0) * k];
+        if (dist2(cx, cy, h.exit.x, h.exit.y) < 450 ** 2 || dist2(cx, cy, h.inside.x, h.inside.y) < 330 ** 2) continue;
+        if (map.caves.some((c) => c.zone === VOLCANO_ZONE && dist2(cx, cy, c.entrance.x, c.entrance.y) < 300 ** 2)) continue;
       } else if (sp.swim) {
         // créature aquatique : un point d'eau profonde de sa zone
         const pool = map.deepWater[sp.zone];
@@ -1358,7 +1404,7 @@ export class Room {
         [cx, cy] = [c.x + nv.x * off, c.y + nv.y * off];
       }
       if ((sp.swim ? !map.isWater(cx, cy) : map.blocked(cx, cy)) || map.zoneAt(cx, cy) !== sp.zone) continue;
-      if (map.arcAt(cx, cy) > fog - 150) continue; // jamais dans la brume (ni tout contre)
+      if (sp.zone !== VOLCANO_ZONE && map.arcAt(cx, cy) > fog - 150) continue; // jamais dans la brume (ni tout contre)
       if (map.inVillage(cx, cy, 250) || dist2(cx, cy, map.spawn.x, map.spawn.y) < SPAWN_SAFE_R ** 2) continue;
       if (map.siteAt(cx, cy, CAMP_R + 300) >= 0) continue;
       let tooClose = false;
@@ -1544,13 +1590,13 @@ export class Room {
     const t = this.nearest(p.x, p.y, PLAYER_R + 80, (e) => this.isFeedable(e) && !isBoss((e as Unit).s) && !(e as Unit).summoner) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (PLAYER_R + t.r + 26) ** 2) return;
     p.atkCd = FEED_CD;
-    if (this.armySize(p) >= ARMY_CAP) {
+    if (this.armySize(p) >= armyCap(p.learned)) {
       this.events.push({ e: 'full', to: p.id });
       return;
     }
     p.fruits--;
     p.dirty = true;
-    if (Math.random() < fruitTameChance(t.s)) {
+    if (Math.random() < fruitTameChance(t.s) + lessonBonus(p.learned, 'tame')) {
       this.makeTamed(t, p);
       this.events.push({ e: 'tame', id: t.id, by: p.id, s: t.s });
       p.stats.tamed++;
@@ -1603,7 +1649,8 @@ export class Room {
       this.events.push({ e: 'gold', to: p.id, n: gold, x: o.x, y: o.y - 10 });
     }
     // un filon donne aussi un peu de pierre ; rochers et bois mort donnent leur matière (quantité un peu au hasard)
-    const wood = o.res === 'wood' ? resRoll(resYield(o.zone)) : 0, stone = o.res === 'stone' ? resRoll(resYield(o.zone)) : o.res === 'gold' ? resRoll(oreStone(o.zone)) : 0;
+    const more = 1 + lessonBonus(p.learned, 'gather'); // leçons de récolte de l'école
+    const wood = o.res === 'wood' ? resRoll(resYield(o.zone) * more) : 0, stone = o.res === 'stone' ? resRoll(resYield(o.zone) * more) : o.res === 'gold' ? resRoll(oreStone(o.zone) * more) : 0;
     p.wood += wood;
     p.stone += stone;
     this.events.push({ e: 'res', to: p.id, wood, stone, x: o.x, y: o.y - (o.res === 'gold' ? 30 : 10) });
@@ -1623,7 +1670,7 @@ export class Room {
     }
     this.treeBack.set(i, this.time + TREE_RESPAWN_S);
     this.map.treeDown.add(i);
-    const wood = resRoll(treeWood(d.zone)), t = this.map.trunkOf(d);
+    const wood = resRoll(treeWood(d.zone) * (1 + lessonBonus(p.learned, 'gather'))), t = this.map.trunkOf(d);
     p.wood += wood;
     p.dirty = true;
     this.events.push({ e: 'res', to: p.id, wood, stone: 0, x: t.x, y: t.y - 40 });
@@ -1702,7 +1749,41 @@ export class Room {
     const gold = Math.round(SPECIES[ch.s].gold * (lo + Math.random() * (hi - lo)));
     p.gold += gold;
     p.dirty = true;
-    this.events.push({ e: 'chest', id, to: p.id, gold, x: Math.round(ch.x), y: Math.round(ch.y) });
+    // parfois un livre d'apprentissage, du tome de la zone du géant, d'une discipline au hasard : un seul exemplaire
+    // de chaque tome (jamais un livre qu'on a déjà, ni un tome déjà lu)
+    const tome = tomeOfZone(SPECIES[ch.s].zone);
+    const useful = LESSON_KINDS.map((_, k) => bookIndex(k, tome)).filter((b, k) => !p.tomes[b] && lessonsLeft(tome, p.learned[k]) > 0);
+    const book = useful.length && Math.random() < TOME_DROP ? useful[Math.floor(Math.random() * useful.length)] : -1;
+    if (book >= 0) p.tomes[book] = 1;
+    this.events.push({ e: 'chest', id, to: p.id, gold, x: Math.round(ch.x), y: Math.round(ch.y), ...(book >= 0 ? { book } : {}) });
+  }
+
+  /**
+   * École des dompteurs (au Camp avancé) : lire la leçon suivante dans le livre de son tome (30 minutes, même hors ligne).
+   * Le livre sert à toutes les leçons de son tome : on le garde jusqu'à la dernière.
+   */
+  onLearn(p: Player, kind: number) {
+    if (!(kind in LESSON_KINDS) || !this.at(p, 'school') || p.readAt || p.learned[kind] >= LESSONS) return;
+    if (!p.tomes[bookIndex(kind, tomeForLesson(p.learned[kind]))]) return;
+    p.readAt = Date.now() + LESSON_MS;
+    p.readKind = kind;
+    p.dirty = true;
+    this.events.push({ e: 'learn', by: p.id, kind, lesson: p.learned[kind], done: false });
+  }
+
+  /** Leçon en cours terminée (on regarde l'horloge : elle avance même quand le dompteur est déconnecté). */
+  private finishLesson(p: Player) {
+    if (!p.readAt || Date.now() < p.readAt) return false;
+    p.readAt = 0;
+    const k = p.readKind, tome = tomeForLesson(p.learned[k]);
+    p.learned[k] = Math.min(LESSONS, p.learned[k] + 1);
+    if (tome >= 0 && !lessonsLeft(tome, p.learned[k])) p.tomes[bookIndex(k, tome)] = 0; // tome lu en entier : le livre est fini
+    p.dirty = true;
+    return true;
+  }
+
+  private updateLessons() {
+    for (const p of this.players.values()) if (this.finishLesson(p)) this.events.push({ e: 'learn', by: p.id, kind: p.readKind, lesson: p.learned[p.readKind] - 1, done: true });
   }
 
   /** Parler au géant endormi de sa grotte, à côté de lui : il se réveille et le combat commence. */
@@ -1932,10 +2013,11 @@ export class Room {
 
   /** Entrer dans une grotte (depuis son entrée) ou en sortir (depuis sa sortie), avec sa meute. */
   onCave(p: Player, id: number, enter: boolean) {
-    const c = this.map.caves[id];
+    const c = this.caveById(id);
     if (!c || p.dead) return;
     if (this.swimming(p)) return; // pas de grotte à la nage
-    if (enter && !this.unlocked.includes(id)) return; // grotte pas encore débloquée
+    // grotte pas encore débloquée ; le volcan, lui, s'ouvre une fois vaincus les géants de la Mer de sable
+    if (enter && !(id === HALL_ID ? volcanoOpen(this.beaten) : this.unlocked.includes(id))) return;
     const from = enter ? c.entrance : c.exit;
     if (dist2(p.x, p.y, from.x, from.y) > (BUILDING_REACH + 40) ** 2) return;
     if (this.time - (this.caveAt.get(p) ?? -Infinity) < CAVE_CD) return;
@@ -2671,7 +2753,7 @@ export class Room {
       if (p.dead || dist2(p.x, p.y, u.x, u.y) > GOLD_SHARE_R ** 2) continue;
       if (!boss) p.gold += gold; // l'or d'un géant est dans son coffre
       if (boss && !this.wantsSoul(p, u.s)) continue; // Alpha déjà légendaire, ou déjà 3 âmes : pas d'âme en plus
-      if (Math.random() < (boss ? BOSS_SOUL_DROP : ESSENCE_DROP)) {
+      if (Math.random() < (boss ? BOSS_SOUL_DROP : ESSENCE_DROP + lessonBonus(p.learned, 'essence'))) {
         p.essences[u.s] += 1; // pour un mini-boss, c'est son âme
         this.events.push({ e: boss ? 'soul' : 'essence', to: p.id, s: u.s, x: u.x, y: u.y });
       }
@@ -2715,10 +2797,10 @@ export class Room {
 
     let tame = false;
     // Coup de pouce au départ : 50 % tant que la meute est vide.
-    const chance = credit && this.armySize(credit) === 0 ? 0.5 : TAME_CHANCE;
+    const chance = credit && this.armySize(credit) === 0 ? 0.5 : TAME_CHANCE + (credit ? lessonBonus(credit.learned, 'tame') : 0);
     // Les renforts appelés par un géant ne s'apprivoisent pas.
     if (credit && !u.summoner && !sp.passive && Math.random() < chance) {
-      if (this.armySize(credit) < ARMY_CAP) tame = true; // meute pleine : rien (pas de message à chaque monstre tué)
+      if (this.armySize(credit) < armyCap(credit.learned)) tame = true; // meute pleine : rien (pas de message à chaque monstre tué)
     }
 
     if (tame && credit) {
@@ -2857,6 +2939,7 @@ export class Room {
         respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
         revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),
         pack: this.armySize(p),
+        tomes: p.tomes, learned: p.learned, readKind: p.readKind, reading: p.readAt ? Math.max(0, Math.ceil((p.readAt - Date.now()) / 1000)) : 0,
         mount: this.mountState(p),
         slowed: p.slowUntil > this.time,
         resting: p.resting.map((r) => ({ species: r.s, level: r.lvl, legend: r.legend })),
@@ -2866,7 +2949,7 @@ export class Room {
         })),
       };
       full.set(p.id, st);
-      light.set(p.id, { ...st, essences: [], army: [], resting: [], seen: [], awakening: [] });
+      light.set(p.id, { ...st, essences: [], army: [], resting: [], seen: [], awakening: [], tomes: [] });
     }
     const vr2 = VIEW_R * VIEW_R;
     const spots = this.events.map((e) => this.eventSpot(e)), er2 = (VIEW_R + 300) ** 2;
@@ -2928,7 +3011,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, unlocked: this.unlocked, hazards, shots, ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, ev });
     }
   }
 }

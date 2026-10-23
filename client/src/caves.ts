@@ -1,4 +1,4 @@
-// Grottes selon le biome (zone 1 à 6) : leur entrée sur la carte et les décors de leur intérieur.
+// Grottes selon le biome (zone 1 à 7) : leur entrée sur la carte et les décors de leur intérieur.
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -239,6 +239,26 @@ export function drawEntrance(ctx: Ctx, x: number, y: number, zone: number, t: nu
     mouth(ctx, x, y, 38, 70, boss, t);
     torch(ctx, x - 86, y + 18, t, '#E8693F', '#F7D774');
     torch(ctx, x + 86, y + 18, t, '#E8693F', '#F7D774');
+  } else if (zone === 7) {
+    // Entrailles du volcan : obsidienne veinée de lave, une coulée qui suinte du seuil, braseros
+    poly(ctx, x, y, [[-110, 40], [-104, -24], [-74, -74], [-26, -94], [28, -96], [76, -72], [106, -22], [110, 40]], '#241A1C');
+    ctx.strokeStyle = `rgba(232,105,63,${0.55 + 0.25 * Math.sin(t * 1.7)})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - 90, y + 30);
+    ctx.lineTo(x - 64, y - 30);
+    ctx.lineTo(x - 70, y - 62);
+    ctx.moveTo(x + 86, y + 28);
+    ctx.lineTo(x + 60, y - 20);
+    ctx.lineTo(x + 40, y - 80);
+    ctx.stroke();
+    mouth(ctx, x, y, 38, 70, boss, t);
+    ctx.fillStyle = `rgba(240,120,50,${0.7 + 0.2 * Math.sin(t * 2.3)})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y + 46, 46, 9, 0, 0, TAU);
+    ctx.fill();
+    torch(ctx, x - 80, y + 18, t, '#E8693F', '#FFD27A');
+    torch(ctx, x + 80, y + 18, t, '#E8693F', '#FFD27A');
   } else {
     // Lacs brumeux : roche noire luisante, mare devant l'entrée, roseaux, lanternes bleues
     ctx.fillStyle = '#2E6574';
@@ -280,6 +300,7 @@ export const INSIDE = [
   { floor: '#3A4A42', wall: '#2A3430', prop: 'runes' },
   { floor: '#2E4448', wall: '#1E2C30', prop: 'water' },
   { floor: '#8A6A42', wall: '#5E4428', prop: 'bones' }, // Mer de sable : grès et ossements
+  { floor: '#4A2E22', wall: '#2A1A14', prop: 'lava' }, // Entrailles du volcan : basalte et lave
 ];
 
 /** Décor du biome posé le long de la paroi d'un intérieur (i : rang du décor, a : angle). */
@@ -316,6 +337,20 @@ export function insideProp(ctx: Ctx, zone: number, px: number, py: number, a: nu
       ctx.lineTo(px + 10, py + 14);
     }
     ctx.stroke();
+  } else if (prop === 'lava') {
+    ctx.fillStyle = 'rgba(240,110,50,0.75)';
+    ctx.beginPath();
+    ctx.ellipse(px, py, 26, 10, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,214,122,0.8)';
+    ctx.beginPath();
+    ctx.ellipse(px, py, 12, 4, 0, 0, TAU);
+    ctx.fill();
+    if (i % 2) {
+      ctx.fillStyle = '#2C201C';
+      ctx.fillRect(px + 20, py - 46, 14, 48);
+      ctx.fillRect(px + 36, py - 30, 12, 32);
+    }
   } else if (prop === 'runes') {
     if (i % 3) return;
     ctx.fillStyle = '#5E6662';

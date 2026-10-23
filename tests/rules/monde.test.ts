@@ -56,8 +56,8 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
       const zones = [1, 2, 3, 4, 5, 6].map((z) => { const q = m.spineAt((m.zoneFrom(z) + m.zoneTo(z)) / 2); return m.zoneAt(q.x, q.y); }).join('');
       const end = m.spineAt(m.length - 250);
       const reachEnd = m.findPath(stone.x, stone.y + 50, end.x, end.y, 600000);
-      check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '123456' && m.caves.length === 15,
-        `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de l'île (Mer de sable) atteignable, 15 grottes`);
+      check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '123456' && m.caves.filter((c) => c.zone <= 6).length === 15 && m.caves.filter((c) => c.zone === 7).length === 3,
+        `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de l'île (Mer de sable) atteignable, 15 grottes sur l'île et 3 antres sous le volcan`);
       const mid = m.length / 2, c = m.spineAt(mid), nv = m.normalAt(mid), far = m.halfWidth(mid) + 1700;
       let shallow = false;
       for (let x = -WORLD_HALF + 50; x < WORLD_HALF && !shallow; x += 120) for (let y = -WORLD_HALF + 50; y < WORLD_HALF && !shallow; y += 120) shallow = m.isSea(x, y) && m.isWater(x, y);
@@ -171,7 +171,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
   });
 
   rule('Ordre des espèces figé : leur index sert dans les sauvegardes (essences, Alphas). On n\'ajoute qu\'à la fin.', () => {
-    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant';
+    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise';
     check(SPECIES.map((sp) => sp.key).join(' ') === order, `ordre des ${SPECIES.length} espèces inchangé (sauvegardes intactes)`);
   });
 

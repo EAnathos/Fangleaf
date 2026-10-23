@@ -1739,6 +1739,89 @@ export class World {
     ctx.restore();
   }
 
+  /**
+   * École des dompteurs, dans le Camp avancé : une estrade de pierre ; le camp établi, son chantier (piquets et
+   * planches) ; bâtie, une maison à colombages, un grand livre ouvert au-dessus de la porte et une lanterne.
+   */
+  drawSchool(ctx: CanvasRenderingContext2D, camp: boolean, built: boolean, t: number) {
+    const { x, y } = this.map.school;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(8,14,12,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(4, 8, 58, 14, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#6E726C'; // estrade
+    ctx.fillRect(-50, -6, 100, 12);
+    ctx.fillStyle = '#5E625C';
+    for (let k = -50; k < 50; k += 20) ctx.fillRect(k + 1, 2, 18, 3);
+    if (built) {
+      ctx.fillStyle = '#E2D3B0'; // murs
+      ctx.fillRect(-40, -54, 80, 50);
+      ctx.fillStyle = '#5B3F2C'; // colombages
+      for (const k of [-40, -14, 12, 37]) ctx.fillRect(k, -54, 3, 50);
+      ctx.fillRect(-40, -32, 80, 3);
+      ctx.fillStyle = '#3E5A6E'; // toit d'ardoise
+      ctx.beginPath();
+      ctx.moveTo(-50, -52);
+      ctx.lineTo(0, -88);
+      ctx.lineTo(50, -52);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#2E4352';
+      ctx.fillRect(-50, -54, 100, 4);
+      ctx.fillStyle = '#2A1F17'; // porte
+      ctx.fillRect(-9, -26, 18, 22);
+      // fenêtres éclairées (elles vacillent : quelqu'un lit)
+      const glow = 0.75 + 0.25 * Math.sin(t * 2.3);
+      ctx.fillStyle = `rgba(240,182,74,${glow})`;
+      ctx.fillRect(-32, -26, 12, 10);
+      ctx.fillRect(20, -26, 12, 10);
+      // grand livre ouvert, enseigne au-dessus de la porte
+      ctx.fillStyle = '#8A3B2E';
+      ctx.fillRect(-15, -50, 30, 15);
+      ctx.fillStyle = '#F2E8CF';
+      ctx.beginPath();
+      ctx.moveTo(0, -46);
+      ctx.quadraticCurveTo(-7, -50, -13, -47);
+      ctx.lineTo(-13, -37);
+      ctx.quadraticCurveTo(-7, -40, 0, -37);
+      ctx.quadraticCurveTo(7, -40, 13, -37);
+      ctx.lineTo(13, -47);
+      ctx.quadraticCurveTo(7, -50, 0, -46);
+      ctx.fill();
+      ctx.strokeStyle = '#8B7E64';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, -46);
+      ctx.lineTo(0, -37);
+      ctx.stroke();
+    } else if (camp) {
+      // chantier : quatre piquets aux coins et une pile de planches
+      for (const [px, py] of [[-40, -4], [40, -4], [-34, -40], [34, -40]]) {
+        ctx.fillStyle = '#5B3F2C';
+        ctx.fillRect(px - 2, py - 16, 4, 18);
+        ctx.fillStyle = '#E8DCC0';
+        ctx.fillRect(px - 2, py - 16, 4, 4);
+      }
+      for (let k = 0; k < 3; k++) {
+        ctx.fillStyle = k % 2 ? '#A8743F' : '#8E6136';
+        ctx.fillRect(-22 + k * 3, -12 - k * 5, 44, 5);
+      }
+    }
+    if (camp && !built) {
+      // bâtie, l'enseigne au livre suffit (son nom couvrirait celui du camp)
+      ctx.font = '700 13px "Pixelify Sans", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+      ctx.strokeText('Chantier de l\'école', 0, -50);
+      ctx.fillStyle = '#C9CFC2';
+      ctx.fillText('Chantier de l\'école', 0, -50);
+    }
+    ctx.restore();
+  }
+
   /** Pierre de passage : un menhir gravé, dont la rune luit quand elle est reliée. */
   drawStone(ctx: CanvasRenderingContext2D, x: number, y: number, active: boolean, t: number, label?: string) {
     ctx.fillStyle = 'rgba(8,14,12,0.35)';

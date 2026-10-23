@@ -7,7 +7,7 @@ export const MAX_PLAYERS = 4;
 export const SWORD_PULLS = 3; // à l'arrivée sur l'île, l'épée est plantée dans le sable : trois coups pour la déterrer
 export const SWORD_REACH = 80;
 export const MAX_VILLAGES = 3; // villages par compte (on choisit le sien au lobby)
-export const WORLD_HALF = 10800; // carte de -10800 à 10800 : une île au milieu de la mer (voir worldmap.ts)
+export const WORLD_HALF = 12000; // carte de -12000 à 12000 : une île au milieu de la mer (voir worldmap.ts)
 export const VILLAGE_R = 360;
 export const VIEW_R = 1250; // rayon d'intérêt : unités envoyées à chaque joueur
 
@@ -18,7 +18,7 @@ export const MARKET_OFFSET = { x: -168, y: -185 };
 export const BUILDING_REACH = 110;
 // Bâtiments du village : construits par n'importe quel membre contre de l'or, une fois pour tout le village.
 // Il faut aussi du bois et de la pierre (récoltés sur la carte), et parfois un Hôtel de ville assez développé.
-export type BuildingId = 'forge' | 'den' | 'market' | 'stone' | 'palisade' | 'plot_forge' | 'plot_den' | 'plot_market' | 'forge2';
+export type BuildingId = 'forge' | 'den' | 'market' | 'stone' | 'palisade' | 'plot_forge' | 'plot_den' | 'plot_market' | 'forge2' | 'school';
 export interface Cost {
   gold: number;
   wood: number;
@@ -37,6 +37,8 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: n
   stone: { name: 'Pierre de passage', cost: 200, wood: 10, stone: 40, hall: 2, desc: 'Voyage instantané entre le village et les camps établis.' },
   // amélioration de la forge (à la forge, pas d'emplacement à part) : au-delà du niveau 10, l'arme suit une spécialisation
   forge2: { name: 'Grande forge', cost: 2500, wood: 400, stone: 450, hall: 4, desc: 'Au-delà du niveau 10, choisis la spécialisation de ton arme.', needs: 'forge' },
+  // au Camp avancé (pas au village) : il faut d'abord l'avoir établi
+  school: { name: 'École des dompteurs', cost: 1500, wood: 250, stone: 200, hall: 4, desc: 'Au Camp avancé : on y lit les livres d\'apprentissage trouvés dans les coffres des géants, pour mener une plus grande meute.' },
 };
 /** « 20 or · 15 bois · 10 pierre » (les montants nuls sont omis). */
 export const costText = (c: Cost) => [c.gold && `${c.gold} or`, c.wood && `${c.wood} bois`, c.stone && `${c.stone} pierre`].filter(Boolean).join(' · ');
@@ -109,6 +111,48 @@ export const ELDER_REACH = 90; // pour lui parler, lui donner un parchemin ou de
 export const SCROLL_REACH = 70; // pour ramasser un parchemin
 export const ELDER_OFFSET = { x: -46, y: 62 }; // le vieil homme, près du feu du village
 export const VILLAGE_STONE_OFFSET = { x: 95, y: 225 }; // Pierre de passage du village
+// École des dompteurs, au Camp avancé : les coffres des géants lâchent parfois un livre d'apprentissage.
+// Il y a plusieurs disciplines (meute, apprivoisement, essences, récolte), chacune en trois tomes : le tome dépend de
+// la zone du géant (I : zones 1-2, II : 3-4, III : 5-6). On n'a qu'un exemplaire de chaque tome, qui enseigne une leçon
+// de sa discipline, dans l'ordre (le tome II demande d'avoir lu le tome I) : trois leçons par discipline en tout.
+// Une leçon lue à l'école prend 30 minutes.
+export const SCHOOL_CAMP = 0; // l'école se bâtit au premier camp
+export type LessonKind = 'pack' | 'tame' | 'essence' | 'gather';
+export interface Discipline {
+  name: string;
+  tomes: string[]; // nom du livre de chaque tome (I, II, III)
+  per: number; // gain par leçon apprise
+  desc: string; // ce que rapporte une leçon
+}
+export const DISCIPLINES: Record<LessonKind, Discipline> = {
+  pack: { name: 'Meute', tomes: ['Traité du jeune dompteur', 'Manuel de la grande meute', 'Codex du maître des bêtes'], per: 1, desc: '+1 place dans la meute' },
+  tame: { name: 'Apprivoisement', tomes: ['Carnet du charmeur', 'Art de l\'apprivoisement', 'Grimoire des liens'], per: 0.02, desc: '+2 % de chance d\'apprivoiser (au combat et aux fruits)' },
+  essence: { name: 'Essences', tomes: ['Herbier des essences', 'Traité des âmes sauvages', 'Codex de l\'éveil'], per: 0.03, desc: '+3 % de chance de recueillir une essence' },
+  gather: { name: 'Récolte', tomes: ['Almanach du bûcheron', 'Manuel du mineur', 'Somme des artisans'], per: 0.1, desc: '+10 % de bois et de pierre récoltés' },
+};
+/** Disciplines dans l'ordre de la sauvegarde (n'ajouter qu'à la fin). */
+export const LESSON_KINDS = Object.keys(DISCIPLINES) as LessonKind[];
+export const TOMES = 3; // tomes par discipline
+export const LESSONS_PER_TOME = 1;
+export const LESSONS = TOMES * LESSONS_PER_TOME; // leçons par discipline
+export const LESSON_MS = 30 * 60 * 1000; // lecture d'une leçon (temps réel : elle continue hors ligne)
+export const TOME_DROP = 0.25; // chance, à l'ouverture d'un coffre de géant, d'y trouver un livre
+/** Index d'un livre dans le sac : discipline k, tome t. */
+export const bookIndex = (k: number, tome: number) => k * TOMES + tome;
+export const BOOKS = LESSON_KINDS.length * TOMES;
+/** Nom d'un livre (index dans le sac). */
+export const bookName = (i: number) => DISCIPLINES[LESSON_KINDS[Math.floor(i / TOMES)]].tomes[i % TOMES];
+/** Tome (0 à TOMES - 1) que lâche le coffre d'un géant de cette zone. */
+export const tomeOfZone = (zone: number) => Math.min(TOMES - 1, Math.floor((zone - 1) / 2));
+/** Tome dont il faut un exemplaire pour apprendre la leçon suivante (lessons : leçons déjà apprises de la discipline), ou -1 si tout est su. */
+export const tomeForLesson = (lessons: number) => (lessons >= LESSONS ? -1 : Math.floor(lessons / LESSONS_PER_TOME));
+/** Leçons d'un tome encore à apprendre (après celles déjà sues dans sa discipline). */
+export const lessonsLeft = (tome: number, lessons: number) => Math.max(0, Math.min(LESSONS_PER_TOME, LESSONS_PER_TOME * (tome + 1) - lessons));
+/** Gain total des leçons apprises d'une discipline (learned : leçons sues, par discipline). */
+export const lessonBonus = (learned: readonly number[], kind: LessonKind) =>
+  DISCIPLINES[kind].per * Math.max(0, Math.min(LESSONS, learned[LESSON_KINDS.indexOf(kind)] ?? 0));
+/** Places de la meute ordinaire, avec les leçons de l'école. */
+export const armyCap = (learned: readonly number[]) => ARMY_CAP + Math.round(lessonBonus(learned, 'pack'));
 export const campName = (i: number) => (i === 0 ? 'Camp avancé' : `Camp avancé ${i + 1}`);
 
 export const PLAYER_R = 16;
@@ -170,7 +214,7 @@ export const REVIVE_R = 80;
 export const REVIVE_HP = 0.5; // relevé avec la moitié de ses PV
 export const PLAYER_COLORS = ['#5CC8B8', '#E6A15C', '#D886C9', '#8FD16A']; // une par place du village (MAX_PLAYERS)
 
-export const ARMY_CAP = 12; // meute ordinaire (les Alphas ne comptent pas)
+export const ARMY_CAP = 12; // meute ordinaire (les Alphas ne comptent pas), avant les leçons de l'école (armyCap)
 export const RECALL_R = 420; // trop loin du dompteur : la meute lâche tout et revient
 export const RECALL_DONE_R = 110;
 export const TAME_CHANCE = 0.25;
@@ -413,6 +457,9 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   sand_queen: [{ kind: 'blink', cd: 5 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'slam', cd: 8 }], // elle plonge et resurgit sous sa cible
   vulture_king: [{ kind: 'leap', cd: 5 }, { kind: 'mortar', cd: 7, n: 4 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // piqués, pluie d'ossements, ses vautours
   moon_jackal: [{ kind: 'charge', cd: 4 }, { kind: 'summon', cd: 9, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
+  salamander_queen: [{ kind: 'charge', cd: 4 }, { kind: 'summon', cd: 10, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }], // elle fonce, appelle ses petits
+  ash_lord: [{ kind: 'leap', cd: 5 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }], // piqués, il disparaît dans la cendre, sa nuée
+  mountain_tortoise: [{ kind: 'mortar', cd: 5, n: 6 }, { kind: 'slam', cd: 7, power: 3 }, { kind: 'enrage', below: 0.3 }], // son volcan crache, il fait trembler le sol
 };
 /** Coup ordinaire d'un géant : une seule cible (deux pour la reine des Gluants et l'ours), dégâts multipliés. */
 const BOSS_MELEE: Record<string, { targets: number; mult: number }> = { slime_queen: { targets: 2, mult: 1.3 }, colossus: { targets: 2, mult: 1.3 } };
@@ -523,6 +570,14 @@ export const SPECIES: Species[] = [
   { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 50000, dmg: 205, speed: 220, atkCd: 0.9, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Anubeth, le Chacal de la Lune', sprite: 'jackal', base: 'jackal' },
   // Bois profonds : le Tréant dort dans un arbre ; il en sort parfois quand on l'abat (jamais d'apparition ailleurs).
   { key: 'treant', name: 'Tréant', color: '#6B4E30', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1], awaken: 20 }, // rare : éveil moins cher
+  // Entrailles du volcan (zone 7, sous la Mer de sable) : trois espèces qu'on ne voit nulle part ailleurs, et leurs géants
+  // (un antre chacun dans la salle).
+  { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 3600, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 7, population: 16, pack: [2, 4] },
+  { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 2800, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 7, population: 14, pack: [3, 5] },
+  { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 9000, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 7, population: 10, pack: [1, 1], ranged: { kind: 'arc', range: 360, windup: 0.7, speed: 0, splash: 60 } },
+  { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Pyrrha, la Mère des Braises', sprite: 'salamander', base: 'salamander' },
+  { key: 'ash_lord', name: 'Seigneur des cendres', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Noctembre, l\'Aile de Cendre', sprite: 'ash_bat', base: 'ash_bat' },
+  { key: 'mountain_tortoise', name: 'Tortue-Montagne', color: '#40342E', r: 70, hp: 170000, dmg: 520, speed: 185, atkCd: 1.5, gold: 5000, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Cratère, la Montagne qui Marche', sprite: 'lava_tortoise', base: 'lava_tortoise' },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);
@@ -532,7 +587,25 @@ export const SPECIES_BY_ZONE = SPECIES.map((_, i) => i).sort((a, b) => SPECIES[a
 
 // Le monde est une île (voir worldmap.ts) découpée en ZONES zones successives, de plus en plus loin de la plage d'arrivée.
 export const ZONES = 6; // la Mer de sable va jusqu'au bout de l'île
-export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable'];
+/** Longueur de chaque zone le long de l'île, en parts (la Mer de sable est plus grande : son volcan y tient). */
+export const ZONE_WEIGHTS = [1, 1, 1, 1, 1, 1.6];
+// Sous le volcan de la Mer de sable : une zone de plus, souterraine (une grande salle hors de l'île), ses monstres et
+// trois antres de géants. Les trois vaincus, le cœur volcanique se libère au centre de la salle.
+export const VOLCANO_ZONE = ZONES + 1;
+export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable', 'Entrailles du volcan'];
+export const VOLCANO_R = 460; // le volcan, sur l'île : demi-largeur de sa base (une ellipse aplatie, VOLCANO_RY) ; il tient à l'écran
+export const VOLCANO_RY = 0.55;
+export const HALL_RX = 950; // la salle sous le volcan (ellipse irrégulière, comme une grotte) : depuis sa sortie, on voit l'autel
+export const HALL_RY = 540;
+export const HEART_REACH = 90; // pour prendre le cœur volcanique, sur son autel
+// Le cœur volcanique est la dernière étape du bateau : pris sur son autel, puis installé dans la coque rebâtie.
+export const HEART_TAKEN = 1;
+export const HEART_IN_BOAT = 2;
+export const BOAT_REACH = 230; // pour installer le cœur, devant le bateau (l'épave du bout de l'île)
+/** Le bateau peut prendre la mer : rebâti en entier, son cœur volcanique installé. */
+export const boatReady = (boat: number, heart: number) => boat >= BOAT_STAGES.length && heart >= HEART_IN_BOAT;
+/** Le volcan s'ouvre quand le village a vaincu tous les géants de la Mer de sable. */
+export const volcanoOpen = (beaten: readonly number[]) => zoneBosses(ZONES).every((b) => beaten.includes(b));
 export const SPAWN_SAFE_R = 420; // pas de monstre qui apparaît près de la plage d'arrivée
 
 // Buissons à fruits : le gibier passif vient y manger ; les fruits repoussent ensuite.

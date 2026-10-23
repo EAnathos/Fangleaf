@@ -46,7 +46,8 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
       if (k < BOAT_STAGES.length - 1) r.onBoat(p);
     }
     check(r.boat === BOAT_STAGES.length && saved.boat === BOAT_STAGES.length, `bateau terminé en ${BOAT_STAGES.length} étapes`);
-    check(ELDER_CHAPTERS.length === m.caves.length, `un souvenir par géant (${ELDER_CHAPTERS.length} chapitres, ${m.caves.length} géants)`);
+    const island = m.caves.filter((c: { zone: number }) => c.zone <= 6).length;
+    check(ELDER_CHAPTERS.length === island, `un souvenir par géant de l'île (${ELDER_CHAPTERS.length} chapitres, ${island} géants ; ceux du volcan n'ont pas de parchemin)`);
     [p.x, p.y] = [m.stones[0].x, m.stones[0].y + 40];
     r.onTravel(p, -2);
     check(Math.hypot(p.x - m.boatStone.x, p.y - m.boatStone.y) < 120, 'Pierre de passage du bateau : on y voyage depuis le village');
@@ -390,7 +391,8 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
         const t = r.map.trunkOf(d);
         for (let a = 0; a < 8; a++) {
           const x = t.x + Math.cos(a) * (t.r + 22), y = t.y + Math.sin(a) * (t.r + 22);
-          if (!r.map.blocked(x, y)) return { d, t, x, y };
+          // (pas de filon ni de rocher à portée de pioche : on les récolterait avant l'arbre)
+          if (!r.map.blocked(x, y) && !r.map.ores.some((o: { x: number; y: number }) => Math.hypot(o.x - x, o.y - y) < 120)) return { d, t, x, y };
         }
       }
       throw new Error('pas d\'arbre');

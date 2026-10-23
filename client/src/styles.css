@@ -303,6 +303,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .camp-perks { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 .camp-perks b { color: var(--text); }
 .modal.camp .cta:disabled, .stone-row .cta:disabled { opacity: 0.55; cursor: not-allowed; }
+.modal.school { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow-y: auto; }
+.school-list { gap: 8px; }
+.school-list .stone-row .col { flex: 1; min-width: 0; }
 .prompt.travel, .prompt.camp { border-color: var(--stone); color: var(--stone); }
 .prompt.market { border-color: var(--ally); color: var(--ally); }
 .prompt.chest { border-color: var(--amber); color: var(--amber); background: rgba(240, 182, 74, 0.15); }
