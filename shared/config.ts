@@ -439,7 +439,9 @@ export type BossMove =
   | { kind: 'rocks'; cd: number } // projette des rochers sur plusieurs cibles
   | { kind: 'blink'; cd: number } // disparaît et réapparaît près d'une cible
   | { kind: 'volley'; cd: number; n: number; shot: 'bolt' | 'jet' } // salve de projectiles en éventail (esquivable)
-  | { kind: 'mortar'; cd: number; n: number }; // pluie de tirs en cloche, cercles annoncés au sol
+  | { kind: 'mortar'; cd: number; n: number } // pluie de tirs en cloche, cercles annoncés au sol
+  | { kind: 'trail'; cd: number; dur: number } // pendant dur secondes, il laisse derrière lui des flaques de lave qui brûlent
+  | { kind: 'spin'; cd: number; arms: number; dur: number }; // il s'arrête : des jets de flammes tournent autour de lui (annoncés au sol)
 
 export const BOSS_MOVES: Record<string, BossMove[]> = {
   slime_queen: [{ kind: 'leap', cd: 6 }, { kind: 'split', at: [0.66, 0.33], n: 3 }],
@@ -457,9 +459,12 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   sand_queen: [{ kind: 'blink', cd: 5 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'slam', cd: 8 }], // elle plonge et resurgit sous sa cible
   vulture_king: [{ kind: 'leap', cd: 5 }, { kind: 'mortar', cd: 7, n: 4 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // piqués, pluie d'ossements, ses vautours
   moon_jackal: [{ kind: 'charge', cd: 4 }, { kind: 'summon', cd: 9, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
-  salamander_queen: [{ kind: 'charge', cd: 4 }, { kind: 'summon', cd: 10, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }], // elle fonce, appelle ses petits
-  ash_lord: [{ kind: 'leap', cd: 5 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }], // piqués, il disparaît dans la cendre, sa nuée
-  mountain_tortoise: [{ kind: 'mortar', cd: 5, n: 6 }, { kind: 'slam', cd: 7, power: 3 }, { kind: 'enrage', below: 0.3 }], // son volcan crache, il fait trembler le sol
+  // elle fonce en laissant une traînée de lave, appelle ses petits
+  salamander_queen: [{ kind: 'trail', cd: 7, dur: 4 }, { kind: 'charge', cd: 4 }, { kind: 'summon', cd: 10, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
+  // piqués, tourbillon de flammes, il disparaît dans la cendre, sa nuée
+  ash_lord: [{ kind: 'leap', cd: 5 }, { kind: 'spin', cd: 9, arms: 3, dur: 3.5 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
+  // son volcan crache, ses jets de flammes tournent, il sème la lave, il fait trembler le sol
+  mountain_tortoise: [{ kind: 'mortar', cd: 5, n: 6 }, { kind: 'spin', cd: 10, arms: 4, dur: 4 }, { kind: 'trail', cd: 12, dur: 5 }, { kind: 'slam', cd: 7, power: 3 }, { kind: 'enrage', below: 0.3 }],
 };
 /** Coup ordinaire d'un géant : une seule cible (deux pour la reine des Gluants et l'ours), dégâts multipliés. */
 const BOSS_MELEE: Record<string, { targets: number; mult: number }> = { slime_queen: { targets: 2, mult: 1.3 }, colossus: { targets: 2, mult: 1.3 } };
@@ -467,7 +472,7 @@ export const bossMelee = (key: string) => BOSS_MELEE[key] ?? { targets: 1, mult:
 export const MOVE_NAMES: Record<BossMove['kind'], string> = {
   leap: 'Bond écrasant', split: 'Division', spores: 'Nuages de spores', summon: 'Renforts', charge: 'Charge',
   web: 'Toiles', slam: 'Onde de choc', enrage: 'Rage', rocks: 'Pluie de rochers', blink: 'Clignement',
-  volley: 'Salve', mortar: 'Pluie de mortiers',
+  volley: 'Salve', mortar: 'Pluie de mortiers', trail: 'Traînée de lave', spin: 'Tourbillon de flammes',
 };
 // Les géants poursuivent : quand leur cible s'éloigne, ils accélèrent (impossible de les tuer en reculant).
 export const BOSS_CHASE_R = 0; // dès que sa cible n'est plus au contact

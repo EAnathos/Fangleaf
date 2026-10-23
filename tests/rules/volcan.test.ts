@@ -100,4 +100,89 @@ describe('Le volcan et ses entrailles', () => {
     check(r.bossCount() === r.map.caves.filter((c: { zone: number }) => c.zone <= ZONES).length, 'les géants du volcan ne comptent pas dans les souvenirs du vieil homme');
     check(!r.scrollCaves(p).some((id: number) => r.map.caves[id].zone === VOLCANO_ZONE), 'ils ne laissent pas de parchemin');
   });
+
+  rule('À dos de vautour : pas de survol du volcan, et on combat les vautours en plein vol.', () => {
+    const r = room(), m = r.map, v = m.volcano, mo = m.volcanoMouth;
+    r.units.clear();
+    const p = r.addPlayer('aile', noop), q = r.addPlayer('pied', noop);
+    const vul = SPECIES.findIndex((sp) => sp.key === 'vulture');
+    check(!m.passable(v.x, v.y, false, true) && !m.passable(v.x + VOLCANO_R * 0.7, v.y, false, true), 'en vol, la base du volcan reste infranchissable');
+    const tree = m.decor.find((d: { kind: number; zone: number }) => d.kind === 0 && d.zone === 2);
+    const trunk = m.trunkOf(tree);
+    check(m.blocked(trunk.x, trunk.y) && m.passable(trunk.x, trunk.y, false, true), 'mais on survole toujours les arbres et les rochers');
+    [p.x, p.y] = [mo.x, mo.y + 60];
+    const mount = r.spawnAlpha(p, vul, 0, false);
+    [mount.x, mount.y] = [p.x, p.y];
+    r.onMount(p, mount.id);
+    check(p.mount === mount.id, 'en selle sur le vautour');
+    for (let i = 0; i < 40; i++) {
+      p.lastPosMs = Date.now() - 100;
+      r.onPos(p, p.x, p.y - 25, 0, -1); // tout droit vers le cœur du volcan
+    }
+    check(!m.inVolcano(p.x, p.y), 'il bute contre le volcan au lieu de passer au-dessus');
+    // un vautour sauvage tourne haut dans le ciel : hors d'atteinte du sol, pas du dos d'un vautour
+    const wild = r.createUnit(vul, false, p.x + 60, p.y);
+    wild.hidden = true;
+    const hp0 = wild.hp;
+    [q.x, q.y] = [p.x - 60, p.y];
+    r.damage(wild, 50, q);
+    check(wild.hp === hp0, 'à pied : le vautour en vol est hors d\'atteinte');
+    r.damage(wild, 50, p);
+    check(wild.hp < hp0, 'à dos de vautour : on le touche en plein vol');
+    check(r.preyOf(p)(wild) && !r.preyOf(q)(wild), 'et on peut le prendre pour cible (le cavalier, pas le piéton)');
+  });
+
+  rule('Géants du volcan : traînée de lave et tourbillon de flammes.', () => {
+    const r = room();
+    // la grille de voisinage est refaite à chaque pas de simulation : ici on avance les attaques à la main
+    const regrid = () => {
+      r.grid.clear();
+      for (const e of [...r.players.values(), ...r.units.values()]) r.grid.insert(e);
+    };
+    const giant = (key: string) => {
+      const c = r.map.caves.find((k: { boss: number }) => SPECIES[k.boss].key === key);
+      const u = r.units.get(r.caveBoss[c.id]);
+      u.dormant = false;
+      return u;
+    };
+    // traînée de lave : des flaques derrière elle, qui brûlent ceux qui y restent
+    const queen = giant('salamander_queen');
+    const p = r.addPlayer('a', noop);
+    p.hp = 99999;
+    [p.x, p.y] = [queen.x + 600, queen.y];
+    r.castMove(queen, { kind: 'trail', cd: 7, dur: 4 }, p);
+    const x0 = queen.x;
+    for (let k = 0; k < 5; k++) {
+      queen.x = x0 + k * 80;
+      r.dropTrail(queen);
+    }
+    const pools = r.hazards.filter((h: { style?: string; boss: unknown }) => h.style === 'lava' && h.boss === queen);
+    check(pools.length === 5, `traînée : une flaque tous les quelques pas (${pools.length})`);
+    [p.x, p.y] = [pools[1].x, pools[1].y];
+    queen.x = x0 + 900;
+    const hp1 = p.hp;
+    regrid();
+    r.time += 1;
+    r.updateHazards();
+    r.time += 0.6;
+    r.updateHazards();
+    check(p.hp < hp1, 'debout dans une flaque : on brûle');
+    // tourbillon : trois jets annoncés qui tournent autour de lui et balaient tout ce qui est à portée
+    const lord = giant('ash_lord');
+    const q = r.addPlayer('b', noop);
+    q.hp = 99999;
+    r.hazards = [];
+    r.castMove(lord, { kind: 'spin', cd: 9, arms: 3, dur: 3.5 }, q);
+    const jets = r.hazards.filter((h: { style?: string }) => h.style === 'flame');
+    check(jets.length === 3 && lord.castUntil > r.time + 4, 'tourbillon : trois jets, le géant reste sur place');
+    [q.x, q.y] = [lord.x + 200, lord.y + 30];
+    regrid();
+    const hp2 = q.hp, end = r.time + 4.6;
+    while (r.time < end) {
+      r.time += 0.05;
+      r.updateHazards();
+    }
+    check(q.hp < hp2, 'les jets tournent : impossible de rester à portée sans être brûlé');
+    check(!r.hazards.some((h: { style?: string }) => h.style === 'flame'), 'puis ils s\'éteignent');
+  });
 });

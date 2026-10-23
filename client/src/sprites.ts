@@ -1,6 +1,7 @@
 // Sprites procéduraux (Canvas 2D) : aucune image à charger.
 
 import { SPECIES, type Resource } from '../../shared/config.ts';
+import { HAZARD_STYLES } from '../../shared/protocol.ts';
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -1316,7 +1317,11 @@ function watcher(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   ctx.fill();
 }
 
-const TOAD = { shade: '#4A6532', dark: '#33481F', wart: '#9DBB66', blotch: '#3E5628', belly: '#E8DCA0', bellyShade: '#C9BC80' };
+// Tout en couleurs pleines, contour compris : une peau translucide se fondait dans la vase des Lacs brumeux.
+const TOAD = {
+  shade: '#4A6532', dark: '#33481F', wart: '#9DBB66', wartShade: '#56723A', wartLight: '#D6E6A8', blotch: '#3E5628',
+  belly: '#E8DCA0', bellyShade: '#C9BC80', light: '#8DAA5C', crease: '#3A5226', web: '#2A3C1A', line: '#16200F', slime: '#7FA060',
+};
 
 /**
  * Crapaud-mortier (zone 5, tireur) : assis, cuisses repliées et pieds palmés, bras fins aux doigts ronds ; peau
@@ -1328,6 +1333,12 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   const f = u.flash, puff = u.charge ?? 0, boss = !!SPECIES[u.species]?.boss;
   const skin = f ? '#FFFFFF' : fill, shade = f ? '#FFFFFF' : TOAD.shade, dark = f ? '#FFFFFF' : TOAD.dark;
   const breath = Math.sin(u.t * 4 + u.seed) * 0.03;
+  const outline = (k = 1) => {
+    ctx.strokeStyle = f ? '#FFFFFF' : TOAD.line;
+    ctx.lineWidth = Math.max(1.5, r * 0.1 * k);
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  };
   // pied palmé : trois orteils écartés, une palmure entre eux
   const foot = (x: number, y: number, s: number, col: string) => {
     ctx.fillStyle = col;
@@ -1340,14 +1351,13 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
       ctx.moveTo(x, y);
     }
     ctx.fill();
-    ctx.globalAlpha *= 0.6;
+    ctx.fillStyle = f ? '#FFFFFF' : TOAD.web;
     ctx.beginPath();
     ctx.moveTo(x, y - 0.03 * r);
     ctx.lineTo(x + Math.cos(-0.5) * 0.28 * r * s, y + 0.06 * r + Math.sin(-0.5) * 0.1 * r * s);
     ctx.lineTo(x + Math.cos(0.5) * 0.28 * r * s, y + 0.06 * r + Math.sin(0.5) * 0.1 * r * s);
     ctx.closePath();
     ctx.fill();
-    ctx.globalAlpha /= 0.6;
   };
   // patte arrière du fond, puis le corps
   foot(-0.62 * r, 0.62 * r, 0.9, dark);
@@ -1361,7 +1371,7 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   ctx.lineTo(-0.6 * r, 0.64 * r);
   ctx.closePath();
   ctx.fill();
-  ink(ctx, r);
+  outline();
   // ventre crème, ombre du flanc
   if (!f) {
     ctx.fillStyle = TOAD.belly;
@@ -1379,16 +1389,16 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   }
   // cuisse repliée du premier plan (son pli dessiné en creux), et son pied
   if (!f) {
-    ctx.strokeStyle = 'rgba(30,45,20,0.55)';
+    ctx.strokeStyle = TOAD.crease;
     ctx.lineWidth = Math.max(1.2, 0.05 * r);
     ctx.beginPath();
     ctx.moveTo(-0.92 * r, 0.3 * r);
     ctx.quadraticCurveTo(-0.7 * r, -0.02 * r, -0.3 * r, 0.12 * r); // dessus de la cuisse
     ctx.quadraticCurveTo(-0.05 * r, 0.25 * r, -0.12 * r, 0.5 * r);
     ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,220,0.18)';
+    ctx.fillStyle = TOAD.light;
     ctx.beginPath();
-    ctx.ellipse(-0.55 * r, 0.18 * r, 0.28 * r, 0.09 * r, -0.35, 0, TAU);
+    ctx.ellipse(-0.55 * r, 0.16 * r, 0.22 * r, 0.05 * r, -0.35, 0, TAU);
     ctx.fill();
   }
   foot(-0.38 * r, 0.66 * r, 1, skin);
@@ -1405,11 +1415,11 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
       ctx.beginPath();
       ctx.arc(x * r, y * r, s * r, 0, TAU);
       ctx.fill();
-      ctx.fillStyle = 'rgba(30,45,20,0.45)';
+      ctx.fillStyle = TOAD.wartShade;
       ctx.beginPath();
       ctx.arc(x * r + s * r * 0.3, y * r + s * r * 0.3, s * r * 0.6, 0, Math.PI);
       ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,230,0.55)';
+      ctx.fillStyle = TOAD.wartLight;
       ctx.beginPath();
       ctx.arc(x * r - s * r * 0.3, y * r - s * r * 0.3, s * r * 0.3, 0, TAU);
       ctx.fill();
@@ -1435,9 +1445,9 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   ctx.beginPath();
   ctx.ellipse(sx, sy, srx, sry, 0, 0, TAU);
   ctx.fill();
-  fineInk(ctx, r, 0.8);
+  outline(0.7);
   if (!f && puff > 0.1) {
-    ctx.strokeStyle = 'rgba(180,160,100,0.6)';
+    ctx.strokeStyle = '#BFAE70';
     ctx.lineWidth = Math.max(1, 0.025 * r);
     ctx.beginPath();
     for (const k of [-0.5, 0, 0.5]) {
@@ -1445,7 +1455,7 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
       ctx.quadraticCurveTo(sx, sy + k * sry * 0.9, sx + srx * 0.7, sy + k * sry * 0.6);
     }
     ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.fillStyle = '#FFFBEA';
     ctx.beginPath();
     ctx.ellipse(sx - srx * 0.35, sy - sry * 0.45, srx * 0.25, sry * 0.15, -0.4, 0, TAU);
     ctx.fill();
@@ -1455,7 +1465,7 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   ctx.beginPath();
   ctx.ellipse(0.12 * r, -0.48 * r, 0.16 * r, 0.07 * r, -0.3, 0, TAU);
   ctx.fill();
-  fineInk(ctx, r, 0.5);
+  outline(0.45);
   ctx.strokeStyle = f ? '#FFFFFF' : '#22301A';
   ctx.lineWidth = Math.max(1.2, 0.05 * r);
   ctx.beginPath();
@@ -1469,7 +1479,7 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.fill();
   }
   if (puff > 0.3 && !f) {
-    ctx.fillStyle = `rgba(110,150,90,${0.7 * puff})`;
+    ctx.fillStyle = TOAD.slime;
     ctx.beginPath();
     ctx.ellipse(1.06 * r, 0.0 + puff * 0.08 * r, 0.04 * r, 0.07 * r * puff, 0, 0, TAU);
     ctx.fill();
@@ -1481,12 +1491,12 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.beginPath();
     ctx.arc(ex, ey + 0.03 * r, es * 1.35, 0, TAU);
     ctx.fill();
-    fineInk(ctx, r, 0.8);
+    outline(0.75);
     ctx.fillStyle = u.alpha ? '#B48CFF' : '#E8B23C';
     ctx.beginPath();
     ctx.arc(ex, ey, es, 0, TAU);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(120,80,20,0.6)';
+    ctx.strokeStyle = '#9A6A24';
     ctx.lineWidth = Math.max(1, 0.02 * r);
     ctx.beginPath();
     ctx.arc(ex, ey, es * 0.7, 0, TAU);
@@ -1495,7 +1505,7 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.beginPath();
     ctx.ellipse(ex + es * 0.1, ey, es * 0.75, es * 0.28, 0, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
     ctx.arc(ex - es * 0.4, ey - es * 0.4, es * 0.22, 0, TAU);
     ctx.fill();
@@ -1522,9 +1532,9 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.lineTo(px, py);
     ctx.closePath();
     ctx.fill();
-    fineInk(ctx, r);
+    outline(0.7);
     if (!f) {
-      ctx.strokeStyle = 'rgba(160,210,120,0.6)';
+      ctx.strokeStyle = '#7FB060';
       ctx.lineWidth = Math.max(1, 0.025 * r);
       ctx.beginPath();
       for (let k = 0; k < 7; k++) {
@@ -3983,6 +3993,9 @@ export function drawHazard(ctx: Ctx, h: number[], t: number, owner?: string) {
   const ember = ally ? rgbOf(owner ?? '#F0B64A') : '232,105,63';
   const k = prog / 100;
   const active = prog >= 100;
+  const style = HAZARD_STYLES[h[8]];
+  if (style === 'lava') return drawLavaPool(ctx, x, y, r, active, t, ember, !!ally);
+  if (style === 'flame') return drawFlameJet(ctx, x, y, x2, y2, r, k, active, t, ember, !!ally);
   if (kind === 1) {
     // couloir de charge
     const ang = Math.atan2(y2 - y, x2 - x), len = Math.hypot(x2 - x, y2 - y);
@@ -4044,6 +4057,102 @@ export function drawHazard(ctx: Ctx, h: number[], t: number, owner?: string) {
   ctx.beginPath();
   ctx.ellipse(x, y, r, r * 0.75, 0, 0, TAU);
   ctx.stroke();
+}
+
+/** Flaque de lave d'une traînée : elle se forme (tache sombre), puis bouillonne dans sa croûte noire. */
+function drawLavaPool(ctx: Ctx, x: number, y: number, r: number, active: boolean, t: number, ember: string, ally: boolean) {
+  const seed = (x * 7 + y * 13) % 10;
+  if (!active) {
+    ctx.fillStyle = `rgba(${ember},0.35)`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * 0.7, r * 0.5, 0, 0, TAU);
+    ctx.fill();
+    return;
+  }
+  ctx.fillStyle = 'rgba(30,16,10,0.85)'; // croûte
+  ctx.beginPath();
+  for (let i = 0; i <= 12; i++) {
+    const a = (i / 12) * TAU, d = r * (1 + 0.12 * Math.sin(a * 3 + seed));
+    const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.72;
+    if (i) ctx.lineTo(px, py);
+    else ctx.moveTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  const g = ctx.createRadialGradient(x, y, 2, x, y, r * 0.85);
+  g.addColorStop(0, ally ? `rgba(${ember},0.95)` : 'rgba(255,236,160,0.95)');
+  g.addColorStop(0.45, `rgba(${ally ? ember : '255,138,61'},0.9)`);
+  g.addColorStop(1, 'rgba(150,40,15,0.75)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r * 0.82, r * 0.58, 0, 0, TAU);
+  ctx.fill();
+  for (let b = 0; b < 3; b++) {
+    const f = (t * 0.7 + b / 3 + seed * 0.1) % 1, bx = x + Math.cos(b * 2.2 + seed) * r * 0.4, by = y + Math.sin(b * 2.2 + seed) * r * 0.25;
+    ctx.strokeStyle = `rgba(255,240,190,${0.8 * (1 - f)})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(bx, by, 2 + f * 7, 0, TAU);
+    ctx.stroke();
+  }
+}
+
+/**
+ * Jet de flammes d'un tourbillon : annoncé, c'est un couloir rouge qui tourne et se remplit ; embrasé, une langue de
+ * feu qui part du lanceur, jaune au cœur, qui vacille et s'effiloche au bout, avec des étincelles.
+ */
+function drawFlameJet(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, k: number, active: boolean, t: number, ember: string, ally: boolean) {
+  const ang = Math.atan2(y2 - y, x2 - x), len = Math.hypot(x2 - x, y2 - y);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  if (!active) {
+    ctx.fillStyle = `rgba(${ember},0.16)`;
+    ctx.fillRect(0, -r, len, r * 2);
+    ctx.fillStyle = `rgba(${ember},0.38)`;
+    ctx.fillRect(0, -r, len * k, r * 2);
+    ctx.strokeStyle = `rgba(${ember},0.9)`;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([14, 10]);
+    ctx.strokeRect(0, -r, len, r * 2);
+    ctx.restore();
+    return;
+  }
+  // langue de feu : trois couches, de la plus large (rouge) au cœur (blanc-jaune), bords qui ondulent
+  const layers: [number, string][] = ally
+    ? [[1.7, `rgba(${ember},0.4)`], [1.15, `rgba(${ember},0.7)`], [0.55, 'rgba(255,250,230,0.9)']]
+    : [[1.7, 'rgba(200,50,20,0.5)'], [1.15, 'rgba(255,140,50,0.85)'], [0.55, 'rgba(255,240,170,0.95)']];
+  for (const [w, col] of layers) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    // bords en courbes douces qui ondulent lentement, bout arrondi qui lèche l'air
+    const n = 6, edge = (i: number, sd: number) => {
+      const f = i / n, wob = Math.sin(t * 9 + i * 1.3 + (sd > 0 ? 1.1 : 0)) * r * 0.1 * (0.4 + f);
+      return [len * f, sd * (r * w * (1 - f * 0.3) + wob)];
+    };
+    ctx.moveTo(0, -r * w * 0.6);
+    for (let i = 1; i <= n; i++) {
+      const [ax, ay] = edge(i - 1, -1), [bx, by] = edge(i, -1);
+      ctx.quadraticCurveTo(ax, ay, (ax + bx) / 2, (ay + by) / 2);
+    }
+    const [tx, ty] = edge(n, -1);
+    ctx.quadraticCurveTo(len + r * w * 0.6, 0, tx, -ty);
+    for (let i = n; i >= 1; i--) {
+      const [ax, ay] = edge(i, 1), [bx, by] = edge(i - 1, 1);
+      ctx.quadraticCurveTo(ax, ay, (ax + bx) / 2, (ay + by) / 2);
+    }
+    ctx.lineTo(0, r * w * 0.6);
+    ctx.closePath();
+    ctx.fill();
+  }
+  for (let i = 0; i < 6; i++) {
+    const f = (t * 1.6 + i / 6) % 1;
+    ctx.fillStyle = `rgba(255,220,140,${1 - f})`;
+    ctx.beginPath();
+    ctx.arc(len * (0.3 + f * 0.75), Math.sin(i * 2.1 + t * 5) * r * (0.4 + f), 2.5, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 /** Toile accrochée au dompteur ralenti. */

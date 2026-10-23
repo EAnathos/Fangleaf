@@ -49,6 +49,9 @@ interface Unit {
   legend: boolean; // Alpha légendaire
   // mini-boss
   castUntil: number; // immobile pendant qu'il prépare une attaque
+  trailUntil?: number; // traînée de lave : il en sème jusqu'à ce temps-là
+  trailX?: number; // dernière flaque posée
+  trailY?: number;
   moveCd: number[]; // recharge de chaque attaque spéciale
   splitDone: number; // seuils de division déjà passés
   enraged: boolean;
@@ -108,6 +111,7 @@ interface Hazard {
   nextTick: number;
   onFire?: () => void;
   style?: HazardStyle; // l'attaque qui l'a posée, pour l'animer côté client (bond, rocher, onde de choc…)
+  spin?: { a0: number; w: number; len: number; end: number }; // jet de flammes qui tourne autour de son lanceur (angle a0 + w·t) jusqu'à end
 }
 
 export interface Player {
@@ -1466,6 +1470,16 @@ export class Room {
 
   /** Monstre sauvage qu'on combat : ni géant endormi, ni gibier passif (lui ne s'apprivoise qu'aux fruits). */
   private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !e.hidden && !SPECIES[e.s].passive;
+  /** En l'air : un dompteur à dos de vautour, ou sa monture volante elle-même. */
+  private airborne(e: Ent) {
+    const mount = e.kind === 'p' ? (e.mount ? this.units.get(e.mount) : undefined) : this.isMount(e) ? e : undefined;
+    return !!mount && flyMount(mount.s);
+  }
+  /** Proie de cet attaquant : un monstre sauvage, ou, depuis le dos d'un vautour, aussi ceux qui volent hors d'atteinte du sol. */
+  private preyOf(by: Ent) {
+    if (!this.airborne(by)) return this.isWild;
+    return (e: Ent) => this.isWild(e) || (e.kind === 'u' && e.owner === 0 && !e.dormant && !!e.hidden && !!SPECIES[e.s].flies);
+  }
   /** Monstre sauvage qu'on peut nourrir d'un fruit (gibier passif compris, géants exclus plus bas). */
   private isFeedable = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !e.hidden;
   private isAllyOfPlayers = (e: Ent) => (e.kind === 'p' || e.owner !== 0) && !this.safe(e.x, e.y);
@@ -1491,7 +1505,8 @@ export class Room {
     if (p.manual) return this.time <= p.orderUntil ? this.aimedAttack(p) : undefined; // attaque au clic : rien sans ordre
     const cls = heroOf(p.cls, p.spec);
     const reach = PLAYER_R + cls.range;
-    const t = this.nearest(p.x, p.y, reach + 50, this.isWild) as Unit | undefined;
+    const prey = this.preyOf(p);
+    const t = this.nearest(p.x, p.y, reach + 50, prey) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (reach + t.r) ** 2) return this.mine(p);
     p.atkCd = cls.cd;
     const dmg = weaponDmg(p.weapon) * cls.dmg * (1 + this.rallyOf(p)); // Alpha suricate : il l'encourage
@@ -1500,7 +1515,7 @@ export class Room {
       // Mage : l'orbe explose et touche tous les monstres sauvages autour de la cible.
       const hit: Unit[] = [];
       this.grid.query(t.x, t.y, cls.splash + 40, (e) => {
-        if (this.isWild(e) && this.alive(e) && dist2(e.x, e.y, t.x, t.y) <= (cls.splash! + e.r) ** 2) hit.push(e as Unit);
+        if (prey(e) && this.alive(e) && dist2(e.x, e.y, t.x, t.y) <= (cls.splash! + e.r) ** 2) hit.push(e as Unit);
       });
       // pleins dégâts au point d'impact, de moins en moins vers le bord de l'explosion
       for (const e of hit) this.strike(p, e, dmg * (1 - (1 - MAGE_SPLASH_EDGE) * Math.min(1, Math.sqrt(dist2(e.x, e.y, t.x, t.y)) / cls.splash)), cls.leech);
@@ -1518,7 +1533,7 @@ export class Room {
     const reach = PLAYER_R + cls.range;
     const d = Math.hypot(p.aimX - p.x, p.aimY - p.y) || 1, ux = (p.aimX - p.x) / d, uy = (p.aimY - p.y) / d;
     const dmg = weaponDmg(p.weapon) * cls.dmg * (1 + this.rallyOf(p)); // Alpha suricate : il l'encourage
-    const prey = (e: Ent) => this.isWild(e) && this.alive(e); // jamais le gibier passif, même au clic
+    const wild = this.preyOf(p), prey = (e: Ent) => wild(e) && this.alive(e); // jamais le gibier passif, même au clic
     if (p.cls === 'mage') {
       p.atkCd = cls.cd;
       const k = Math.min(d, reach), bx = p.x + ux * k, by = p.y + uy * k;
@@ -1816,6 +1831,7 @@ export class Room {
    * contre les monstres sauvages, avec sa recharge. Renvoie vrai pendant qu'il la prépare (il reste sur place).
    */
   private legendMove(u: Unit, t: Ent) {
+    this.dropTrail(u);
     if (u.castUntil > this.time) return true;
     const boss = bossOf(u.s);
     const moves = (boss < 0 ? [] : BOSS_MOVES[SPECIES[boss].key] ?? []).filter((m): m is Extract<BossMove, { cd: number }> => 'cd' in m && m.kind !== 'summon');
@@ -1830,8 +1846,18 @@ export class Room {
     return u.castUntil > this.time;
   }
 
+  /** Traînée de lave en cours : une flaque tous les quelques pas, qui brûle ceux qui marchent dedans puis refroidit. */
+  private dropTrail(u: Unit) {
+    if (!u.trailUntil || this.time >= u.trailUntil) return;
+    if (u.trailX !== undefined && dist2(u.x, u.y, u.trailX, u.trailY ?? 0) < 55 ** 2) return;
+    [u.trailX, u.trailY] = [u.x, u.y];
+    const d = u.dmg * (u.owner ? LEGEND_MOVE_DMG : 1);
+    this.hazard(u, { kind: 2, style: 'lava', x: u.x, y: u.y, r: u.owner ? 40 : 52, at: this.time + 0.35, until: this.time + 6, dmg: d * 0.5 });
+  }
+
   /** Cerveau d'un mini-boss en combat. Renvoie vrai s'il est occupé (préparation d'une attaque). */
   private bossAI(u: Unit, t: Ent) {
+    this.dropTrail(u);
     if (u.castUntil > this.time) return true;
     const moves = BOSS_MOVES[SPECIES[u.s].key] ?? [];
     const ratio = u.hp / u.maxHp;
@@ -1927,6 +1953,22 @@ export class Room {
         }
         break;
       }
+      case 'trail':
+        // Traînée de lave : il continue de poursuivre sa cible, en semant des flaques derrière lui (dropTrail).
+        u.trailUntil = this.time + m.dur;
+        u.trailX = u.trailY = undefined;
+        break;
+      case 'spin': {
+        // Tourbillon de flammes : il s'arrête ; ses jets, annoncés au sol, s'embrasent puis tournent autour de lui.
+        const warn = 1, len = u.owner ? 220 : 340, a0 = Math.random() * Math.PI * 2, w = (Math.random() < 0.5 ? -1 : 1) * 1.4;
+        const end = this.time + warn + m.dur;
+        u.castUntil = end;
+        for (let k = 0; k < m.arms; k++) {
+          const a = a0 + (k * Math.PI * 2) / m.arms;
+          this.hazard(u, { kind: 1, style: 'flame', x: u.x, y: u.y, x2: u.x + Math.cos(a) * len, y2: u.y + Math.sin(a) * len, r: 28, at: this.time + warn, dmg: d * 0.3, spin: { a0: a, w, len, end } });
+        }
+        break;
+      }
       case 'blink': {
         // Disparaît puis réapparaît à côté d'une cible, en explosant.
         const a = Math.random() * Math.PI * 2;
@@ -1943,9 +1985,21 @@ export class Room {
 
   private updateHazards() {
     for (const h of this.hazards) {
+      if (h.spin) {
+        // le jet suit son lanceur et tourne (déjà pendant l'annonce : on voit dans quel sens il va balayer)
+        const a = h.spin.a0 + h.spin.w * (this.time - h.start);
+        [h.x, h.y] = [h.boss.x, h.boss.y];
+        [h.x2, h.y2] = [h.boss.x + Math.cos(a) * h.spin.len, h.boss.y + Math.sin(a) * h.spin.len];
+      }
       if (!h.fired && this.time >= h.at) {
         h.fired = true;
         h.onFire?.();
+        if (h.spin) {
+          h.nextTick = this.time; // il brûle dans la durée, tant qu'il tourne
+          this.events.push({ e: 'boom', x: Math.round(h.x), y: Math.round(h.y), r: h.r, kind: 'flame', ...(h.boss.owner ? { by: h.boss.owner } : {}) });
+        }
+        if (h.spin) continue;
+        if (h.style === 'lava') continue; // une flaque de plus : pas d'explosion à chaque pas
         this.events.push({ e: 'boom', x: Math.round(h.x2 === h.x && h.y2 === h.y ? h.x : h.x2), y: Math.round(h.y2), r: h.r, kind: h.style && h.style !== 'charge' && h.style !== 'spores' && h.style !== 'web' ? h.style : ['circle', 'line', 'cloud', 'web'][h.kind], ...(h.boss.owner ? { by: h.boss.owner } : {}) });
         if (h.kind === 2) continue; // les nuages frappent dans la durée
         const hit = h.kind === 1 ? this.alliesOnLine(h) : this.targetsNear(h.boss, h.x, h.y, h.r);
@@ -1954,12 +2008,16 @@ export class Room {
           this.damage(e, h.dmg, h.boss);
         }
       }
+      if (h.fired && h.spin && this.time < h.spin.end && this.time >= h.nextTick) {
+        h.nextTick = this.time + 0.25;
+        for (const e of this.alliesOnLine(h)) this.damage(e, h.dmg, h.boss);
+      }
       if (h.fired && h.kind === 2 && this.time < h.until && this.time >= h.nextTick) {
         h.nextTick = this.time + 0.5;
         for (const e of this.targetsNear(h.boss, h.x, h.y, h.r)) this.damage(e, h.dmg * 0.5, h.boss);
       }
     }
-    this.hazards = this.hazards.filter((h) => !h.fired || (h.kind === 2 && this.time < h.until) || this.time < h.at + 0.3);
+    this.hazards = this.hazards.filter((h) => this.units.has(h.boss.id) && (!h.fired || (h.kind === 2 && this.time < h.until) || (!!h.spin && this.time < h.spin.end) || this.time < h.at + 0.3));
   }
 
   private alliesOnLine(h: Hazard) {
@@ -2041,7 +2099,7 @@ export class Room {
   private mountAttack(u: Unit) {
     u.atkCd -= DT;
     if (u.atkCd > 0) return;
-    const t = this.nearest(u.x, u.y, u.r + 70, this.isWild) as Unit | undefined;
+    const t = this.nearest(u.x, u.y, u.r + 70, this.preyOf(u)) as Unit | undefined;
     if (!t || dist2(u.x, u.y, t.x, t.y) > (u.r + t.r + 14) ** 2) return;
     u.atkCd = u.atkCdBase;
     this.damage(t, u.dmg, u, true);
@@ -2588,7 +2646,8 @@ export class Room {
 
   /** melee : coup au corps à corps (le client anime l'attaquant qui se fend vers sa cible). */
   private damage(t: Ent, amount: number, by: Ent, melee = false) {
-    if (t.kind === 'u' && t.hidden) return; // sous le sable : rien ne l'atteint
+    // sous le sable, dans sa tanière ou haut dans le ciel : rien ne l'atteint (sauf, dans le ciel, depuis le dos d'un vautour)
+    if (t.kind === 'u' && t.hidden && !(SPECIES[t.s].flies && this.airborne(by))) return;
     const m = melee ? { m: 1 as const } : {};
     if (t.kind === 'p') {
       if (t.dead) return;

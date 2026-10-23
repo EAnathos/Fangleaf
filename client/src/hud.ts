@@ -654,7 +654,7 @@ export class Hud {
   private updateSchool(me: PlayerState) {
     $('school-have').textContent = `Meute de ${armyCap(me.learned)} monstres`;
     setText($('school-status'), me.reading
-      ? `Lecture en cours (${DISCIPLINES[LESSON_KINDS[me.readKind]].name}) : encore ${clock(me.reading)}. Une seule leçon à la fois.`
+      ? `Lecture en cours (${DISCIPLINES[LESSON_KINDS[me.readKind]].name}) : encore ${clock(me.reading)}.`
       : `Une leçon : ${duration(LESSON_MS / 1000)} de lecture. Livres I : ${ZONE_NAMES.slice(0, 2).join(', ')} · II : ${ZONE_NAMES.slice(2, 4).join(', ')} · III : ${ZONE_NAMES.slice(4, 6).join(', ')}.`);
     const key = JSON.stringify([me.learned, me.tomes, !!me.reading]);
     if (key === this.last.school) return;

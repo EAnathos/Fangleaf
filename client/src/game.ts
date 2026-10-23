@@ -1159,7 +1159,7 @@ export class Game {
     const casts = new Map<number, Cast>(), seen = new Set<string>();
     for (const h of hazards) {
       const style = HAZARD_STYLES[h[8]];
-      if (!style) continue;
+      if (!style || style === 'lava') continue; // une flaque de traînée : le géant court, il ne prend pas de pose
       const key = `${h[0]}|${h[1]}|${h[2]}|${h[9]}`;
       seen.add(key);
       let since = 0;

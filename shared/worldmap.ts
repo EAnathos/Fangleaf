@@ -1054,6 +1054,12 @@ export class WorldMap {
     });
   }
 
+  /** Dans la base du volcan (l'obstacle lui-même). */
+  inVolcano(x: number, y: number) {
+    const v = this.volcano, nx = (x - v.x) / VOLCANO_R, ny = (y - v.y) / (VOLCANO_R * VOLCANO_RY);
+    return nx * nx + ny * ny < 1;
+  }
+
   /** Près du volcan : dans sa base (agrandie de margin), ou devant son entrée. */
   nearVolcano(x: number, y: number, margin: number) {
     const v = this.volcano, nx = (x - v.x) / (VOLCANO_R + margin), ny = (y - v.y) / (VOLCANO_R * VOLCANO_RY + margin);
@@ -1375,7 +1381,8 @@ export class WorldMap {
 
   /** Où l'on peut aller : à pied, tout sauf l'eau et les obstacles ; sur une monture nageuse, seulement l'eau. */
   passable(x: number, y: number, swimming: boolean, flying = false) {
-    if (flying) return this.caveAt(x, y) ? !this.blocked(x, y) : !this.isForest(x, y); // en vol : tout sauf la forêt du bord
+    // en vol : tout sauf la forêt du bord… et le volcan, trop haut (et son panache, trop chaud) pour le survoler
+    if (flying) return this.caveAt(x, y) ? !this.blocked(x, y) : !this.isForest(x, y) && !this.inVolcano(x, y);
     return swimming ? this.isWater(x, y) : !this.blocked(x, y);
   }
 }

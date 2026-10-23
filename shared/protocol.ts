@@ -122,7 +122,7 @@ export type UnitTuple = [number, number, number, number, number, number, number]
  */
 export type HazardTuple = [number, number, number, number, number, number, number, number, number, number, number];
 /** Attaque d'où vient une zone annoncée au sol (le client l'anime : bond, rocher lancé, onde de choc…). */
-export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores'] as const;
+export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores', 'lava', 'flame'] as const; // n'ajouter qu'à la fin
 export type HazardStyle = (typeof HAZARD_STYLES)[number];
 /**
  * Projectile de tireur : [id, type, x, y, a, b, c, dompteur] — type 0 trait (bolt), 1 en cloche (arc), 2 jet.
