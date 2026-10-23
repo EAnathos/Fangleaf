@@ -56,7 +56,7 @@ export interface UnitLook {
 /** Décalage de la couronne (Alpha, géant) vers la tête, en rayons, pour les espèces dont la tête est loin devant. */
 const CROWN_X: Record<string, number> = { bear: 0.8, boar: 0.9, firefly: 0.5, sandworm: 0.5, vulture: 0.55, jackal: 0.85, meerkat: 0.08, salamander: 0.95, lava_tortoise: 1.05 };
 /** … et vers le bas, en rayons, pour celles dont la tête est plus basse que le haut du corps. */
-const CROWN_Y: Record<string, number> = { boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
+const CROWN_Y: Record<string, number> = { crab: -0.05, boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
 
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
@@ -1316,52 +1316,239 @@ function watcher(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   ctx.fill();
 }
 
-/** Crapaud-mortier : gonfle sa gorge avant de cracher en cloche (zone 5, tireur). */
+const TOAD = { shade: '#4A6532', dark: '#33481F', wart: '#9DBB66', blotch: '#3E5628', belly: '#E8DCA0', bellyShade: '#C9BC80' };
+
+/**
+ * Crapaud-mortier (zone 5, tireur) : assis, cuisses repliées et pieds palmés, bras fins aux doigts ronds ; peau
+ * verruqueuse (verrues en relief, taches sombres, glandes derrière les yeux), ventre crème, large bouche, narines,
+ * yeux globuleux à pupille horizontale. Avant de tirer, il gonfle son sac vocal (tendu, luisant) et un filet de vase
+ * perle au coin de la bouche. Le Crapaud-Roi porte une cape de nénuphar et une fleur d'eau.
+ */
 function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
-  const puff = u.charge ?? 0;
-  const sq = Math.sin(u.t * 4 + u.seed) * 0.03;
-  ctx.fillStyle = u.flash ? '#FFFFFF' : '#4F6B3A';
-  for (const k of [-0.7, 0.6]) {
+  const f = u.flash, puff = u.charge ?? 0, boss = !!SPECIES[u.species]?.boss;
+  const skin = f ? '#FFFFFF' : fill, shade = f ? '#FFFFFF' : TOAD.shade, dark = f ? '#FFFFFF' : TOAD.dark;
+  const breath = Math.sin(u.t * 4 + u.seed) * 0.03;
+  // pied palmé : trois orteils écartés, une palmure entre eux
+  const foot = (x: number, y: number, s: number, col: string) => {
+    ctx.fillStyle = col;
     ctx.beginPath();
-    ctx.ellipse(k * r, 0.62 * r, 0.32 * r, 0.16 * r, 0, 0, TAU);
+    ctx.moveTo(x, y - 0.04 * r);
+    for (const a of [-0.5, 0, 0.5]) {
+      const tx = x + Math.cos(a) * 0.3 * r * s, ty = y + 0.06 * r + Math.sin(a) * 0.1 * r * s;
+      ctx.lineTo(tx, ty);
+      ctx.arc(tx, ty, 0.04 * r * s, 0, TAU);
+      ctx.moveTo(x, y);
+    }
     ctx.fill();
-  }
-  ctx.fillStyle = fill;
+    ctx.globalAlpha *= 0.6;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 0.03 * r);
+    ctx.lineTo(x + Math.cos(-0.5) * 0.28 * r * s, y + 0.06 * r + Math.sin(-0.5) * 0.1 * r * s);
+    ctx.lineTo(x + Math.cos(0.5) * 0.28 * r * s, y + 0.06 * r + Math.sin(0.5) * 0.1 * r * s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha /= 0.6;
+  };
+  // patte arrière du fond, puis le corps
+  foot(-0.62 * r, 0.62 * r, 0.9, dark);
+  ctx.fillStyle = skin;
   ctx.beginPath();
-  ctx.ellipse(0, 0.1 * r, 1.05 * r * (1 + sq), 0.72 * r * (1 - sq), 0, 0, TAU);
+  ctx.moveTo(-0.95 * r, 0.5 * r);
+  ctx.quadraticCurveTo(-1.08 * r * (1 + breath), -0.35 * r, -0.4 * r, -0.62 * r * (1 - breath));
+  ctx.quadraticCurveTo(0.25 * r, -0.8 * r, 0.75 * r, -0.42 * r);
+  ctx.quadraticCurveTo(1.1 * r, -0.2 * r, 1.05 * r, 0.12 * r);
+  ctx.quadraticCurveTo(1.0 * r, 0.5 * r, 0.5 * r, 0.62 * r);
+  ctx.lineTo(-0.6 * r, 0.64 * r);
+  ctx.closePath();
   ctx.fill();
   ink(ctx, r);
-  ctx.fillStyle = u.flash ? '#FFFFFF' : '#8FAE5C';
-  for (const [x, y, sz] of [[-0.5, -0.15, 0.13], [-0.15, -0.4, 0.1], [0.25, -0.3, 0.09], [-0.65, 0.2, 0.08]] as const) {
+  // ventre crème, ombre du flanc
+  if (!f) {
+    ctx.fillStyle = TOAD.belly;
     ctx.beginPath();
-    ctx.arc(x * r, y * r, sz * r, 0, TAU);
+    ctx.ellipse(0.2 * r, 0.42 * r, 0.62 * r, 0.2 * r, -0.05, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = TOAD.bellyShade;
+    ctx.beginPath();
+    ctx.ellipse(0.1 * r, 0.54 * r, 0.5 * r, 0.07 * r, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = shade;
+    ctx.beginPath();
+    ctx.ellipse(-0.35 * r, 0.25 * r, 0.5 * r, 0.12 * r, -0.2, 0, TAU);
     ctx.fill();
   }
-  // sac vocal
-  ctx.fillStyle = u.flash ? '#FFFFFF' : '#E8DCA0';
-  ctx.beginPath();
-  ctx.ellipse(0.55 * r, 0.3 * r, (0.32 + puff * 0.28) * r, (0.24 + puff * 0.22) * r, 0, 0, TAU);
-  ctx.fill();
-  ink(ctx, r);
-  for (const x of [0.25, 0.75]) {
-    ctx.fillStyle = fill;
+  // cuisse repliée du premier plan (son pli dessiné en creux), et son pied
+  if (!f) {
+    ctx.strokeStyle = 'rgba(30,45,20,0.55)';
+    ctx.lineWidth = Math.max(1.2, 0.05 * r);
     ctx.beginPath();
-    ctx.arc(x * r, -0.55 * r, 0.22 * r, 0, TAU);
-    ctx.fill();
-    ink(ctx, r);
-    ctx.fillStyle = '#F0B64A';
+    ctx.moveTo(-0.92 * r, 0.3 * r);
+    ctx.quadraticCurveTo(-0.7 * r, -0.02 * r, -0.3 * r, 0.12 * r); // dessus de la cuisse
+    ctx.quadraticCurveTo(-0.05 * r, 0.25 * r, -0.12 * r, 0.5 * r);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,220,0.18)';
     ctx.beginPath();
-    ctx.arc(x * r, -0.57 * r, 0.13 * r, 0, TAU);
+    ctx.ellipse(-0.55 * r, 0.18 * r, 0.28 * r, 0.09 * r, -0.35, 0, TAU);
     ctx.fill();
-    ctx.fillStyle = '#10181A';
-    ctx.fillRect(x * r - 0.1 * r, -0.6 * r, 0.2 * r, 0.06 * r);
   }
-  ctx.strokeStyle = '#2A3A20';
-  ctx.lineWidth = 0.06 * r;
+  foot(-0.38 * r, 0.66 * r, 1, skin);
+  // taches sombres et verrues en relief
+  if (!f) {
+    ctx.fillStyle = TOAD.blotch;
+    for (const [x, y, rx, ry] of [[-0.55, -0.25, 0.16, 0.1], [-0.1, -0.5, 0.12, 0.07], [-0.75, 0.05, 0.1, 0.12], [-0.6, 0.3, 0.1, 0.07]]) {
+      ctx.beginPath();
+      ctx.ellipse(x * r, y * r, rx * r, ry * r, 0.3, 0, TAU);
+      ctx.fill();
+    }
+    for (const [x, y, s] of [[-0.45, -0.4, 0.07], [-0.2, -0.3, 0.06], [-0.7, -0.15, 0.06], [-0.35, -0.05, 0.05], [0.0, -0.52, 0.05], [-0.65, 0.4, 0.05], [-0.3, 0.25, 0.045], [0.15, -0.35, 0.04]]) {
+      ctx.fillStyle = TOAD.wart;
+      ctx.beginPath();
+      ctx.arc(x * r, y * r, s * r, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(30,45,20,0.45)';
+      ctx.beginPath();
+      ctx.arc(x * r + s * r * 0.3, y * r + s * r * 0.3, s * r * 0.6, 0, Math.PI);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,230,0.55)';
+      ctx.beginPath();
+      ctx.arc(x * r - s * r * 0.3, y * r - s * r * 0.3, s * r * 0.3, 0, TAU);
+      ctx.fill();
+    }
+  }
+  // bras fin et doigts aux bouts ronds
+  ctx.strokeStyle = skin;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 0.13 * r;
   ctx.beginPath();
-  ctx.moveTo(0.15 * r, -0.12 * r);
-  ctx.quadraticCurveTo(0.6 * r, 0.02 * r, 1.0 * r, -0.15 * r);
+  ctx.moveTo(0.3 * r, 0.3 * r);
+  ctx.quadraticCurveTo(0.42 * r, 0.52 * r, 0.36 * r, 0.66 * r);
   ctx.stroke();
+  ctx.fillStyle = skin;
+  for (const d of [-0.12, 0, 0.12]) {
+    ctx.beginPath();
+    ctx.arc(0.36 * r + d * r, 0.7 * r, 0.045 * r, 0, TAU);
+    ctx.fill();
+  }
+  // sac vocal : il gonfle, se tend et luit avant le tir
+  const sx = 0.68 * r, sy = 0.16 * r, srx = (0.26 + puff * 0.32) * r, sry = (0.18 + puff * 0.24) * r;
+  ctx.fillStyle = f ? '#FFFFFF' : puff > 0.1 ? '#F2E6B0' : TOAD.belly;
+  ctx.beginPath();
+  ctx.ellipse(sx, sy, srx, sry, 0, 0, TAU);
+  ctx.fill();
+  fineInk(ctx, r, 0.8);
+  if (!f && puff > 0.1) {
+    ctx.strokeStyle = 'rgba(180,160,100,0.6)';
+    ctx.lineWidth = Math.max(1, 0.025 * r);
+    ctx.beginPath();
+    for (const k of [-0.5, 0, 0.5]) {
+      ctx.moveTo(sx - srx * 0.7, sy + k * sry * 0.6);
+      ctx.quadraticCurveTo(sx, sy + k * sry * 0.9, sx + srx * 0.7, sy + k * sry * 0.6);
+    }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.beginPath();
+    ctx.ellipse(sx - srx * 0.35, sy - sry * 0.45, srx * 0.25, sry * 0.15, -0.4, 0, TAU);
+    ctx.fill();
+  }
+  // glande derrière l'œil, large bouche, narines, filet de vase quand il charge
+  ctx.fillStyle = f ? '#FFFFFF' : TOAD.wart;
+  ctx.beginPath();
+  ctx.ellipse(0.12 * r, -0.48 * r, 0.16 * r, 0.07 * r, -0.3, 0, TAU);
+  ctx.fill();
+  fineInk(ctx, r, 0.5);
+  ctx.strokeStyle = f ? '#FFFFFF' : '#22301A';
+  ctx.lineWidth = Math.max(1.2, 0.05 * r);
+  ctx.beginPath();
+  ctx.moveTo(0.3 * r, -0.04 * r);
+  ctx.quadraticCurveTo(0.7 * r, 0.06 * r, 1.04 * r, -0.08 * r);
+  ctx.stroke();
+  ctx.fillStyle = '#22301A';
+  for (const x of [0.88, 0.96]) {
+    ctx.beginPath();
+    ctx.arc(x * r, -0.3 * r, 0.022 * r, 0, TAU);
+    ctx.fill();
+  }
+  if (puff > 0.3 && !f) {
+    ctx.fillStyle = `rgba(110,150,90,${0.7 * puff})`;
+    ctx.beginPath();
+    ctx.ellipse(1.06 * r, 0.0 + puff * 0.08 * r, 0.04 * r, 0.07 * r * puff, 0, 0, TAU);
+    ctx.fill();
+  }
+  // yeux globuleux : dôme, iris doré, pupille horizontale, paupière
+  for (const x of [0.38, 0.72]) {
+    const ex = x * r, ey = -0.58 * r, es = 0.15 * r;
+    ctx.fillStyle = skin;
+    ctx.beginPath();
+    ctx.arc(ex, ey + 0.03 * r, es * 1.35, 0, TAU);
+    ctx.fill();
+    fineInk(ctx, r, 0.8);
+    ctx.fillStyle = u.alpha ? '#B48CFF' : '#E8B23C';
+    ctx.beginPath();
+    ctx.arc(ex, ey, es, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(120,80,20,0.6)';
+    ctx.lineWidth = Math.max(1, 0.02 * r);
+    ctx.beginPath();
+    ctx.arc(ex, ey, es * 0.7, 0, TAU);
+    ctx.stroke();
+    ctx.fillStyle = '#10181A';
+    ctx.beginPath();
+    ctx.ellipse(ex + es * 0.1, ey, es * 0.75, es * 0.28, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.beginPath();
+    ctx.arc(ex - es * 0.4, ey - es * 0.4, es * 0.22, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = shade; // paupière
+    ctx.beginPath();
+    ctx.arc(ex, ey, es * 1.05, Math.PI * 1.08, Math.PI * 1.92);
+    ctx.closePath();
+    ctx.fill();
+    if (u.wild) {
+      ctx.strokeStyle = '#10181A';
+      ctx.lineWidth = Math.max(1.5, es * 0.3);
+      ctx.beginPath();
+      ctx.moveTo(ex - es * 1.1, ey - es * 1.25);
+      ctx.lineTo(ex + es * 1.0, ey - es * 0.85);
+      ctx.stroke();
+    }
+  }
+  // le roi : une feuille de nénuphar posée sur le dos comme une cape, sa fleur d'eau dessus
+  if (boss) {
+    const px = -0.42 * r, py = -0.42 * r;
+    ctx.fillStyle = f ? '#FFFFFF' : '#3F7A3A';
+    ctx.beginPath();
+    ctx.ellipse(px, py, 0.5 * r, 0.24 * r, -0.25, 0.25, TAU - 0.05);
+    ctx.lineTo(px, py);
+    ctx.closePath();
+    ctx.fill();
+    fineInk(ctx, r);
+    if (!f) {
+      ctx.strokeStyle = 'rgba(160,210,120,0.6)';
+      ctx.lineWidth = Math.max(1, 0.025 * r);
+      ctx.beginPath();
+      for (let k = 0; k < 7; k++) {
+        const a = 0.5 + k * 0.85;
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + Math.cos(a) * 0.45 * r, py + Math.sin(a) * 0.2 * r);
+      }
+      ctx.stroke();
+    }
+  }
+  if (boss && !f) {
+    const fx = -0.5 * r, fy = -0.5 * r;
+    for (let k = 0; k < 7; k++) {
+      const a = -Math.PI + (k / 6) * Math.PI;
+      ctx.fillStyle = k % 2 ? '#F2B8D0' : '#E68AB0';
+      ctx.beginPath();
+      ctx.ellipse(fx + Math.cos(a) * 0.1 * r, fy + Math.sin(a) * 0.08 * r, 0.1 * r, 0.04 * r, a, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#F0D060';
+    ctx.beginPath();
+    ctx.arc(fx, fy - 0.02 * r, 0.04 * r, 0, TAU);
+    ctx.fill();
+  }
 }
 
 /**
@@ -1491,67 +1678,238 @@ function serpent(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   if (u.inWater) ripple(0.1 * r, 0.42 * r, 0.5 * r);
 }
 
-/** Crabe des berges : carapace épaisse, marche de côté, pince fort (zone 5, mêlée). */
+const CRAB = { shade: '#9A4228', dark: '#6E2C1A', light: '#F09A6E', belly: '#F2D9B8', tip: '#2A1A14' };
+
+/**
+ * Crabe des berges (zone 5, mêlée) : carapace large et plate à bord épineux, marbrée, plus claire au sommet, rebord sombre et
+ * dessous crème ; quatre paires de pattes articulées qui trottinent de côté ; pinces à deux doigts (dents, pointes
+ * noires) portées par des bras articulés, qui claquent ; yeux noirs luisants sur pédoncules, pièces buccales, et une
+ * bulle d'écume de temps en temps. Le Crabe Titan a une pince énorme, des balanes et des algues sur le dos.
+ */
 function crab(ctx: Ctx, r: number, fill: string, u: UnitLook) {
-  const pinch = Math.sin(u.t * 3 + u.seed) > 0.7;
-  const leg = u.flash ? '#FFFFFF' : '#9A3E22';
-  const claw = u.flash ? '#FFFFFF' : '#A8442C';
-  ctx.strokeStyle = leg;
-  ctx.lineWidth = 0.09 * r;
-  ctx.lineCap = 'round';
+  const f = u.flash, boss = !!SPECIES[u.species]?.boss;
+  const shell = f ? '#FFFFFF' : fill, shade = f ? '#FFFFFF' : CRAB.shade, dark = f ? '#FFFFFF' : CRAB.dark;
+  const snap = Math.max(0, Math.sin(u.t * 3 + u.seed)); // les pinces s'ouvrent et claquent
+  ctx.translate(0, 0.12 * r); // plat et haut sur pattes : on le pose sur son ombre
+  // pattes : trois segments, pointe sombre ; elles trottinent par paires alternées
   for (const sd of [-1, 1]) {
-    for (let i = 0; i < 3; i++) {
-      const ox = sd * (0.4 + i * 0.18) * r, lf = Math.sin(u.t * 10 + i + sd + u.seed) * 0.08 * r;
+    for (let i = 0; i < 4; i++) {
+      const lift = Math.sin(u.t * 10 + i * 1.7 + (sd > 0 ? Math.PI : 0) + u.seed) * 0.07 * r;
+      const bx = sd * (0.4 + i * 0.12) * r, by = (0.08 + i * 0.03) * r;
+      const kx = sd * (0.98 + i * 0.1) * r, ky = (-0.24 + i * 0.1) * r + lift;
+      const fx = sd * (1.25 + i * 0.07) * r, fy = (0.48 + i * 0.05) * r;
+      ctx.strokeStyle = i % 2 ? shade : dark;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 0.075 * r;
       ctx.beginPath();
-      ctx.moveTo(ox * 0.6, 0.3 * r);
-      ctx.lineTo(ox, 0.5 * r + lf);
-      ctx.lineTo(ox * 1.15, 0.8 * r);
+      ctx.moveTo(bx, by);
+      ctx.lineTo(kx, ky);
+      ctx.lineTo(fx, fy - 0.1 * r);
+      ctx.stroke();
+      ctx.strokeStyle = f ? '#FFFFFF' : CRAB.tip;
+      ctx.lineWidth = 0.045 * r;
+      ctx.beginPath();
+      ctx.moveTo(fx, fy - 0.1 * r);
+      ctx.lineTo(fx + sd * 0.04 * r, fy + 0.02 * r);
       ctx.stroke();
     }
   }
-  ctx.fillStyle = fill;
+  // dessous crème et rebord sombre, puis la carapace bombée à bord épineux
+  ctx.fillStyle = f ? '#FFFFFF' : CRAB.belly;
   ctx.beginPath();
-  ctx.ellipse(0, 0.1 * r, 0.95 * r, 0.6 * r, 0, 0, TAU);
+  ctx.ellipse(0, 0.2 * r, 0.7 * r, 0.11 * r, 0, 0, TAU);
   ctx.fill();
-  ink(ctx, r);
-  ctx.fillStyle = u.flash ? '#FFFFFF' : 'rgba(255,190,150,0.45)';
+  fineInk(ctx, r, 0.6);
+  ctx.fillStyle = dark;
   ctx.beginPath();
-  ctx.ellipse(-0.1 * r, -0.1 * r, 0.55 * r, 0.25 * r, 0, 0, TAU);
+  ctx.ellipse(0, 0.12 * r, 1.0 * r, 0.16 * r, 0, 0, TAU);
   ctx.fill();
-  for (const sd of [-1, 1]) {
-    const cx = sd * 1.05 * r, cy = -0.25 * r;
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, 0.32 * r, 0.24 * r, sd * 0.4, 0, TAU);
-    ctx.fill();
-    ink(ctx, r);
-    const o = pinch ? 0.05 : 0.35;
-    ctx.fillStyle = claw;
-    ctx.beginPath();
-    ctx.moveTo(cx + sd * 0.15 * r, cy - 0.1 * r);
-    ctx.lineTo(cx + sd * 0.55 * r, cy - (0.2 + o) * r);
-    ctx.lineTo(cx + sd * 0.3 * r, cy - 0.05 * r);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(cx + sd * 0.15 * r, cy + 0.05 * r);
-    ctx.lineTo(cx + sd * 0.55 * r, cy + 0.05 * r + o * 0.4 * r);
-    ctx.lineTo(cx + sd * 0.28 * r, cy + 0.12 * r);
-    ctx.closePath();
-    ctx.fill();
+  ctx.fillStyle = shell;
+  ctx.beginPath();
+  const spikes = 5;
+  ctx.moveTo(-1.02 * r, 0.06 * r);
+  for (let k = 0; k <= spikes * 2; k++) {
+    // bord avant : une rangée d'épines pointues, de gauche à droite en passant par le front
+    const a = Math.PI + (k / (spikes * 2)) * Math.PI, d = k % 2 ? 1.13 : 0.97;
+    ctx.lineTo(Math.cos(a) * 1.02 * r * d, 0.02 * r + Math.sin(a) * 0.44 * r * d);
   }
-  ctx.strokeStyle = '#10181A';
-  ctx.lineWidth = 0.06 * r;
-  for (const sd of [-0.2, 0.2]) {
+  ctx.quadraticCurveTo(0.9 * r, 0.18 * r, 0, 0.2 * r);
+  ctx.quadraticCurveTo(-0.9 * r, 0.18 * r, -1.02 * r, 0.06 * r);
+  ctx.closePath();
+  ctx.fill();
+  fineInk(ctx, r, 0.9);
+  if (!f) {
+    // sommet plus clair, marbrures, sillons de la carapace
+    ctx.fillStyle = 'rgba(255,190,150,0.4)';
     ctx.beginPath();
-    ctx.moveTo(sd * r, -0.3 * r);
-    ctx.lineTo(sd * r * 1.2, -0.62 * r);
+    ctx.ellipse(-0.1 * r, -0.2 * r, 0.6 * r, 0.12 * r, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(110,40,20,0.35)';
+    for (const [x, y, s] of [[-0.6, -0.08, 0.08], [0.55, -0.12, 0.07], [0.22, 0.04, 0.05], [-0.25, 0.05, 0.05], [0.72, 0.02, 0.04]]) {
+      ctx.beginPath();
+      ctx.arc(x * r, y * r, s * r, 0, TAU);
+      ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(90,30,15,0.5)';
+    ctx.lineWidth = Math.max(1, 0.035 * r);
+    ctx.beginPath();
+    ctx.moveTo(-0.32 * r, -0.36 * r);
+    ctx.quadraticCurveTo(-0.22 * r, -0.12 * r, -0.42 * r, 0.1 * r);
+    ctx.moveTo(0.32 * r, -0.36 * r);
+    ctx.quadraticCurveTo(0.22 * r, -0.12 * r, 0.42 * r, 0.1 * r);
+    ctx.moveTo(-0.2 * r, -0.02 * r);
+    ctx.quadraticCurveTo(0, 0.04 * r, 0.2 * r, -0.02 * r);
     ctx.stroke();
-    ctx.fillStyle = '#10181A';
-    ctx.beginPath();
-    ctx.arc(sd * r * 1.2, -0.66 * r, 0.08 * r, 0, TAU);
-    ctx.fill();
   }
+  // balanes et algues du Titan
+  if (boss && !f) {
+    // balanes : de petits cônes de calcaire, ouverts au sommet
+    for (const [x, y, s] of [[-0.62, -0.1, 0.08], [-0.45, -0.26, 0.06], [0.52, -0.2, 0.07], [0.7, -0.04, 0.05], [-0.05, -0.34, 0.05]]) {
+      ctx.fillStyle = '#D8D0BC';
+      ctx.beginPath();
+      ctx.moveTo(x * r - s * r, y * r + s * r * 0.6);
+      ctx.lineTo(x * r - s * r * 0.45, y * r - s * r * 0.6);
+      ctx.lineTo(x * r + s * r * 0.45, y * r - s * r * 0.6);
+      ctx.lineTo(x * r + s * r, y * r + s * r * 0.6);
+      ctx.closePath();
+      ctx.fill();
+      fineInk(ctx, r, 0.35);
+      ctx.fillStyle = 'rgba(120,110,95,0.7)';
+      ctx.fillRect(x * r - s * r * 0.35, y * r - s * r * 0.15, s * r * 0.7, s * r * 0.18);
+      ctx.fillStyle = '#4A443C';
+      ctx.beginPath();
+      ctx.ellipse(x * r, y * r - s * r * 0.6, s * r * 0.4, s * r * 0.14, 0, 0, TAU);
+      ctx.fill();
+    }
+    ctx.strokeStyle = '#4F7C45';
+    ctx.lineWidth = Math.max(1.5, 0.05 * r);
+    ctx.beginPath();
+    for (const [x, sd] of [[-0.7, -1], [0.75, 1], [-0.15, -1]]) {
+      ctx.moveTo(x * r, -0.15 * r);
+      ctx.quadraticCurveTo((x + sd * 0.1) * r, 0.1 * r + Math.sin(u.t * 2 + x) * 0.04 * r, (x + sd * 0.05) * r, 0.32 * r);
+    }
+    ctx.stroke();
+  }
+  // bras articulés et pinces (celle du Titan, à droite, est énorme)
+  for (const sd of [-1, 1]) {
+    const big = boss && sd > 0 ? 1.45 : 1;
+    const sx = sd * 0.6 * r, sy = -0.22 * r, ex = sd * 0.92 * r, ey = -0.46 * r;
+    ctx.strokeStyle = shell;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 0.1 * r;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+    const cx = sd * (1.1 + (big - 1) * 0.2) * r, cy = (-0.52 - (big - 1) * 0.15) * r;
+    const open = (1 - snap) * 0.45;
+    // repère de la pince : vers l'extérieur et le haut
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(sd * big, big);
+    ctx.rotate(-0.6);
+    // un doigt : fuselé, pointe noire, dents sur son bord intérieur (in : +1 vers le bas, -1 vers le haut)
+    const finger = (bx: number, by: number, rot: number, len: number, inner: number, col: string) => {
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(rot);
+      ctx.beginPath();
+      ctx.moveTo(0, -0.045 * r);
+      ctx.quadraticCurveTo(len * 0.55, -0.075 * r, len, 0);
+      ctx.quadraticCurveTo(len * 0.55, 0.035 * r, 0, 0.045 * r);
+      ctx.closePath();
+      ctx.fillStyle = col;
+      ctx.fill();
+      fineInk(ctx, r / big, 0.6);
+      ctx.save();
+      ctx.clip();
+      ctx.fillStyle = f ? '#FFFFFF' : CRAB.tip;
+      ctx.fillRect(len * 0.72, -0.12 * r, len * 0.3, 0.24 * r); // pointe noire
+      if (!f) {
+        ctx.fillStyle = CRAB.belly;
+        for (const k of [0.2, 0.36, 0.52]) {
+          ctx.beginPath();
+          ctx.moveTo(k * len, inner * 0.05 * r);
+          ctx.lineTo((k + 0.05) * len, inner * 0.015 * r);
+          ctx.lineTo((k + 0.1) * len, inner * 0.05 * r);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+      ctx.restore();
+    };
+    finger(0.24 * r, 0.03 * r, 0.1, 0.5 * r, -1, shell); // doigt fixe, dans l'axe
+    finger(0.22 * r, -0.05 * r, -0.08 - open, 0.48 * r, 1, shade); // doigt mobile, qui s'ouvre
+    // la paume, bombée, par-dessus la base des doigts
+    ctx.fillStyle = shell;
+    ctx.beginPath();
+    ctx.ellipse(0.02 * r, 0, 0.3 * r, 0.12 * r, 0, 0, TAU);
+    ctx.fill();
+    fineInk(ctx, r / big, 0.8);
+    if (!f) {
+      ctx.fillStyle = 'rgba(255,200,160,0.45)';
+      ctx.beginPath();
+      ctx.ellipse(-0.02 * r, -0.05 * r, 0.16 * r, 0.035 * r, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(110,40,20,0.35)';
+      for (const [x, y] of [[0.08, 0.04], [-0.1, 0.05], [0.16, -0.02]]) {
+        ctx.beginPath();
+        ctx.arc(x * r, y * r, 0.025 * r, 0, TAU);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+  // pièces buccales, pédoncules et yeux noirs luisants
+  if (!f) {
+    ctx.fillStyle = CRAB.belly;
+    ctx.beginPath();
+    ctx.ellipse(0, -0.3 * r, 0.12 * r, 0.06 * r, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(120,70,40,0.6)';
+    ctx.lineWidth = Math.max(1, 0.02 * r);
+    ctx.beginPath();
+    ctx.moveTo(0, -0.36 * r);
+    ctx.lineTo(0, -0.24 * r);
+    ctx.stroke();
+  }
+  for (const sd of [-1, 1]) {
+    const tx = sd * 0.24 * r, ty = -0.6 * r + Math.sin(u.t * 2 + sd + u.seed) * 0.03 * r;
+    ctx.strokeStyle = shade;
+    ctx.lineWidth = 0.05 * r;
+    ctx.beginPath();
+    ctx.moveTo(sd * 0.14 * r, -0.36 * r);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    ctx.fillStyle = u.alpha ? '#B48CFF' : '#10181A';
+    ctx.beginPath();
+    ctx.arc(tx, ty, 0.085 * r, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.beginPath();
+    ctx.arc(tx - 0.03 * r, ty - 0.03 * r, 0.03 * r, 0, TAU);
+    ctx.fill();
+    if (u.wild) {
+      ctx.strokeStyle = '#10181A';
+      ctx.lineWidth = Math.max(1.5, 0.04 * r);
+      ctx.beginPath();
+      ctx.moveTo(tx - sd * 0.14 * r, ty - 0.16 * r);
+      ctx.lineTo(tx + sd * 0.08 * r, ty - 0.1 * r);
+      ctx.stroke();
+    }
+  }
+  // une bulle d'écume, de temps en temps
+  const b = (u.t * 0.6 + u.seed * 0.37) % 1;
+  if (!f && b < 0.6) {
+    ctx.strokeStyle = `rgba(230,245,250,${0.8 * (1 - b / 0.6)})`;
+    ctx.lineWidth = Math.max(1, 0.025 * r);
+    ctx.beginPath();
+    ctx.arc(0.08 * r + b * 0.1 * r, -0.34 * r - b * 0.35 * r, (0.04 + b * 0.05) * r, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.translate(0, -0.12 * r);
 }
 
 /**
