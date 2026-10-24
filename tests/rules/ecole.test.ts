@@ -21,7 +21,7 @@ describe('École des dompteurs', () => {
     check(r.buildings.includes('school'), 'camp établi : l\'école est bâtie, pour tout le village');
   });
 
-  rule('Un coffre de géant cache parfois un livre, du tome de sa zone, d\'une discipline au hasard, jamais inutile.', () => {
+  rule('Un coffre de géant cache parfois un livre (une fois l\'école bâtie), du tome de sa zone, d\'une discipline au hasard, jamais inutile.', () => {
     check(tomeOfZone(1) === 0 && tomeOfZone(2) === 0 && tomeOfZone(3) === 1 && tomeOfZone(4) === 1 && tomeOfZone(5) === 2 && tomeOfZone(6) === 2, 'tome I : zones 1-2, II : 3-4, III : 5-6');
     const r = room();
     const c = r.map.caves.find((k: { boss: number }) => SPECIES[k.boss].zone === 3);
@@ -50,6 +50,13 @@ describe('École des dompteurs', () => {
     p.learned[3] = 2; // tome II de la récolte aussi
     open();
     check(p.tomes.reduce((a: number, b: number) => a + b) === 2, 'plus de tome II à trouver : le coffre n\'en donne plus');
+    // village sans école : les coffres ne donnent aucun livre
+    r.buildings = r.buildings.filter((b: string) => b !== 'school');
+    const before = p.tomes.reduce((a: number, b: number) => a + b);
+    p.learned[2] = p.learned[3] = 0;
+    p.tomes[bookIndex(2, 1)] = p.tomes[bookIndex(3, 1)] = 0;
+    open();
+    check(p.tomes.reduce((a: number, b: number) => a + b) === before && !p.tomes[bookIndex(2, 1)] && !p.tomes[bookIndex(3, 1)], 'pas d\'école au village : pas de livre dans les coffres');
     check(p.tomes.length === BOOKS && BOOKS === LESSON_KINDS.length * TOMES && LESSON_KINDS.length >= 4, `${LESSON_KINDS.length} disciplines de ${TOMES} tomes`);
   });
 

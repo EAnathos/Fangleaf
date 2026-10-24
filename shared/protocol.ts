@@ -160,6 +160,7 @@ export type GameEvent =
   | { e: 'challenge'; cave: number; id: number; by: number } // un dompteur a provoqué le géant : le combat commence
   | { e: 'chest'; id: number; to: number; gold: number; x: number; y: number; book?: number } // coffre ouvert : or tiré au hasard, parfois un livre (bookIndex)
   | { e: 'prick'; id: number } // un dompteur s'est frotté à un cactus
+  | { e: 'munch'; id: number; ore: number; done: boolean } // un golem de la meute croque un rocher (done : avalé)
   | { e: 'phase'; id: number; s: number; phase: number; up: boolean } // le Kraken plonge (up : false), puis remonte pour sa phase suivante
   | { e: 'heart'; by: number; installed: boolean } // le cœur volcanique a été pris (ou installé dans le bateau), pour tout le village
   | { e: 'learn'; by: number; kind: number; lesson: number; done: boolean } // École des dompteurs : une leçon commence (by) ou s'achève (done)

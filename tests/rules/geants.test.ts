@@ -272,7 +272,7 @@ describe('Géants et grottes', () => {
     }
   });
 
-  rule('Œil des Ruines : ses traits traversent la meute ; son rayon runique balaie en tournant.', () => {
+  rule('Œil des Ruines : ses traits traversent la meute ; son rayon runique poursuit sa cible en tournant.', () => {
     const S = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
     const r = room();
     r.units.clear();
@@ -324,8 +324,30 @@ describe('Géants et grottes', () => {
       r.updateHazards();
     }
     check(p.hp < hp, 'pris dans le rayon : on brûle');
-    const later = Math.atan2(beam.y2 - beam.y, beam.x2 - beam.x);
-    check(Math.abs(later - aim) > 0.5, 'il tourne : on peut s\'en écarter en se déplaçant');
+    const angle = () => Math.atan2(beam.y2 - beam.y, beam.x2 - beam.x);
+    check(Math.abs(angle()) < 0.05, 'immobile, il reste dans le rayon : il ne le lâche pas');
+    // on s'écarte d'un quart de tour : le rayon le poursuit, à sa vitesse de rotation (pas d'un coup)
+    const tick = (n: number) => {
+      for (let i = 0; i < n; i++) {
+        r.time += 0.05;
+        r.grid.clear();
+        for (const e of [p, wolf]) r.grid.insert(e);
+        r.updateHazards();
+      }
+    };
+    [wolf.x, wolf.y] = [eye.x - 2000, eye.y]; // (le loup, lui, est hors de portée)
+    [p.x, p.y] = [eye.x, eye.y + 220];
+    tick(10);
+    const half = angle();
+    check(half > 0.35 && half < 0.55, `il tourne vers lui, à ${laser!.turn} rad/s (${half.toFixed(2)} rad en 0,5 s)`);
+    tick(30);
+    check(Math.abs(angle() - Math.PI / 2) < 0.05, 'puis il le rattrape et le suit');
+    // plus personne à portée : il continue de balayer dans le même sens
+    [p.x, p.y] = [eye.x + 2000, eye.y];
+    [wolf.x, wolf.y] = [eye.x + 2000, eye.y + 40];
+    const before = angle();
+    tick(6);
+    check(angle() - before > 0.2, 'personne à portée : il continue de tourner');
     while (r.time < eye.castUntil + 0.5) {
       r.time += 0.25;
       r.updateHazards();

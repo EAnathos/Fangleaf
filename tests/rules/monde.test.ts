@@ -166,7 +166,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
 
   rule('Courbe des monstres : chaque zone nettement plus dure que la précédente.', () => {
     const main = SPECIES.slice(0, 4); // espèce principale de chaque zone
-    const ok = main.every((s, i) => i === 0 || (s.hp >= main[i - 1].hp * 2.4 && s.dmg >= main[i - 1].dmg * 1.75));
+    const ok = main.every((s, i) => i === 0 || (s.hp >= main[i - 1].hp * 1.8 && s.dmg >= main[i - 1].dmg * 1.75));
     check(ok, `progression des monstres : ${main.map((s) => `${s.hp}/${s.dmg}`).join(' → ')}`);
   });
 

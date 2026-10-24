@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, unarmedAdd } from '../helpers.ts';
-import { BOAT_STAGES, BUILDING_IDS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE } from '../../shared/config.ts';
+import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE } from '../../shared/config.ts';
 import { Room } from '../../server/room.ts';
 import { ELDER_CHAPTERS } from '../../client/src/elder.ts';
 
@@ -529,6 +529,26 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     r.onChat(p, '   ');
     r.step();
     check(said.length === 2 && said[0] === 'Salut tout le monde' && said[1].length === 200, `chat : ${said.length} messages relayés (espaces nettoyés, rafale et vide ignorés, 200 caractères max)`);
+  });
+
+  rule('Couleur d\'un dompteur : sa place dans le village, gardée quand les autres se déconnectent ou reviennent.', () => {
+    const r = room();
+    const a = r.addPlayer('Lou', noop, { userId: 'lou', profile: null });
+    const b = r.addPlayer('Max', noop, { userId: 'max', profile: null });
+    check(a.color === PLAYER_COLORS[0] && b.color === PLAYER_COLORS[1], 'deux membres : deux places, deux couleurs');
+    const profA = r.profileOf(a), profB = r.profileOf(b);
+    check(profA.seat === 0 && profB.seat === 1, 'la place est enregistrée avec la progression');
+    r.removePlayer(a.id);
+    check(b.color === PLAYER_COLORS[1], 'Lou se déconnecte : Max garde sa couleur');
+    const c = r.addPlayer('Zoé', noop, { userId: 'zoe', profile: null });
+    check(c.color === PLAYER_COLORS[2], 'une nouvelle venue ne prend pas la place de Lou, endormie au village');
+    // le village se rouvre : Max revient seul, avant que les membres endormis ne soient chargés
+    const r2 = room();
+    const b2 = r2.addPlayer('Max', noop, { userId: 'max', profile: profB });
+    check(b2.color === PLAYER_COLORS[1], 'Max revient seul : toujours sa couleur, pas la première libre');
+    r2.addSleeper('lou', profA);
+    const a2 = r2.addPlayer('Lou', noop, { userId: 'lou', profile: profA });
+    check(a2.color === PLAYER_COLORS[0], 'Lou revient : la sienne aussi');
   });
 
   rule('Tableau du village : géants battus, apprivoisements, dons, or dépensé pour le village ; enregistrés et visibles pour les déconnectés.', () => {

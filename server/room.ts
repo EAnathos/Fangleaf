@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, armyCap, lessonBonus, LESSON_KINDS, LESSONS, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, armyCap, lessonBonus, LESSON_KINDS, LESSONS, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
@@ -21,6 +21,7 @@ import type { Profile } from './persist.ts';
 
 interface Unit {
   kind: 'u';
+  eatOre?: number; // golem de la meute : le rocher qu'il est en train de manger (-1 : aucun)
   id: number;
   s: SpeciesId;
   alpha: boolean;
@@ -115,7 +116,7 @@ interface Hazard {
   nextTick: number;
   onFire?: () => void;
   style?: HazardStyle; // l'attaque qui l'a posée, pour l'animer côté client (bond, rocher, onde de choc…)
-  spin?: { a0: number; w: number; len: number; end: number }; // jet de flammes qui tourne autour de son lanceur (angle a0 + w·t) jusqu'à end
+  spin?: { a0: number; w: number; len: number; end: number; ang?: number }; // jet de flammes qui tourne autour de son lanceur (angle a0 + w·t) jusqu'à end ; ang : rayon qui traque sa cible
 }
 
 export interface Player {
@@ -353,8 +354,7 @@ export class Room {
   }
 
   addPlayer(name: string, send: (m: ServerMsg) => void, account?: { userId: string; profile: Profile | null }): Player {
-    const used = new Set([...this.players.values()].map((p) => p.color));
-    const color = PLAYER_COLORS.find((c) => !used.has(c)) ?? PLAYER_COLORS[0];
+    const color = PLAYER_COLORS[this.seatFor(account?.userId ?? null, account?.profile?.seat)];
     // Première fois : on échoue sur la plage et il faut trouver le village.
     // Une fois le village découvert, on y apparaît directement.
     const found = !!account?.profile?.village_found;
@@ -431,12 +431,23 @@ export class Room {
    * Membre déconnecté : il dort près du feu du village, ses Alphas équipés et sa meute autour de lui
    * (un sur trois dort aussi, les autres flânent dans le village).
    */
-  addSleeper(key: string, prof: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats' | 'learned'>) {
+  /**
+   * Place d'un membre dans le village (et donc sa couleur) : celle qu'il a déjà si personne d'autre ne l'occupe, sinon la
+   * première qu'aucun membre (connecté ou endormi au village) n'a prise. Elle ne dépend pas de qui est connecté.
+   */
+  private seatFor(key: string | null, want?: number | null) {
+    const online = new Set([...this.players.values()].map((p) => PLAYER_COLORS.indexOf(p.color)));
+    const asleep = new Set([...this.sleepers].filter(([k]) => k !== key).map(([, z]) => PLAYER_COLORS.indexOf(z.color)));
+    const ok = (i: number) => !online.has(i) && !asleep.has(i);
+    if (want !== undefined && want !== null && want >= 0 && want < PLAYER_COLORS.length && ok(want)) return want;
+    const free = PLAYER_COLORS.findIndex((_, i) => ok(i));
+    return free >= 0 ? free : Math.max(0, PLAYER_COLORS.findIndex((_, i) => !online.has(i))); // plus de membres que de couleurs
+  }
+
+  addSleeper(key: string, prof: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats' | 'learned' | 'seat'>) {
     if (this.sleepers.has(key) || [...this.players.values()].some((p) => p.userId === key)) return;
     const v = this.map.village, k = this.sleepers.size;
     const a = 0.9 + k * 2.1, at = this.map.freeNear(v.x + Math.cos(a) * 95, v.y + Math.sin(a) * 70 + 10);
-    let hash = 0;
-    for (const ch of key) hash = (hash * 31 + ch.charCodeAt(0)) | 0;
     const species = [
       ...(prof.alphas ?? []).filter((x) => !x.rest && !x.wakeAt && x.s in SPECIES).map((x) => ({ s: x.s, alpha: true, legend: !!x.legend })),
       ...(prof.pack ?? []).filter((s) => s in SPECIES && !SPECIES[s].boss).slice(0, armyCap((prof.learned ?? []).map(Number))).map((s) => ({ s, alpha: false, legend: false })),
@@ -447,7 +458,7 @@ export class Room {
       return { id: this.nextId++, ...m, asleep: i % 3 === 0, x: pos.x, y: pos.y, wx: pos.x, wy: pos.y, wt: Math.random() * 3 };
     });
     this.sleepers.set(key, {
-      name: prof.name, color: PLAYER_COLORS[Math.abs(hash) % PLAYER_COLORS.length], armor: clamp(Number(prof.armor) || 0, 0, ARMOR_MAX),
+      name: prof.name, color: PLAYER_COLORS[this.seatFor(key, prof.seat)], armor: clamp(Number(prof.armor) || 0, 0, ARMOR_MAX),
       cls: CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as string) : '', x: at.x, y: at.y, pack, stats: statsOf(prof.stats),
     });
     this.scaleBosses();
@@ -548,7 +559,7 @@ export class Room {
     const slow = p.slowUntil > this.time ? WEB_SLOW : 1;
     const swimming = !!mounted && swimMount(mounted.s); // sur le serpent : seulement l'eau
     const flying = !!mounted && flyMount(mounted.s); // à dos de vautour : par-dessus l'eau et les obstacles
-    const allowed = PLAYER_SPEED * slow * (mounted ? mountSpeedOf(mounted.s) : bootsSpeed(p.boots)) * 1.35 * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12;
+    const allowed = (PLAYER_SPEED * slow * (mounted ? mountSpeedOf(mounted.s) : bootsSpeed(p.boots)) * 1.35 + STORM_PUSH * this.storm) * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12; // (le vent de la tempête pousse en plus)
     p.lastPosMs = now;
     let dx = x - p.x, dy = y - p.y;
     const d = Math.hypot(dx, dy);
@@ -589,7 +600,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats }, tomes: [...p.tomes], learned: [...p.learned], read_at: p.readAt, read_kind: p.readKind };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats }, tomes: [...p.tomes], learned: [...p.learned], read_at: p.readAt, read_kind: p.readKind, seat: Math.max(0, PLAYER_COLORS.indexOf(p.color)) };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -1338,7 +1349,7 @@ export class Room {
     }
     const sky = this.sky();
     this.night = sky.light < 0.5;
-    this.storm = sky.storm;
+    this.storm = this.zoneOpen(6) ? sky.storm : 0; // pas de tempête tant que le village n'a pas ouvert la porte du désert
     this.rain = sky.rain;
     // Au lever du jour, les bêtes de nuit sauvages s'en vont, hors de la vue des dompteurs (on ne les voit pas disparaître).
     if (!this.isNight()) {
@@ -1813,7 +1824,8 @@ export class Room {
     // de chaque tome (jamais un livre qu'on a déjà, ni un tome déjà lu)
     const tome = tomeOfZone(SPECIES[ch.s].zone);
     const useful = LESSON_KINDS.map((_, k) => bookIndex(k, tome)).filter((b, k) => !p.tomes[b] && lessonsLeft(tome, p.learned[k]) > 0);
-    const book = useful.length && Math.random() < TOME_DROP ? useful[Math.floor(Math.random() * useful.length)] : -1;
+    // pas de livre tant que le village n'a pas bâti l'école des dompteurs : on ne saurait où le lire
+    const book = useful.length && this.buildings.includes('school') && Math.random() < TOME_DROP ? useful[Math.floor(Math.random() * useful.length)] : -1;
     if (book >= 0) p.tomes[book] = 1;
     this.events.push({ e: 'chest', id, to: p.id, gold, x: Math.round(ch.x), y: Math.round(ch.y), ...(book >= 0 ? { book } : {}) });
   }
@@ -2034,9 +2046,9 @@ export class Room {
         break;
       }
       case 'laser': {
-        // Rayon : il s'arrête ; le rayon s'annonce en glissant vers sa cible, s'allume face à elle, puis balaie lentement en brûlant.
+        // Rayon : il s'arrête ; le rayon s'annonce face à sa cible, s'allume, puis la poursuit en tournant (laserAim) en brûlant.
         const warn = 0.9, len = u.owner ? 300 : 480, w = (Math.random() < 0.5 ? -1 : 1) * m.turn;
-        const a0 = Math.atan2(t.y - u.y, t.x - u.x) - w * warn, end = this.time + warn + m.dur;
+        const a0 = Math.atan2(t.y - u.y, t.x - u.x), end = this.time + warn + m.dur;
         u.castUntil = end;
         this.hazard(u, { kind: 1, style: 'laser', x: u.x, y: u.y, x2: u.x + Math.cos(a0) * len, y2: u.y + Math.sin(a0) * len, r: 18, at: this.time + warn, dmg: d * 0.35, spin: { a0, w, len, end } });
         break;
@@ -2058,8 +2070,8 @@ export class Room {
   private updateHazards() {
     for (const h of this.hazards) {
       if (h.spin) {
-        // le jet suit son lanceur et tourne (déjà pendant l'annonce : on voit dans quel sens il va balayer)
-        const a = h.spin.a0 + h.spin.w * (this.time - h.start);
+        // le jet suit son lanceur et tourne (déjà pendant l'annonce : on voit dans quel sens il va balayer) ; le rayon, lui, traque
+        const a = h.style === 'laser' ? this.laserAim(h) : h.spin.a0 + h.spin.w * (this.time - h.start);
         [h.x, h.y] = [h.boss.x, h.boss.y];
         [h.x2, h.y2] = [h.boss.x + Math.cos(a) * h.spin.len, h.boss.y + Math.sin(a) * h.spin.len];
       }
@@ -2093,6 +2105,24 @@ export class Room {
       }
     }
     this.hazards = this.hazards.filter((h) => this.units.has(h.boss.id) && (!h.fired || (h.kind === 2 && this.time < h.until) || (!!h.spin && this.time < h.spin.end) || this.time < h.at + 0.3));
+  }
+
+  /**
+   * Rayon runique : il tourne toujours à la même vitesse, vers la cible à sa portée la plus proche de lui (un dompteur ou
+   * un monstre de la meute) ; s'il n'y a personne, il continue de balayer dans le même sens.
+   */
+  private laserAim(h: Hazard) {
+    const s = h.spin!, a = s.ang ?? s.a0, step = Math.abs(s.w) * DT;
+    let best = Infinity, da = 0;
+    for (const e of this.targetsNear(h.boss, h.boss.x, h.boss.y, s.len)) {
+      const d = Math.atan2(Math.sin(Math.atan2(e.y - h.boss.y, e.x - h.boss.x) - a), Math.cos(Math.atan2(e.y - h.boss.y, e.x - h.boss.x) - a));
+      if (Math.abs(d) < Math.abs(best)) [best, da] = [d, d];
+    }
+    if (best !== Infinity) {
+      if (Math.abs(da) > 1e-3) s.w = Math.sign(da) * Math.abs(s.w); // il garde ce sens si sa cible lui échappe
+      s.ang = a + Math.max(-step, Math.min(step, da));
+    } else s.ang = a + Math.sign(s.w) * step;
+    return s.ang;
   }
 
   private alliesOnLine(h: Hazard) {
@@ -2724,6 +2754,7 @@ export class Room {
       return;
     }
     if (o.dead) return;
+    if (SPECIES[u.s].key === 'golem' && this.golemEats(u, o)) return;
     // Au village ou dans un camp (dompteur et monstre à l'abri) : la meute se promène tranquillement.
     const area = this.safeArea(o.x, o.y);
     if (area && dist2(u.x, u.y, area.x, area.y) < area.r ** 2) {
@@ -2753,6 +2784,47 @@ export class Room {
     // Place libre dans la formation (pas au milieu d'un arbre), puis on y va en contournant les obstacles.
     const slot = this.blockedFor(u, sx, sy) ? { x: hx, y: hy } : { x: sx, y: sy };
     this.navTo(u, slot.x, slot.y, far ? Math.max(u.speed, ownerSpeed * 1.15) : Math.max(u.speed, 90), 3, !!bank);
+  }
+
+  /**
+   * Golem de mousse de la meute (ordinaire ou Alpha), sans ennemi à combattre : il va manger le rocher le plus proche, pas
+   * trop loin de son dompteur, en quelques bouchées ; la pierre revient à son dompteur.
+   */
+  private golemEats(u: Unit, o: Player) {
+    const ok = (i: number) => {
+      const ore = this.map.ores[i];
+      return !!ore && ore.res === 'stone' && this.oreHp[i] > 0 && dist2(o.x, o.y, ore.x, ore.y) < (FOLLOW_MAX_R * 0.8) ** 2;
+    };
+    if (u.eatOre === undefined || u.eatOre < 0 || !ok(u.eatOre)) {
+      u.eatOre = -1;
+      if (this.tick % 5 !== 0) return false;
+      let bd = GOLEM_EAT_R ** 2;
+      for (const ore of this.map.ores) {
+        const d = dist2(u.x, u.y, ore.x, ore.y);
+        if (d < bd && ok(ore.id)) [bd, u.eatOre] = [d, ore.id];
+      }
+      if (u.eatOre < 0) return false;
+    }
+    const ore = this.map.ores[u.eatOre], reach = u.r + ORE_R + 8;
+    if (dist2(u.x, u.y, ore.x, ore.y) > reach ** 2) {
+      this.navTo(u, ore.x, ore.y, u.speed, reach - 6);
+      return true;
+    }
+    u.atkCd -= DT;
+    if (u.atkCd > 0) return true;
+    u.atkCd = GOLEM_BITE_S;
+    this.oreHp[ore.id] -= oreHp(ore.zone) / GOLEM_BITES + 0.01;
+    const done = this.oreHp[ore.id] <= 0;
+    this.events.push({ e: 'munch', id: u.id, ore: ore.id, done });
+    if (!done) return true;
+    this.oreBack[ore.id] = this.time + ORE_RESPAWN_S;
+    this.map.oreDown.add(ore.id);
+    const stone = resRoll(resYield(ore.zone) * (1 + lessonBonus(o.learned, 'gather')));
+    o.stone += stone;
+    o.dirty = true;
+    this.events.push({ e: 'res', to: o.id, wood: 0, stone, x: ore.x, y: ore.y - 10 });
+    u.eatOre = -1;
+    return true;
   }
 
   /** melee : coup au corps à corps (le client anime l'attaquant qui se fend vers sa cible). */
@@ -3123,6 +3195,7 @@ export class Room {
       case 'die': case 'shot': case 'boom': return e;
       case 'move': case 'charge': case 'feed': case 'revive': case 'heal': return ent(e.id) ?? null;
       case 'mine': return this.map.ores[e.id] ?? null;
+      case 'munch': return this.map.ores[e.ore] ?? null;
       case 'chop': return this.map.decor[e.id] ?? null;
       case 'eat': case 'pick': return this.map.bushes[e.bush] ?? null;
       case 'gold': case 'essence': case 'soul': case 'res': case 'chest': case 'full': case 'seen': case 'trade': case 'scroll': return e.to;

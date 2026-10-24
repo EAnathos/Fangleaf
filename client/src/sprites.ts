@@ -48,11 +48,15 @@ export interface UnitLook {
   color?: string;
   charge?: number; // tireur : avancement de la charge du tir (0 à 1)
   inWater?: boolean; // serpent : nage (seuls la tête et les anneaux dépassent)
-  moving?: boolean; // il se déplace (les gluants avancent par bonds)
+  moving?: boolean; // il se déplace (gluants, crapauds et lièvres avancent par bonds)
   air?: number; // hauteur au-dessus du sol (bond d'un géant) : le corps monte, l'ombre reste au sol et rétrécit
   squash?: number; // écrasement vertical (> 1 : étiré, < 1 : aplati), pour l'élan et l'atterrissage
   shell?: boolean; // escargot rentré dans sa coquille : seule la coquille, posée au sol
+  leap?: Leap; // en plein bond (rempli par drawUnit) : de quoi poser les pattes
 }
+
+/** Pose d'un bond : ext (0 → 1) pattes arrière détendues, reach (0 → 1) pattes avant tendues vers le sol, crouch (0 → 1) ramassé. */
+export interface Leap { ext: number; reach: number; crouch: number }
 
 /** Décalage de la couronne (Alpha, géant) vers la tête, en rayons, pour les espèces dont la tête est loin devant. */
 const CROWN_X: Record<string, number> = { bear: 0.8, boar: 0.9, firefly: 0.5, sandworm: 0.5, vulture: 0.55, jackal: 0.85, meerkat: 0.08, salamander: 0.95, lava_tortoise: 1.05 };
@@ -63,8 +67,9 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
   const key = u.key ?? SPECIES[u.species].sprite ?? SPECIES[u.species].key;
   const floating = key === 'wisp' || key === 'firefly' || key === 'ash_bat';
-  // Gluant en marche : il avance par bonds (élan aplati, saut étiré, atterrissage écrasé).
-  const hop = key === 'slime' && u.moving ? slimeHop(u) : null;
+  // Gluant, crapaud, lièvre en marche : ils avancent par bonds (élan aplati, saut étiré, atterrissage écrasé).
+  const hop = u.moving && HOPS[key] ? hopOf(u, HOPS[key]) : null;
+  if (hop) u = { ...u, leap: hop.leap };
   const air = (u.air ?? 0) + (hop?.lift ?? 0);
   const bob = floating ? Math.sin(u.t * 2.5 + u.seed) * r * 0.18 - r * 0.55 : hop ? 0 : Math.sin(u.t * 6 + u.seed) * r * 0.06;
   const y = u.y + bob - air;
@@ -73,6 +78,16 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
   const lifted = Math.max(0.35, 1 - air / (r * 6)); // l'ombre rétrécit quand il monte
   if (floating) shadow(ctx, x, u.y, r * (0.75 - Math.sin(u.t * 2.5 + u.seed) * 0.08));
   else if (!u.inWater) shadow(ctx, x, u.y, r * lifted);
+  if (hop?.dust) {
+    // petites bouffées de poussière qui s'écartent sous les pattes quand il retombe
+    const d = hop.dust;
+    ctx.fillStyle = `rgba(196,182,150,${0.5 * (1 - d)})`;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(x + s * r * (0.55 + d * 0.6), u.y + r * 0.7, r * (0.16 + d * 0.14), r * (0.08 + d * 0.06), 0, 0, TAU);
+      ctx.fill();
+    }
+  }
 
   if (u.legend) {
     // Halo doré qui pulse sous l'Alpha légendaire.
@@ -105,6 +120,7 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
   ctx.translate(x, y + r * 0.75); // écrasement depuis les pieds : il reste posé au sol
   ctx.scale(u.face / Math.sqrt(squash), squash);
   ctx.translate(0, -r * 0.75);
+  if (hop?.tilt) ctx.rotate(hop.tilt); // museau vers le haut au décollage, vers le sol à l'arrivée
   const base = u.color ?? SPECIES[u.species].color;
   const fill = u.flash ? '#FFFFFF' : base;
   (DRAWERS[key] ?? golem)(ctx, r, fill, u);
@@ -145,12 +161,45 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
  * Bond d'un gluant qui avance : environ deux sauts par seconde. Il s'aplatit pour prendre son élan, s'étire en l'air,
  * puis s'écrase en retombant.
  */
-function slimeHop(u: UnitLook) {
-  const ph = (u.t * 2.1 + u.seed * 0.37) % 1;
-  if (ph < 0.18) return { lift: 0, squash: 1 - 0.28 * Math.sin((ph / 0.18) * Math.PI) }; // élan
-  if (ph > 0.86) return { lift: 0, squash: 1 - 0.32 * Math.sin(((ph - 0.86) / 0.14) * Math.PI) }; // atterrissage
+/** Bonds par seconde, hauteur (en rayons), écrasement à l'élan et à l'atterrissage, étirement en l'air, bascule du corps (rad). */
+interface Hop { rate: number; height: number; crouch: number; land: number; stretch: number; tilt: number }
+const HOPS: Record<string, Hop> = {
+  slime: { rate: 2.1, height: 0.85, crouch: 0.28, land: 0.32, stretch: 0.18, tilt: 0 }, // gros bonds mous
+  toad: { rate: 1.4, height: 0.75, crouch: 0.24, land: 0.26, stretch: 0.1, tilt: 0.32 }, // sauts lourds et longs, pattes détendues
+  hare: { rate: 2.6, height: 0.7, crouch: 0.18, land: 0.2, stretch: 0.12, tilt: 0.38 }, // bonds vifs, oreilles couchées
+};
+/** Espèces (apparence) qui avancent par bonds : le jeu les redessine à chaque image pendant qu'elles sautent. */
+export const hops = (key: string) => key in HOPS;
+
+const smoothstep = (a: number, b: number, v: number) => {
+  const k = Math.max(0, Math.min(1, (v - a) / (b - a)));
+  return k * k * (3 - 2 * k);
+};
+
+/**
+ * Un bond, découpé en temps : élan (ramassé, museau qui plonge), détente (pattes arrière qui se déplient d'un coup,
+ * museau en l'air), vol (pattes qui se replient, le corps bascule), réception (pattes avant tendues vers le sol, écrasement,
+ * poussière).
+ */
+function hopOf(u: UnitLook, h: Hop) {
+  const ph = (u.t * h.rate + u.seed * 0.37) % 1;
+  if (ph < 0.18) {
+    const c = Math.sin((ph / 0.18) * Math.PI * 0.5);
+    return { lift: 0, squash: 1 - h.crouch * c, tilt: h.tilt * 0.35 * c, leap: { ext: 0, reach: 0, crouch: c }, dust: 0 }; // élan
+  }
+  if (ph > 0.86) {
+    const k = (ph - 0.86) / 0.14;
+    return { lift: 0, squash: 1 - h.land * Math.sin(k * Math.PI), tilt: h.tilt * 0.5 * (1 - k), leap: { ext: 0, reach: 1 - k, crouch: Math.sin(k * Math.PI) * 0.8 }, dust: k }; // réception
+  }
   const k = (ph - 0.18) / 0.68;
-  return { lift: Math.sin(k * Math.PI) * u.r * 0.85, squash: 1 + 0.18 * Math.cos(k * Math.PI) }; // étiré en montant, rond au sommet
+  const ext = smoothstep(0, 0.12, k) * (1 - smoothstep(0.35, 0.7, k)), reach = smoothstep(0.5, 0.85, k);
+  return {
+    lift: Math.sin(k * Math.PI) * u.r * h.height,
+    squash: 1 + h.stretch * Math.cos(k * Math.PI), // étiré en montant, rond au sommet
+    tilt: -h.tilt * Math.cos(k * Math.PI), // museau en l'air au départ, vers le sol à l'arrivée
+    leap: { ext, reach, crouch: 0 },
+    dust: 0,
+  };
 }
 
 /** Contour sombre du corps (chemin courant) pour détacher le sprite du sol. */
@@ -1359,8 +1408,28 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.closePath();
     ctx.fill();
   };
+  const lp = u.leap ?? { ext: 0, reach: 0, crouch: 0 };
+  // en plein bond : les deux longues pattes arrière se déplient loin derrière (cuisse, jambe, pied palmé)
+  const leg = (hipX: number, hipY: number, s: number, col: string) => {
+    if (lp.ext < 0.05) return;
+    const e = lp.ext, kx = hipX - 0.35 * r * s * e, ky = hipY + 0.32 * r * e, fx = hipX - 0.95 * r * s * e, fy = hipY + 0.42 * r * e;
+    ctx.strokeStyle = col;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 0.26 * r * s;
+    ctx.beginPath();
+    ctx.moveTo(hipX, hipY);
+    ctx.lineTo(kx, ky);
+    ctx.stroke();
+    ctx.lineWidth = 0.18 * r * s;
+    ctx.beginPath();
+    ctx.moveTo(kx, ky);
+    ctx.lineTo(fx, fy);
+    ctx.stroke();
+    foot(fx, fy - 0.04 * r, s * 0.9, col);
+  };
+  leg(-0.55 * r, 0.3 * r, 0.9, dark);
   // patte arrière du fond, puis le corps
-  foot(-0.62 * r, 0.62 * r, 0.9, dark);
+  if (lp.ext < 0.05) foot(-0.62 * r, 0.62 * r, 0.9, dark);
   ctx.fillStyle = skin;
   ctx.beginPath();
   ctx.moveTo(-0.95 * r, 0.5 * r);
@@ -1401,7 +1470,19 @@ function toad(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.ellipse(-0.55 * r, 0.16 * r, 0.22 * r, 0.05 * r, -0.35, 0, TAU);
     ctx.fill();
   }
-  foot(-0.38 * r, 0.66 * r, 1, skin);
+  if (lp.ext < 0.05) foot(-0.38 * r, 0.66 * r, 1, skin);
+  else leg(-0.4 * r, 0.38 * r, 1, skin);
+  if (lp.reach > 0.05) {
+    // bras tendus vers le sol pour se recevoir
+    ctx.strokeStyle = skin;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 0.15 * r;
+    ctx.beginPath();
+    ctx.moveTo(0.55 * r, 0.45 * r);
+    ctx.lineTo(0.55 * r + 0.32 * r * lp.reach, 0.45 * r + 0.32 * r * lp.reach);
+    ctx.stroke();
+    foot(0.55 * r + 0.32 * r * lp.reach, 0.45 * r + 0.3 * r * lp.reach, 0.6, skin);
+  }
   // taches sombres et verrues en relief
   if (!f) {
     ctx.fillStyle = TOAD.blotch;
@@ -1994,10 +2075,12 @@ function hare(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
     ctx.ellipse(x, y, rx, ry, rot, 0, TAU);
     ctx.fill();
   };
-  ctx.translate(0, -Math.max(0, Math.sin(u.t * 8 + u.seed)) * r * 0.16); // il sautille
-  const flick = Math.sin(u.t * 3 + u.seed) * 0.08;
-  ell(-0.35 * r, 0.62 * r, 0.22 * r, 0.12 * r, 0, shade);
-  ell(0.3 * r, 0.62 * r, 0.22 * r, 0.12 * r, 0, shade);
+  const flick = Math.sin(u.t * 3 + u.seed) * 0.08, lp = u.leap ?? { ext: 0, reach: 0, crouch: 0 };
+  // pattes arrière : posées et ramassées, ou détendues loin derrière pendant la poussée
+  ell(-0.35 * r - lp.ext * 0.26 * r, 0.62 * r + lp.ext * 0.14 * r, 0.22 * r + lp.ext * 0.16 * r, 0.12 * r, lp.ext * 0.35, shade);
+  // pattes avant : sous le corps, rentrées en l'air, tendues vers le sol pour se recevoir
+  const tuck = lp.ext * (1 - lp.reach);
+  ell(0.3 * r + lp.reach * 0.32 * r - tuck * 0.1 * r, 0.62 * r + lp.reach * 0.1 * r - tuck * 0.12 * r, 0.22 * r - tuck * 0.06 * r, 0.12 * r, -lp.reach * 0.6, shade);
   // boule de poils au contour duveteux
   ctx.fillStyle = fur;
   ctx.beginPath();
@@ -2015,7 +2098,8 @@ function hare(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
   ctx.stroke();
   ell(0.05 * r, 0.32 * r, 0.42 * r, 0.24 * r, 0, pale);
   ell(-0.82 * r, 0.05 * r, 0.16 * r, 0.15 * r, 0, '#FFFFFF'); // queue
-  for (const [ox, rot] of [[0.1, -0.3 + flick], [0.42, 0.25 - flick]] as const) {
+  const back = Math.max(lp.ext, lp.reach * 0.6) * 0.9 - lp.crouch * 0.15; // oreilles couchées par le vent du saut
+  for (const [ox, rot] of [[0.1, -0.3 + flick - back], [0.42, 0.25 - flick - back * 1.2]] as const) {
     ctx.save();
     ctx.translate(ox * r, -0.42 * r);
     ctx.rotate(rot);

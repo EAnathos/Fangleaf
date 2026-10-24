@@ -371,6 +371,11 @@ export const ALPHA_EQUIP_MAX = 5; // Alphas équipés (sur le terrain) en même 
 
 // Grottes : un mini-boss par grotte, qui réapparaît après un délai ; il peut lâcher son âme.
 export const BOSS_RESPAWN_S = 300;
+export const STORM_PUSH = 55; // tempête de sable au plus fort : elle pousse le dompteur de 55 px/s dans le sens du vent…
+export const STORM_WIND = { x: 0.984, y: 0.177 }; // … vers l'est, en descendant un peu (comme les traînées de sable à l'écran)
+export const GOLEM_EAT_R = 130; // un golem de la meute repère un rocher à cette distance…
+export const GOLEM_BITE_S = 0.9; // … et le grignote, une bouchée toutes les 0,9 s…
+export const GOLEM_BITES = 4; // … en quatre bouchées : la pierre revient à son dompteur
 export const CACTUS_PRICK = 0.05; // s'y frotter : 5 % des PV max…
 export const CACTUS_CD = 0.8; // … au plus toutes les 0,8 s
 export const BOSS_HP_BONUS = 1.2; // PV des géants : +20 % par-dessus le tableau des espèces
@@ -550,7 +555,7 @@ export const SPECIES: Species[] = [
   { key: 'slime', name: 'Gluant', color: '#7FCB5B', r: 14, hp: 25, dmg: 2, speed: 70, atkCd: 1.2, gold: 2, zone: 1, population: 57, pack: [2, 4] },
   { key: 'wolf', name: 'Loup', color: '#8A93A8', r: 19, hp: 70, dmg: 9, speed: 135, atkCd: 0.8, gold: 5, zone: 2, population: 43, pack: [2, 4] },
   { key: 'boar', name: 'Sanglier', color: '#8B5E3C', r: 20, hp: 180, dmg: 18, speed: 95, atkCd: 1.1, gold: 10, zone: 3, population: 34, pack: [1, 3] }, // bête de nuit : il ne dort pas
-  { key: 'golem', name: 'Golem de mousse', color: '#5F7A5A', r: 24, hp: 450, dmg: 32, speed: 60, atkCd: 1.4, gold: 20, zone: 4, population: 30, pack: [1, 2] },
+  { key: 'golem', name: 'Golem de mousse', color: '#5F7A5A', r: 24, hp: 340, dmg: 32, speed: 60, atkCd: 1.4, gold: 20, zone: 4, population: 30, pack: [1, 2] },
   { key: 'sporelin', name: 'Sporelin', color: '#C8553D', r: 13, hp: 18, dmg: 5, speed: 95, atkCd: 1.0, gold: 2, zone: 1, population: 38, pack: [3, 5] },
   { key: 'spider', name: 'Araignée sylvestre', color: '#6A4E7E', r: 17, hp: 55, dmg: 11, speed: 155, atkCd: 0.9, gold: 5, zone: 2, population: 30, pack: [1, 3] },
   { key: 'bear', name: 'Ours des fourrés', color: '#6B4A33', r: 24, hp: 240, dmg: 15, speed: 80, atkCd: 1.3, gold: 12, zone: 3, population: 24, pack: [1, 1], sleeps: 'day' }, // il chasse la nuit, dort le jour
@@ -569,7 +574,7 @@ export const SPECIES: Species[] = [
   { key: 'watcher', name: 'Guetteur runique', color: '#6E7570', r: 22, hp: 320, dmg: 38, speed: 55, atkCd: 2.0, gold: 20, zone: 4, population: 22, pack: [1, 2], ranged: { kind: 'bolt', range: 320, windup: 0.6, speed: 260 } },
   { key: 'toad', name: 'Crapaud-mortier', color: '#6E8F45', r: 24, hp: 900, dmg: 50, speed: 75, atkCd: 2.4, gold: 40, zone: 5, population: 18, pack: [1, 2], ranged: { kind: 'arc', range: 340, windup: 0.55, speed: 0, splash: 52 }, amphibious: true },
   { key: 'serpent', name: 'Serpent des brumes', color: '#4A93A0', r: 22, hp: 700, dmg: 45, speed: 105, atkCd: 1.8, gold: 36, zone: 5, population: 16, pack: [1, 1], ranged: { kind: 'jet', range: 360, windup: 0.45, speed: 560 }, swim: true },
-  { key: 'crab', name: 'Crabe des berges', color: '#D46A43', r: 24, hp: 1400, dmg: 55, speed: 70, atkCd: 1.4, gold: 45, zone: 5, population: 16, pack: [1, 2], amphibious: true },
+  { key: 'crab', name: 'Crabe des berges', color: '#D46A43', r: 24, hp: 1050, dmg: 55, speed: 70, atkCd: 1.4, gold: 45, zone: 5, population: 16, pack: [1, 2], amphibious: true },
   // Géants des nouvelles espèces : une grotte chacun (zone 4 : Œil des Ruines ; zone 5 : les trois autres).
   { key: 'rune_eye', name: 'Œil des Ruines', color: '#5E6662', r: 57, hp: 12480, dmg: 70, speed: 185, atkCd: 1.4, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Œil-de-Pierre le Veilleur', sprite: 'watcher', base: 'watcher' },
   { key: 'toad_king', name: 'Crapaud-Roi', color: '#5F8A3A', r: 60, hp: 27170, dmg: 100, speed: 190, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Croâ XIV, roi des Mares', sprite: 'toad', base: 'toad' },

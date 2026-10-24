@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf, SCHOOL_CAMP, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf, SCHOOL_CAMP, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { HAZARD_STYLES, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -15,7 +15,7 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawLaser, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawLaser, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
@@ -569,6 +569,11 @@ export class Game {
         if (o) sound.play(o.res === 'wood' ? 'chop' : 'pick', e.by === me ? 1 : near(o.x, o.y) * 0.6);
         break;
       }
+      case 'munch': {
+        const o = this.map.ores[e.ore];
+        if (o) sound.play('pick', near(o.x, o.y) * 0.8);
+        break;
+      }
       case 'chop': {
         const d = this.map.decor[e.id];
         if (d) sound.play('chop', e.by === me ? 1 : near(d.x, d.y) * 0.6);
@@ -901,6 +906,15 @@ export class Game {
         this.tools.set(e.by, { kind: o.res === 'wood' ? 'axe' : 'pick', at: this.time, tx: o.x, ty: o.y });
         break;
       }
+      case 'munch': {
+        // le golem se penche sur le rocher et en arrache une bouchée : éclats de pierre (et un nuage de poussière quand il l'a avalé)
+        const o = this.map.ores[e.ore], g = this.posOf(e.id, players);
+        if (!o) break;
+        if (g) this.lunges.set(e.id, { at: this.time, ang: Math.atan2(o.y - g.y, o.x - g.x) });
+        this.fx.debris(o.x, o.y - 6, ['#9AA39E', '#7E8681', '#5F7A5A'], e.done ? 12 : 5, e.done ? 170 : 110, 6);
+        if (e.done) this.fx.dust(o.x, o.y, 40, 8);
+        break;
+      }
       case 'chop': {
         const d = this.map.decor[e.id];
         if (!d) break;
@@ -1069,6 +1083,13 @@ export class Game {
       this.me.fx = dx / l;
       this.me.fy = dy / l;
     }
+    // Tempête de sable : le vent pousse le dompteur vers l'est (même règle de passage qu'un pas ordinaire).
+    const gust = dead || this.map.caveAt(this.me.x, this.me.y) || !this.gateOpen(5) ? 0 : skyAt(this.map.seed, this.net.serverNow()).storm * desertMix(this.map, this.me.x, this.me.y);
+    if (gust > 0.05) {
+      const swim = !!st?.mount && swimMount(st.mount.species), fly = !!st?.mount && flyMount(st.mount.species);
+      const nx = this.me.x + STORM_WIND.x * STORM_PUSH * gust * dt, ny = this.me.y + STORM_WIND.y * STORM_PUSH * gust * dt;
+      if (this.map.passable(nx, ny, swim, fly) && this.map.gateCrossed(this.me.x, this.me.y, nx, ny) < 0) [this.me.x, this.me.y] = [nx, ny];
+    }
     // Attaque au clic : tant que le bouton gauche est maintenu, on frappe vers le pointeur.
     this.aimTimer -= dt;
     if (aim.down && !dead && !this.hud.panel && this.aimTimer <= 0) {
@@ -1166,7 +1187,8 @@ export class Game {
     const r = look.r, res = this.scale;
     const l = r * 2.6, t = r * 2.9, w = r * 5.2, h = r * 4.8; // de quoi contenir aura, couronne, pattes et bond
     const key = `${look.species}|${look.alpha}|${look.legend}|${look.wild}|${look.ownerColor}|${look.face}|${look.flash}|${r}|${look.inWater}|${Math.round((look.charge ?? 0) * 8)}|${look.moving}|${res}`;
-    const fps = settings.display.quality === 'low' ? 12 : SPRITE_FPS;
+    const sprite = SPECIES[look.species].sprite ?? SPECIES[look.species].key;
+    const fps = look.moving && hops(sprite) ? 60 : settings.display.quality === 'low' ? 12 : SPRITE_FPS; // un bond se dessine à pleine cadence
     const frame = Math.floor(look.t * fps + (id % 7) / 7);
     let e = this.sprites.get(id);
     if (!e || e.key !== key || e.frame !== frame) {
@@ -1373,7 +1395,7 @@ export class Game {
     // Mer de sable : jamais de pluie, mais des tempêtes de sable
     const desert = this.map.caveAt(camX, camY) ? 0 : desertMix(this.map, camX, camY);
     sky.rain *= 1 - desert;
-    const storm = sky.storm * desert;
+    const storm = sky.storm * desert * (this.gateOpen(5) ? 1 : 0); // pas de tempête avant que le village ait ouvert le désert
     this.watchStorm(storm);
 
     // Dans une grotte, on ne voit que la grotte (pas la forêt qui borde le monde).
