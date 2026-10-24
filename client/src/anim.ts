@@ -68,6 +68,12 @@ export function castPose(c: Cast, r: number, ox: number, oy: number, t: number):
       const back = r * 0.28 * ease(Math.min(1, c.k * 1.4)), shiver = Math.sin(t * 55) * r * 0.05 * c.k;
       return { ...p, dx: -ux * back + shiver, dy: -uy * back * 0.7, squash: 1 - 0.1 * c.k };
     }
+    case 'laser': {
+      // il se soulève en chargeant, de plus en plus fébrile ; le rayon allumé, il vibre sous la puissance du tir
+      if (c.since > 0) return { ...p, air: r * 0.14, dx: Math.sin(t * 61) * r * 0.025, squash: 1.04 + Math.sin(t * 47) * 0.02 };
+      const e = ease(c.k);
+      return { ...p, air: r * 0.14 * e, dx: Math.sin(t * 50) * r * 0.04 * c.k * c.k, squash: 1 + 0.06 * e };
+    }
     default: {
       const f = c.k < 0.25 ? Math.sin((c.k / 0.25) * Math.PI) : 0; // sursaut au lancer
       return { ...p, air: r * 0.15 * f, squash: 1 + 0.08 * f };

@@ -4136,7 +4136,7 @@ function drawDeadwood(ctx: Ctx, x: number, y: number, zone: number, hpPct: numbe
 
 /** Zone d'attaque d'un mini-boss : annonce (bord + remplissage qui progresse), puis effet. */
 /** « #5CC8B8 » → « 92,200,184 » (pour composer des rgba). */
-const rgbOf = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0).join(',');
+export const rgbOf = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0).join(',');
 
 /** owner : couleur du dompteur dont l'Alpha légendaire a lancé l'attaque (absente : un sauvage). */
 export function drawHazard(ctx: Ctx, h: number[], t: number, owner?: string) {
@@ -4148,7 +4148,6 @@ export function drawHazard(ctx: Ctx, h: number[], t: number, owner?: string) {
   const style = HAZARD_STYLES[h[8]];
   if (style === 'lava') return drawLavaPool(ctx, x, y, r, active, t, ember, !!ally);
   if (style === 'flame') return drawFlameJet(ctx, x, y, x2, y2, r, k, active, t, ember, !!ally);
-  if (style === 'laser') return drawLaserBeam(ctx, x, y, x2, y2, r, k, active, t, ember, ally ? rgbOf(owner ?? '#F0B64A') : '143,227,214');
   if (style === 'tentacle' && active) {
     // le tentacule s'abat de tout son long sur le pont
     const n = 8, pts: [number, number][] = [];
@@ -4329,52 +4328,163 @@ function drawFlameJet(ctx: Ctx, x: number, y: number, x2: number, y2: number, r:
   ctx.restore();
 }
 
+/** Rayon runique en cours : son œil (ox, oy), le bout au sol (tx, ty) et la base du couloir au sol (gx, gy). */
+export interface Laser {
+  ox: number; oy: number; tx: number; ty: number; gx: number; gy: number;
+  r: number; // demi-largeur de la zone qui brûle
+  k: number; // annonce : 0 → 1
+  since: number; // secondes depuis l'allumage (0 : pas encore allumé)
+  fade: number; // 1, puis vers 0 quand il s'éteint
+  glow: string; // « r,g,b » du faisceau (runes du géant, ou couleur du dompteur pour un Alpha légendaire)
+  ember: string; // « r,g,b » de l'annonce au sol
+}
+
 /**
- * Rayon runique de l'Œil des Ruines : annoncé par un couloir pointillé qui se remplit, puis un faisceau couleur de ses runes
- * (halo, rayon, cœur blanc qui vibre) avec des étincelles qui filent le long et un éclat là où il s'arrête.
+ * Rayon runique de l'Œil des Ruines.
+ * Annonce : couloir au sol qui se remplit, viseur qui grésille de l'œil jusqu'au sol, énergie aspirée dans l'œil.
+ * Tir : le faisceau jaillit jusqu'au sol, éclair à l'œil ; puis il pulse (cœur blanc, halo, ondes d'énergie qui filent
+ * vers le bout, spirales autour), et là où il touche le sol, une gerbe de lumière.
  */
-function drawLaserBeam(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, k: number, active: boolean, t: number, ember: string, glow: string) {
-  const ang = Math.atan2(y2 - y, x2 - x), len = Math.hypot(x2 - x, y2 - y);
+export function drawLaser(ctx: Ctx, l: Laser, t: number) {
+  const { ox, oy, r, glow } = l;
   ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(ang);
-  if (!active) {
-    ctx.fillStyle = `rgba(${ember},0.14)`;
-    ctx.fillRect(0, -r, len, r * 2);
-    ctx.fillStyle = `rgba(${ember},0.34)`;
-    ctx.fillRect(0, -r * k, len, r * 2 * k);
-    ctx.strokeStyle = `rgba(${ember},0.9)`;
+  ctx.globalAlpha = l.fade;
+  if (!l.since) {
+    // couloir au sol (zone qui va brûler)
+    const ga = Math.atan2(l.ty - l.gy, l.tx - l.gx), glen = Math.hypot(l.tx - l.gx, l.ty - l.gy);
+    ctx.save();
+    ctx.translate(l.gx, l.gy);
+    ctx.rotate(ga);
+    ctx.fillStyle = `rgba(${l.ember},0.12)`;
+    ctx.fillRect(0, -r, glen, r * 2);
+    ctx.fillStyle = `rgba(${l.ember},0.28)`;
+    ctx.fillRect(0, -r, glen * l.k, r * 2);
+    ctx.restore();
+    // viseur : un fil rouge qui grésille, de plus en plus net
+    const flick = 0.55 + 0.45 * Math.abs(Math.sin(t * 37)) * (0.4 + 0.6 * l.k);
+    ctx.strokeStyle = `rgba(255,90,70,${(0.25 + 0.6 * l.k) * flick})`;
+    ctx.lineWidth = 1 + l.k * 1.5;
+    ctx.setLineDash([12, 7]);
+    ctx.lineDashOffset = -t * 120;
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    ctx.lineTo(l.tx, l.ty);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // point de visée au sol
+    ctx.strokeStyle = `rgba(255,90,70,${0.4 + 0.5 * l.k})`;
     ctx.lineWidth = 2;
-    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.ellipse(l.tx, l.ty, r * (1.4 - 0.5 * l.k), r * (0.8 - 0.3 * l.k), 0, 0, TAU);
+    ctx.stroke();
+    // l'œil aspire la lumière : étincelles qui convergent, boule qui grossit
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 10; i++) {
+      const f = (t * 1.8 + i / 10) % 1, a = i * 2.4 + t * 0.7, d = (1 - f) * (40 + r * 2);
+      ctx.fillStyle = `rgba(${glow},${f * (0.4 + 0.6 * l.k)})`;
+      ctx.beginPath();
+      ctx.arc(ox + Math.cos(a) * d, oy + Math.sin(a) * d * 0.8, 1.5 + f * 2, 0, TAU);
+      ctx.fill();
+    }
+    const orb = r * (0.25 + 0.65 * l.k) * (1 + Math.sin(t * 30) * 0.08);
+    const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, orb * 2.2);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(0.35, `rgba(${glow},0.7)`);
+    g.addColorStop(1, `rgba(${glow},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(ox, oy, orb * 2.2, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+  // le faisceau jaillit en 0,12 s, puis reste tendu jusqu'au sol
+  const grow = Math.min(1, l.since / 0.12);
+  const ex = ox + (l.tx - ox) * grow, ey = oy + (l.ty - oy) * grow;
+  const ang = Math.atan2(ey - oy, ex - ox), len = Math.hypot(ex - ox, ey - oy);
+  const pulse = 1 + Math.sin(t * 38) * 0.1 + Math.sin(t * 71) * 0.05, flash = Math.max(0, 1 - l.since / 0.25);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+  ctx.translate(ox, oy);
+  ctx.rotate(ang);
+  // halo, rayon, cœur
+  for (const [w, col] of [[2.8, `rgba(${glow},0.14)`], [1.7, `rgba(${glow},0.28)`], [1, `rgba(${glow},0.55)`], [0.3, 'rgba(255,255,255,0.85)']] as const) {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = r * w * pulse * (1 + flash * 0.8);
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.lineTo(len, 0);
     ctx.stroke();
-    ctx.restore();
-    return;
   }
-  const buzz = 1 + Math.sin(t * 40) * 0.08;
-  for (const [w, col] of [[1.6, `rgba(${glow},0.22)`], [1, `rgba(${glow},0.6)`], [0.42, 'rgba(255,255,255,0.95)']] as const) {
-    ctx.fillStyle = col;
+  // ondes d'énergie qui filent de l'œil vers le sol
+  for (let i = 0; i < 6; i++) {
+    const f = (t * 2.6 + i / 6) % 1;
+    ctx.fillStyle = `rgba(${glow},${0.5 * Math.sin(f * Math.PI)})`;
     ctx.beginPath();
-    ctx.moveTo(0, -r * w * 0.5 * buzz);
-    ctx.lineTo(len, -r * w * buzz);
-    ctx.arc(len, 0, r * w * buzz, -Math.PI / 2, Math.PI / 2);
-    ctx.lineTo(0, r * w * 0.5 * buzz);
-    ctx.closePath();
+    ctx.ellipse(len * f, 0, r * 1.1, r * 0.6 * pulse, 0, 0, TAU);
     ctx.fill();
   }
-  for (let i = 0; i < 8; i++) {
-    const f = (t * 2.2 + i / 8) % 1;
+  // deux spirales qui s'enroulent autour du faisceau
+  ctx.lineWidth = 2;
+  for (const ph of [0, Math.PI]) {
+    ctx.strokeStyle = `rgba(${glow},0.55)`;
+    ctx.beginPath();
+    for (let x = 0; x <= len; x += 6) {
+      const y = Math.sin(x / 16 - t * 22 + ph) * r * 0.85 * pulse;
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  // éclats qui s'échappent sur les côtés
+  for (let i = 0; i < 10; i++) {
+    const f = (t * 1.7 + i * 0.137) % 1, side = i % 2 ? 1 : -1;
     ctx.fillStyle = `rgba(255,255,255,${1 - f})`;
     ctx.beginPath();
-    ctx.arc(len * f, Math.sin(i * 2.7 + t * 9) * r * 0.7, 2, 0, TAU);
+    ctx.arc(len * ((i * 0.31 + t * 0.5) % 1), side * (r * 0.5 + f * r * 1.8), 1.8, 0, TAU);
     ctx.fill();
   }
-  ctx.fillStyle = `rgba(${glow},${0.45 + Math.sin(t * 25) * 0.15})`;
+  ctx.restore();
+  // à l'œil : éclat et rayons qui tournent
+  ctx.save();
+  ctx.globalAlpha = l.fade;
+  ctx.globalCompositeOperation = 'lighter';
+  const eye = r * (0.9 + flash * 1.6) * pulse;
+  const ge = ctx.createRadialGradient(ox, oy, 0, ox, oy, eye * 2);
+  ge.addColorStop(0, 'rgba(255,255,255,1)');
+  ge.addColorStop(0.4, `rgba(${glow},0.7)`);
+  ge.addColorStop(1, `rgba(${glow},0)`);
+  ctx.fillStyle = ge;
   ctx.beginPath();
-  ctx.arc(len, 0, r * 1.9, 0, TAU);
+  ctx.arc(ox, oy, eye * 2, 0, TAU);
   ctx.fill();
+  ctx.strokeStyle = `rgba(${glow},0.6)`;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 4; i++) {
+    const a = t * 3 + (i * TAU) / 4;
+    ctx.beginPath();
+    ctx.moveTo(ox + Math.cos(a) * eye * 0.6, oy + Math.sin(a) * eye * 0.6);
+    ctx.lineTo(ox + Math.cos(a) * eye * 2.4, oy + Math.sin(a) * eye * 2.4);
+    ctx.stroke();
+  }
+  // au sol, là où il frappe : gerbe de lumière aplatie et anneau qui s'élargit
+  if (grow >= 1) {
+    const hit = r * (1.6 + Math.sin(t * 29) * 0.25);
+    const gh = ctx.createRadialGradient(ex, ey, 0, ex, ey, hit * 2);
+    gh.addColorStop(0, 'rgba(255,255,255,0.95)');
+    gh.addColorStop(0.3, `rgba(${glow},0.65)`);
+    gh.addColorStop(1, `rgba(${glow},0)`);
+    ctx.fillStyle = gh;
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, hit * 2, hit * 1.2, 0, 0, TAU);
+    ctx.fill();
+    const f = (t * 3) % 1;
+    ctx.strokeStyle = `rgba(${glow},${0.8 * (1 - f)})`;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, hit * (0.6 + f * 1.8), hit * (0.35 + f * 1.05), 0, 0, TAU);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 

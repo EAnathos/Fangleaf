@@ -15,7 +15,7 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawLaser, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
@@ -36,6 +36,19 @@ const GEAR_NAMES = { weapon: 'Arme améliorée', armor: 'Armure améliorée', to
 
 // En local seulement : ?ciel=nuit, ?ciel=pluie, ?ciel=orage (nuit et pluie) ou ?ciel=tempete (dans la Mer de sable) pour voir le ciel sans attendre.
 const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1 }, tempete: { storm: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
+
+/** Rayon runique suivi par le client : angle et vitesse de rotation (extrapolés entre deux snapshots), dernier passage, sol brûlé. */
+interface LaserState {
+  a: number;
+  w: number;
+  snap: number;
+  len: number;
+  seen: number;
+  tip?: [number, number];
+  spark: number;
+  lit: boolean;
+  laser: Omit<Laser, 'tx' | 'ty' | 'k' | 'since' | 'fade'>;
+}
 
 export class Game {
   private ctx: CanvasRenderingContext2D;
@@ -809,6 +822,7 @@ export class Game {
         // une attaque d'Alpha légendaire (ou d'un tireur de la meute) éclate à la couleur de son dompteur
         const mine = e.by ? players.find((p) => p.id === e.by)?.color : undefined;
         const col = e.kind === 'cloud' ? '#A0BE5A' : e.kind === 'web' ? '#EEE7D7' : e.kind === 'orb' ? '#B48CFF' : mine ?? (e.kind === 'splash' ? '#B9D86A' : '#E8693F');
+        if (e.kind === 'laser') break; // le rayon s'allume tout seul (drawLasers)
         if (e.kind === 'orb') { // orbe du mage : pas de secousse, juste l'éclat violet
           this.fx.ring(e.x, e.y, col, e.r * 0.3, e.r, 0.35);
           break;
@@ -1202,6 +1216,63 @@ export class Game {
     return casts;
   }
 
+  private lasers = new Map<string, LaserState>();
+
+  /**
+   * Rayons runiques : ils partent de l'œil du géant (au-dessus des créatures). Le serveur n'envoie que 20 positions par
+   * seconde : l'angle est extrapolé entre deux snapshots pour un balayage fluide. Le bout brûle le sol et crépite ;
+   * quand le rayon disparaît du snapshot, il s'éteint en un quart de seconde.
+   */
+  private drawLasers(ctx: CanvasRenderingContext2D, hazards: HazardTuple[], units: UnitTuple[], late: number, colorOf: Map<number, string>, air: { y: number; draw: () => void }[]) {
+    for (const h of hazards) {
+      if (HAZARD_STYLES[h[8]] !== 'laser') continue;
+      const key = `${h[0]}|${h[1]}|${h[2]}|${h[9]}`;
+      const a = Math.atan2(h[5] - h[2], h[4] - h[1]), len = Math.hypot(h[4] - h[1], h[5] - h[2]);
+      let st = this.lasers.get(key);
+      if (!st) {
+        const u = units.find((x) => x[0] === h[9]), lift = u ? SPECIES[u[1]].r * 0.68 : 36; // son œil, géant soulevé compris
+        const owner = h[7] ? colorOf.get(h[7]) : undefined;
+        st = { a, w: 0, snap: this.shotsAt, len, seen: this.time, spark: 0, lit: false, laser: { ox: h[1], oy: h[2] - lift, gx: h[1], gy: h[2], r: h[3], glow: owner ? rgbOf(owner) : '143,227,214', ember: owner ? rgbOf(owner) : '232,105,63' } };
+        this.lasers.set(key, st);
+      } else if (this.shotsAt > st.snap) {
+        // vitesse de rotation mesurée entre deux snapshots
+        const da = Math.atan2(Math.sin(a - st.a), Math.cos(a - st.a));
+        st.w = Math.max(-3, Math.min(3, da / Math.max(0.02, this.shotsAt - st.snap)));
+        [st.a, st.snap, st.len] = [a, this.shotsAt, len];
+      }
+      st.seen = this.time;
+      const at = this.fired.get(key), since = h[6] >= 100 && at !== undefined ? Math.max(0.001, this.time - at) : 0;
+      const k = since ? 1 : Math.min(0.999, h[6] / 100 + late / Math.max(0.05, h[10] / 100));
+      if (since && !st.lit) {
+        st.lit = true;
+        this.fx.ring(st.laser.ox, st.laser.oy, '#FFFFFF', 6, 70, 0.3);
+        if (Math.hypot(this.me.x - h[1], this.me.y - h[2]) < 520) this.shake = Math.max(this.shake, 0.22);
+      }
+      this.queueLaser(ctx, st, k, since, 1, late, air);
+    }
+    for (const [key, st] of this.lasers) {
+      if (st.seen === this.time) continue;
+      const fade = 1 - (this.time - st.seen) / 0.25;
+      if (fade <= 0 || !st.lit) this.lasers.delete(key);
+      else this.queueLaser(ctx, st, 1, 1, fade, 0, air);
+    }
+  }
+
+  private queueLaser(ctx: CanvasRenderingContext2D, st: LaserState, k: number, since: number, fade: number, late: number, air: { y: number; draw: () => void }[]) {
+    const ang = st.a + (since ? st.w * late : 0), l = st.laser;
+    const tx = l.gx + Math.cos(ang) * st.len, ty = l.gy + Math.sin(ang) * st.len;
+    if (since > 0.12 && fade === 1) {
+      // sol brûlé là où passe le rayon, et quelques étincelles
+      if (st.tip && Math.hypot(tx - st.tip[0], ty - st.tip[1]) > 3) this.fx.streak(st.tip[0], st.tip[1], tx, ty, l.r * 0.9, 'rgba(28,20,16,0.55)', 2.5);
+      st.tip = [tx, ty];
+      if (this.time >= st.spark) {
+        st.spark = this.time + 0.06;
+        this.fx.burst(tx, ty, Math.random() < 0.5 ? '#FFFFFF' : `rgb(${l.glow})`, 3, 170);
+      }
+    }
+    air.push({ y: l.gy + 1, draw: () => drawLaser(ctx, { ...l, tx, ty, k, since, fade }, this.time) });
+  }
+
   /** La charge vient de passer : sillon au sol, poussière tout le long, et quelques mottes de terre. */
   private chargeTrail(x: number, y: number, x2: number, y2: number, w: number) {
     this.fx.streak(x, y, x2, y2, w * 1.1);
@@ -1334,9 +1405,10 @@ export class Game {
     const hazards = this.net.latest?.hazards ?? [];
     const casts = this.trackCasts(hazards, late);
     const colorOf = new Map(players.map((p) => [p.id, p.color]));
-    for (const h of hazards) if (inView(h[1], h[2], 500)) drawHazard(ctx, h, this.time, colorOf.get(h[7]));
+    for (const h of hazards) if (inView(h[1], h[2], 500) && HAZARD_STYLES[h[8]] !== 'laser') drawHazard(ctx, h, this.time, colorOf.get(h[7]));
     this.fx.drawGround(ctx); // fissures et sillons au sol
     const air: { y: number; draw: () => void }[] = []; // ce qui passe au-dessus de tout : géant en plein bond, rochers lancés
+    this.drawLasers(ctx, hazards, units, late, colorOf, air);
 
     // Tri par profondeur : unités, joueurs, filons et entrées de grotte ensemble.
     const list = this.drawList; // réutilisée d'une image à l'autre
