@@ -115,26 +115,31 @@ export const VILLAGE_STONE_OFFSET = { x: 95, y: 225 }; // Pierre de passage du v
 // Il y a plusieurs disciplines (meute, apprivoisement, essences, récolte), chacune en trois tomes : le tome dépend de
 // la zone du géant (I : zones 1-2, II : 3-4, III : 5-6). On n'a qu'un exemplaire de chaque tome, qui enseigne une leçon
 // de sa discipline, dans l'ordre (le tome II demande d'avoir lu le tome I) : trois leçons par discipline en tout.
+// À part, la Maîtrise des Alphas n'a qu'un tome, que seuls les coffres des géants du volcan renferment.
 // Une leçon lue à l'école prend 30 minutes.
 export const SCHOOL_CAMP = 0; // l'école se bâtit au premier camp
-export type LessonKind = 'pack' | 'tame' | 'essence' | 'gather';
+export type LessonKind = 'pack' | 'tame' | 'essence' | 'gather' | 'alpha';
 export interface Discipline {
   name: string;
   tomes: string[]; // nom du livre de chaque tome (I, II, III)
   per: number; // gain par leçon apprise
   desc: string; // ce que rapporte une leçon
+  volcano?: boolean; // ses tomes ne se trouvent que dans les coffres des géants du volcan (et nulle part ailleurs)
 }
 export const DISCIPLINES: Record<LessonKind, Discipline> = {
   pack: { name: 'Meute', tomes: ['Traité du jeune dompteur', 'Manuel de la grande meute', 'Codex du maître des bêtes'], per: 1, desc: '+1 place dans la meute' },
   tame: { name: 'Apprivoisement', tomes: ['Carnet du charmeur', 'Art de l\'apprivoisement', 'Grimoire des liens'], per: 0.02, desc: '+2 % de chance d\'apprivoiser (au combat et aux fruits)' },
   essence: { name: 'Essences', tomes: ['Herbier des essences', 'Traité des âmes sauvages', 'Codex de l\'éveil'], per: 0.03, desc: '+3 % de chance de recueillir une essence' },
   gather: { name: 'Récolte', tomes: ['Almanach du bûcheron', 'Manuel du mineur', 'Somme des artisans'], per: 0.1, desc: '+10 % de bois et de pierre récoltés' },
+  alpha: { name: 'Maîtrise des Alphas', tomes: ['Livre des braises'], per: 1, desc: '+1 Alpha équipé en même temps', volcano: true },
 };
 /** Disciplines dans l'ordre de la sauvegarde (n'ajouter qu'à la fin). */
 export const LESSON_KINDS = Object.keys(DISCIPLINES) as LessonKind[];
-export const TOMES = 3; // tomes par discipline
+export const TOMES = 3; // tomes par discipline (au plus : la Maîtrise des Alphas n'en a qu'un)
 export const LESSONS_PER_TOME = 1;
-export const LESSONS = TOMES * LESSONS_PER_TOME; // leçons par discipline
+export const LESSONS = TOMES * LESSONS_PER_TOME; // leçons par discipline (au plus, voir lessonsOf)
+/** Leçons de la discipline k (index dans LESSON_KINDS). */
+export const lessonsOf = (k: number) => (DISCIPLINES[LESSON_KINDS[k]]?.tomes.length ?? 0) * LESSONS_PER_TOME;
 export const LESSON_MS = 30 * 60 * 1000; // lecture d'une leçon (temps réel : elle continue hors ligne)
 export const TOME_DROP = 0.25; // chance, à l'ouverture d'un coffre de géant, d'y trouver un livre
 /** Index d'un livre dans le sac : discipline k, tome t. */
@@ -144,13 +149,15 @@ export const BOOKS = LESSON_KINDS.length * TOMES;
 export const bookName = (i: number) => DISCIPLINES[LESSON_KINDS[Math.floor(i / TOMES)]].tomes[i % TOMES];
 /** Tome (0 à TOMES - 1) que lâche le coffre d'un géant de cette zone. */
 export const tomeOfZone = (zone: number) => Math.min(TOMES - 1, Math.floor((zone - 1) / 2));
-/** Tome dont il faut un exemplaire pour apprendre la leçon suivante (lessons : leçons déjà apprises de la discipline), ou -1 si tout est su. */
-export const tomeForLesson = (lessons: number) => (lessons >= LESSONS ? -1 : Math.floor(lessons / LESSONS_PER_TOME));
+/** Tome dont il faut un exemplaire pour apprendre la leçon suivante de la discipline k (lessons : leçons déjà apprises), ou -1 si tout est su. */
+export const tomeForLesson = (lessons: number, k: number) => (lessons >= lessonsOf(k) ? -1 : Math.floor(lessons / LESSONS_PER_TOME));
 /** Leçons d'un tome encore à apprendre (après celles déjà sues dans sa discipline). */
 export const lessonsLeft = (tome: number, lessons: number) => Math.max(0, Math.min(LESSONS_PER_TOME, LESSONS_PER_TOME * (tome + 1) - lessons));
 /** Gain total des leçons apprises d'une discipline (learned : leçons sues, par discipline). */
-export const lessonBonus = (learned: readonly number[], kind: LessonKind) =>
-  DISCIPLINES[kind].per * Math.max(0, Math.min(LESSONS, learned[LESSON_KINDS.indexOf(kind)] ?? 0));
+export const lessonBonus = (learned: readonly number[], kind: LessonKind) => {
+  const k = LESSON_KINDS.indexOf(kind);
+  return DISCIPLINES[kind].per * Math.max(0, Math.min(lessonsOf(k), learned[k] ?? 0));
+};
 /** Places de la meute ordinaire, avec les leçons de l'école. */
 export const armyCap = (learned: readonly number[]) => ARMY_CAP + Math.round(lessonBonus(learned, 'pack'));
 export const campName = (i: number) => (i === 0 ? 'Camp avancé' : `Camp avancé ${i + 1}`);
@@ -222,7 +229,7 @@ export const TAMED_MULT = 0.5; // un monstre apprivoisé a 50 % des dégâts de 
 export const TAMED_HP_MULT = 0.575; // … et 57,5 % de ses PV (+15 % par rapport à la moitié)
 export const GOLD_SHARE_R = 700;
 
-export const ALPHA_MULT = { hp: 2.5, dmg: 2.5, size: 1.6 }; // Alpha niv. 0 = 2,5× le monstre de base
+export const ALPHA_MULT = { hp: 2.2, dmg: 2.2, size: 1.6 }; // Alpha niv. 0 = 2,2× le monstre de base
 
 // Forge : arme et armure progressent séparément.
 export const ARMOR_MAX = 10;
@@ -360,6 +367,7 @@ export const ALPHA_PERKS: Record<string, { kind: 'guard' | 'heal' | 'rally'; bas
   snail: { kind: 'guard', base: 0.08, per: 0.01 }, // −8 % de dégâts reçus, +1 % par niveau
   hare: { kind: 'heal', base: 0.03, per: 0.003 }, // 3 % des PV max, +0,3 % par niveau
 };
+export const LASER_TICK = 1; // rayon runique : par quart de seconde dans le faisceau, 100 % des dégâts du lanceur
 export const ALPHA_HEAL_S = 3;
 export const ALPHA_HEAL_R = 260; // le lièvre soigne ce qui est à cette distance de lui
 /** Pouvoir de l'Alpha de cette espèce à ce niveau (part de dégâts évités ou de PV rendus), ou null. */
@@ -368,6 +376,8 @@ export const alphaPerk = (species: number, lvl: number) => {
   return k ? { kind: k.kind, value: k.base + k.per * lvl } : null;
 };
 export const ALPHA_EQUIP_MAX = 5; // Alphas équipés (sur le terrain) en même temps ; les autres se reposent à la Tanière
+/** Alphas équipés au plus, avec la Maîtrise des Alphas (tome du volcan) lue à l'école. */
+export const alphaEquipMax = (learned: readonly number[]) => ALPHA_EQUIP_MAX + Math.round(lessonBonus(learned, 'alpha'));
 
 // Grottes : un mini-boss par grotte, qui réapparaît après un délai ; il peut lâcher son âme.
 export const BOSS_RESPAWN_S = 300;

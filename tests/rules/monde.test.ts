@@ -248,7 +248,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     const r: any = new Room('TEST', undefined, { hall: 2 }); // porte du village ouverte, Bois profonds fermés (géants invaincus)
     const fog = r.map.gates[1];
     const wild = [...r.units.values()].filter((u: { owner: number; s: number }) => !u.owner && !SPECIES[u.s].boss);
-    check(wild.length > 50 && wild.every((u: { x: number; y: number; s: number }) => r.map.arcAt(u.x, u.y) < fog && SPECIES[u.s].zone === 1),
+    check(wild.length > 50 && wild.every((u: { x: number; y: number; s: number }) => r.map.zoneArc(u.x, u.y) < fog && SPECIES[u.s].zone === 1),
       `zone 2 sous la brume : ${wild.length} monstres, tous de la zone 1 et en deçà de la brume`);
   });
 

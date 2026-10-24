@@ -2,8 +2,8 @@
 
 import {
   bossMelee, sleeperBlocks,
-  ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, armyCap, lessonBonus, LESSON_KINDS, LESSONS, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
+  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
@@ -379,9 +379,9 @@ export class Room {
       p.scrolls = (prof.scrolls ?? []).map(Number).filter((s, i, all) => s in SPECIES && SPECIES[s].boss && all.indexOf(s) === i);
       p.stats = statsOf(prof.stats);
       p.tomes = Array.from({ length: BOOKS }, (_, i) => (Number(prof.tomes?.[i]) > 0 ? 1 : 0)); // un exemplaire au plus de chaque tome
-      p.learned = LESSON_KINDS.map((_, k) => clamp(Math.floor(Number(prof.learned?.[k]) || 0), 0, LESSONS));
+      p.learned = LESSON_KINDS.map((_, k) => clamp(Math.floor(Number(prof.learned?.[k]) || 0), 0, lessonsOf(k)));
       p.readKind = clamp(Math.floor(Number(prof.read_kind) || 0), 0, LESSON_KINDS.length - 1);
-      p.readAt = p.learned[p.readKind] < LESSONS ? Math.max(0, Number(prof.read_at) || 0) : 0;
+      p.readAt = p.learned[p.readKind] < lessonsOf(p.readKind) ? Math.max(0, Number(prof.read_at) || 0) : 0;
       this.finishLesson(p); // une leçon finie pendant qu'il était déconnecté compte déjà
       p.weapon = clamp(prof.weapon, 0, WEAPON_MAX);
       p.armor = clamp(prof.armor, 0, ARMOR_MAX);
@@ -401,8 +401,8 @@ export class Room {
           p.awakening.set(a.s, a.wakeAt); // l'éveil continue même hors ligne
           continue;
         }
-        // Au-delà de 5 équipés, ou rangé : il reste à la Tanière.
-        if (a.rest || this.equippedCount(p) >= ALPHA_EQUIP_MAX) {
+        // Au-delà de 5 équipés (6 avec le tome du volcan), ou rangé : il reste à la Tanière.
+        if (a.rest || this.equippedCount(p) >= alphaEquipMax(p.learned)) {
           p.resting.push({ s: a.s, lvl: clamp(a.lvl, 0, ALPHA_LVL_MAX), legend: !!a.legend });
           continue;
         }
@@ -908,7 +908,7 @@ export class Room {
     if (!this.at(p, 'den')) return;
     if (equip) {
       const i = p.resting.findIndex((r) => r.s === s);
-      if (i < 0 || this.equippedCount(p) >= ALPHA_EQUIP_MAX) return;
+      if (i < 0 || this.equippedCount(p) >= alphaEquipMax(p.learned)) return;
       const [r] = p.resting.splice(i, 1);
       this.spawnAlpha(p, r.s, r.lvl, r.legend);
     } else {
@@ -980,8 +980,8 @@ export class Room {
         if (now < wakeAt) continue;
         p.awakening.delete(s);
         p.dirty = true;
-        if (this.equippedCount(p) >= ALPHA_EQUIP_MAX) {
-          // Déjà 5 Alphas sur le terrain : le nouveau attend à la Tanière.
+        if (this.equippedCount(p) >= alphaEquipMax(p.learned)) {
+          // Déjà 5 Alphas (ou 6) sur le terrain : le nouveau attend à la Tanière.
           p.resting.push({ s, lvl: 0, legend: false });
           this.refreshAlphas(p);
           this.events.push({ e: 'awaken', id: 0, by: p.id, s });
@@ -1397,10 +1397,9 @@ export class Room {
     return SPECIES[s].night && !this.isNight() ? 0 : SPECIES[s].population;
   }
 
-  /** Abscisse de la première porte fermée : au-delà, tout est sous la brume (rien n'y apparaît). */
-  private fogArc() {
-    const k = this.map.gates.findIndex((_, i) => !this.gateIsOpen(i));
-    return k < 0 ? Infinity : this.map.gates[k];
+  /** Première porte fermée (-1 : aucune) : au-delà, tout est sous la brume (rien n'y apparaît). */
+  private fogGate() {
+    return this.map.gates.findIndex((_, i) => !this.gateIsOpen(i));
   }
 
   /** Zone ouverte au village : la zone 1, puis chaque zone dont la porte s'est ouverte. */
@@ -1413,7 +1412,7 @@ export class Room {
     const sp = SPECIES[s];
     const { map } = this;
     if (!this.zoneOpen(sp.zone)) return false; // zone encore sous la brume : pas de monstre
-    const fog = this.fogArc();
+    const fog = this.fogGate();
     // On vise le tronçon du couloir de la zone, puis on vérifie la zone réelle (frontières déformées par le bruit).
     for (let attempt = 0; attempt < 40; attempt++) {
       let cx: number, cy: number;
@@ -1442,7 +1441,7 @@ export class Room {
         [cx, cy] = [c.x + nv.x * off, c.y + nv.y * off];
       }
       if ((sp.swim ? !map.isWater(cx, cy) : map.blocked(cx, cy)) || map.zoneAt(cx, cy) !== sp.zone) continue;
-      if (sp.zone !== VOLCANO_ZONE && map.arcAt(cx, cy) > fog - 150) continue; // jamais dans la brume (ni tout contre)
+      if (sp.zone !== VOLCANO_ZONE && fog >= 0 && map.gateArc(fog, cx, cy) > map.gates[fog] - 150) continue; // jamais dans la brume (ni tout contre)
       if (map.inVillage(cx, cy, 250) || dist2(cx, cy, map.spawn.x, map.spawn.y) < SPAWN_SAFE_R ** 2) continue;
       if (map.siteAt(cx, cy, CAMP_R + 300) >= 0) continue;
       let tooClose = false;
@@ -1821,9 +1820,14 @@ export class Room {
     p.gold += gold;
     p.dirty = true;
     // parfois un livre d'apprentissage, du tome de la zone du géant, d'une discipline au hasard : un seul exemplaire
-    // de chaque tome (jamais un livre qu'on a déjà, ni un tome déjà lu)
-    const tome = tomeOfZone(SPECIES[ch.s].zone);
-    const useful = LESSON_KINDS.map((_, k) => bookIndex(k, tome)).filter((b, k) => !p.tomes[b] && lessonsLeft(tome, p.learned[k]) > 0);
+    // de chaque tome (jamais un livre qu'on a déjà, ni un tome déjà lu). Dans le volcan, le tome qu'on ne trouve que
+    // là (Maîtrise des Alphas) passe en premier, tant qu'il reste à lire.
+    const zone = SPECIES[ch.s].zone, books = (volcano: boolean, tome: number) => LESSON_KINDS
+      .map((kind, k) => ({ k, b: bookIndex(k, tome), d: DISCIPLINES[kind] }))
+      .filter(({ k, b, d }) => !!d.volcano === volcano && tome < d.tomes.length && !p.tomes[b] && lessonsLeft(tome, p.learned[k]) > 0)
+      .map(({ b }) => b);
+    const fire = zone === VOLCANO_ZONE ? books(true, 0) : [];
+    const useful = fire.length ? fire : books(false, tomeOfZone(zone));
     // pas de livre tant que le village n'a pas bâti l'école des dompteurs : on ne saurait où le lire
     const book = useful.length && this.buildings.includes('school') && Math.random() < TOME_DROP ? useful[Math.floor(Math.random() * useful.length)] : -1;
     if (book >= 0) p.tomes[book] = 1;
@@ -1835,8 +1839,8 @@ export class Room {
    * Le livre sert à toutes les leçons de son tome : on le garde jusqu'à la dernière.
    */
   onLearn(p: Player, kind: number) {
-    if (!(kind in LESSON_KINDS) || !this.at(p, 'school') || p.readAt || p.learned[kind] >= LESSONS) return;
-    if (!p.tomes[bookIndex(kind, tomeForLesson(p.learned[kind]))]) return;
+    if (!(kind in LESSON_KINDS) || !this.at(p, 'school') || p.readAt || p.learned[kind] >= lessonsOf(kind)) return;
+    if (!p.tomes[bookIndex(kind, tomeForLesson(p.learned[kind], kind))]) return;
     p.readAt = Date.now() + LESSON_MS;
     p.readKind = kind;
     p.dirty = true;
@@ -1847,8 +1851,8 @@ export class Room {
   private finishLesson(p: Player) {
     if (!p.readAt || Date.now() < p.readAt) return false;
     p.readAt = 0;
-    const k = p.readKind, tome = tomeForLesson(p.learned[k]);
-    p.learned[k] = Math.min(LESSONS, p.learned[k] + 1);
+    const k = p.readKind, tome = tomeForLesson(p.learned[k], k);
+    p.learned[k] = Math.min(lessonsOf(k), p.learned[k] + 1);
     if (tome >= 0 && !lessonsLeft(tome, p.learned[k])) p.tomes[bookIndex(k, tome)] = 0; // tome lu en entier : le livre est fini
     p.dirty = true;
     return true;
@@ -2050,7 +2054,7 @@ export class Room {
         const warn = 0.9, len = u.owner ? 300 : 480, w = (Math.random() < 0.5 ? -1 : 1) * m.turn;
         const a0 = Math.atan2(t.y - u.y, t.x - u.x), end = this.time + warn + m.dur;
         u.castUntil = end;
-        this.hazard(u, { kind: 1, style: 'laser', x: u.x, y: u.y, x2: u.x + Math.cos(a0) * len, y2: u.y + Math.sin(a0) * len, r: 18, at: this.time + warn, dmg: d * 0.35, spin: { a0, w, len, end } });
+        this.hazard(u, { kind: 1, style: 'laser', x: u.x, y: u.y, x2: u.x + Math.cos(a0) * len, y2: u.y + Math.sin(a0) * len, r: 18, at: this.time + warn, dmg: d * LASER_TICK, spin: { a0, w, len, end } });
         break;
       }
       case 'blink': {

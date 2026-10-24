@@ -17,7 +17,7 @@
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = mer profonde).
 
-import { CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
+import { CAMP_R, CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -652,6 +652,38 @@ export class WorldMap {
     return j * N + i;
   }
 
+  /** Abscisse le long du couloir, déformée comme les frontières des zones (bruit) : zoneAt et les portes k ≥ 1 la suivent. */
+  zoneArc(x: number, y: number): number {
+    const cave = this.caveAt(x, y);
+    if (cave) return this.zoneArc(cave.entrance.x, cave.entrance.y);
+    const s = this.arc[this.cellOf(x, y)];
+    let warp = (fbm(x / 1400, y / 1400, this.seed + 31, 2) - 0.5) * 1000;
+    // autour d'un camp (au bout d'une zone), la frontière suivante reste à distance : jamais de brume sur le camp
+    this.sites.forEach((c, i) => {
+      const d = Math.sqrt(dist2(x, y, c.x, c.y)), t = clamp((d - CAMP_R - 150) / 600, 0, 1);
+      const g = this.gates.find((g) => g > this.siteArcs[i]);
+      if (t < 1 && g !== undefined) warp = Math.min(warp, g - 200 - s + t * 2000);
+    });
+    return s + warp;
+  }
+  /**
+   * Abscisse à comparer à la porte k : la porte du village (0) coupe le couloir droit ; les suivantes suivent la
+   * frontière (bruitée) entre deux zones, pour que la brume et le blocage tombent pile sur le changement de décor.
+   */
+  gateArc(k: number, x: number, y: number) {
+    return k === 0 ? this.arcAt(x, y) : this.zoneArc(x, y);
+  }
+  /** Abscisse du point de la colonne où passe la porte k (frontière déformée : pas forcément gates[k]). */
+  gateSpine(k: number) {
+    const g = this.gates[k];
+    if (k === 0) return g;
+    for (let s = g - 800; s <= g + 800; s += 10) {
+      const c = this.spineAt(s);
+      if (this.zoneArc(c.x, c.y) >= g) return s;
+    }
+    return g;
+  }
+
   /** Abscisse le long du couloir du point de colonne le plus proche (0 au bord de départ). */
   arcAt(x: number, y: number): number {
     const cave = this.caveAt(x, y);
@@ -901,8 +933,8 @@ export class WorldMap {
   /** Porte (index) que franchit en avançant le déplacement de a vers b, ou -1. */
   gateCrossed(ax: number, ay: number, bx: number, by: number) {
     if (this.caveAt(ax, ay) || this.caveAt(bx, by)) return -1;
-    const sa = this.arcAt(ax, ay), sb = this.arcAt(bx, by);
-    return sb > sa ? this.gates.findIndex((g) => sa <= g && sb > g) : -1;
+    const sa = this.arcAt(ax, ay), sb = this.arcAt(bx, by), za = this.zoneArc(ax, ay), zb = this.zoneArc(bx, by);
+    return this.gates.findIndex((g, k) => (k === 0 ? sa <= g && sb > g : za <= g && zb > g));
   }
 
   /** Taille d'un arbre ou d'un rocher (même hasard que le dessin). */
@@ -1248,8 +1280,7 @@ export class WorldMap {
 
   /** Position continue le long des zones : 1,5 = milieu de la zone 1, 2,0 = frontière entre les zones 1 et 2. */
   private zonePos(x: number, y: number) {
-    const warp = (fbm(x / 1400, y / 1400, this.seed + 31, 2) - 0.5) * 1000;
-    const u = (this.arcAt(x, y) + warp - ZONE1_EXTRA) / this.zoneLen; // en parts de zone
+    const u = (this.zoneArc(x, y) - ZONE1_EXTRA) / this.zoneLen; // en parts de zone
     if (u <= 0) return 1 + u;
     let z = 1;
     while (z < ZONES && u >= ZONE_CUM[z]) z++;

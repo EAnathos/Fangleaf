@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost } from '../../shared/config.ts';
+import { alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT } from '../../shared/config.ts';
 
 describe('Alphas de la Tanière', () => {
   rule('Tanière : éveiller un Alpha avec des essences, le renforcer (de plus en plus cher), sauvegarde du profil.', () => {
@@ -25,7 +25,7 @@ describe('Alphas de la Tanière', () => {
     check(p.army.length === 1 && r.units.get(p.army[0]).alpha, 'Alpha Loup éveillé, un seul par espèce');
     const a = r.units.get(p.army[0]);
     const hp0 = a.maxHp;
-    check(a.maxHp === Math.round(SPECIES[1].hp * 2.5 * 1.05) && a.dmg === Math.round(SPECIES[1].dmg * 2.5 * 1.05), `Alpha niv. 0 = 2,5× le Loup, +5 % de collection (PV ${a.maxHp}, dégâts ${a.dmg})`);
+    check(a.maxHp === Math.round(SPECIES[1].hp * ALPHA_MULT.hp * 1.05) && a.dmg === Math.round(SPECIES[1].dmg * ALPHA_MULT.dmg * 1.05), `Alpha niv. 0 = ${ALPHA_MULT.hp}× le Loup, +5 % de collection (PV ${a.maxHp}, dégâts ${a.dmg})`);
     p.essences[1] = alphaUpCost(1, 0);
     r.onAlphaUp(p, a.s);
     check(a.level === 1 && a.maxHp > hp0 && p.essences[1] === 0, `Alpha renforcé (PV ${hp0} → ${a.maxHp})`);
@@ -108,7 +108,7 @@ describe('Alphas de la Tanière', () => {
     r.onCheat(p);
     r.step();
     const wolf = p.army.map((id: number) => r.units.get(id)).find((u: { s: number }) => u.s === 1);
-    check(p.army.length === 3 && wolf.maxHp === alphaStats(1, 0, 3).hp && wolf.maxHp === Math.round(SPECIES[1].hp * 2.5 * 1.15),
+    check(p.army.length === 3 && wolf.maxHp === alphaStats(1, 0, 3).hp && wolf.maxHp === Math.round(SPECIES[1].hp * ALPHA_MULT.hp * 1.15),
       `3 Alphas : +15 % chacun (Alpha Loup ${Math.round(SPECIES[1].hp * 2.5)} → ${wolf.maxHp} PV)`);
   });
 

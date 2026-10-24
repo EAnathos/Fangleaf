@@ -305,13 +305,14 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     // Porte du village (0) : fermée tant que l'Hôtel de ville est au niveau 0.
     // De part et d'autre d'une porte, sur une ligne droite libre (décalée le long de la porte si un arbre est sur la colonne).
     const across = (g: number) => {
-      const n = map.normalAt(map.gates[g]);
+      const s = map.gateSpine(g), n = map.normalAt(s); // la porte suit la frontière (bruitée) entre deux zones
+      const ok = (q: { x: number; y: number }, after: boolean) => map.gateArc(g, q.x, q.y) > map.gates[g] === after;
       for (const off of [0, 40, -40, 80, -80, 120, -120, 160, -160, 200, -200]) {
-        const a = map.spineAt(map.gates[g] - 60), b = map.spineAt(map.gates[g] + 60);
+        const a = map.spineAt(s - 60), b = map.spineAt(s + 60);
         const p0 = { x: a.x + n.x * off, y: a.y + n.y * off }, p1 = { x: b.x + n.x * off, y: b.y + n.y * off };
-        if (!map.blocked(p0.x, p0.y) && map.clearLine(p0.x, p0.y, p1.x, p1.y)) return [p0, p1];
+        if (!map.blocked(p0.x, p0.y) && map.clearLine(p0.x, p0.y, p1.x, p1.y) && ok(p0, false) && ok(p1, true)) return [p0, p1];
       }
-      return [map.spineAt(map.gates[g] - 60), map.spineAt(map.gates[g] + 60)];
+      return [map.spineAt(s - 60), map.spineAt(s + 60)];
     };
     const [before, after] = across(0);
     const walk = (from: { x: number; y: number }, to: { x: number; y: number }, gate = 0) => {
@@ -320,7 +321,7 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
         p.lastPosMs = Date.now() - 50;
         r.onPos(p, p.x + (to.x - from.x) / 20, p.y + (to.y - from.y) / 20, 1, 0);
       }
-      return map.arcAt(p.x, p.y) > map.gates[gate];
+      return map.gateArc(gate, p.x, p.y) > map.gates[gate];
     };
     check(!walk(before, after), 'Hôtel de ville niv. 0 : la porte du village ne se franchit pas');
     [p.x, p.y] = [map.hall.x, map.hall.y + 60];
@@ -374,7 +375,7 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
       p.lastPosMs = Date.now() - 50;
       r.onPos(p, p.x + (b1.x - a1.x) / 20, p.y + (b1.y - a1.y) / 20, 1, 0);
     }
-    check(map.arcAt(p.x, p.y) < map.gates[1], 'revenir en arrière par une porte fermée : toujours possible');
+    check(map.gateArc(1, p.x, p.y) < map.gates[1], 'revenir en arrière par une porte fermée : toujours possible');
     const again: any = new Room('TEST2', r.seed, { hall: 99, beaten: [g1, g1, 0, 999] });
     check(again.hall === HALL_MAX && again.beaten.join() === String(g1), 'Hôtel de ville et géants rechargés (bornés, doublons et non-géants ignorés)');
   });

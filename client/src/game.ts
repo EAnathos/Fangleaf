@@ -362,10 +362,14 @@ export class Game {
     // nuages espacés (STEP) mais plus grands : à peu près la même couverture, 3 à 4 fois moins d'images collées
     const STEP = settings.display.quality === 'low' ? 150 : 120, feather = 140;
     // densité : 0 avant la lisière, 1 un peu après ; idem (en s'estompant) pour une brume qui se lève
-    const density = (a: number) => {
-      let d = Math.min(1, Math.max(0, (a - (fogArc - feather)) / (feather * 1.6)));
+    // (abscisse de porte : le couloir droit pour celle du village, la frontière bruitée des zones pour les autres)
+    const density = (x: number, y: number) => {
+      const a = map.arcAt(x, y), za = map.zoneArc(x, y), at = (k: number) => (k === 0 ? a : za);
+      const f = at(closed);
+      let d = closed < 0 ? 0 : Math.min(1, Math.max(0, (f - (fogArc - feather)) / (feather * 1.6)));
       for (const [k, t] of fading) {
-        if (a > map.gates[k] - feather && a < fogArc) d = Math.max(d, Math.min(1, (a - (map.gates[k] - feather)) / (feather * 1.6)) * (1 - (this.time - t) / MIST_FADE_S));
+        const b = at(k);
+        if (b > map.gates[k] - feather && (closed < 0 || f < fogArc)) d = Math.max(d, Math.min(1, (b - (map.gates[k] - feather)) / (feather * 1.6)) * (1 - (this.time - t) / MIST_FADE_S));
       }
       return d;
     };
@@ -374,7 +378,7 @@ export class Game {
         const h = hash2(gx, gy, 41);
         const x = gx * STEP + (h - 0.5) * STEP * 0.6, y = gy * STEP + (hash2(gy, gx, 43) - 0.5) * STEP * 0.6;
         if (Math.abs(x) >= WORLD_HALF || Math.abs(y) >= WORLD_HALF) continue;
-        const d = density(map.arcAt(x, y));
+        const d = density(x, y);
         if (d <= 0) continue;
         const size = (150 + h * 90) * (STEP / 64) * 0.78, drift = Math.sin(this.time * 0.25 + h * 9) * 14;
         ctx.globalAlpha = Math.min(1, d);
@@ -384,7 +388,7 @@ export class Game {
     ctx.globalAlpha = 1;
     // panneau à la lisière de la brume : la zone, et ce qu'il faut pour la lever
     if (closed >= 0) {
-      const c = map.spineAt(fogArc - 90);
+      const c = map.spineAt(map.gateSpine(closed) - 90);
       if (Math.abs(c.x - camX) < hw + 300 && Math.abs(c.y - camY) < hh + 300) {
         this.world.drawGateLabel(ctx, c.x, c.y, closed === 0 ? 'Brume · suite de la Lisière' : `Brume · ${ZONE_NAMES[closed]}`, this.gateWhy(closed));
       }
@@ -480,7 +484,7 @@ export class Game {
         if (!o || this.gatesOpen![k]) return;
         this.mistLifted.set(k, this.time); // sa brume se dissipe en fondu
         this.hud.toast(k === 0 ? 'La brume se lève : la Lisière vous attend !' : `La brume se lève sur les ${ZONE_NAMES[k]} !`, 'good');
-        const c = this.map.spineAt(this.map.gates[k]);
+        const c = this.map.spineAt(this.map.gateSpine(k));
         this.fx.ring(c.x, c.y, '#7FCB5B', 20, 260, 1.2);
       });
     }
@@ -944,7 +948,7 @@ export class Game {
         break;
       }
       case 'awaken': {
-        if (e.by === this.myId) this.hud.toast(e.id ? `L'Alpha ${SPECIES[e.s].name} s'éveille et rejoint ta meute !` : `L'Alpha ${SPECIES[e.s].name} s'éveille : 5 Alphas déjà équipés, il t'attend à la Tanière.`, 'alpha');
+        if (e.by === this.myId) this.hud.toast(e.id ? `L'Alpha ${SPECIES[e.s].name} s'éveille et rejoint ta meute !` : `L'Alpha ${SPECIES[e.s].name} s'éveille : tes Alphas équipés sont au complet, il t'attend à la Tanière.`, 'alpha');
         else this.hud.toast(`${name(e.by)} a éveillé un Alpha ${SPECIES[e.s].name}`, 'alpha');
         const u = this.posOf(e.id, players);
         if (u) this.fx.ring(u.x, u.y, '#B48CFF', 20, 110, 1.0);

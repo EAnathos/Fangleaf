@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, armyCap, LESSONS, LESSONS_PER_TOME, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, BUILDING_REACH,
+  alphaEquipMax, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, armyCap, lessonsOf, LESSONS_PER_TOME, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
@@ -675,25 +675,27 @@ export class Hud {
   private buildSchool(me: PlayerState, key: string) {
     this.last.school = key;
     $('school-list').replaceChildren(...LESSON_KINDS.map((kind, k) => {
-      const d = DISCIPLINES[kind], n = me.learned[k] ?? 0, next = tomeForLesson(n);
+      const d = DISCIPLINES[kind], n = me.learned[k] ?? 0, next = tomeForLesson(n, k), solo = d.tomes.length === 1;
       const row = document.createElement('div');
       row.className = 'stone-row';
       row.innerHTML = '<div class="col"><b></b><span class="small muted"></span><span class="small"></span></div>';
-      row.querySelector('b')!.textContent = `${d.name} · ${n}/${LESSONS}`;
+      row.querySelector('b')!.textContent = `${d.name} · ${n}/${lessonsOf(k)}`;
       row.querySelectorAll('span')[0].textContent = d.desc;
       // un exemplaire de chaque tome : déjà lu, dans le sac, ou encore à trouver
-      row.querySelectorAll('span')[1].textContent = d.tomes.map((_, t) => `${ROMAN[t]} ${n >= LESSONS_PER_TOME * (t + 1) ? 'lu' : me.tomes[bookIndex(k, t)] ? 'dans ton sac' : 'à trouver'}`).join(' · ');
+      row.querySelectorAll('span')[1].textContent = d.tomes.map((_, t) => `${solo ? 'Tome' : ROMAN[t]} ${n >= LESSONS_PER_TOME * (t + 1) ? 'lu' : me.tomes[bookIndex(k, t)] ? 'dans ton sac' : 'à trouver'}`).join(' · ');
       const btn = document.createElement('button');
       btn.className = me.reading && me.readKind === k ? 'cta reading' : 'cta';
       btn.dataset.kind = String(k);
       const have = next >= 0 ? me.tomes[bookIndex(k, next)] ?? 0 : 0;
       btn.disabled = next < 0 || !have || !!me.reading;
       // bouton court (il tient sur téléphone) ; le nom du livre à trouver et où le chercher, en dessous
-      btn.textContent = next < 0 ? 'Tout appris' : have ? 'Lire' : `Tome ${ROMAN[next]} à trouver`;
+      btn.textContent = next < 0 ? 'Tout appris' : have ? 'Lire' : solo ? 'Tome à trouver' : `Tome ${ROMAN[next]} à trouver`;
       if (next >= 0 && !have) {
         const where = document.createElement('span');
         where.className = 'small muted';
-        where.textContent = `${d.tomes[next]} : coffres des géants (${ZONE_NAMES.slice(next * 2, next * 2 + 2).join(', ')})`;
+        where.textContent = d.volcano
+          ? `${d.tomes[next]} : seulement dans les coffres des géants du volcan (${ZONE_NAMES[VOLCANO_ZONE - 1]})`
+          : `${d.tomes[next]} : coffres des géants (${ZONE_NAMES.slice(next * 2, next * 2 + 2).join(', ')})`;
         row.querySelector('.col')!.append(where);
       }
       row.append(btn);
@@ -1392,12 +1394,12 @@ export class Hud {
     this.portraits = [];
 
     // Bonus de collection : chaque Alpha éveillé renforce les autres de 5 %.
-    const equipped = me.army.filter((x) => x.alpha).length;
+    const equipped = me.army.filter((x) => x.alpha).length, equipMax = alphaEquipMax(me.learned);
     const count = equipped + me.resting.length; // le bonus compte tous les Alphas possédés, équipés ou non
     $('collection').innerHTML = (count
       ? `Bonus de collection : <b>+${Math.round((collectionMult(count) - 1) * 100)} %</b> PV et dégâts`
       : 'Bonus de collection : chaque Alpha éveillé donnera +5 % de PV et de dégâts à tous tes Alphas.')
-      + `<br>Équipés : <b>${equipped}/${ALPHA_EQUIP_MAX}</b>`;
+      + `<br>Équipés : <b>${equipped}/${equipMax}</b>`;
 
     // Une carte par espèce déjà rencontrée (ou dont on a déjà l'Alpha) : éveiller son Alpha, puis le renforcer.
     // espèces croisées dont la zone est ouverte (un Alpha déjà possédé reste visible, même d'une zone fermée)
@@ -1491,14 +1493,14 @@ export class Hud {
           leg.title = why;
           el.querySelector('.actions')!.append(leg);
         }
-        // Équiper (5 au maximum sur le terrain) ou ranger à la Tanière.
+        // Équiper (5 au maximum sur le terrain, 6 avec le tome du volcan) ou ranger à la Tanière.
         if (a) {
           const eq = document.createElement('button');
           eq.className = 'equip';
           eq.dataset.s = String(s);
           eq.dataset.equip = rest ? '1' : '0';
-          eq.disabled = !!rest && equipped >= ALPHA_EQUIP_MAX;
-          eq.textContent = rest ? (equipped >= ALPHA_EQUIP_MAX ? `${ALPHA_EQUIP_MAX}/${ALPHA_EQUIP_MAX} équipés` : 'Équiper') : 'Déséquiper';
+          eq.disabled = !!rest && equipped >= equipMax;
+          eq.textContent = rest ? (equipped >= equipMax ? `${equipMax}/${equipMax} équipés` : 'Équiper') : 'Déséquiper';
           el.querySelector('.actions')!.append(eq);
         }
         // Monture : seuls certains Alphas équipés se chevauchent.

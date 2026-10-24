@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { ARMY_CAP, armyCap, BOOKS, bookIndex, BUILDING_IDS, DISCIPLINES, HALL_MAX, LESSON_KINDS, LESSON_MS, LESSONS, lessonBonus, SPECIES, tomeOfZone, TOMES } from '../../shared/config.ts';
+import { ALPHA_EQUIP_MAX, alphaEquipMax, ARMY_CAP, armyCap, VOLCANO_ZONE, BOOKS, bookIndex, BUILDING_IDS, DISCIPLINES, HALL_MAX, LESSON_KINDS, LESSON_MS, LESSONS, lessonBonus, SPECIES, tomeOfZone, TOMES } from '../../shared/config.ts';
 import { Room } from '../../server/room.ts';
 
 describe('École des dompteurs', () => {
@@ -114,5 +114,38 @@ describe('École des dompteurs', () => {
     p.seen.add(0);
     for (let i = 0; i < ARMY_CAP + 4; i++) r.onBuy(p, 0);
     check(r.armySize(p) === ARMY_CAP + 1, `un tome de meute lu : ${ARMY_CAP + 1} places`);
+  });
+
+  rule('Le tome de la Maîtrise des Alphas ne se trouve que dans le volcan ; lu, il permet un Alpha équipé de plus.', () => {
+    const k = LESSON_KINDS.indexOf('alpha'), fire = bookIndex(k, 0);
+    check(k >= 0 && DISCIPLINES.alpha.tomes.length === 1, 'une discipline à un seul tome');
+    const r = room();
+    const p = r.addPlayer('braise', noop);
+    const open = (zone: number) => {
+      const c = r.map.caves.find((q: { boss: number; zone: number }) => q.zone === zone);
+      const boss = r.units.get(r.caveBoss[c.id]);
+      [p.x, p.y] = [boss.x + boss.r + 20, boss.y];
+      r.damage(boss, boss.hp, p);
+      const ch = r.chests.find((q: { cave: number }) => q.cave === c.id);
+      [p.x, p.y] = [ch.x + 30, ch.y];
+      const rnd = Math.random;
+      Math.random = () => 0; // un livre à coup sûr
+      r.onChest(p, ch.id);
+      Math.random = rnd;
+      r.chests = r.chests.filter((q: { id: number }) => q.id !== ch.id);
+      r.time = r.caveBack[c.id] + 1; // le géant revient
+      r.tick = 0;
+      r.updateSpawns();
+    };
+    for (let i = 0; i < LESSON_KINDS.length; i++) open(5);
+    check(!p.tomes[fire] && p.tomes.some((b: number) => b), 'Lacs brumeux : des tomes III, jamais celui du volcan');
+    open(VOLCANO_ZONE);
+    check(p.tomes[fire] === 1, 'géant du volcan : le Livre des braises');
+    const none = LESSON_KINDS.map(() => 0), read = none.map((_, i) => (i === k ? 1 : 0));
+    check(alphaEquipMax(none) === ALPHA_EQUIP_MAX && alphaEquipMax(read) === ALPHA_EQUIP_MAX + 1, `lu : ${ALPHA_EQUIP_MAX + 1} Alphas équipés au lieu de ${ALPHA_EQUIP_MAX}`);
+    p.learned[k] = 1;
+    p.tomes[fire] = 0;
+    open(VOLCANO_ZONE);
+    check(!p.tomes[fire], 'déjà lu : le volcan ne le redonne plus');
   });
 });
