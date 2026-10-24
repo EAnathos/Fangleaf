@@ -17,6 +17,10 @@ interface Chunk { x: number; y: number; z: number; vx: number; vy: number; vz: n
 interface Puff { x: number; y: number; vx: number; vy: number; r0: number; r1: number; life: number; max: number; color: string }
 /** Fissures au sol, en étoile depuis l'impact : elles se dessinent vite puis s'estompent. */
 interface Crack { x: number; y: number; r: number; life: number; max: number; lines: number[][] }
+/** Onde de choc enflammée : un front de flammes qui s'élargit (colors : halo, flamme, cœur, en « r,g,b »). */
+interface FireWave { x: number; y: number; r: number; life: number; max: number; seed: number; colors: [string, string, string] }
+/** Sol brûlé en anneau, après une onde enflammée. */
+interface Scorch { x: number; y: number; r: number; life: number; max: number }
 /** Traînée au sol (charge) : un sillon qui s'efface. */
 interface Streak { x: number; y: number; x2: number; y2: number; w: number; life: number; max: number; color: string }
 /** Impact d'un coup au corps à corps, selon l'arme du monstre (crocs, griffes, défenses…). */
@@ -33,6 +37,8 @@ export class Fx {
   private chunks: Chunk[] = [];
   private puffs: Puff[] = [];
   private cracks: Crack[] = [];
+  private fireWaves: FireWave[] = [];
+  private scorches: Scorch[] = [];
   private streaks: Streak[] = [];
   private impacts: Impact[] = [];
 
@@ -74,6 +80,20 @@ export class Fx {
       lines.push(pts);
     }
     this.cracks.push({ x, y, r, life, max: life, lines });
+  }
+
+  /**
+   * Onde de choc enflammée jusqu'au rayon r : un anneau de flammes qui court au ras du sol en s'élargissant puis retombe,
+   * des braises projetées, et le sol qui reste brûlé là où il est passé.
+   */
+  fireWave(x: number, y: number, r: number, colors: [string, string, string]) {
+    this.fireWaves.push({ x, y, r, life: 0.8, max: 0.8, seed: Math.random() * 100, colors });
+    this.scorches.push({ x, y, r, life: 2.6, max: 2.6 });
+    const n = Math.max(6, Math.round(14 * particleRate()));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + Math.random() * 0.3, d = r * (0.4 + Math.random() * 0.5);
+      this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.6, `rgb(${i % 2 ? colors[2] : colors[1]})`, 2, 150);
+    }
   }
 
   /** Sillon au sol de (x, y) à (x2, y2) (une charge vient de passer). */
@@ -174,6 +194,10 @@ export class Fx {
     }
     this.puffs = this.puffs.filter((p) => p.life > 0);
     for (const c of this.cracks) c.life -= dt;
+    for (const w of this.fireWaves) w.life -= dt;
+    this.fireWaves = this.fireWaves.filter((w) => w.life > 0);
+    for (const s of this.scorches) s.life -= dt;
+    this.scorches = this.scorches.filter((s) => s.life > 0);
     this.cracks = this.cracks.filter((c) => c.life > 0);
     for (const s of this.streaks) s.life -= dt;
     this.streaks = this.streaks.filter((s) => s.life > 0);
@@ -189,6 +213,16 @@ export class Fx {
   /** Effets posés au sol (fissures, sillons) : dessinés sous les créatures. */
   drawGround(ctx: CanvasRenderingContext2D) {
     ctx.lineCap = 'round';
+    for (const s of this.scorches) {
+      // anneau de sol noirci, posé au fur et à mesure que le front passe
+      const age = s.max - s.life, reach = s.r * Math.min(1, age / 0.55);
+      ctx.globalAlpha = Math.min(1, (s.life / s.max) * 1.8) * 0.32;
+      ctx.strokeStyle = 'rgba(22,16,14,1)';
+      ctx.lineWidth = Math.max(4, reach * 0.22);
+      ctx.beginPath();
+      ctx.ellipse(s.x, s.y, Math.max(1, reach * 0.8), Math.max(1, reach * 0.48), 0, 0, TAU);
+      ctx.stroke();
+    }
     for (const s of this.streaks) {
       const k = s.life / s.max;
       ctx.globalAlpha = Math.min(1, k * 1.5);
@@ -216,6 +250,43 @@ export class Fx {
       }
     }
     ctx.globalAlpha = 1;
+  }
+
+  private drawFireWave(ctx: CanvasRenderingContext2D, w: FireWave) {
+    const k = 1 - w.life / w.max, front = 1 - (1 - k) ** 3; // le front file vite puis ralentit
+    const R = w.r * front, fade = k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4, [halo, mid, core] = w.colors;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // lueur au sol, juste derrière le front
+    ctx.globalAlpha = 0.5 * fade;
+    ctx.strokeStyle = `rgb(${halo})`;
+    ctx.lineWidth = Math.max(2, w.r * 0.22 * (1 - k * 0.5));
+    ctx.beginPath();
+    ctx.ellipse(w.x, w.y, Math.max(1, R * 0.95), Math.max(1, R * 0.57), 0, 0, TAU);
+    ctx.stroke();
+    // langues de feu tout le long du front, de l'arrière (en haut) vers l'avant (en bas) pour la profondeur
+    const n = 34, tongues: [number, number, number, number][] = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * TAU + w.seed, x = w.x + Math.cos(a) * R, y = w.y + Math.sin(a) * R * 0.6;
+      const wob = Math.sin(w.seed * 3 + i * 1.7 + k * 30), h = (26 + 20 * Math.abs(Math.sin(i * 2.3 + w.seed))) * (1 - k * 0.7) * (1 + 0.25 * wob) * (0.6 + 0.4 * front);
+      tongues.push([x, y, h, wob]);
+    }
+    tongues.sort((p, q) => p[1] - q[1]);
+    for (const [x, y, h, wob] of tongues) {
+      for (const [s, col, al] of [[1, halo, 0.55], [0.7, mid, 0.8], [0.38, core, 0.95]] as const) {
+        const hh = h * s * 1.25, ww = Math.max(2, h * 0.32 * s + 3);
+        ctx.globalAlpha = al * fade;
+        ctx.fillStyle = `rgb(${col})`;
+        ctx.beginPath();
+        // flamme en goutte inversée : base ronde au sol, pointe qui ondule vers le haut
+        ctx.moveTo(x - ww, y);
+        ctx.quadraticCurveTo(x - ww * 0.9, y - hh * 0.55, x + wob * ww * 0.5, y - hh);
+        ctx.quadraticCurveTo(x + ww * 0.9, y - hh * 0.55, x + ww, y);
+        ctx.arc(x, y, ww, 0, Math.PI);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
   }
 
   draw(ctx: CanvasRenderingContext2D) {
@@ -253,6 +324,7 @@ export class Fx {
       ctx.restore();
     }
     for (const i of this.impacts) this.drawImpact(ctx, i);
+    for (const w of this.fireWaves) this.drawFireWave(ctx, w);
     for (const r of this.rings) {
       const k = 1 - r.life / r.max;
       ctx.globalAlpha = 1 - k;

@@ -437,7 +437,7 @@ export type BossMove = (
   | { kind: 'summon'; cd: number; n: number; max: number; minion?: string } // appelle des renforts de son espèce (ou de l'espèce minion)
   | { kind: 'charge'; cd: number } // charge en ligne droite
   | { kind: 'web'; cd: number } // toiles qui ralentissent
-  | { kind: 'slam'; cd: number; power?: number } // onde de choc tout autour de lui (power : multiplicateur des dégâts, 1,5 par défaut)
+  | { kind: 'slam'; cd: number; power?: number; fire?: boolean } // onde de choc tout autour de lui (power : multiplicateur des dégâts, 1,5 par défaut ; fire : une vague de flammes)
   | { kind: 'enrage'; below: number } // s'enrage sous ce seuil de PV
   | { kind: 'rocks'; cd: number } // projette des rochers sur plusieurs cibles
   | { kind: 'blink'; cd: number } // disparaît et réapparaît près d'une cible
@@ -458,7 +458,7 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   old_tusk: [{ kind: 'charge', cd: 4 }, { kind: 'enrage', below: 0.35 }],
   colossus: [{ kind: 'slam', cd: 6, power: 4 }, { kind: 'enrage', below: 0.3 }], // onde de choc de l'ours : plus forte que les autres
   moss_heart: [{ kind: 'rocks', cd: 5 }, { kind: 'slam', cd: 8 }],
-  old_flame: [{ kind: 'blink', cd: 6 }, { kind: 'slam', cd: 7 }],
+  old_flame: [{ kind: 'blink', cd: 6 }, { kind: 'slam', cd: 7, fire: true }], // son onde de choc est une vague de flammes
   rune_eye: [{ kind: 'volley', cd: 4, n: 5, shot: 'bolt', pierce: true }, { kind: 'laser', cd: 10, dur: 3.5, turn: 0.9 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // ses traits traversent la meute ; son rayon balaie
   toad_king: [{ kind: 'mortar', cd: 5, n: 5 }, { kind: 'leap', cd: 7 }],
   mist_hydra: [{ kind: 'volley', cd: 3.5, n: 3, shot: 'jet' }, { kind: 'slam', cd: 8 }],

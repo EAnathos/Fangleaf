@@ -51,7 +51,8 @@ export function castPose(c: Cast, r: number, ox: number, oy: number, t: number):
         squash: f < 0.5 ? 1.18 - f * 0.3 : 0.88 + (1 - f) * 0.3, // étiré au décollage, ramassé en retombant
       };
     }
-    case 'slam': {
+    case 'slam':
+    case 'fireslam': {
       if (c.since > 0) return { ...p, squash: 1 - 0.25 * land };
       if (c.k < 0.78) {
         const f = ease(c.k / 0.78);

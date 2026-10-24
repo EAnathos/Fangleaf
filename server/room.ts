@@ -1991,7 +1991,7 @@ export class Room {
       case 'slam': {
         const at = this.time + 1.1;
         u.castUntil = at;
-        this.hazard(u, { kind: 0, style: 'slam', x: u.x, y: u.y, r: 175, at, dmg: d * (m.power ?? 1.5) });
+        this.hazard(u, { kind: 0, style: m.fire ? 'fireslam' : 'slam', x: u.x, y: u.y, r: 175, at, dmg: d * (m.power ?? 1.5) });
         break;
       }
       case 'rocks':

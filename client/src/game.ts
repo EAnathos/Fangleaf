@@ -837,6 +837,14 @@ export class Game {
           if (near) this.shake = Math.max(this.shake, 0.22);
           break;
         }
+        if (e.kind === 'fireslam') {
+          // onde de choc du Feu Ancien : une vague de flammes (ses flammes bleues, ou la couleur du dompteur d'un Alpha légendaire)
+          const glow = mine ? rgbOf(mine) : '79,139,255';
+          this.fx.fireWave(e.x, e.y, e.r * 1.05, [glow, mine ? glow : '111,183,255', mine ? '255,250,235' : '214,238,255']);
+          this.fx.ring(e.x, e.y, mine ?? '#BFE3FF', e.r * 0.15, e.r * 1.05, 0.45);
+          if (near) this.shake = Math.max(this.shake, 0.35);
+          break;
+        }
         if (e.kind === 'leap' || e.kind === 'slam') {
           // le géant retombe de tout son poids : sol fissuré, onde de poussière, mottes de terre
           this.fx.crack(e.x, e.y, e.r * (e.kind === 'slam' ? 0.95 : 0.75), 2);
