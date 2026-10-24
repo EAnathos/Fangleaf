@@ -4148,6 +4148,7 @@ export function drawHazard(ctx: Ctx, h: number[], t: number, owner?: string) {
   const style = HAZARD_STYLES[h[8]];
   if (style === 'lava') return drawLavaPool(ctx, x, y, r, active, t, ember, !!ally);
   if (style === 'flame') return drawFlameJet(ctx, x, y, x2, y2, r, k, active, t, ember, !!ally);
+  if (style === 'laser') return drawLaserBeam(ctx, x, y, x2, y2, r, k, active, t, ember, ally ? rgbOf(owner ?? '#F0B64A') : '143,227,214');
   if (style === 'tentacle' && active) {
     // le tentacule s'abat de tout son long sur le pont
     const n = 8, pts: [number, number][] = [];
@@ -4325,6 +4326,55 @@ function drawFlameJet(ctx: Ctx, x: number, y: number, x2: number, y2: number, r:
     ctx.arc(len * (0.3 + f * 0.75), Math.sin(i * 2.1 + t * 5) * r * (0.4 + f), 2.5, 0, TAU);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+/**
+ * Rayon runique de l'Œil des Ruines : annoncé par un couloir pointillé qui se remplit, puis un faisceau couleur de ses runes
+ * (halo, rayon, cœur blanc qui vibre) avec des étincelles qui filent le long et un éclat là où il s'arrête.
+ */
+function drawLaserBeam(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, k: number, active: boolean, t: number, ember: string, glow: string) {
+  const ang = Math.atan2(y2 - y, x2 - x), len = Math.hypot(x2 - x, y2 - y);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  if (!active) {
+    ctx.fillStyle = `rgba(${ember},0.14)`;
+    ctx.fillRect(0, -r, len, r * 2);
+    ctx.fillStyle = `rgba(${ember},0.34)`;
+    ctx.fillRect(0, -r * k, len, r * 2 * k);
+    ctx.strokeStyle = `rgba(${ember},0.9)`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(len, 0);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  const buzz = 1 + Math.sin(t * 40) * 0.08;
+  for (const [w, col] of [[1.6, `rgba(${glow},0.22)`], [1, `rgba(${glow},0.6)`], [0.42, 'rgba(255,255,255,0.95)']] as const) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(0, -r * w * 0.5 * buzz);
+    ctx.lineTo(len, -r * w * buzz);
+    ctx.arc(len, 0, r * w * buzz, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(0, r * w * 0.5 * buzz);
+    ctx.closePath();
+    ctx.fill();
+  }
+  for (let i = 0; i < 8; i++) {
+    const f = (t * 2.2 + i / 8) % 1;
+    ctx.fillStyle = `rgba(255,255,255,${1 - f})`;
+    ctx.beginPath();
+    ctx.arc(len * f, Math.sin(i * 2.7 + t * 9) * r * 0.7, 2, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = `rgba(${glow},${0.45 + Math.sin(t * 25) * 0.15})`;
+  ctx.beginPath();
+  ctx.arc(len, 0, r * 1.9, 0, TAU);
+  ctx.fill();
   ctx.restore();
 }
 

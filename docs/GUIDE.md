@@ -154,6 +154,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **E** près du géant pour lui parler, puis on lance le combat. Ses PV dépendent du nombre de membres du village.
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
   (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact.
+- L'**Œil des Ruines** tire des salves qui traversent la meute, et maintient un **rayon runique** qui tourne
+  lentement autour de lui : on le contourne dans le sens opposé.
 - Vaincu, il laisse un **coffre** (chacun l'ouvre une fois, pour un montant d'or aléatoire), parfois son **âme**, et
   la première fois, un **parchemin** pour le vieil homme. Il revient après un délai. Si tout le monde sort, il se
   rendort, guéri.
@@ -201,6 +203,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Pluie** : l'Escargot l'adore, il va plus vite.
 - **Tempête de sable** (Mer de sable) : elle blesse ceux qui restent dehors ; les vers restent sous le sable, les
   vautours très haut, les suricates cachés.
+- **Cactus** (Mer de sable) : s'y frotter pique. Les palmiers de la lisière verte, eux, ne piquent pas.
 
 ## Jouer à plusieurs
 

@@ -69,6 +69,7 @@ export class Game {
   private fog: Fog;
   private area = '';
   private shake = 0;
+  private pricked = false; // premier contact avec un cactus : on le dit une fois
   private introUntil = 0; // réveil sur l'île en cours : pas de bandeau de lieu
   private swordHit = -9; // dernier coup sur l'épée plantée (elle tremble)
   private swordOut = -9; // épée sortie du sable (elle s'envole)
@@ -605,7 +606,7 @@ export class Game {
         const a = this.posOf(e.a, players), b = this.posOf(e.b, players);
         if (e.m && a && b && !players.some((p) => p.id === e.a)) this.meleeHit(e.a, a, b, e.b, players);
         const ranged = players.find((q) => q.id === e.a)?.cls;
-        if (e.a === this.myId && a && b) {
+        if (e.a === this.myId && e.b !== e.a && a && b) {
           // (attaque au clic : le coup est déjà dessiné quand on clique)
           if (ranged !== 'archer' && ranged !== 'mage' && (touchOnly || settings.attack !== 'click')) this.fx.slash(a.x, a.y, Math.atan2(b.y - a.y, b.x - a.x));
         }
@@ -689,6 +690,12 @@ export class Game {
             this.fx.text(e.x, e.y - 100, bookName(e.book), '#B48CFF', 18, 2.4);
             this.hud.toast(`Un livre au fond du coffre : ${bookName(e.book)} ! À lire à l'École des dompteurs, au Camp avancé.`, 'alpha');
           }
+        }
+        break;
+      case 'prick':
+        if (e.id === this.myId && !this.pricked) {
+          this.pricked = true;
+          this.hud.toast('Aïe ! Les cactus piquent : passe au large.');
         }
         break;
       case 'learn':

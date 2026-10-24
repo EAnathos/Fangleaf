@@ -38,6 +38,7 @@ const STAMP_R = 4300; // au-delà, mer profonde : on ne calcule plus la distance
 const LANE = 280; // voie centrale jamais inondée (bord bruité)
 const MIN_LAKE = 40; // en cases : un lac plus petit (une flaque) est asséché
 const MIN_ISLET = 40; // en cases : un îlot plus petit est englouti
+export const COAST_GREEN = 700; // largeur de la lisière verte entre le sable du désert et l'eau
 export const MOUTH_FADE = 320; // embouchure : sur cette distance (à travers l'eau), l'eau d'un lac passe à celle de la mer
 const NB8 = [-N - 1, -N, -N + 1, -1, 1, N - 1, N, N + 1];
 const CAVE_GAP = 4000; // > VIEW_R + 2 × CAVE_RX + la demi-largeur de l'écran
@@ -89,6 +90,19 @@ export interface Decor {
   x: number;
   y: number;
   zone: number;
+}
+
+/**
+ * Lisière verte de la Mer de sable : au bord de l'eau (mer ou lac), le sable laisse place à une steppe (palmiers),
+ * pour que le désert ne touche jamais l'eau directement. 0 ailleurs, 1 au bord de l'eau, au bord irrégulier.
+ */
+export function coastGreen(map: WorldMap, x: number, y: number) {
+  const m = map.zoneMix(x, y), d = (m.z0 === 6 ? 1 - m.t : 0) + (m.z1 === 6 ? m.t : 0);
+  if (!d) return 0;
+  // distance à l'eau la plus proche : la mer, ou un lac (oasis ; les lacs des Lacs brumeux voisins s'ouvrent sur l'océan)
+  const near = Math.min(map.wetDistAt(x, y), Math.max(0, -map.shoreAt(x, y)));
+  const u = Math.min(1, Math.max(0, 1 - near / COAST_GREEN + (fbm(x / 300, y / 300, map.seed + 76, 2) - 0.5) * 0.5));
+  return d * u * u * (3 - 2 * u);
 }
 
 /**
@@ -956,6 +970,11 @@ export class WorldMap {
         }
       }
     }
+  }
+
+  /** Arbre de la Mer de sable hors de sa lisière verte (là, des palmiers) : un cactus, qui pique. Même règle que le dessin. */
+  isCactus(d: Decor) {
+    return d.kind === 0 && this.styleZone(d.x, d.y) === 6 && coastGreen(this, d.x, d.y) <= 0.45;
   }
 
   /** Tronc d'un arbre (pour l'abattre) : centre et rayon. */

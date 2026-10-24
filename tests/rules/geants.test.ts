@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { alphaCreateCost, SHOT_KINDS, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, SPECIES } from '../../shared/config.ts';
+import { alphaCreateCost, SHOT_KINDS, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, SPECIES } from '../../shared/config.ts';
 
 describe('Géants et grottes', () => {
   rule('Grottes : entrer avec sa meute, mini-boss, âme, réapparition du boss.', () => {
@@ -272,6 +272,67 @@ describe('Géants et grottes', () => {
     }
   });
 
+  rule('Œil des Ruines : ses traits traversent la meute ; son rayon runique balaie en tournant.', () => {
+    const S = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
+    const r = room();
+    r.units.clear();
+    const p = r.addPlayer('a', noop), m = r.map;
+    p.hp = 1e6;
+    // un couloir dégagé : le géant, un loup de la meute, puis le dompteur, alignés
+    let s = 3000, at = m.spineAt(s);
+    const clear = (x: number, y: number) => [0, 40, 80, 120, 160, 200].every((d) => !m.blocked(x - d, y) && !m.isForest(x - d, y));
+    while (!clear(at.x, at.y)) at = m.spineAt((s += 37));
+    [p.x, p.y] = [at.x, at.y];
+    const eye = r.createUnit(S('rune_eye'), false, p.x - 200, p.y + 28); // (ses traits partent de son œil, au-dessus de son centre)
+    const wolf = r.createUnit(S('wolf'), false, p.x - 100, p.y);
+    r.makeTamed(wolf, p);
+    const shoot = (pierce: boolean) => {
+      const hw = wolf.hp, hp = p.hp;
+      r.shots = [];
+      r.launch(eye, 'bolt', p.x, p.y + 28, 10, 280, 520, 0, pierce);
+      for (let i = 0; i < 40; i++) {
+        r.grid.clear();
+        for (const e of [p, wolf]) r.grid.insert(e);
+        r.updateShots();
+      }
+      return [hw - wolf.hp, hp - p.hp];
+    };
+    const [w1, p1] = shoot(false);
+    check(w1 > 0 && p1 === 0, 'un trait ordinaire s\'arrête sur le premier monstre');
+    const [w2, p2] = shoot(true);
+    check(w2 > 0 && p2 > 0, `le trait de l'Œil traverse le loup (${w2}) et atteint le dompteur (${p2})`);
+    check(BOSS_MOVES.rune_eye.some((mv) => mv.kind === 'volley' && mv.pierce), 'ses salves sont perçantes');
+    // rayon : annoncé vers sa cible, il reste sur place et balaie quelques secondes
+    const laser = BOSS_MOVES.rune_eye.find((mv) => mv.kind === 'laser');
+    check(!!laser, 'il a un rayon runique');
+    r.hazards = [];
+    [p.x, p.y] = [eye.x + 220, eye.y];
+    r.castMove(eye, laser, p);
+    const beam = r.hazards.find((h: { style?: string }) => h.style === 'laser');
+    check(beam && eye.castUntil > r.time + 3, 'un seul rayon ; le géant reste sur place pendant qu\'il le maintient');
+    const hp = p.hp;
+    r.time = beam.at;
+    r.grid.clear();
+    r.grid.insert(p);
+    r.updateHazards();
+    const aim = Math.atan2(beam.y2 - beam.y, beam.x2 - beam.x);
+    check(Math.abs(aim) < 0.05, `il s'allume face à sa cible (${aim.toFixed(2)} rad)`);
+    for (let i = 0; i < 20; i++) {
+      r.time += 0.05;
+      r.grid.clear();
+      r.grid.insert(p);
+      r.updateHazards();
+    }
+    check(p.hp < hp, 'pris dans le rayon : on brûle');
+    const later = Math.atan2(beam.y2 - beam.y, beam.x2 - beam.x);
+    check(Math.abs(later - aim) > 0.5, 'il tourne : on peut s\'en écarter en se déplaçant');
+    while (r.time < eye.castUntil + 0.5) {
+      r.time += 0.25;
+      r.updateHazards();
+    }
+    check(!r.hazards.some((h: { style?: string }) => h.style === 'laser'), 'puis il s\'éteint');
+  });
+
   rule('Géant endormi : ni cible ni menace tant qu\'on ne lui a pas parlé ; il se rendort quand la grotte se vide.', () => {
     const r = room();
     const c = r.map.caves[0];
@@ -329,22 +390,22 @@ describe('Géants et grottes', () => {
     check(r.chests.length === 0 && r.caveBoss[c.id] > 0, 'le géant revient, le coffre disparaît');
   });
 
-  rule('PV des géants : multipliés par le nombre de membres du village (en ligne ou endormis au village), en gardant leur part de PV.', () => {
+  rule('PV des géants : +20 %, multipliés par le nombre de membres du village (en ligne ou endormis au village), en gardant leur part de PV.', () => {
     const r = room();
     const boss = r.units.get(r.caveBoss[0]);
-    const base = SPECIES[boss.s].hp;
+    const base = SPECIES[boss.s].hp * BOSS_HP_BONUS, near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
     const p = r.addPlayer('a', noop);
-    check(boss.maxHp === base && boss.hp === base, `un dompteur : ${SPECIES[boss.s].name} à ${base} PV`);
+    check(BOSS_HP_BONUS === 1.2 && near(boss.maxHp, base) && near(boss.hp, base), `un dompteur : ${SPECIES[boss.s].name} à ${base} PV`);
     r.damage(boss, base / 2, p);
     r.addPlayer('b', noop);
-    check(boss.maxHp === base * 2 && Math.abs(boss.hp - base) < 1e-6, `deux dompteurs : PV doublés (${boss.hp}/${boss.maxHp}), toujours à moitié`);
+    check(near(boss.maxHp, base * 2) && near(boss.hp, base), `deux dompteurs : PV doublés (${boss.hp}/${boss.maxHp}), toujours à moitié`);
     const q = r.addPlayer('c', noop);
     r.removePlayer(q.id);
-    check(boss.maxHp === base * 3, 'un dompteur se déconnecte : il dort au village, il compte toujours (trois membres)');
+    check(near(boss.maxHp, base * 3), 'un dompteur se déconnecte : il dort au village, il compte toujours (trois membres)');
     r.addSleeper('absent', { name: 'Absent', armor: 0, class: null, alphas: [], pack: [], stats: {} });
-    check(boss.maxHp === base * 4, 'un membre déconnecté de plus (chargé au démarrage) : quatre membres');
+    check(near(boss.maxHp, base * 4), 'un membre déconnecté de plus (chargé au démarrage) : quatre membres');
     r.removeSleeper('absent');
-    check(boss.maxHp === base * 3, 'un membre quitte le village : on revient à trois');
+    check(near(boss.maxHp, base * 3), 'un membre quitte le village : on revient à trois');
   });
 
   rule('grottes des dernières zones bien plus chères', () => {

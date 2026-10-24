@@ -371,6 +371,9 @@ export const ALPHA_EQUIP_MAX = 5; // Alphas équipés (sur le terrain) en même 
 
 // Grottes : un mini-boss par grotte, qui réapparaît après un délai ; il peut lâcher son âme.
 export const BOSS_RESPAWN_S = 300;
+export const CACTUS_PRICK = 0.05; // s'y frotter : 5 % des PV max…
+export const CACTUS_CD = 0.8; // … au plus toutes les 0,8 s
+export const BOSS_HP_BONUS = 1.2; // PV des géants : +20 % par-dessus le tableau des espèces
 export const BOSS_TALK_R = 140; // distance (depuis le bord du géant) pour lui parler et lancer le combat
 export const BOSS_SOUL_DROP = 0.35;
 // Coffre du géant vaincu : chaque dompteur l'ouvre une fois, pour un montant d'or tiré au hasard (× l'or du géant).
@@ -438,12 +441,13 @@ export type BossMove = (
   | { kind: 'enrage'; below: number } // s'enrage sous ce seuil de PV
   | { kind: 'rocks'; cd: number } // projette des rochers sur plusieurs cibles
   | { kind: 'blink'; cd: number } // disparaît et réapparaît près d'une cible
-  | { kind: 'volley'; cd: number; n: number; shot: 'bolt' | 'jet' } // salve de projectiles en éventail (esquivable)
+  | { kind: 'volley'; cd: number; n: number; shot: 'bolt' | 'jet'; pierce?: boolean } // salve de projectiles en éventail (esquivable) ; pierce : ils traversent la meute
   | { kind: 'mortar'; cd: number; n: number } // pluie de tirs en cloche, cercles annoncés au sol
   | { kind: 'trail'; cd: number; dur: number } // pendant dur secondes, il laisse derrière lui des flaques de lave qui brûlent
   | { kind: 'spin'; cd: number; arms: number; dur: number } // il s'arrête : des jets de flammes tournent autour de lui (annoncés au sol)
   | { kind: 'lash'; cd: number; n: number } // coups de tentacule : des couloirs annoncés vers ses cibles, qui s'abattent d'un coup
   | { kind: 'ink'; cd: number } // nuages d'encre sous les dompteurs : ils brûlent et ralentissent
+  | { kind: 'laser'; cd: number; dur: number; turn: number } // il s'arrête : un rayon annoncé vers sa cible, maintenu dur secondes en tournant (turn rad/s)
 ) & { from?: number }; // from : phase de combat à partir de laquelle il s'en sert (géant à plusieurs phases)
 
 export const BOSS_MOVES: Record<string, BossMove[]> = {
@@ -455,7 +459,7 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   colossus: [{ kind: 'slam', cd: 6, power: 4 }, { kind: 'enrage', below: 0.3 }], // onde de choc de l'ours : plus forte que les autres
   moss_heart: [{ kind: 'rocks', cd: 5 }, { kind: 'slam', cd: 8 }],
   old_flame: [{ kind: 'blink', cd: 6 }, { kind: 'slam', cd: 7 }],
-  rune_eye: [{ kind: 'volley', cd: 4, n: 5, shot: 'bolt' }, { kind: 'summon', cd: 11, n: 2, max: 4 }],
+  rune_eye: [{ kind: 'volley', cd: 4, n: 5, shot: 'bolt', pierce: true }, { kind: 'laser', cd: 10, dur: 3.5, turn: 0.9 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // ses traits traversent la meute ; son rayon balaie
   toad_king: [{ kind: 'mortar', cd: 5, n: 5 }, { kind: 'leap', cd: 7 }],
   mist_hydra: [{ kind: 'volley', cd: 3.5, n: 3, shot: 'jet' }, { kind: 'slam', cd: 8 }],
   titan_crab: [{ kind: 'charge', cd: 5 }, { kind: 'slam', cd: 7, power: 3 }, { kind: 'enrage', below: 0.3 }],
@@ -481,7 +485,7 @@ export const bossMelee = (key: string) => BOSS_MELEE[key] ?? { targets: 1, mult:
 export const MOVE_NAMES: Record<BossMove['kind'], string> = {
   leap: 'Bond écrasant', split: 'Division', spores: 'Nuages de spores', summon: 'Renforts', charge: 'Charge',
   web: 'Toiles', slam: 'Onde de choc', enrage: 'Rage', rocks: 'Pluie de rochers', blink: 'Clignement',
-  volley: 'Salve', mortar: 'Pluie de mortiers', trail: 'Traînée de lave', spin: 'Tourbillon de flammes', lash: 'Coup de tentacule', ink: 'Nuage d\'encre',
+  volley: 'Salve', mortar: 'Pluie de mortiers', trail: 'Traînée de lave', spin: 'Tourbillon de flammes', lash: 'Coup de tentacule', ink: 'Nuage d\'encre', laser: 'Rayon runique',
 };
 // Les géants poursuivent : quand leur cible s'éloigne, ils accélèrent (impossible de les tuer en reculant).
 export const BOSS_CHASE_R = 0; // dès que sa cible n'est plus au contact

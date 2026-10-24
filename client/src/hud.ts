@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  ALPHA_EQUIP_MAX, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, armyCap, LESSONS, LESSONS_PER_TOME, LESSON_MS, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, BUILDING_REACH,
+  ALPHA_EQUIP_MAX, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, armyCap, LESSONS, LESSONS_PER_TOME, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
@@ -58,6 +58,7 @@ export interface VillageView {
   heart: number; // cœur volcanique : 0 sur son autel, HEART_TAKEN pris, HEART_IN_BOAT installé dans le bateau
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+const ROMAN = ['I', 'II', 'III'];
 /** Prix (or, bois, pierre), nom et niveau de Hôtel de ville requis d'un achat pour le village. */
 export const purchaseOf = (map: WorldMap, buy: Purchase): { name: string; cost: Cost; hall: number } =>
   'b' in buy
@@ -662,14 +663,16 @@ export class Hud {
     btn.textContent = me.gold < CAMP_COST ? `Il te faut ${CAMP_COST} or` : `Établir le camp · ${CAMP_COST} or`;
   }
 
-  /** École des dompteurs : une ligne par discipline (leçons apprises, livres du sac, de quoi lire la suivante), et la leçon en cours. */
+  /** École des dompteurs : une ligne par discipline (leçons apprises, livres du sac, de quoi lire la suivante) ; la leçon en cours affiche son compte à rebours. */
   private updateSchool(me: PlayerState) {
     $('school-have').textContent = `Meute de ${armyCap(me.learned)} monstres`;
-    setText($('school-status'), me.reading
-      ? `Lecture en cours (${DISCIPLINES[LESSON_KINDS[me.readKind]].name}) : encore ${clock(me.reading)}.`
-      : `Une leçon : ${duration(LESSON_MS / 1000)} de lecture. Livres I : ${ZONE_NAMES.slice(0, 2).join(', ')} · II : ${ZONE_NAMES.slice(2, 4).join(', ')} · III : ${ZONE_NAMES.slice(4, 6).join(', ')}.`);
-    const key = JSON.stringify([me.learned, me.tomes, !!me.reading]);
-    if (key === this.last.school) return;
+    const key = JSON.stringify([me.learned, me.tomes, !!me.reading, me.readKind]);
+    if (key !== this.last.school) this.buildSchool(me, key);
+    const reading = me.reading ? $('school-list').querySelector<HTMLButtonElement>(`button[data-kind="${me.readKind}"]`) : null;
+    if (reading) setText(reading, `En lecture · ${clock(me.reading)}`);
+  }
+
+  private buildSchool(me: PlayerState, key: string) {
     this.last.school = key;
     $('school-list').replaceChildren(...LESSON_KINDS.map((kind, k) => {
       const d = DISCIPLINES[kind], n = me.learned[k] ?? 0, next = tomeForLesson(n);
@@ -679,14 +682,20 @@ export class Hud {
       row.querySelector('b')!.textContent = `${d.name} · ${n}/${LESSONS}`;
       row.querySelectorAll('span')[0].textContent = d.desc;
       // un exemplaire de chaque tome : déjà lu, dans le sac, ou encore à trouver
-      row.querySelectorAll('span')[1].textContent = d.tomes.map((_, t) => `${['I', 'II', 'III'][t]} ${n >= LESSONS_PER_TOME * (t + 1) ? 'lu' : me.tomes[bookIndex(k, t)] ? 'dans ton sac' : 'à trouver'}`).join(' · ');
+      row.querySelectorAll('span')[1].textContent = d.tomes.map((_, t) => `${ROMAN[t]} ${n >= LESSONS_PER_TOME * (t + 1) ? 'lu' : me.tomes[bookIndex(k, t)] ? 'dans ton sac' : 'à trouver'}`).join(' · ');
       const btn = document.createElement('button');
-      btn.className = 'cta';
+      btn.className = me.reading && me.readKind === k ? 'cta reading' : 'cta';
       btn.dataset.kind = String(k);
       const have = next >= 0 ? me.tomes[bookIndex(k, next)] ?? 0 : 0;
       btn.disabled = next < 0 || !have || !!me.reading;
-      btn.textContent = next < 0 ? 'Tout appris' : have ? 'Lire' : `Il faut : ${d.tomes[next]}`;
-      if (next >= 0 && !have) btn.title = `Tome ${['I', 'II', 'III'][next]} : ${d.tomes[next]}`;
+      // bouton court (il tient sur téléphone) ; le nom du livre à trouver et où le chercher, en dessous
+      btn.textContent = next < 0 ? 'Tout appris' : have ? 'Lire' : `Tome ${ROMAN[next]} à trouver`;
+      if (next >= 0 && !have) {
+        const where = document.createElement('span');
+        where.className = 'small muted';
+        where.textContent = `${d.tomes[next]} : coffres des géants (${ZONE_NAMES.slice(next * 2, next * 2 + 2).join(', ')})`;
+        row.querySelector('.col')!.append(where);
+      }
       row.append(btn);
       return row;
     }));
@@ -1040,9 +1049,9 @@ export class Hud {
   /** Tableau du village reçu du serveur : un rang par membre, couronne pour le premier de chaque colonne. */
   board(rows: BoardRow[]) {
     this.offline = rows.filter((r) => !r.online).map((r) => ({ name: r.name, color: r.color })); // pour la liste des membres
-    const best = (k: 'bosses' | 'tamed' | 'given') => Math.max(1, ...rows.map((r) => r[k]));
-    const top = { bosses: best('bosses'), tamed: best('tamed'), given: best('given') };
-    rows.sort((a, b) => b.bosses - a.bosses || b.tamed - a.tamed || b.given - a.given);
+    const best = (k: 'bosses' | 'tamed' | 'given' | 'spent') => Math.max(1, ...rows.map((r) => r[k]));
+    const top = { bosses: best('bosses'), tamed: best('tamed'), given: best('given'), spent: best('spent') };
+    rows.sort((a, b) => b.bosses - a.bosses || b.tamed - a.tamed || b.given - a.given || b.spent - a.spent);
     $('board-rows').replaceChildren(
       ...rows.map((r) => {
         const tr = document.createElement('tr');
@@ -1052,7 +1061,7 @@ export class Hud {
         b.style.color = r.color;
         who.append(b);
         tr.append(who);
-        for (const k of ['bosses', 'tamed', 'given'] as const) {
+        for (const k of ['bosses', 'tamed', 'given', 'spent'] as const) {
           const td = document.createElement('td');
           const lead = r[k] === top[k];
           td.className = lead ? 'top' : '';

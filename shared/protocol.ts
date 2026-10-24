@@ -7,6 +7,7 @@ export interface Stats {
   bosses: number; // géants vaincus (en ayant pris part au combat)
   tamed: number; // monstres apprivoisés
   given: number; // bois et pierre donnés à l'entrepôt
+  spent: number; // or dépensé pour le village (bâtiments, Hôtel de ville, bateau, camps)
 }
 /** Ligne du tableau du village. */
 export interface BoardRow extends Stats {
@@ -122,7 +123,7 @@ export type UnitTuple = [number, number, number, number, number, number, number]
  */
 export type HazardTuple = [number, number, number, number, number, number, number, number, number, number, number];
 /** Attaque d'où vient une zone annoncée au sol (le client l'anime : bond, rocher lancé, onde de choc…). */
-export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores', 'lava', 'flame', 'tentacle', 'ink'] as const; // n'ajouter qu'à la fin
+export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores', 'lava', 'flame', 'tentacle', 'ink', 'laser'] as const; // n'ajouter qu'à la fin
 export type HazardStyle = (typeof HAZARD_STYLES)[number];
 /**
  * Projectile de tireur : [id, type, x, y, a, b, c, dompteur] — type 0 trait (bolt), 1 en cloche (arc), 2 jet.
@@ -158,6 +159,7 @@ export type GameEvent =
   | { e: 'move'; id: number; kind: string } // un mini-boss lance une attaque spéciale
   | { e: 'challenge'; cave: number; id: number; by: number } // un dompteur a provoqué le géant : le combat commence
   | { e: 'chest'; id: number; to: number; gold: number; x: number; y: number; book?: number } // coffre ouvert : or tiré au hasard, parfois un livre (bookIndex)
+  | { e: 'prick'; id: number } // un dompteur s'est frotté à un cactus
   | { e: 'phase'; id: number; s: number; phase: number; up: boolean } // le Kraken plonge (up : false), puis remonte pour sa phase suivante
   | { e: 'heart'; by: number; installed: boolean } // le cœur volcanique a été pris (ou installé dans le bateau), pour tout le village
   | { e: 'learn'; by: number; kind: number; lesson: number; done: boolean } // École des dompteurs : une leçon commence (by) ou s'achève (done)

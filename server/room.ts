@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   ALPHA_EQUIP_MAX, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, armyCap, lessonBonus, LESSON_KINDS, LESSONS, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, armyCap, lessonBonus, LESSON_KINDS, LESSONS, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
@@ -95,6 +95,7 @@ interface Shot {
   splash: number;
   wild: boolean; // tiré par un sauvage (touche dompteurs et meutes) ou par la meute (touche les sauvages)
   by: Unit;
+  pierced?: Set<number>; // trait perçant : les monstres déjà traversés (il ne s'arrête que sur un dompteur)
 }
 
 /** Attaque spéciale posée au sol : annoncée, puis elle frappe (et dure, pour les nuages). */
@@ -146,6 +147,7 @@ export interface Player {
   essences: number[];
   userId: string | null; // compte Supabase, null = invité (tests uniquement)
   dirty: boolean; // progression à sauvegarder
+  prickAt?: number; // prochain moment où un cactus peut le piquer
   dead: boolean;
   respawnAt: number;
   helping: boolean; // R maintenu : relève le coéquipier à terre le plus proche
@@ -222,6 +224,7 @@ const statsOf = (s?: Partial<Stats>): Stats => ({
   bosses: Math.max(0, Math.floor(Number(s?.bosses) || 0)),
   tamed: Math.max(0, Math.floor(Number(s?.tamed) || 0)),
   given: Math.max(0, Math.floor(Number(s?.given) || 0)),
+  spent: Math.max(0, Math.floor(Number(s?.spent) || 0)),
 });
 
 /** Nom de village propre : sans caractères de contrôle, espaces réduits, 24 caractères au plus. */
@@ -363,7 +366,7 @@ export class Room {
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: { bosses: 0, tamed: 0, given: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: { bosses: 0, tamed: 0, given: 0, spent: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], seen: new Set(), tomes: Array(BOOKS).fill(0), learned: LESSON_KINDS.map(() => 0), readAt: 0, readKind: 0,
     };
@@ -602,6 +605,7 @@ export class Room {
   private pay(p: Player, c: Cost) {
     if (p.gold < c.gold || this.stock.wood < c.wood || this.stock.stone < c.stone) return false;
     p.gold -= c.gold;
+    p.stats.spent += c.gold;
     this.stock.wood -= c.wood;
     this.stock.stone -= c.stone;
     p.dirty = true;
@@ -1095,6 +1099,7 @@ export class Room {
     }
     this.updateSpawns();
     this.stormDamage();
+    this.cactusDamage();
     this.updateSeen();
 
     // La monture suit exactement son cavalier (elle n'est pas une cible séparée).
@@ -1237,6 +1242,7 @@ export class Room {
     if (!c || p.dead || this.camps.includes(site) || p.gold < CAMP_COST) return;
     if (dist2(p.x, p.y, c.x, c.y) > CAMP_R ** 2) return;
     p.gold -= CAMP_COST;
+    p.stats.spent += CAMP_COST;
     p.dirty = true;
     this.camps.push(site);
     this.saveVillage();
@@ -1360,6 +1366,18 @@ export class Room {
     for (const p of this.players.values()) {
       if (p.dead || this.safe(p.x, p.y) || this.map.caveAt(p.x, p.y) || this.map.zoneAt(p.x, p.y) !== 6) continue;
       this.damage(p, maxHpOf(p) * STORM_DPS * this.storm, p);
+    }
+  }
+
+  /** Cactus de la Mer de sable : s'y frotter pique (une part des PV max, à intervalles), sauf à dos de monture volante. */
+  private cactusDamage() {
+    for (const p of this.players.values()) {
+      if (p.dead || this.time < (p.prickAt ?? 0) || this.airborne(p) || this.map.caveAt(p.x, p.y)) continue;
+      const prick = this.map.treesNear(p.x, p.y, p.r + 10).some((i) => !this.map.treeDown.has(i) && this.map.isCactus(this.map.decor[i]));
+      if (!prick) continue;
+      p.prickAt = this.time + CACTUS_CD;
+      this.damage(p, maxHpOf(p) * CACTUS_PRICK, p);
+      this.events.push({ e: 'prick', id: p.id });
     }
   }
 
@@ -1987,7 +2005,7 @@ export class Room {
         const speed = m.shot === 'jet' ? 520 : 280;
         for (let k = 0; k < m.n; k++) {
           const a = base + (k - (m.n - 1) / 2) * spread;
-          this.launch(u, m.shot, u.x + Math.cos(a) * 400, u.y + Math.sin(a) * 400, d * 0.8, speed, 520, 0);
+          this.launch(u, m.shot, u.x + Math.cos(a) * 400, u.y + Math.sin(a) * 400, d * 0.8, speed, 520, 0, !!m.pierce);
         }
         break;
       }
@@ -2013,6 +2031,14 @@ export class Room {
           const a = a0 + (k * Math.PI * 2) / m.arms;
           this.hazard(u, { kind: 1, style: 'flame', x: u.x, y: u.y, x2: u.x + Math.cos(a) * len, y2: u.y + Math.sin(a) * len, r: 28, at: this.time + warn, dmg: d * 0.3, spin: { a0: a, w, len, end } });
         }
+        break;
+      }
+      case 'laser': {
+        // Rayon : il s'arrête ; le rayon s'annonce en glissant vers sa cible, s'allume face à elle, puis balaie lentement en brûlant.
+        const warn = 0.9, len = u.owner ? 300 : 480, w = (Math.random() < 0.5 ? -1 : 1) * m.turn;
+        const a0 = Math.atan2(t.y - u.y, t.x - u.x) - w * warn, end = this.time + warn + m.dur;
+        u.castUntil = end;
+        this.hazard(u, { kind: 1, style: 'laser', x: u.x, y: u.y, x2: u.x + Math.cos(a0) * len, y2: u.y + Math.sin(a0) * len, r: 18, at: this.time + warn, dmg: d * 0.35, spin: { a0, w, len, end } });
         break;
       }
       case 'blink': {
@@ -2042,7 +2068,7 @@ export class Room {
         h.onFire?.();
         if (h.spin) {
           h.nextTick = this.time; // il brûle dans la durée, tant qu'il tourne
-          this.events.push({ e: 'boom', x: Math.round(h.x), y: Math.round(h.y), r: h.r, kind: 'flame', ...(h.boss.owner ? { by: h.boss.owner } : {}) });
+          this.events.push({ e: 'boom', x: Math.round(h.x), y: Math.round(h.y), r: h.r, kind: h.style === 'laser' ? 'laser' : 'flame', ...(h.boss.owner ? { by: h.boss.owner } : {}) });
         }
         if (h.spin) continue;
         if (h.style === 'lava') continue; // une flaque de plus : pas d'explosion à chaque pas
@@ -2104,9 +2130,9 @@ export class Room {
     return u.id;
   }
 
-  /** PV des géants multipliés par le nombre de membres du village, en ligne ou endormis près du feu (au moins ×1). */
+  /** PV des géants multipliés par le nombre de membres du village, en ligne ou endormis près du feu (au moins ×1), plus BOSS_HP_BONUS. */
   private bossHpMult() {
-    return Math.max(1, this.players.size + this.sleepers.size);
+    return BOSS_HP_BONUS * Math.max(1, this.players.size + this.sleepers.size);
   }
 
   /** Quelqu'un arrive ou s'en va : chaque géant garde sa part de PV, sur un total recalculé. */
@@ -2273,11 +2299,11 @@ export class Room {
    * Lance un projectile de u vers (tx, ty). Cloche : retombe là où était la cible (au plus à portée),
    * on l'esquive en bougeant. Trait, jet : file en ligne droite.
    */
-  private launch(u: Unit, kind: Ranged['kind'], tx: number, ty: number, dmg: number, speed: number, range: number, splash: number) {
+  private launch(u: Unit, kind: Ranged['kind'], tx: number, ty: number, dmg: number, speed: number, range: number, splash: number, pierce = false) {
     const d = Math.hypot(tx - u.x, ty - u.y) || 1;
     const shot: Shot = {
       id: this.nextId++, kind: SHOT_KINDS.indexOf(kind), x: u.x, y: u.y - u.r * 0.5, vx: 0, vy: 0, x0: u.x, y0: u.y - u.r * 0.5, tx, ty,
-      start: this.time, left: range * 1.3, dmg, splash, wild: !u.owner, by: u,
+      start: this.time, left: range * 1.3, dmg, splash, wild: !u.owner, by: u, ...(pierce ? { pierced: new Set<number>() } : {}),
     };
     if (kind === 'arc') {
       const k = Math.min(1, range / d);
@@ -2314,10 +2340,20 @@ export class Room {
         s.x += (s.vx * DT) / n;
         s.y += (s.vy * DT) / n;
         s.left -= step / n;
-        const hit = this.shotTargets(s, s.x, s.y, 6)[0];
-        if (hit) {
-          this.damage(hit, s.dmg, s.by);
-          return false;
+        if (s.pierced) {
+          // perçant : il blesse chaque monstre traversé une fois et poursuit sa route ; un dompteur l'arrête
+          for (const e of this.shotTargets(s, s.x, s.y, 6)) {
+            if (s.pierced.has(e.id)) continue;
+            s.pierced.add(e.id);
+            this.damage(e, s.dmg, s.by);
+            if (e.kind === 'p') return false;
+          }
+        } else {
+          const hit = this.shotTargets(s, s.x, s.y, 6)[0];
+          if (hit) {
+            this.damage(hit, s.dmg, s.by);
+            return false;
+          }
         }
         if (s.left <= 0 || this.map.isForest(s.x, s.y) || (this.map.blocked(s.x, s.y) && !this.map.isWater(s.x, s.y))) return false;
       }

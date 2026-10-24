@@ -3,7 +3,7 @@
 
 import { BUILDINGS, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, BOARD_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
-import { BEACH, caveEdge, MAP_CELL, MOUTH_FADE, SEA_SHALLOW, type Cave, type WorldMap } from '../../shared/worldmap.ts';
+import { BEACH, caveEdge, coastGreen, MAP_CELL, MOUTH_FADE, SEA_SHALLOW, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 import { maxDpr, settings } from './settings.ts';
 import { drawCocoon, drawEntrance, drawWeb, INSIDE, insideProp } from './caves.ts';
 
@@ -23,7 +23,6 @@ const LAKE_BANK = [94, 107, 73]; // berge des lacs (#5E6B49)
 const MOUTH_SURF = 150; // en mer, l'écume et le sable s'effacent à l'approche d'une embouchure
 export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76], [204, 172, 114]];
 const STEPPE = [124, 140, 78]; // lisière verte entre le sable du désert et la mer
-const COAST_GREEN = 700; // largeur de cette lisière
 const PATH = [110, 97, 66];
 const VILLAGE_GROUND = [79, 101, 63]; // herbe de la place, tondue
 
@@ -70,19 +69,6 @@ export function groundColor(map: WorldMap, x: number, y: number) {
   if (g) col = lerp3(col, STEPPE, g);
   const v = villageMix(map, x, y);
   return v ? lerp3(col, VILLAGE_GROUND, v) : col;
-}
-
-/**
- * Lisière verte de la Mer de sable : au bord de l'eau (mer ou lac), le sable laisse place à une steppe (palmiers),
- * pour que le désert ne touche jamais l'eau directement. 0 ailleurs, 1 au bord de l'eau, au bord irrégulier.
- */
-export function coastGreen(map: WorldMap, x: number, y: number) {
-  const m = map.zoneMix(x, y), d = (m.z0 === 6 ? 1 - m.t : 0) + (m.z1 === 6 ? m.t : 0);
-  if (!d) return 0;
-  // distance à l'eau la plus proche : la mer, ou un lac (oasis ; les lacs des Lacs brumeux voisins s'ouvrent sur l'océan)
-  const near = Math.min(map.wetDistAt(x, y), Math.max(0, -map.shoreAt(x, y)));
-  const u = Math.min(1, Math.max(0, 1 - near / COAST_GREEN + (fbm(x / 300, y / 300, map.seed + 76, 2) - 0.5) * 0.5));
-  return d * u * u * (3 - 2 * u);
 }
 
 /** Part de Mer de sable en un point (0 ailleurs, 1 en plein désert, en fondu à la frontière). */

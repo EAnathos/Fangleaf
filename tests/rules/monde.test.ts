@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
+import { CACTUS_CD, CACTUS_PRICK, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
 import { BEACH, WorldMap } from '../../shared/worldmap.ts';
 import { sky } from '../../shared/weather.ts';
 import { Room } from '../../server/room.ts';
@@ -286,6 +286,27 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     check(worm.hidden && !worm.emerging && vul.hidden && !vul.emerging && !r.hazards.length, 'en pleine tempête, le ver reste sous le sable et le vautour très haut : aucun ne frappe');
     check(cat.hidden, 'les suricates se cachent dans leur tanière');
     Date.now = realNow;
+
+    // cactus : s'y frotter pique (pas les palmiers de la lisière verte)
+    const cactus = r.map.decor.find((d: { kind: number }) => r.map.isCactus(d));
+    check(!!cactus && r.map.decor.some((d: { kind: number; x: number; y: number }) => d.kind === 0 && r.map.styleZone(d.x, d.y) === 6 && !r.map.isCactus(d)), 'des cactus dans le désert, des palmiers au bord de l\'eau');
+    const trunk = r.map.trunkOf(cactus);
+    Date.now = realNow;
+    [p.x, p.y, p.hp] = [trunk.x + trunk.r + p.r + 2, trunk.y, 1000];
+    p.maxHp = 1000;
+    r.cactusDamage();
+    const pricked = 1000 - p.hp;
+    check(pricked > 0 && pricked <= Math.ceil(2000 * CACTUS_PRICK), `contre un cactus : il pique (${pricked} PV, ${CACTUS_PRICK * 100} % des PV max)`);
+    r.cactusDamage();
+    check(1000 - p.hp === pricked, `pas à chaque tick : au plus toutes les ${CACTUS_CD} s`);
+    r.time += CACTUS_CD;
+    r.cactusDamage();
+    check(1000 - p.hp > pricked, 'resté collé : il pique encore');
+    [p.x, p.y, p.hp] = [trunk.x + trunk.r + p.r + 80, trunk.y, 1000];
+    r.time += CACTUS_CD;
+    r.cactusDamage();
+    const other = r.map.treesNear(p.x, p.y, p.r + 10).some((i: number) => r.map.isCactus(r.map.decor[i]));
+    check(other || p.hp === 1000, 'à distance, rien');
 
     // Alpha suricate : il encourage son dompteur (+8 % de dégâts, plus en le renforçant), comme l'escargot le protège.
     const r2 = room();

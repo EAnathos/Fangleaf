@@ -531,10 +531,10 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     check(said.length === 2 && said[0] === 'Salut tout le monde' && said[1].length === 200, `chat : ${said.length} messages relayés (espaces nettoyés, rafale et vide ignorés, 200 caractères max)`);
   });
 
-  rule('Tableau du village : géants battus, apprivoisements, dons ; enregistrés et visibles pour les déconnectés.', () => {
+  rule('Tableau du village : géants battus, apprivoisements, dons, or dépensé pour le village ; enregistrés et visibles pour les déconnectés.', () => {
     const r = room();
     for (const u of [...r.units.values()]) if (!u.owner && !SPECIES[u.s].boss) r.units.delete(u.id);
-    let board: { name: string; online: boolean; bosses: number; tamed: number; given: number }[] = [];
+    let board: { name: string; online: boolean; bosses: number; tamed: number; given: number; spent: number }[] = [];
     const p = r.addPlayer('Lou', (m: { t: string; rows?: typeof board }) => m.t === 'board' && (board = m.rows!), { userId: 'lou', profile: null });
     const q = r.addPlayer('Max', noop, { userId: 'max', profile: null });
     const c = r.map.caves[0];
@@ -549,13 +549,17 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     p.stone = 5;
     [p.x, p.y] = [r.map.store.x, r.map.store.y + 50];
     r.onDeposit(p);
+    const site = r.map.sites.findIndex((_: unknown, i: number) => !r.camps.includes(i));
+    [p.x, p.y] = [r.map.sites[site].x, r.map.sites[site].y];
+    p.gold = CAMP_COST;
+    r.onEstablish(p, site);
     r.onBoard(p);
     const lou = board.find((b) => b.name === 'Lou'), max = board.find((b) => b.name === 'Max');
-    check(lou?.bosses === 1 && max?.bosses === 1 && lou.tamed === 1 && lou.given === 12, `tableau : Lou ${lou?.bosses} géant, ${lou?.tamed} apprivoisé, ${lou?.given} donnés ; Max ${max?.bosses} géant`);
+    check(lou?.bosses === 1 && max?.bosses === 1 && lou.tamed === 1 && lou.given === 12 && lou.spent === CAMP_COST && max?.spent === 0, `tableau : Lou ${lou?.bosses} géant, ${lou?.tamed} apprivoisé, ${lou?.given} donnés, ${lou?.spent} or pour un camp ; Max ${max?.bosses} géant`);
     const prof = r.profileOf(p);
     r.removePlayer(p.id);
     q.send = (m: { t: string; rows?: typeof board }) => m.t === 'board' && (board = m.rows!);
     r.onBoard(q);
-    check(prof.stats?.given === 12 && board.some((b) => b.name === 'Lou' && !b.online && b.given === 12), 'statistiques enregistrées ; Lou déconnecté reste au tableau');
+    check(prof.stats?.given === 12 && prof.stats?.spent === CAMP_COST && board.some((b) => b.name === 'Lou' && !b.online && b.given === 12), 'statistiques enregistrées ; Lou déconnecté reste au tableau');
   });
 });
