@@ -47,7 +47,7 @@ describe('École des dompteurs', () => {
   });
 
   rule('Un coffre de géant cache parfois un livre (une fois l\'école bâtie), du tome de sa zone, d\'une discipline au hasard, jamais inutile.', () => {
-    check(tomeOfZone(1) === 0 && tomeOfZone(2) === 0 && tomeOfZone(3) === 1 && tomeOfZone(4) === 1 && tomeOfZone(5) === 2 && tomeOfZone(6) === 2, 'tome I : zones 1-2, II : 3-4, III : 5-6');
+    check(tomeOfZone(1) === 0 && tomeOfZone(2) === 0 && tomeOfZone(3) === 1 && tomeOfZone(4) === 1 && tomeOfZone(5) === 2 && tomeOfZone(6) === 2 && tomeOfZone(7) === 2, 'tome I : zones 1-2, II : 3-4, III : 5 à 7');
     const r = room();
     const c = r.map.caves.find((k: { boss: number }) => SPECIES[k.boss].zone === 3);
     const p = r.addPlayer('chanceux', noop);

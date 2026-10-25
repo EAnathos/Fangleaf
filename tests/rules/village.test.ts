@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, unarmedAdd } from '../helpers.ts';
-import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE, gearWood, gearCost, saddleSpeed } from '../../shared/config.ts';
+import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE, ZONES, gearWood, gearCost, saddleSpeed } from '../../shared/config.ts';
 import { Room } from '../../server/room.ts';
 import { villageEdge } from '../../shared/worldmap.ts';
 import { ELDER_CHAPTERS } from '../../client/src/elder.ts';
@@ -47,7 +47,7 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
       if (k < BOAT_STAGES.length - 1) r.onBoat(p);
     }
     check(r.boat === BOAT_STAGES.length && saved.boat === BOAT_STAGES.length, `bateau terminé en ${BOAT_STAGES.length} étapes`);
-    const island = m.caves.filter((c: { zone: number }) => c.zone <= 6).length;
+    const island = m.caves.filter((c: { zone: number }) => c.zone <= ZONES).length;
     check(ELDER_CHAPTERS.length === island, `un souvenir par géant de l'île (${ELDER_CHAPTERS.length} chapitres, ${island} géants ; ceux du volcan n'ont pas de parchemin)`);
     [p.x, p.y] = [m.stones[0].x, m.stones[0].y + 40];
     r.onTravel(p, -2);
@@ -214,7 +214,7 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     // un village rouvert retrouve ses camps
     const again: any = new Room('TEST2', r.seed, { camps: [0, 0, 7, -1], buildings: ['forge', 'forge', 'nope' as never], unlocked: [1, 1, 999] });
     check(again.camps.join() === '0', 'camps rechargés (doublons et index invalides ignorés)');
-    check(again.buildings.join() === 'forge,palisade,plot_forge,plot_den,plot_market' && again.unlocked.join() === '1', 'bâtiments et grottes rechargés (doublons et valeurs invalides ignorés) ; village d\'avant l\'île : son camp est installé');
+    check(again.buildings.join() === 'forge,palisade,plot_forge,plot_den,plot_market,bridge' && again.unlocked.join() === '1', 'bâtiments et grottes rechargés (doublons et valeurs invalides ignorés) ; village d\'avant l\'île : son camp est installé, son pont réparé');
   });
 
   rule('Bâtiments du village : achetés avec de l\'or, du bois et de la pierre, une fois pour tous ; sans eux, rien à faire devant le chantier.', () => {
@@ -597,5 +597,42 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     q.send = (m: { t: string; rows?: typeof board }) => m.t === 'board' && (board = m.rows!);
     r.onBoard(q);
     check(prof.stats?.given === 12 && prof.stats?.spent === CAMP_COST && board.some((b) => b.name === 'Lou' && !b.online && b.given === 12), 'statistiques enregistrées ; Lou déconnecté reste au tableau');
+  });
+
+  rule('Le pont du village : cassé au départ, réparé avec le bois et la pierre de son sac ; d\'ici là, on se réveille sur la plage.', () => {
+    const r: any = new Room('TEST');
+    const p = r.addPlayer('a', noop), m = r.map, br = m.bridge;
+    const mid = { x: (br.a.x + br.b.x) / 2, y: (br.a.y + br.b.y) / 2 };
+    check(m.blocked(mid.x, mid.y) && !r.buildings.includes('bridge'), 'nouveau village : le pont est cassé');
+    const back = r.respawnPoint(m.village.x, m.village.y);
+    check(back.x === m.spawn.x && back.y === m.spawn.y, 'pont cassé : on réapparaît sur la plage, pas sur l\'îlot');
+    [p.x, p.y] = [br.a.x - (br.b.x - br.a.x) * 0.1, br.a.y - (br.b.y - br.a.y) * 0.1];
+    p.wood = BUILDINGS.bridge.wood - 1;
+    p.stone = BUILDINGS.bridge.stone;
+    r.onBuild(p, 'bridge');
+    check(!r.buildings.includes('bridge'), 'pas assez de bois dans le sac : rien');
+    p.wood++;
+    r.onBuild(p, 'bridge');
+    check(r.buildings.includes('bridge') && !m.blocked(mid.x, mid.y) && p.wood === 0 && p.stone === 0, `pont réparé (${costText(buildingCost('bridge'))}, pris dans le sac) : on passe`);
+    const old = new Room('TEST', r.seed, { buildings: ['palisade'], hall: 1 });
+    check(old.buildings.includes('bridge'), 'un village déjà commencé : son pont est déjà réparé');
+  });
+
+  rule('Tableau du village : monstres vaincus, dégâts, plus gros coup, chutes, récolte, temps de jeu ; sauvegardés.', () => {
+    const r = room();
+    for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
+    const p = r.addPlayer('Lou', noop);
+    const at = r.map.spineAt(r.map.zoneFrom(2) + 600);
+    [p.x, p.y] = [at.x, at.y];
+    const foe = r.createUnit(0, false, at.x + 30, at.y);
+    r.damage(foe, 7, p);
+    r.damage(foe, 1000, p);
+    p.hp = 1;
+    r.damage(p, 1000, foe);
+    r.events.push({ e: 'res', to: p.id, wood: 3, stone: 2, x: 0, y: 0 });
+    for (let i = 0; i < 20; i++) r.step();
+    const st = r.profileOf(p).stats;
+    check(st.kills === 1 && st.dmg >= 1007 && st.best === 1000 && st.deaths === 1 && st.wood === 3 && st.stone === 2 && st.time >= 1,
+      `stats comptées (vaincus ${st.kills}, dégâts ${st.dmg}, plus gros coup ${st.best}, chutes ${st.deaths}, bois ${st.wood}, temps ${st.time} s)`);
   });
 });

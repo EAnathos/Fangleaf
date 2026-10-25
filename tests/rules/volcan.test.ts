@@ -14,7 +14,7 @@ describe('Le volcan et ses entrailles', () => {
     check(!m.blocked(mo.x, mo.y) && !m.isWater(mo.x, mo.y), 'sa bouche est libre, au sec');
     const s = m.arcAt(mo.x, mo.y), lane = m.spineAt(s);
     check(!!m.findPath(mo.x, mo.y, lane.x, lane.y, 60000), 'on y arrive depuis la voie centrale');
-    check(m.zoneTo(ZONES) - m.zoneFrom(ZONES) > 1.5 * (m.zoneTo(ZONES - 1) - m.zoneFrom(ZONES - 1)), 'la Mer de sable est bien plus longue que les autres zones');
+    check(m.zoneTo(ZONES) - m.zoneFrom(ZONES) > 1.5 * (m.zoneTo(5) - m.zoneFrom(5)), 'la Mer de sable est bien plus longue que les autres zones');
   });
 
   rule('Les entrailles : une grande salle de la zone 7, ses mares de lave, trois antres de géants.', () => {

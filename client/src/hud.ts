@@ -1,11 +1,11 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  alphaEquipMax, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, BUILDING_REACH,
+  alphaEquipMax, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
-import type { BoardRow, PlayerState, UnitTuple } from '../../shared/protocol.ts';
+import type { BoardRow, PlayerState, Stats, UnitTuple } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
 import { armorColor, drawElder, drawHatchling, drawUnit } from './sprites.ts';
 import { CHAPTER_TITLES, ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD } from './elder.ts';
@@ -61,6 +61,25 @@ export interface VillageView {
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 const ROMAN = ['I', 'II', 'III'];
+const num = (n: number) => Math.round(n).toLocaleString('fr-FR');
+/** Tableau du village, par catégorie : clé de la statistique, libellé, mise en forme, et « moins, c'est mieux ». */
+const BOARD: { title: string; stats: { k: keyof Stats; label: string; fmt?: (n: number) => string; low?: boolean }[] }[] = [
+  { title: '⚔️ Combat', stats: [
+    { k: 'bosses', label: 'Géants battus' }, { k: 'firsts', label: 'Premières victoires sur un géant' }, { k: 'kills', label: 'Monstres vaincus' },
+    { k: 'dmg', label: 'Dégâts infligés' }, { k: 'best', label: 'Plus gros coup' }, { k: 'deaths', label: 'Chutes', low: true }, { k: 'revives', label: 'Coéquipiers relevés' },
+  ] },
+  { title: '🐾 Dressage', stats: [
+    { k: 'tamed', label: 'Monstres apprivoisés' }, { k: 'essences', label: 'Essences recueillies' }, { k: 'awakened', label: 'Alphas éveillés' }, { k: 'legends', label: 'Alphas légendaires' },
+  ] },
+  { title: '🪵 Récolte et village', stats: [
+    { k: 'wood', label: 'Bois récolté' }, { k: 'stone', label: 'Pierre récoltée' }, { k: 'given', label: 'Dons à l\'entrepôt' }, { k: 'spent', label: 'Or pour le village' },
+  ] },
+  { title: '🧭 Exploration', stats: [
+    { k: 'chests', label: 'Coffres de géants ouverts' }, { k: 'books', label: 'Livres trouvés' },
+    { k: 'dist', label: 'Distance parcourue', fmt: (n) => `${(n * 0.00003).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km` },
+    { k: 'time', label: 'Temps de jeu', fmt: (n) => (n >= 3600 ? `${Math.floor(n / 3600)} h ${String(Math.floor((n % 3600) / 60)).padStart(2, '0')}` : `${Math.floor(n / 60)} min`) },
+  ] },
+];
 /** Prix (or, bois, pierre), nom et niveau de Hôtel de ville requis d'un achat pour le village. */
 export const purchaseOf = (map: WorldMap, buy: Purchase): { name: string; cost: Cost; hall: number } =>
   'b' in buy
@@ -87,6 +106,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     ...(v.lore[1] >= BOAT_STAGES.length ? [{ panel: 'travel' as const, pos: map.boatStone, label: 'E — Pierre de passage', at: -2 }] : []),
     ...(v.sword < SWORD_PULLS ? [{ sword: true, pos: map.sword, reach: SWORD_REACH, label: v.sword ? `E — Tirer encore (${v.sword}/${SWORD_PULLS})` : 'E — Déterrer l\'épée' }] : []),
     ...(v.buildings.includes('palisade') ? [] : [{ ...offer('palisade', map.village, 'Monter'), reach: 110 }]),
+    ...(v.buildings.includes('bridge') ? [] : [{ ...offer('bridge', map.bridge.a, 'Réparer'), reach: 150 }]),
     { panel: 'hall', pos: map.hall, label: `E — Hôtel de ville · niv. ${v.hall}` },
     { deposit: true, pos: map.store, label: 'E — Entrepôt : déposer ton bois et ta pierre' },
     building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Forge' }),
@@ -420,6 +440,10 @@ export class Hud {
     $('torch-buy').onclick = () => this.onUpgrade('torch');
     $('boots-buy').onclick = () => this.onUpgrade('boots');
     $('saddle-buy').onclick = () => this.onUpgrade('saddle');
+    $('evolve-go').onclick = () => {
+      $('evolve').hidden = true;
+      $('evolve-text').classList.remove('on');
+    };
     $('alphas').addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button.buy');
       if (btn?.dataset.up) this.onAlphaUp(Number(btn.dataset.up));
@@ -510,6 +534,95 @@ export class Hud {
     this.last.hall = '';
     this.last.school = '';
     if (panel && panel !== 'chat') $(panel === 'map' ? 'bigmap' : panel).querySelector<HTMLButtonElement>('.close')!.focus();
+  }
+
+  /**
+   * Double éveil, façon évolution : l'Alpha au centre, une silhouette blanche qui grandit et rapetisse de plus en plus
+   * vite (sa forme d'avant, sa forme légendaire), un éclair, puis l'Alpha légendaire dans son aura dorée ; le texte dit
+   * qu'il peut maintenant utiliser les attaques de son géant. Un clic sur « Continuer » referme.
+   */
+  evolve(s: number) {
+    const el = $('evolve'), c = $<HTMLCanvasElement>('evolve-canvas'), text = $('evolve-text');
+    const sp = SPECIES[s], boss = bossOf(s), giant = SPECIES[boss];
+    $('evolve-title').textContent = 'Quoi ? Ton Alpha évolue !';
+    $('evolve-line').textContent = `Ton Alpha ${sp.name} est devenu légendaire ! Il peut maintenant utiliser les attaques de ${giant?.title ?? giant?.name ?? 'son géant'}.`;
+
+    text.classList.remove('on');
+    el.hidden = false;
+    const t0 = performance.now(), REVEAL = 3.8, r = alphaStats(s, 0, 0, false).r, rl = alphaStats(s, 0, 0, true).r;
+    const id = ++this.evolveId;
+    let revealed = false;
+    sound.play('chime');
+    const frame = () => {
+      if (id !== this.evolveId || el.hidden) return;
+      const t = (performance.now() - t0) / 1000, dpr = Math.min(2, devicePixelRatio || 1);
+      const W = Math.round(c.clientWidth * dpr), H = Math.round(c.clientHeight * dpr);
+      if (c.width !== W || c.height !== H) [c.width, c.height] = [W, H];
+      const ctx = c.getContext('2d')!, cx = W / 2, cy = H * 0.42, k = (Math.min(W, H) * 0.16) / rl;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#07090A';
+      ctx.fillRect(0, 0, W, H);
+      // rayons de lumière qui tournent derrière lui, de plus en plus vifs
+      const glow = Math.min(1, t / REVEAL), gold = t >= REVEAL;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(t * 0.4);
+      for (let i = 0; i < 12; i++) {
+        ctx.rotate(Math.PI / 6);
+        ctx.fillStyle = gold ? 'rgba(240,182,74,0.16)' : `rgba(190,220,255,${0.05 + glow * 0.12})`;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.max(W, H), -40 * dpr);
+        ctx.lineTo(Math.max(W, H), 40 * dpr);
+        ctx.fill();
+      }
+      ctx.restore();
+      // la transformation : sa forme d'avant et sa forme légendaire en silhouette blanche, de plus en plus vite
+      ctx.setTransform(k, 0, 0, k, cx, cy);
+      if (t < 0.7) drawUnit(ctx, { x: 0, y: 0, r, species: s, alpha: true, legend: false, wild: false, face: 1, t, seed: s, flash: false });
+      else if (!gold) {
+        const speed = 1.5 + (t - 0.7) * 4, big = Math.sin((t - 0.7) * speed * Math.PI) > 0;
+        drawUnit(ctx, { x: 0, y: 0, r: big ? rl : r, species: s, alpha: true, legend: false, wild: false, face: 1, t: 0, seed: s, flash: true });
+      } else drawUnit(ctx, { x: 0, y: 0, r: rl, species: s, alpha: true, legend: true, wild: false, face: 1, t, seed: s, flash: false });
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      // éclair blanc au moment de la révélation, puis des étincelles dorées qui montent
+      if (t >= REVEAL - 0.25 && t < REVEAL + 0.6) {
+        ctx.fillStyle = `rgba(255,255,255,${t < REVEAL ? (t - REVEAL + 0.25) / 0.25 : 1 - (t - REVEAL) / 0.6})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+      if (gold) {
+        for (let i = 0; i < 24; i++) {
+          const a = (i / 24) * Math.PI * 2 + i, d = ((t - REVEAL) * 60 + i * 37) % 220;
+          ctx.fillStyle = `rgba(240,182,74,${1 - d / 220})`;
+          ctx.beginPath();
+          ctx.arc(cx + Math.cos(a) * (60 + d) * dpr, cy + Math.sin(a) * (40 + d * 0.6) * dpr - d * 0.5 * dpr, 3 * dpr, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        if (!revealed) {
+          revealed = true;
+          text.classList.add('on');
+          sound.play('fanfare');
+        }
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  }
+  private evolveId = 0;
+
+  /** Ce qu'on vient de perdre en tombant : en gros, en rouge, sur l'écran de mort (or, puis bois et pierre du sac). */
+  deathLoss(gold: number, wood: number, stone: number) {
+    const el = $('death-loss'), res = [wood && `−${wood} bois`, stone && `−${stone} pierre`].filter(Boolean).join(' · ');
+    el.hidden = !gold && !res;
+    el.innerHTML = gold ? `−${gold.toLocaleString('fr-FR')} or` : '';
+    if (res) {
+      const small = document.createElement('small');
+      small.textContent = res;
+      el.append(small);
+    }
+    el.style.animation = 'none';
+    void el.offsetWidth; // relance l'animation
+    el.style.animation = '';
   }
 
   toast(text: string, kind: '' | 'alpha' | 'good' = '') {
@@ -703,7 +816,7 @@ export class Hud {
       return li;
     };
     $('school-where').replaceChildren(
-      ...ROMAN.map((t, i) => where(`Tome ${t}`, `géants ${ZONE_NAMES.slice(i * 2, i * 2 + 2).join(', ')}`)),
+      ...ROMAN.map((t, i) => where(`Tome ${t}`, `géants ${ZONE_NAMES.slice(0, ZONES).filter((_, z) => tomeOfZone(z + 1) === i).join(', ')}`)),
       ...LESSON_KINDS.filter((kind) => DISCIPLINES[kind].volcano).map((kind) => where(DISCIPLINES[kind].tomes[0], `géants du volcan, ${ZONE_NAMES[VOLCANO_ZONE - 1]} (${DISCIPLINES[kind].name})`)),
     );
     $('school-list').replaceChildren(...LESSON_KINDS.map((kind, k) => {
@@ -906,9 +1019,10 @@ export class Hud {
     const buy = this.buying;
     if (!buy) return;
     const { name, cost, hall } = purchaseOf(this.map, buy);
-    const funds = this.funds(me);
+    // le pont : le bois et la pierre du sac comptent (l'entrepôt est de l'autre côté)
+    const funds = 'b' in buy && buy.b === 'bridge' ? { gold: me.gold, wood: me.wood + this.stock[0], stone: me.stone + this.stock[1] } : this.funds(me);
     this.costChips('buy-cost', funds, cost);
-    $('buy-title').textContent = 'b' in buy ? `Construire : ${name}` : `Débloquer : ${name}`;
+    $('buy-title').textContent = 'b' in buy ? `${buy.b === 'bridge' ? 'Réparer' : 'Construire'} : ${name}` : `Débloquer : ${name}`;
     if ('b' in buy) $('buy-desc').textContent = BUILDINGS[buy.b].desc;
     else {
       const boss = SPECIES[this.map.caves[buy.cave].boss], base = SPECIES.find((s) => s.key === boss.base);
@@ -916,7 +1030,7 @@ export class Hud {
     }
     const btn = $<HTMLButtonElement>('buy-go');
     btn.disabled = this.hall < hall || !canPay(funds, cost);
-    btn.textContent = this.hall < hall ? `Hôtel de ville niv. ${hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : `${'b' in buy ? 'Construire' : 'Débloquer'} pour le village`;
+    btn.textContent = this.hall < hall ? `Hôtel de ville niv. ${hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : `${'b' in buy ? (buy.b === 'bridge' ? 'Réparer' : 'Construire') : 'Débloquer'} pour le village`;
   }
 
   /** Paramètres : mode d'attaque et touches (PC), membres du village (expulsion par le fondateur). */
@@ -1101,29 +1215,46 @@ export class Hud {
     );
   }
 
-  /** Tableau du village reçu du serveur : un rang par membre, couronne pour le premier de chaque colonne. */
+  /** Tableau du village reçu du serveur : une colonne par membre, une ligne par exploit, couronne pour le premier de chaque ligne. */
   board(rows: BoardRow[]) {
     this.offline = rows.filter((r) => !r.online).map((r) => ({ name: r.name, color: r.color })); // pour la liste des membres
-    const best = (k: 'bosses' | 'tamed' | 'given' | 'spent') => Math.max(1, ...rows.map((r) => r[k]));
-    const top = { bosses: best('bosses'), tamed: best('tamed'), given: best('given'), spent: best('spent') };
-    rows.sort((a, b) => b.bosses - a.bosses || b.tamed - a.tamed || b.given - a.given || b.spent - a.spent);
+    rows.sort((a, b) => b.bosses - a.bosses || b.kills - a.kills || b.tamed - a.tamed || b.given - a.given);
+    const head = document.createElement('tr'), corner = document.createElement('th');
+    head.append(corner);
+    for (const r of rows) {
+      const th = document.createElement('th');
+      th.scope = 'col';
+      const b = document.createElement('b');
+      b.textContent = r.name;
+      b.style.color = r.color;
+      th.append(b);
+      head.append(th);
+    }
+    $('board-head').replaceChildren(head);
     $('board-rows').replaceChildren(
-      ...rows.map((r) => {
-        const tr = document.createElement('tr');
-        const who = document.createElement('td');
-        const b = document.createElement('b');
-        b.textContent = r.name;
-        b.style.color = r.color;
-        who.append(b);
-        tr.append(who);
-        for (const k of ['bosses', 'tamed', 'given', 'spent'] as const) {
-          const td = document.createElement('td');
-          const lead = r[k] === top[k];
-          td.className = lead ? 'top' : '';
-          td.textContent = `${lead ? '👑 ' : ''}${r[k]}`;
-          tr.append(td);
-        }
-        return tr;
+      ...BOARD.flatMap(({ title, stats }) => {
+        // une ligne de titre par catégorie, sur toute la largeur
+        const head = document.createElement('tr'), cell = document.createElement('th');
+        head.className = 'board-cat';
+        cell.colSpan = rows.length + 1;
+        cell.textContent = title;
+        head.append(cell);
+        return [head, ...stats.map(({ k, label, fmt, low }) => {
+          const tr = document.createElement('tr'), vals = rows.map((r) => r[k] ?? 0);
+          // couronne : le premier (le moins de chutes, pour les chutes), s'il y a quelque chose à départager
+          const top = low ? Math.min(...vals) : Math.max(1, ...vals), shared = vals.filter((v) => v === top).length === rows.length;
+          const th = document.createElement('th');
+          th.scope = 'row';
+          th.textContent = label;
+          tr.append(th);
+          for (const v of vals) {
+            const td = document.createElement('td'), lead = v === top && !(low && shared);
+            td.className = lead ? 'top' : '';
+            td.textContent = `${lead ? '👑 ' : ''}${(fmt ?? num)(v)}`;
+            tr.append(td);
+          }
+          return tr;
+        })];
       }),
     );
   }
@@ -1351,7 +1482,8 @@ export class Hud {
     // Selle : sans elle, on ne monte pas ; ensuite, +4 % de vitesse en selle par niveau.
     const sd = me.saddle ?? 0, sdMax = sd >= SADDLE_MAX;
     $('saddle-name').textContent = sd ? `${SADDLE_NAMES[sd]} · niv. ${sd}` : 'Aucune';
-    const ss = (l: number) => (l ? `+${Math.round((saddleSpeed(l) - 1) * 100)} %` : 'on ne monte pas');
+    const ss = (l: number) => `+${Math.round((saddleSpeed(l) - 1) * 100)} %`;
+    $('saddle-line').hidden = !sd; // sans selle : rien à dire de la vitesse
     $('saddle-speed').innerHTML = next(ss(sd), ss(sd + 1), sdMax);
     $('saddle-shape').setAttribute('fill', sd > 1 ? armorColor(sd) : '#8B5E3C');
     $('saddle-icon').style.opacity = sd ? '1' : '0.45';

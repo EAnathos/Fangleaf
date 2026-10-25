@@ -1,9 +1,9 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
-import { HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
+import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
 import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST } from './anim.ts';
 import { type Ambience, sound } from './audio.ts';
@@ -17,7 +17,7 @@ import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './sett
 import type { Net } from './net.ts';
 import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
-import { desertMix, World } from './world.ts';
+import { desertMix, jungleMix, lakesMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
 import { HALL_ID, WorldMap } from '../../shared/worldmap.ts';
 import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts';
@@ -60,6 +60,7 @@ export class Game {
   private skyFx = new SkyFx(); // nuit et pluie
   private dt = 0;
   private palisadeUp = false;
+  private bridgeUp: boolean | null = null;
   me = { x: 0, y: 0, fx: 1, fy: 0, moving: false };
   private flashes = new Map<number, number>();
   private charges = new Map<number, number>(); // tireur → début de la charge de son tir
@@ -289,7 +290,7 @@ export class Game {
       }
       return this.net.send({ t: 'mount', id: 0 });
     }
-    if (!st.saddle && st.army.some((a) => a.alpha && MOUNTS[SPECIES[a.species].key])) return this.hud.toast('Il te faut une selle pour monter ton Alpha : la forge en vend.');
+    if (!st.saddle && st.army.some((a) => a.alpha && MOUNTS[SPECIES[a.species].key])) return this.hud.toast('Il te faut une selle pour monter ton Alpha.');
     const candidates = (this.net.latest?.units ?? []).filter(
       (u) => u[6] === this.myId && u[2] & UNIT_FLAG_ALPHA && MOUNTS[SPECIES[u[1]].key] && Math.hypot(u[3] - this.me.x, u[4] - this.me.y) < MOUNT_REACH,
     );
@@ -353,17 +354,7 @@ export class Game {
     const fogArc = closed < 0 ? Infinity : map.gates[closed];
     const fading = [...this.mistLifted].filter(([k, t]) => this.time - t < MIST_FADE_S && map.gates[k] < fogArc);
     if (fogArc === Infinity && !fading.length) return;
-    if (!this.puff) {
-      // nuage rond et doux, pré-rendu une fois
-      const c = (this.puff = document.createElement('canvas'));
-      c.width = c.height = 128;
-      const g = c.getContext('2d')!, grad = g.createRadialGradient(64, 64, 6, 64, 64, 64);
-      grad.addColorStop(0, 'rgba(226,232,236,0.95)');
-      grad.addColorStop(0.55, 'rgba(206,214,220,0.7)');
-      grad.addColorStop(1, 'rgba(190,200,208,0)');
-      g.fillStyle = grad;
-      g.fillRect(0, 0, 128, 128);
-    }
+    this.puffImage();
     // nuages espacés (STEP) mais plus grands : à peu près la même couverture, 3 à 4 fois moins d'images collées
     const STEP = settings.display.quality === 'low' ? 150 : 120, feather = 140;
     // densité : 0 avant la lisière, 1 un peu après ; idem (en s'estompant) pour une brume qui se lève
@@ -387,7 +378,7 @@ export class Game {
         if (d <= 0) continue;
         const size = (150 + h * 90) * (STEP / 64) * 0.78, drift = Math.sin(this.time * 0.25 + h * 9) * 14;
         ctx.globalAlpha = Math.min(1, d);
-        ctx.drawImage(this.puff, x + drift - size / 2, y - size / 2 + Math.cos(this.time * 0.2 + h * 7) * 8, size, size);
+        ctx.drawImage(this.puff!, x + drift - size / 2, y - size / 2 + Math.cos(this.time * 0.2 + h * 7) * 8, size, size);
       }
     }
     ctx.globalAlpha = 1;
@@ -400,6 +391,126 @@ export class Game {
     }
   }
   private puff?: HTMLCanvasElement;
+  /** Nuage rond et doux, pré-rendu une fois (brume des portes, brume des lacs). */
+  private puffImage() {
+    if (this.puff) return this.puff;
+    const c = (this.puff = document.createElement('canvas'));
+    c.width = c.height = 128;
+    const g = c.getContext('2d')!, grad = g.createRadialGradient(64, 64, 6, 64, 64, 64);
+    grad.addColorStop(0, 'rgba(226,232,236,0.95)');
+    grad.addColorStop(0.55, 'rgba(206,214,220,0.7)');
+    grad.addColorStop(1, 'rgba(190,200,208,0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 128, 128);
+    return c;
+  }
+
+  /**
+   * Brume légère des Lacs brumeux : de grands bancs pâles et lents qui traînent au ras du sol, plus épais au-dessus de
+   * l'eau, et qui s'effacent en approchant des zones voisines (fondu sur la frontière).
+   */
+  private drawLakeMist(camX: number, camY: number, hw: number, hh: number) {
+    const { ctx, map } = this, puff = this.puffImage(), STEP = 170;
+    if (lakesMix(map, camX, camY) <= 0 && lakesMix(map, camX + hw, camY) <= 0 && lakesMix(map, camX - hw, camY) <= 0 && lakesMix(map, camX, camY + hh) <= 0 && lakesMix(map, camX, camY - hh) <= 0) return;
+    for (let gx = Math.floor((camX - hw - 200) / STEP); gx <= (camX + hw + 200) / STEP; gx++) {
+      for (let gy = Math.floor((camY - hh - 200) / STEP); gy <= (camY + hh + 200) / STEP; gy++) {
+        const h = hash2(gx, gy, 57), drift = this.time * (6 + h * 8);
+        const x = gx * STEP + (h - 0.5) * STEP + Math.sin(this.time * 0.07 + h * 9) * 60 + drift % STEP, y = gy * STEP + (hash2(gy, gx, 59) - 0.5) * STEP;
+        const d = lakesMix(map, x, y);
+        if (d <= 0.02) continue;
+        const wet = map.isWater(x, y) ? 1.5 : 1, breathe = 0.75 + 0.25 * Math.sin(this.time * 0.3 + h * 11);
+        const size = 300 + h * 180;
+        ctx.globalAlpha = Math.min(0.32, 0.17 * d * wet * breathe);
+        ctx.drawImage(puff, x - size / 2, y - size * 0.32, size, size * 0.64);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  private canopy?: { c: HTMLCanvasElement; w: number; h: number };
+  /**
+   * Sous la canopée de la jungle (à l'écran, par-dessus tout) : un bord de feuillage sombre qui pend du haut de l'écran
+   * et se balance, l'ombre verte des feuilles sur les bords, et quelques rais de lumière en biais. Son intensité suit la
+   * part de jungle sous la caméra : il apparaît en fondu en passant la frontière.
+   */
+  private drawCanopy(camX: number, camY: number) {
+    const j = this.map.caveAt(camX, camY) ? 0 : jungleMix(this.map, camX, camY);
+    if (j <= 0.01) return;
+    const { ctx, canvas } = this, W = canvas.width, H = canvas.height, dpr = this.dpr;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // ombre verte sur les bords
+    const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.7);
+    vg.addColorStop(0, 'rgba(6,24,10,0)');
+    vg.addColorStop(1, `rgba(6,24,10,${0.55 * j})`);
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+    // rais de lumière en biais, qui respirent
+    ctx.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < 3; k++) {
+      const x0 = W * (0.15 + k * 0.32) + Math.sin(this.time * 0.15 + k) * 30 * dpr, a = 0.05 * j * (0.6 + 0.4 * Math.sin(this.time * 0.4 + k * 2));
+      const g = ctx.createLinearGradient(x0, 0, x0 + H * 0.45, H);
+      g.addColorStop(0, `rgba(255,240,170,${a})`);
+      g.addColorStop(1, 'rgba(255,240,170,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(x0, 0);
+      ctx.lineTo(x0 + 60 * dpr, 0);
+      ctx.lineTo(x0 + 60 * dpr + H * 0.45, H);
+      ctx.lineTo(x0 + H * 0.45, H);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    // feuillage qui pend du haut de l'écran
+    if (!this.canopy || this.canopy.w !== W || this.canopy.h !== H) this.canopy = { c: this.paintCanopy(W, H, dpr), w: W, h: H };
+    ctx.globalAlpha = j;
+    ctx.drawImage(this.canopy.c, Math.sin(this.time * 0.5) * 6 * dpr - 10 * dpr, Math.sin(this.time * 0.37) * 3 * dpr - 6 * dpr);
+    ctx.restore();
+  }
+
+  /** Bord de feuillage de la canopée (pré-rendu à la taille de l'écran) : grandes feuilles et lianes, en silhouettes. */
+  private paintCanopy(W: number, H: number, dpr: number) {
+    const c = document.createElement('canvas');
+    c.width = W + 20 * dpr;
+    c.height = Math.round(H * 0.35);
+    const g = c.getContext('2d')!;
+    const leaf = (x: number, y: number, len: number, a: number, col: string) => {
+      g.save();
+      g.translate(x, y);
+      g.rotate(a);
+      g.fillStyle = col;
+      g.beginPath();
+      g.ellipse(len * 0.5, 0, len * 0.55, len * 0.24, 0, 0, Math.PI * 2);
+      g.fill();
+      g.strokeStyle = 'rgba(40,80,40,0.5)';
+      g.lineWidth = 1.2 * dpr;
+      g.beginPath();
+      g.moveTo(0, 0);
+      g.lineTo(len, 0);
+      g.stroke();
+      g.restore();
+    };
+    const n = Math.ceil(W / (46 * dpr));
+    for (let k = 0; k <= n; k++) {
+      const x = (k / n) * c.width, deep = 26 + hash2(k, 3, 61) * 50 + (k % 5 === 0 ? 40 : 0);
+      for (let f = 0; f < 4; f++) {
+        const a = Math.PI / 2 + (hash2(k, f, 62) - 0.5) * 1.6, len = (30 + hash2(f, k, 63) * 30) * dpr;
+        leaf(x + (hash2(k, f, 64) - 0.5) * 30 * dpr, (hash2(k, f, 65) * deep - 10) * dpr * 0.6, len, a, f % 2 ? 'rgba(10,32,16,0.92)' : 'rgba(16,44,22,0.9)');
+      }
+      if (k % 4 === 1) {
+        // une liane qui descend plus bas
+        const len = (60 + hash2(k, 9, 66) * 90) * dpr;
+        g.strokeStyle = 'rgba(14,38,18,0.9)';
+        g.lineWidth = 3 * dpr;
+        g.beginPath();
+        g.moveTo(x, 0);
+        g.bezierCurveTo(x + 10 * dpr, len * 0.4, x - 8 * dpr, len * 0.7, x + 4 * dpr, len);
+        g.stroke();
+        for (let f = 1; f < 5; f++) leaf(x + (f % 2 ? 4 : -4) * dpr, (len * f) / 5, 12 * dpr, f % 2 ? 0.4 : Math.PI - 0.4, 'rgba(14,40,20,0.9)');
+      }
+    }
+    return c;
+  }
   private bubbles = new Map<number, { text: string; until: number }>(); // dompteur → message affiché au-dessus de lui
 
   /** Bulles de chat au-dessus des dompteurs (dessinées par-dessus tout le reste). */
@@ -605,10 +716,12 @@ export class Game {
       case 'pdie':
         if (e.id === me) sound.play('death');
         break;
+      case 'legend':
+        if (e.by !== me) sound.play('fanfare', 0.5); // le sien : l'animation du double éveil a sa fanfare
+        break;
       case 'upgrade':
       case 'hall':
       case 'built':
-      case 'legend':
       case 'alphaUp':
         if (('id' in e && e.id === me) || ('by' in e && e.by === me)) sound.play('fanfare');
         else if (e.e === 'hall' || e.e === 'built') sound.play('fanfare', 0.5);
@@ -895,7 +1008,7 @@ export class Game {
         break;
       }
       case 'legend':
-        if (e.by === this.myId) this.hud.toast(`Double éveil : ton Alpha ${SPECIES[e.s].name} devient légendaire ! (×${String(LEGEND_MULT.hp).replace('.', ',')})`, 'alpha');
+        if (e.by === this.myId) this.hud.evolve(e.s); // l'animation dit tout (et ses nouvelles attaques)
         else this.hud.toast(`${name(e.by)} a réussi le double éveil de son Alpha ${SPECIES[e.s].name}`, 'alpha');
         {
           const u = this.posOf(e.id, players);
@@ -943,7 +1056,7 @@ export class Game {
         const t = this.map.trunkOf(d);
         this.chopAt.set(e.id, this.time);
         this.fx.burst(t.x, t.y - 10, '#B88A5A', e.done ? 24 : 5, e.done ? 160 : 70);
-        if (e.done) this.fx.burst(t.x, t.y - 50, this.map.styleZone(d.x, d.y) === 6 ? '#7FA65A' : '#4F8A45', 26, 140); // le feuillage s'éparpille
+        if (e.done) this.fx.burst(t.x, t.y - 50, this.map.styleZone(d.x, d.y) === DESERT_ZONE ? '#7FA65A' : '#4F8A45', 26, 140); // le feuillage s'éparpille
         this.tools.set(e.by, { kind: 'axe', at: this.time, tx: t.x, ty: t.y });
         break;
       }
@@ -977,6 +1090,12 @@ export class Game {
         if (p) this.fx.text(p.x, p.y - 34, `+${e.n}`, '#7FCB5B', e.id === this.myId ? 15 : 12, 0.9);
         break;
       }
+      case 'pet': {
+        // deux Alphas au repos se mettent à jouer : un « ! » au-dessus de celui qui lance la partie
+        const p = (this.net.latest?.pets ?? []).find((q) => q[0] === e.id);
+        if (p) this.fx.text(p[3], p[4] - 40, e.act === 'chase' ? '!' : '♪', e.act === 'chase' ? '#F0B64A' : '#F2B8D0', 16, 1);
+        break;
+      }
       case 'shout': {
         // le suricate se dresse et crie, l'escargot dresse sa carapace : une onde part de lui jusqu'aux alliés touchés
         const u = this.posOf(e.id, players);
@@ -994,7 +1113,7 @@ export class Game {
         break;
       }
       case 'pdie':
-        if (e.id === this.myId && e.gold) this.hud.toast(`Tu es tombé : ${e.gold} or perdus.`);
+        if (e.id === this.myId) this.hud.deathLoss(e.gold, e.wood ?? 0, e.stone ?? 0);
         if (e.id !== this.myId) this.hud.toast(`${name(e.id)} est tombé ! Maintiens R près de lui pour le relever.`);
         break;
       case 'previve': {
@@ -1117,7 +1236,7 @@ export class Game {
       this.me.fy = dy / l;
     }
     // Tempête de sable : le vent pousse le dompteur vers l'est (même règle de passage qu'un pas ordinaire).
-    const gust = dead || this.map.caveAt(this.me.x, this.me.y) || !this.gateOpen(5) ? 0 : skyAt(this.map.seed, this.net.serverNow()).storm * desertMix(this.map, this.me.x, this.me.y);
+    const gust = dead || this.map.caveAt(this.me.x, this.me.y) || !this.gateOpen(DESERT_ZONE - 1) ? 0 : skyAt(this.map.seed, this.net.serverNow()).storm * desertMix(this.map, this.me.x, this.me.y);
     if (gust > 0.05) {
       const swim = !!st?.mount && swimMount(st.mount.species), fly = !!st?.mount && flyMount(st.mount.species);
       const nx = this.me.x + STORM_WIND.x * STORM_PUSH * gust * dt, ny = this.me.y + STORM_WIND.y * STORM_PUSH * gust * dt;
@@ -1170,6 +1289,8 @@ export class Game {
     this.hud.stock = this.net.latest?.stock ?? [0, 0];
     const palisade = this.hud.buildings.includes('palisade');
     if (palisade !== this.palisadeUp) this.map.setPalisade((this.palisadeUp = palisade)); // solide une fois construite (comme côté serveur)
+    const bridge = this.hud.buildings.includes('bridge');
+    if (bridge !== this.bridgeUp) this.map.setBridge((this.bridgeUp = bridge)); // praticable une fois réparé
     this.hud.bare = this.net.latest?.bare ?? [];
     this.hud.beaten = this.net.latest?.beaten ?? [];
     this.hud.heart = this.net.latest?.heart ?? 0;
@@ -1199,6 +1320,7 @@ export class Game {
     this.pruneTimer = 10;
     const alive = new Set((this.net.latest?.units ?? []).map((u) => u[0]));
     for (const [id] of this.net.latest?.dozers ?? []) alive.add(id);
+    for (const [id] of this.net.latest?.pets ?? []) alive.add(id);
     for (const p of this.net.latest?.players ?? []) {
       alive.add(p.id);
       if (p.mount) alive.add(p.mount.id);
@@ -1217,6 +1339,46 @@ export class Game {
    * change : flash, sens, charge…) et recollée à sa position à chaque image : le tracé vectoriel coûte 3 fois moins.
    * Les monstres sont décalés dans le temps pour ne pas tous se redessiner pendant la même image.
    */
+  /**
+   * Alphas au repos sur l'îlot du village : ils flânent, dorment (ronflements), se roulent par terre (sur le dos, les pattes
+   * en l'air), reniflent le sol, se courent après (poussière, « ! ») et se chamaillent (petits bonds face à face, notes).
+   */
+  private drawPets(ctx: CanvasRenderingContext2D, list: { y: number; draw: () => void }[], inView: (x: number, y: number, m: number) => boolean) {
+    const pets = this.net.latest?.pets ?? [], at = new Map(pets.map((p) => [p[0], p]));
+    for (const [id, s, flags, x, y, color, act, partner] of pets) {
+      if (!inView(x, y, 80)) continue;
+      const kind = PET_ACTS[act] ?? 'walk', legend = (flags & UNIT_FLAG_LEGEND) !== 0, r = alphaStats(s, 0, 1, legend).r;
+      const f = this.faces.get(id) ?? { x, y, face: 1, movedAt: -9 };
+      if (Math.abs(x - f.x) > 0.5) f.face = x > f.x ? 1 : -1;
+      if (Math.hypot(x - f.x, y - f.y) > 0.25) f.movedAt = this.time;
+      [f.x, f.y] = [x, y];
+      const mate = partner ? at.get(partner) : undefined;
+      if (mate && kind === 'play') f.face = mate[3] > x ? 1 : -1; // face à face
+      this.faces.set(id, f);
+      const t = this.time, k = id * 0.37;
+      let pose: Pose = REST;
+      if (kind === 'play') pose = { ...REST, air: Math.abs(Math.sin(t * 7 + k)) * r * 0.45, squash: 1 + Math.sin(t * 14 + k) * 0.08 };
+      else if (kind === 'roll') {
+        // il se roule : écrasé, il bascule d'un côté à l'autre
+        const w = Math.sin(t * 9 + k);
+        f.face = w > 0 ? 1 : -1;
+        pose = { ...REST, squash: 0.62 + Math.abs(w) * 0.12, dx: w * r * 0.25 };
+      } else if (kind === 'sniff') pose = { ...REST, dy: Math.abs(Math.sin(t * 10 + k)) * r * 0.06, squash: 0.94 };
+      else if (kind === 'nap') pose = { ...REST, squash: 0.82 };
+      const moving = kind === 'walk' || kind === 'chase' || kind === 'flee' ? this.time - f.movedAt < 0.2 : false;
+      if ((kind === 'chase' || kind === 'flee') && moving && Math.random() < 0.15) this.fx.dust(x - f.face * r * 0.6, y + r * 0.6, r * 0.5, 2);
+      if (kind === 'roll' && Math.random() < 0.1) this.fx.dust(x, y + r * 0.5, r * 0.7, 2);
+      if (kind === 'play' && Math.random() < 0.012) this.fx.text(x, y - r * 2, Math.random() < 0.5 ? '♪' : '♥', '#F2B8D0', 13, 1.2);
+      const look: UnitLook = {
+        x, y, r, species: s, alpha: true, legend, wild: false, ownerColor: color, face: f.face, t: kind === 'nap' ? 0 : t, seed: id * 1.7, flash: false, moving,
+      };
+      list.push({ y, draw: () => {
+        this.drawUnitCached(ctx, id, look, pose);
+        if (kind === 'nap') this.snore(x + r * 0.5, y - r * 1.2, 12, id);
+      } });
+    }
+  }
+
   /** Cri d'un Alpha suricate (ou carapace d'un escargot) : avancement de 0 à 1 pendant la seconde qui suit, 0 sinon. */
   private shoutOf(id: number) {
     const at = this.shouts.get(id);
@@ -1440,7 +1602,7 @@ export class Game {
     // Mer de sable : jamais de pluie, mais des tempêtes de sable
     const desert = this.map.caveAt(camX, camY) ? 0 : desertMix(this.map, camX, camY);
     sky.rain *= 1 - desert;
-    const storm = sky.storm * desert * (this.gateOpen(5) ? 1 : 0); // pas de tempête avant que le village ait ouvert le désert
+    const storm = sky.storm * desert * (this.gateOpen(DESERT_ZONE - 1) ? 1 : 0); // pas de tempête avant que le village ait ouvert le désert
     this.watchStorm(storm);
 
     // Dans une grotte, on ne voit que la grotte (pas la forêt qui borde le monde).
@@ -1457,6 +1619,8 @@ export class Game {
     } else if (here?.zone === VOYAGE_ZONE) drawVoyage(ctx, here, this.time, camX, camY, hw, hh);
     else if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
     if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id]);
+    const br = this.map.bridge;
+    if (!here && inView((br.a.x + br.b.x) / 2, (br.a.y + br.b.y) / 2, Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y) / 2 + 120)) this.world.drawBridge(ctx, this.hud.buildings.includes('bridge'), this.time);
     const cs = this.world.campSize;
     ctx.drawImage(this.world.camp, spawn.x - cs / 2, spawn.y - cs / 2);
     const vs = this.world.villageSize;
@@ -1540,9 +1704,10 @@ export class Game {
       const t = this.map.trunkOf(d);
       list.push({ y: t.y, draw: () => drawStump(ctx, t.x, t.y, t.r) });
     }
-    for (const d of trees) this.world.treeShadow(ctx, d.x, d.y);
+    const tz = new Map(trees.map((d) => [d, this.map.styleZone(d.x, d.y)])); // style de chaque arbre (la jungle a ses géants)
+    for (const d of trees) this.world.treeShadow(ctx, d.x, d.y, tz.get(d));
     for (const d of trees) {
-      const s = this.world.treeSize(d.x, d.y);
+      const s = this.world.treeSize(d.x, d.y, tz.get(d));
       const hitK = Math.max(0, 1 - (this.time - (this.chopAt.get(d.id) ?? -9)) / 0.3), shake = Math.sin(this.time * 70) * 3 * hitK; // il tremble sous la hache
       const under = Math.hypot(this.me.x - d.x, this.me.y - (d.y - s * 0.6)) < s + 14 && this.me.y < d.y + s * 0.5;
       const fade = this.fades.get(d) ?? 1, target = under ? 0.3 : 1;
@@ -1553,7 +1718,7 @@ export class Game {
         y: d.y + s * 0.5,
         draw: () => {
           if (shake) ctx.translate(shake, 0);
-          this.world.tree(ctx, d.x, d.y, this.map.styleZone(d.x, d.y), next, false);
+          this.world.tree(ctx, d.x, d.y, tz.get(d) ?? 1, next, false);
           if (shake) ctx.translate(-shake, 0);
         },
       });
@@ -1669,7 +1834,7 @@ export class Game {
         return {
           x, y, r, species: s, alpha, wild: owner === 0, ownerColor: owner ? colorOf.get(owner) : undefined,
           face: f.face, t: flags & UNIT_FLAG_ASLEEP ? 0 : this.time, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, legend,
-          charge, inWater: !!SPECIES[s].swim && this.map.isWater(x, y), moving: this.time - f.movedAt < 0.2, shout: this.shoutOf(id),
+          charge, inWater: !!(SPECIES[s].swim || SPECIES[s].amphibious) && this.map.isWater(x, y), moving: this.time - f.movedAt < 0.2, shout: this.shoutOf(id),
         };
       };
       // clignement : sa silhouette se forme déjà au point d'arrivée
@@ -1730,6 +1895,7 @@ export class Game {
         if (asleep) this.snore(x + r * 0.5, y - r * 1.2, 12, id);
       } });
     }
+    this.drawPets(ctx, list, inView);
     for (const p of players) {
       const isMe = p.id === this.myId;
       const x = isMe ? this.me.x : p.x, y = isMe ? this.me.y : p.y;
@@ -1806,9 +1972,10 @@ export class Game {
     if (!here) this.drawMist(camX, camY, hw, hh);
     this.drawBubbles(players);
     for (const [, kind, x, y, a, b, c, owner] of shots) {
-      if (kind === 1) drawShot(ctx, kind, x, y, a, b, Math.min(100, c + (late * 100) / ARC_FLIGHT_S), this.time, colorOf.get(owner));
+      if (kind === 1 || kind === 3) drawShot(ctx, kind, x, y, a, b, Math.min(100, c + (late * 100) / ARC_FLIGHT_S), this.time, colorOf.get(owner));
       else drawShot(ctx, kind, x + a * late, y + b * late, a, b, 0, this.time, colorOf.get(owner));
     }
+    if (!here) this.drawLakeMist(camX, camY, hw, hh);
     this.fog.draw(ctx, -WORLD_HALF, -WORLD_HALF, WORLD_HALF * 2, WORLD_HALF * 2, 0.88);
     this.fx.draw(ctx);
     // Nuit et pluie, communes à tout le village (pas sous terre : les grottes ont leur propre pénombre).
@@ -1817,6 +1984,7 @@ export class Game {
       this.skyFx.shade(ctx, scale, camX, camY, sky);
       this.skyFx.rain(ctx, scale, camX, camY, sky, this.dt, this.dpr);
       this.skyFx.sandstorm(ctx, scale, camX, camY, storm, this.dt, this.dpr, sky.light);
+      this.drawCanopy(camX, camY);
     }
     sound.rain(here || !settings.display.weather ? 0 : sky.rain);
     sound.storm(here ? 0 : storm);

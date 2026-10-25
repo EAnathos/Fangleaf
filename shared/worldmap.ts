@@ -7,27 +7,29 @@
 // - On arrive sur la plage d'un bout de l'île (une épave, des planches) ; un chemin de cailloux mène au pont de bois
 //   qui traverse un bras de mer jusqu'à l'îlot du village (palissade irrégulière, pas ronde).
 // - Zones de danger : ZONES bandes successives à travers l'île, de plus en plus loin de la plage, frontières bruitées ;
-//   la zone 5 (Lacs brumeux) est criblée de lacs, parfois ouverts sur la mer, où nagent les Serpents des brumes ; la 6 (Mer de sable)
+//   la zone 5 (Lacs brumeux) est criblée de lacs, parfois ouverts sur la mer, où nagent les Serpents des brumes ; la 6
+//   (Jungle) a ses mares et ses marigots, où guettent les crocodiles, sous les grands arbres ; la 7 (Mer de sable)
 //   n'a que de rares oasis et une lisière verte le long de la côte (jusqu'au bout de l'île : la transition avec la mer).
 // - Au bout de la zone 4 : un emplacement de camp, que le village peut établir contre de l'or
 //   (feu qui soigne, point de réapparition, Pierre de passage pour voyager entre camps).
 // - Lacs dans l'île, en laissant toujours libre une voie centrale.
 // - Une grotte par espèce (deux ou trois par zone), gardée par la version géante de l'espèce (entrée sur la carte, intérieur hors du monde).
-// - Un volcan dans la Mer de sable ; sa bouche mène à ses entrailles (zone 7, une grande salle hors du monde) et aux
+// - Un volcan dans la Mer de sable ; sa bouche mène à ses entrailles (zone 8, une grande salle hors du monde) et aux
 //   antres de ses trois géants.
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = mer profonde).
 
-import { CAMP_R, CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, SCHOOL_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
+import { CAMP_R, CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, SCHOOL_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, LAKES_ZONE, JUNGLE_ZONE, DESERT_ZONE, type BuildingId, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
 const N = (WORLD_HALF * 2) / MAP_CELL;
 const LAKE_THRESHOLD = 0.64;
 const LAKE_THRESHOLD_LAKES = 0.54; // zone 5 (Lacs brumeux) : bien plus d'eau
-const LAKE_THRESHOLD_DESERT = 0.8; // zone 6 (Mer de sable) : de rares oasis
+const LAKE_THRESHOLD_JUNGLE = 0.59; // Jungle : des mares et des marigots, où guettent les crocodiles
+const LAKE_THRESHOLD_DESERT = 0.8; // Mer de sable : de rares oasis
 const SPINE_STEP = 100;
-const ISLAND_LEN: [number, number] = [17600, 25300]; // longueur de la colonne : l'île est plus ou moins grande
+const ISLAND_LEN: [number, number] = [19800, 28000]; // longueur de la colonne : l'île est plus ou moins grande
 const HALF_W: [number, number] = [1600, 3000]; // demi-largeur de l'île (avant le bruit de la côte)
 const DESERT_WIDEN = 0.3; // la Mer de sable est plus large (son volcan y tient, à l'écart de la voie centrale)
 const COAST_NOISE = 900; // la côte s'écarte de ± la moitié de ceci
@@ -116,7 +118,7 @@ export interface Decor {
  * pour que le désert ne touche jamais l'eau directement. 0 ailleurs, 1 au bord de l'eau, au bord irrégulier.
  */
 export function coastGreen(map: WorldMap, x: number, y: number) {
-  const m = map.zoneMix(x, y), d = (m.z0 === 6 ? 1 - m.t : 0) + (m.z1 === 6 ? m.t : 0);
+  const m = map.zoneMix(x, y), d = (m.z0 === DESERT_ZONE ? 1 - m.t : 0) + (m.z1 === DESERT_ZONE ? m.t : 0);
   if (!d) return 0;
   // distance à l'eau la plus proche : la mer, ou un lac (oasis ; les lacs des Lacs brumeux voisins s'ouvrent sur l'océan)
   const near = Math.min(map.wetDistAt(x, y), Math.max(0, -map.shoreAt(x, y)));
@@ -227,6 +229,7 @@ export class WorldMap {
   private mouth = new Float32Array(N * N).fill(1e9); // embouchures (voir buildMouths)
   private wetDist = new Float32Array(N * N); // distance à l'eau la plus proche, mer ou lac (voir buildWetDist)
   private palisadeCells: number[] = []; // cases de la palissade (solides seulement une fois construite)
+  private bridgeCells: number[] = []; // cases du pont (praticables seulement une fois réparé)
 
   constructor(readonly seed: number) {
     const rand = rng(seed ^ 0x5f3759df);
@@ -302,7 +305,7 @@ export class WorldMap {
         const p = { x: -WORLD_HALF + (i + 0.5) * MAP_CELL, y: -WORLD_HALF + (j + 0.5) * MAP_CELL };
         // part de Lacs brumeux et de désert, en fondu à travers les frontières bruitées des zones (pas de bord au cordeau)
         const m = this.zoneMix(p.x, p.y), w = (z: number) => (m.z0 === z ? 1 - m.t : 0) + (m.z1 === z ? m.t : 0);
-        const w5 = w(5), w6 = w(6);
+        const w5 = w(LAKES_ZONE), w6 = w(DESERT_ZONE), wj = w(JUNGLE_ZONE);
         if (
           (w5 < 0.5 && this.shore[k] > -BEACH - 120) || // plage au sec (sauf aux Lacs brumeux : les lacs y rejoignent la mer)
           // voie centrale au sec, au bord très irrégulier (jamais moins d'une centaine de px de chaque côté de la colonne)
@@ -319,7 +322,7 @@ export class WorldMap {
         }
         // près de la côte des Lacs brumeux, l'eau gagne : bras de mer et lacs ouverts sur l'océan
         const lakes = LAKE_THRESHOLD_LAKES + 0.04 - 0.12 * clamp(1 + this.shore[k] / 450, 0, 1);
-        const threshold = LAKE_THRESHOLD + (lakes - LAKE_THRESHOLD) * w5 + (LAKE_THRESHOLD_DESERT - LAKE_THRESHOLD) * w6;
+        const threshold = LAKE_THRESHOLD + (lakes - LAKE_THRESHOLD) * w5 + (LAKE_THRESHOLD_JUNGLE - LAKE_THRESHOLD) * wj + (LAKE_THRESHOLD_DESERT - LAKE_THRESHOLD) * w6;
         if (this.lakeNoise(p.x, p.y) > threshold) this.water[k] = 1;
       }
     }
@@ -814,14 +817,14 @@ export class WorldMap {
     Object.assign(this.bridge, { a: { x: a.x + ux * 30, y: a.y + uy * 30 }, b: { x: b.x - ux * 30, y: b.y - uy * 30 } });
   }
 
-  /** Les planches du pont se marchent (la mer dessous) : une fois l'eau nettoyée, ses cases deviennent praticables. */
+  /** Cases du pont, une fois l'eau nettoyée : on n'y marche qu'une fois le pont réparé (setBridge), la mer dessous. */
   private stampBridge() {
     const { a: A, b: B } = this.bridge, half = BRIDGE_W / 2;
     for (let j = Math.floor((Math.min(A.y, B.y) - half + WORLD_HALF) / MAP_CELL); j <= Math.floor((Math.max(A.y, B.y) + half + WORLD_HALF) / MAP_CELL); j++) {
       for (let i = Math.floor((Math.min(A.x, B.x) - half + WORLD_HALF) / MAP_CELL); i <= Math.floor((Math.max(A.x, B.x) + half + WORLD_HALF) / MAP_CELL); i++) {
         if (i < 0 || j < 0 || i >= N || j >= N) continue;
         const k = j * N + i, px = -WORLD_HALF + (i + 0.5) * MAP_CELL, py = -WORLD_HALF + (j + 0.5) * MAP_CELL;
-        if (this.bridgeDist(px, py) < half - 4 && (this.water[k] === 1 || this.water[k] === 3)) this.water[k] = 0;
+        if (this.bridgeDist(px, py) < half - 4 && (this.water[k] === 1 || this.water[k] === 3)) this.bridgeCells.push(k);
       }
     }
   }
@@ -920,8 +923,8 @@ export class WorldMap {
         const z = this.zoneAt(x, y);
         const f = fbm(x / 700, y / 700, this.seed + 55, 3);
         const edge = this.shoreAt(x, y) > -600; // près de la côte : plus dense
-        const forest = Math.max(f > 0.56 ? 4.5 : f > 0.48 ? 1.2 : 0.15, z === 2 ? 0.7 : 0) * (edge ? 3 : 1); // Bois profonds : jamais de vraie clairière
-        const treeP = [0, 0.1, 0.3, 0.09, 0.05, 0.07, 0.025][z] * forest; // Bois profonds : forêt dense de sapins ; désert : de rares cactus
+        const forest = Math.max(f > 0.56 ? 4.5 : f > 0.48 ? 1.2 : 0.15, z === 2 ? 0.7 : z === JUNGLE_ZONE ? 1.1 : 0) * (edge ? 3 : 1); // Bois profonds, jungle : jamais de vraie clairière
+        const treeP = [0, 0.1, 0.3, 0.09, 0.05, 0.07, 0.12, 0.025][z] * forest; // Bois profonds : sapins ; jungle : grands arbres et bambous ; désert : de rares cactus
         if (h >= treeP) continue; // les rochers ronds d'autrefois ont disparu : la pierre vient des rochers à casser
         if (this.pathDist(x, y) < 30) continue;
         const d: Decor = { id: this.decor.length, kind: 0, x, y, zone: z };
@@ -988,13 +991,13 @@ export class WorldMap {
   /** Tanières de suricates dans la Mer de sable (hasard à part), loin des chemins, de l'eau et les unes des autres. */
   private buildDens() {
     const rand = rng(this.seed ^ 0xde75);
-    const lo = this.zoneFrom(6) + 400, hi = this.zoneTo(6) - 400;
+    const lo = this.zoneFrom(DESERT_ZONE) + 400, hi = this.zoneTo(DESERT_ZONE) - 400;
     for (let tries = 0; tries < 3000 && this.dens.length < DENS && hi > lo; tries++) {
       const s = lo + rand() * (hi - lo);
       const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
       const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 140);
       const x = sx + n.x * off, y = sy + n.y * off;
-      if (this.zoneAt(x, y) !== 6 || this.blocked(x, y) || this.blocked(x + 40, y) || this.blocked(x - 40, y) || this.blocked(x, y + 30)) continue;
+      if (this.zoneAt(x, y) !== DESERT_ZONE || this.blocked(x, y) || this.blocked(x + 40, y) || this.blocked(x - 40, y) || this.blocked(x, y + 30)) continue;
       if (this.pathDist(x, y) < 90 || this.nearWreck(x, y, 300) || this.dens.some((d) => dist2(x, y, d.x, d.y) < 700 ** 2)) continue;
       if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 400 ** 2) || this.ores.some((o) => dist2(x, y, o.x, o.y) < 120 ** 2)) continue;
       if (this.nearVolcano(x, y, 400)) continue;
@@ -1046,6 +1049,11 @@ export class WorldMap {
     this.planChest = { x: site.x, y: site.y + 150 }; // (jamais vu) : sous le feu
   }
 
+  /** Pont réparé (on marche sur ses planches) ou cassé (de l'eau, on ne passe pas). */
+  setBridge(up: boolean) {
+    for (const c of this.bridgeCells) this.water[c] = up ? 0 : 1;
+  }
+
   /** Palissade construite (solide) ou non (on passe). Seules ses cases encore libres changent. */
   setPalisade(up: boolean) {
     for (const c of this.palisadeCells) if (this.water[c] === 0 || this.water[c] === 2) this.water[c] = up ? 2 : 0;
@@ -1054,6 +1062,7 @@ export class WorldMap {
   /** Où se construit un bâtiment du village (un emplacement à défricher est celui de son bâtiment ; la palissade : au feu). */
   buildingPos(b: BuildingId): Pt {
     if (b === 'stone') return this.stones[0];
+    if (b === 'bridge') return this.bridge.a;
     if (b === 'palisade') return this.village;
     if (b === 'forge2') return this.forge; // la Grande forge : la forge améliorée, sur place
     if (b === 'school') return this.school;
@@ -1146,7 +1155,7 @@ export class WorldMap {
 
   /** Arbre de la Mer de sable hors de sa lisière verte (là, des palmiers) : un cactus, qui pique. Même règle que le dessin. */
   isCactus(d: Decor) {
-    return d.kind === 0 && this.styleZone(d.x, d.y) === 6 && coastGreen(this, d.x, d.y) <= 0.45;
+    return d.kind === 0 && this.styleZone(d.x, d.y) === DESERT_ZONE && coastGreen(this, d.x, d.y) <= 0.45;
   }
 
   /** Tronc d'un arbre (pour l'abattre) : centre et rayon. */

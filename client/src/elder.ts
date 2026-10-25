@@ -75,6 +75,18 @@ export const ELDER_CHAPTERS: string[][] = [
     'Et chaque monstre que tu apprivoises… c\'est un peu un vieil ami qui rentre enfin à la maison.',
   ],
   [
+    'Il y avait d\'autres gens sur l\'île, avant nous. Tout au fond de la jungle, un petit peuple qui portait des masques de bois peint.',
+    'Ce sont eux qui ont bâti les temples, là-bas, sous les grands arbres. Ils parlaient aux géants mieux que personne.',
+  ],
+  [
+    'Quand la Brume est venue, ils se sont enfermés dans leurs temples, avec leurs gardiens.',
+    'Les petits masqués que tu croises entre les bambous… ce sont peut-être leurs enfants. Ou leurs esprits. Je n\'ai jamais su.',
+  ],
+  [
+    'Le vieux pont de l\'îlot ! C\'est mon père qui l\'avait bâti, planche par planche, avec le bois des Bois profonds.',
+    'Le jour où tu l\'as réparé, j\'ai senti le village respirer de nouveau.',
+  ],
+  [
     'Je me souviens de tout, maintenant. De tout…',
     'Et je sais une chose : je sais construire un bateau. C\'est moi qui avais tracé les plans du grand navire !',
     'L\'épave, au bout de l\'île… on peut la relever. Il me faudra de l\'or, du bois, de la pierre… et un peu de temps. Tu m\'aides ?',
@@ -84,7 +96,8 @@ export const ELDER_CHAPTERS: string[][] = [
 /** Titre de chaque souvenir (la liste des anciens parchemins). */
 export const CHAPTER_TITLES = [
   'Un nom', 'Le village', 'Nos compagnons', 'Les gardiens', 'La Brume', 'Les lisières', 'Le grand bateau', 'Le naufrage',
-  'Le départ', 'Les œufs', 'Le gardien', 'Ton œuf', 'L\'épée', 'La Brume recule', 'Le bateau à reconstruire',
+  'Le départ', 'Les œufs', 'Le gardien', 'Ton œuf', 'L\'épée', 'La Brume recule', 'Le peuple masqué', 'Les temples', 'Le vieux pont',
+  'Le bateau à reconstruire',
 ];
 
 /** Ce qu'il dit quand on lui remontre un parchemin déjà lu. */

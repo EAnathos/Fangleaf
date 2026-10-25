@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, alphaPerk, alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT } from '../../shared/config.ts';
+import { BOSS_MOVES, LEGEND_STAGGER_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, alphaPerk, alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT } from '../../shared/config.ts';
 
 describe('Alphas de la Tanière', () => {
   rule('Tanière : éveiller un Alpha avec des essences, le renforcer (de plus en plus cher), sauvegarde du profil.', () => {
@@ -262,5 +262,53 @@ describe('Alphas de la Tanière', () => {
     check(Math.abs(before - pet.hp - 20 * (1 - g)) < 1e-6, `un coup de 20 sur la meute : ${(before - pet.hp).toFixed(1)}`);
     const st = r.players.get(p.id), flags = r.buffOf(st, 'guard') && r.buffOf(st, 'rally');
     check(flags, 'les deux effets se cumulent');
+  });
+
+  rule('Légendaires : un seul du même dompteur attaque à la fois, et ils ne visent pas tous le même monstre.', () => {
+    const r = room();
+    const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
+    for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
+    const p = r.addPlayer('chef', noop);
+    const at = r.map.spineAt(r.map.zoneFrom(2) + 600);
+    [p.x, p.y] = [at.x, at.y];
+    const a = r.spawnAlpha(p, key('wolf'), 0, true), b = r.spawnAlpha(p, key('boar'), 0, true);
+    const foes = [0, 1, 2].map((k) => r.createUnit(key('slime'), false, at.x + 120 + k * 50, at.y));
+    r.grid.clear();
+    for (const e of [p, ...r.units.values()]) r.grid.insert(e);
+    // leurs attaques prêtes (charge du Croc-d'Ombre, charge de Vieille-Défense)
+    for (const u of [a, b]) {
+      const boss = SPECIES.find((sp) => sp.boss && sp.base === SPECIES[u.s].key)!;
+      u.moveCd = (BOSS_MOVES[boss.key] ?? []).filter((m) => 'cd' in m && m.kind !== 'summon').map(() => -1);
+    }
+    const cast = (u: { id: number }) => r.legendMove(u, foes[0]);
+    r.events = [];
+    cast(a);
+    cast(b);
+    const moves = r.events.filter((e: { e: string }) => e.e === 'move').length;
+    check(moves === 1, `au même instant, un seul légendaire lance son attaque (${moves})`);
+    r.time += LEGEND_STAGGER_S + 0.05;
+    cast(b);
+    check(r.events.filter((e: { e: string }) => e.e === 'move').length === 2, 'un instant plus tard, l\'autre lance la sienne');
+    check(r.legendAimed.size === 2, `deux monstres différents visés (${[...r.legendAimed.keys()].join(', ')})`);
+  });
+
+  rule('Alphas au repos : ils se promènent sur l\'îlot du village et jouent entre eux.', () => {
+    const r = room();
+    const p = r.addPlayer('chef', noop);
+    p.resting.push({ s: 1, lvl: 0, legend: false }, { s: 2, lvl: 0, legend: true }, { s: 6, lvl: 0, legend: false });
+    const acts = new Set<string>();
+    let played = false;
+    for (let i = 0; i < 20 * 60; i++) {
+      r.step();
+      for (const pet of r.pets.values()) {
+        acts.add(pet.act);
+        played ||= !!pet.partner;
+        check(r.map.onIsle(pet.x, pet.y) && !r.map.blocked(pet.x, pet.y), `${SPECIES[pet.s].name} au repos : toujours sur l'îlot, à terre (${Math.round(pet.x)}, ${Math.round(pet.y)})`);
+      }
+    }
+    check(r.pets.size === 3 && played && acts.size >= 4, `les trois Alphas rangés sont là, et en une minute ils ont joué ensemble (${[...acts].join(', ')})`);
+    p.resting.pop();
+    for (let i = 0; i < 25; i++) r.step();
+    check(r.pets.size === 2, 'un Alpha sorti de la Tanière : il quitte l\'îlot');
   });
 });

@@ -181,10 +181,17 @@ async function main() {
   host.send({ t: 'cheat' }); // +300 or, +100 bois, +100 pierre
   await sleep(150);
   check(host.me()!.wood >= 100, `ressources de dev reçues (or ${host.me()!.gold}, bois ${host.me()!.wood})`);
+  // le pont de l'îlot du village est cassé : on le répare avec le bois et la pierre du sac
+  const br = map.bridge, bl = Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y), bx = (br.a.x - br.b.x) / bl, by = (br.a.y - br.b.y) / bl;
+  await reach(br.a.x + bx * 70, br.a.y + by * 70, 60);
+  host.send({ t: 'build', b: 'bridge' });
+  await sleep(150);
+  check(!!host.last?.buildings.includes('bridge'), `pont du village réparé (sac : ${host.me()!.wood} bois, ${host.me()!.stone} pierre)`);
+  map.setBridge(true);
   await reach(map.store.x, map.store.y + 50, 60);
   host.send({ t: 'deposit' });
   await sleep(150);
-  check((host.last?.stock[0] ?? 0) >= 100 && host.me()!.wood === 0, `sac vidé à l'entrepôt (réserve : ${host.last?.stock.join(' bois, ')} pierre)`);
+  check((host.last?.stock[0] ?? 0) >= 80 && host.me()!.wood === 0, `sac vidé à l'entrepôt (réserve : ${host.last?.stock.join(' bois, ')} pierre)`);
   await reach(map.forge.x + 20, map.forge.y + 75, 60);
   host.send({ t: 'build', b: 'plot_forge' }); // le camp d'abord : défricher l'emplacement
   await sleep(150);

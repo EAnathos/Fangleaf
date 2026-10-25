@@ -1,4 +1,7 @@
-// Grottes selon le biome (zone 1 à 7) : leur entrée sur la carte et les décors de leur intérieur.
+// Grottes selon le biome (zone 1 à 8) : leur entrée sur la carte et les décors de leur intérieur.
+// Dans la jungle, ce sont des temples à degrés, façon maya.
+
+import { DESERT_ZONE, JUNGLE_ZONE, VOLCANO_ZONE } from '../../shared/config.ts';
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -218,7 +221,9 @@ export function drawEntrance(ctx: Ctx, x: number, y: number, zone: number, t: nu
       ctx.arc(x + 9, y - 10, 3, 0, TAU);
       ctx.fill();
     }
-  } else if (zone === 6) {
+  } else if (zone === JUNGLE_ZONE) {
+    drawTemple(ctx, x, y, t, boss);
+  } else if (zone === DESERT_ZONE) {
     // Mer de sable : falaise de grès à strates, deux colonnes taillées, dune au pied, braseros
     ctx.fillStyle = '#D9B47E';
     ctx.beginPath();
@@ -239,7 +244,7 @@ export function drawEntrance(ctx: Ctx, x: number, y: number, zone: number, t: nu
     mouth(ctx, x, y, 38, 70, boss, t);
     torch(ctx, x - 86, y + 18, t, '#E8693F', '#F7D774');
     torch(ctx, x + 86, y + 18, t, '#E8693F', '#F7D774');
-  } else if (zone === 7) {
+  } else if (zone === VOLCANO_ZONE) {
     // Entrailles du volcan : obsidienne veinée de lave, une coulée qui suinte du seuil, braseros
     poly(ctx, x, y, [[-110, 40], [-104, -24], [-74, -74], [-26, -94], [28, -96], [76, -72], [106, -22], [110, 40]], '#241A1C');
     ctx.strokeStyle = `rgba(232,105,63,${0.55 + 0.25 * Math.sin(t * 1.7)})`;
@@ -290,6 +295,242 @@ export function drawEntrance(ctx: Ctx, x: number, y: number, zone: number, t: nu
   }
 }
 
+// ───────────────────────── Temples de la jungle ─────────────────────────
+
+/** Bloc de pierre taillée, éclairé en haut à gauche, joint sombre en bas à droite. */
+const block = (ctx: Ctx, x: number, y: number, w: number, h: number, base: string, light: string, dark: string) => {
+  ctx.fillStyle = base;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = light;
+  ctx.fillRect(x, y, w, 2);
+  ctx.fillRect(x, y, 2, h);
+  ctx.fillStyle = dark;
+  ctx.fillRect(x, y + h - 2, w, 2);
+  ctx.fillRect(x + w - 2, y, 2, h);
+};
+
+/** Liane qui pend : une courbe qui ondule un peu au vent, des feuilles en cœur de loin en loin. */
+export const liana = (ctx: Ctx, x: number, y: number, len: number, t: number, seed: number, col = '#3E6A2E', leaf = '#5E9A44') => {
+  const sway = Math.sin(t * 0.9 + seed) * 4;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.bezierCurveTo(x + 6, y + len * 0.3, x - 6 + sway * 0.5, y + len * 0.65, x + sway, y + len);
+  ctx.stroke();
+  ctx.fillStyle = leaf;
+  for (let k = 1; k <= Math.floor(len / 14); k++) {
+    const f = (k * 14) / len, lx = x + sway * f * f + Math.sin(f * 6 + seed) * 4, ly = y + len * f, s = k % 2 ? 1 : -1;
+    ctx.beginPath();
+    ctx.ellipse(lx + s * 4, ly, 4.2, 2.4, s * 0.6, 0, TAU);
+    ctx.fill();
+  }
+};
+
+/**
+ * Temple à degrés de la jungle (l'entrée d'une grotte) : quatre étages de pierre grise moussue, un grand escalier
+ * central vers le sanctuaire du sommet, une porte basse sous un linteau sculpté de glyphes (l'entrée, où luisent les yeux
+ * du géant), deux têtes de serpent à plumes au pied des rampes, des lianes qui pendent des corniches, des fougères
+ * au pied, et deux braseros.
+ */
+function drawTemple(ctx: Ctx, x: number, y: number, t: number, boss: boolean) {
+  const stone = '#7C8370', light = '#9EA38E', dark = '#4E5446', moss = '#4E7A3A';
+  // étages, du bas vers le haut : de plus en plus étroits
+  const tiers = [[-120, 8, 240, 32], [-100, -22, 200, 30], [-80, -50, 160, 28], [-60, -76, 120, 26]];
+  for (const [tx, ty, tw, th] of tiers) {
+    ctx.fillStyle = 'rgba(8,14,12,0.35)';
+    ctx.fillRect(x + tx + 6, y + ty + th - 4, tw, 6);
+    for (let bx = 0; bx < tw; bx += 20) for (let by = 0; by < th; by += 10) block(ctx, x + tx + bx + ((by / 10) % 2) * 6 - 3, y + ty + by, 20, 10, stone, light, dark);
+    ctx.fillStyle = '#5E6454'; // corniche
+    ctx.fillRect(x + tx - 4, y + ty - 4, tw + 8, 5);
+  }
+  // sanctuaire du sommet : petit toit à crête, porte sombre
+  block(ctx, x - 34, y - 104, 68, 28, stone, light, dark);
+  ctx.fillStyle = '#5E6454';
+  ctx.beginPath();
+  ctx.moveTo(x - 40, y - 104);
+  ctx.lineTo(x - 22, y - 122);
+  ctx.lineTo(x + 22, y - 122);
+  ctx.lineTo(x + 40, y - 104);
+  ctx.fill();
+  for (let k = -2; k <= 2; k++) block(ctx, x + k * 10 - 3, y - 132, 6, 10, stone, light, dark); // crête ajourée
+  ctx.fillStyle = '#0E1210';
+  ctx.fillRect(x - 9, y - 98, 18, 22);
+  // grand escalier central, ses marches
+  ctx.fillStyle = '#6A7160';
+  ctx.beginPath();
+  ctx.moveTo(x - 30, y + 40);
+  ctx.lineTo(x - 18, y - 76);
+  ctx.lineTo(x + 18, y - 76);
+  ctx.lineTo(x + 30, y + 40);
+  ctx.fill();
+  for (let k = 0; k < 22; k++) {
+    const sy = y + 38 - k * 5.3, half = 30 - k * 0.55;
+    ctx.fillStyle = k % 2 ? '#848A76' : '#767C68';
+    ctx.fillRect(x - half, sy - 3, half * 2, 3);
+    ctx.fillStyle = 'rgba(16,20,14,0.35)';
+    ctx.fillRect(x - half, sy, half * 2, 1.5);
+  }
+  // rampes de part et d'autre, têtes de serpent à plumes au pied
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = '#5E6454';
+    ctx.beginPath();
+    ctx.moveTo(x + s * 30, y + 40);
+    ctx.lineTo(x + s * 18, y - 76);
+    ctx.lineTo(x + s * 24, y - 76);
+    ctx.lineTo(x + s * 38, y + 40);
+    ctx.fill();
+    const hx = x + s * 40, hy = y + 30;
+    ctx.fillStyle = '#8A907A';
+    ctx.beginPath();
+    ctx.ellipse(hx, hy, 14, 11, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#6A7060';
+    ctx.beginPath(); // la gueule ouverte, crocs
+    ctx.moveTo(hx + s * 4, hy + 2);
+    ctx.lineTo(hx + s * 18, hy - 2);
+    ctx.lineTo(hx + s * 18, hy + 8);
+    ctx.fill();
+    ctx.fillStyle = '#E9DFC8';
+    ctx.fillRect(hx + s * 12 - 1, hy, 2, 4);
+    ctx.fillStyle = '#1A1A14';
+    ctx.beginPath();
+    ctx.arc(hx + s * 2, hy - 4, 2.2, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#3F8A6A'; // panache de plumes de jade
+    for (let k = 0; k < 4; k++) {
+      ctx.beginPath();
+      ctx.ellipse(hx - s * (8 + k * 3), hy - 8 - k * 2, 3, 8, -s * (0.6 + k * 0.2), 0, TAU);
+      ctx.fill();
+    }
+  }
+  // porte basse au pied de l'escalier (l'entrée), sous un linteau de glyphes
+  ctx.fillStyle = '#0B0E0C';
+  ctx.beginPath();
+  ctx.moveTo(x - 24, y + 40);
+  ctx.lineTo(x - 24, y + 6);
+  ctx.lineTo(x - 14, y - 6);
+  ctx.lineTo(x + 14, y - 6);
+  ctx.lineTo(x + 24, y + 6);
+  ctx.lineTo(x + 24, y + 40);
+  ctx.fill();
+  block(ctx, x - 32, y - 16, 64, 11, '#8A907A', '#A8AD96', '#5E6454');
+  ctx.strokeStyle = '#4A5040';
+  ctx.lineWidth = 1.4;
+  for (let k = 0; k < 5; k++) {
+    // glyphes : spirale, œil, marches, croix… un par case du linteau
+    const gx = x - 26 + k * 13, gy = y - 10.5;
+    ctx.beginPath();
+    if (k % 3 === 0) ctx.arc(gx, gy, 3.2, 0, Math.PI * 1.6);
+    else if (k % 3 === 1) {
+      ctx.ellipse(gx, gy, 4, 2.4, 0, 0, TAU);
+      ctx.moveTo(gx + 1, gy);
+      ctx.arc(gx, gy, 1, 0, TAU);
+    } else {
+      ctx.moveTo(gx - 4, gy + 3);
+      ctx.lineTo(gx - 4, gy);
+      ctx.lineTo(gx, gy);
+      ctx.lineTo(gx, gy - 3);
+      ctx.lineTo(gx + 4, gy - 3);
+    }
+    ctx.stroke();
+  }
+  if (boss) {
+    const blink = Math.sin(t * 1.3) > 0.92 ? 0.2 : 1;
+    ctx.fillStyle = `rgba(240,182,74,${0.9 * blink})`;
+    ctx.beginPath();
+    ctx.arc(x - 8, y + 14, 3, 0, TAU);
+    ctx.arc(x + 8, y + 14, 3, 0, TAU);
+    ctx.fill();
+  }
+  // mousse sur les corniches, lianes qui pendent
+  ctx.fillStyle = moss;
+  for (const [mx, my, mw] of [[-118, 4, 40], [64, 4, 46], [-98, -26, 30], [70, -26, 26], [-78, -54, 24], [46, -80, 20], [-30, -108, 22]]) {
+    ctx.beginPath();
+    ctx.ellipse(x + mx + mw / 2, y + my, mw / 2, 4, 0, 0, TAU);
+    ctx.fill();
+  }
+  for (const [lx, ly, len] of [[-112, 6, 26], [-92, -24, 34], [96, -24, 30], [110, 6, 22], [-70, -52, 22], [74, -52, 40], [-50, -78, 18]]) liana(ctx, x + lx, y + ly, len, t, lx);
+  // fougères au pied, braseros
+  for (const [fx, s] of [[-128, -1], [128, 1], [-60, -1], [62, 1]]) {
+    ctx.strokeStyle = '#3F7A34';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    for (let k = 0; k < 5; k++) {
+      const a = -Math.PI / 2 + (k - 2) * 0.45 + s * 0.1;
+      ctx.beginPath();
+      ctx.moveTo(x + fx, y + 44);
+      ctx.quadraticCurveTo(x + fx + Math.cos(a) * 14, y + 44 + Math.sin(a) * 18, x + fx + Math.cos(a) * 26, y + 44 + Math.sin(a) * 18 + 8);
+      ctx.stroke();
+    }
+  }
+  torch(ctx, x - 52, y + 38, t, '#E8693F', '#F7D774');
+  torch(ctx, x + 52, y + 38, t, '#E8693F', '#F7D774');
+}
+
+/** Décor d'un temple, au pied des parois : piliers sculptés, braseros, statues à tête de jaguar, lianes. */
+function templeProp(ctx: Ctx, px: number, py: number, a: number, i: number) {
+  if (i % 4 === 0) {
+    // pilier sculpté de glyphes, mousse à sa base
+    block(ctx, px - 13, py - 62, 26, 64, '#7C8370', '#9EA38E', '#4E5446');
+    ctx.strokeStyle = '#4A5040';
+    ctx.lineWidth = 1.3;
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      ctx.arc(px, py - 50 + k * 18, 5, 0, Math.PI * 1.5);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#4E7A3A';
+    ctx.beginPath();
+    ctx.ellipse(px, py + 1, 18, 5, 0, 0, TAU);
+    ctx.fill();
+    liana(ctx, px - 8, py - 62, 40, 0, i);
+  } else if (i % 4 === 1) {
+    // brasero de pierre et son feu
+    ctx.fillStyle = 'rgba(240,150,60,0.18)';
+    ctx.beginPath();
+    ctx.arc(px, py - 20, 34, 0, TAU);
+    ctx.fill();
+    block(ctx, px - 12, py - 16, 24, 18, '#6A7060', '#8A907A', '#3E443A');
+    ctx.fillStyle = '#E8693F';
+    ctx.beginPath();
+    ctx.ellipse(px, py - 24, 9, 12, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#F7D774';
+    ctx.beginPath();
+    ctx.ellipse(px, py - 21, 4, 6, 0, 0, TAU);
+    ctx.fill();
+  } else if (i % 4 === 2) {
+    // statue à tête de jaguar
+    block(ctx, px - 12, py - 22, 24, 24, '#6A7060', '#8A907A', '#3E443A');
+    ctx.fillStyle = '#848A76';
+    ctx.beginPath();
+    ctx.ellipse(px, py - 34, 15, 13, 0, 0, TAU);
+    ctx.fill();
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(px + s * 10, py - 45, 5, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#2F8A6A'; // yeux de jade
+    ctx.fillRect(px - 8, py - 37, 5, 3);
+    ctx.fillRect(px + 3, py - 37, 5, 3);
+    ctx.fillStyle = '#3E443A';
+    ctx.fillRect(px - 6, py - 29, 12, 3);
+  } else {
+    // racines et lianes qui ont percé la paroi
+    ctx.strokeStyle = '#4A3A26';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.quadraticCurveTo(px - Math.cos(a) * 26, py - Math.sin(a) * 10, px - Math.cos(a) * 46 + 8, py - Math.sin(a) * 24);
+    ctx.stroke();
+    liana(ctx, px + 6, py - 40, 36, 0, i * 3);
+  }
+}
+
 // ───────────────────────── Intérieurs selon le biome ─────────────────────────
 
 /** Sol, paroi et décor d'un intérieur de grotte, par zone. */
@@ -299,6 +540,7 @@ export const INSIDE = [
   { floor: '#6A5238', wall: '#4A3826', prop: 'bones' },
   { floor: '#3A4A42', wall: '#2A3430', prop: 'runes' },
   { floor: '#2E4448', wall: '#1E2C30', prop: 'water' },
+  { floor: '#5C6450', wall: '#2E3828', prop: 'temple' }, // Jungle : dalles de temple moussues, piliers sculptés, braseros
   { floor: '#8A6A42', wall: '#5E4428', prop: 'bones' }, // Mer de sable : grès et ossements
   { floor: '#4A2E22', wall: '#2A1A14', prop: 'lava' }, // Entrailles du volcan : basalte et lave
 ];
@@ -351,6 +593,8 @@ export function insideProp(ctx: Ctx, zone: number, px: number, py: number, a: nu
       ctx.fillRect(px + 20, py - 46, 14, 48);
       ctx.fillRect(px + 36, py - 30, 12, 32);
     }
+  } else if (prop === 'temple') {
+    templeProp(ctx, px, py, a, i);
   } else if (prop === 'runes') {
     if (i % 3) return;
     ctx.fillStyle = '#5E6662';

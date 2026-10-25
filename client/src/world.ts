@@ -1,11 +1,11 @@
 // Terrain procédural par morceaux (chunks) mis en cache, village et plage d'arrivée pré-rendus.
 // Tout découle de la WorldMap partagée : zones, lacs, chemin du camp au village.
 
-import { BUILDINGS, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, BOARD_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName } from '../../shared/config.ts';
+import { BUILDINGS, CAVE_RX, CAVE_RY, JUNGLE_ZONE, DESERT_ZONE, LAKES_ZONE, DEN_OFFSET, FORGE_OFFSET, BOARD_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
 import { atVillageGate, BEACH, BRIDGE_W, caveEdge, coastGreen, MAP_CELL, MOUTH_FADE, SEA_SHALLOW, VILLAGE_GATES, villageEdge, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 import { maxDpr, settings } from './settings.ts';
-import { drawCocoon, drawEntrance, drawWeb, INSIDE, insideProp } from './caves.ts';
+import { drawCocoon, drawEntrance, drawWeb, INSIDE, insideProp, liana } from './caves.ts';
 
 const CHUNK = 512;
 const TILE = MAP_CELL;
@@ -21,7 +21,7 @@ const LAKE_WATER = [61, 127, 140]; // mêmes bleus que l'eau des lacs (#3D7F8C, 
 const LAKE_DEEP = [46, 101, 116];
 const LAKE_BANK = [94, 107, 73]; // berge des lacs (#5E6B49)
 const MOUTH_SURF = 150; // en mer, l'écume et le sable s'effacent à l'approche d'une embouchure
-export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76], [204, 172, 114]];
+export const ZONE_GROUND = [[74, 94, 62], [63, 106, 59], [52, 88, 57], [72, 82, 48], [44, 69, 66], [56, 82, 76], [40, 74, 40], [204, 172, 114]]; // 0 village, 1 à 7 les zones (6 : jungle)
 const STEPPE = [124, 140, 78]; // lisière verte entre le sable du désert et la mer
 const PATH = [110, 97, 66];
 const VILLAGE_GROUND = [79, 101, 63]; // herbe de la place, tondue
@@ -73,13 +73,32 @@ export function groundColor(map: WorldMap, x: number, y: number) {
   const g = coastGreen(map, x, y);
   if (g) col = lerp3(col, STEPPE, g);
   const v = villageMix(map, x, y);
-  return v ? lerp3(col, VILLAGE_GROUND, v) : col;
+  if (v) col = lerp3(col, VILLAGE_GROUND, v);
+  // sous la canopée de la jungle : de grandes ombres de feuillage, et des taches de soleil là où il perce
+  const j = jungleMix(map, x, y);
+  if (j) {
+    const sh = fbm(x / 210, y / 210, map.seed + 141, 3), k = 1 - j * (0.32 * smooth((sh - 0.35) / 0.3) - 0.14 * smooth((0.3 - sh) / 0.12));
+    col = [col[0] * k, col[1] * k, col[2] * k];
+  }
+  return col;
+}
+
+/** Part de jungle en un point (0 ailleurs, 1 en pleine jungle, en fondu à la frontière). */
+export function jungleMix(map: WorldMap, x: number, y: number) {
+  const m = map.zoneMix(x, y);
+  return (m.z0 === JUNGLE_ZONE ? 1 - m.t : 0) + (m.z1 === JUNGLE_ZONE ? m.t : 0);
+}
+
+/** Part de Lacs brumeux en un point (pour la brume légère qui y flotte). */
+export function lakesMix(map: WorldMap, x: number, y: number) {
+  const m = map.zoneMix(x, y);
+  return (m.z0 === LAKES_ZONE ? 1 - m.t : 0) + (m.z1 === LAKES_ZONE ? m.t : 0);
 }
 
 /** Part de Mer de sable en un point (0 ailleurs, 1 en plein désert, en fondu à la frontière). */
 export function desertMix(map: WorldMap, x: number, y: number) {
   const m = map.zoneMix(x, y);
-  return (m.z0 === 6 ? 1 - m.t : 0) + (m.z1 === 6 ? m.t : 0);
+  return (m.z0 === DESERT_ZONE ? 1 - m.t : 0) + (m.z1 === DESERT_ZONE ? m.t : 0);
 }
 
 const smooth = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
@@ -293,11 +312,6 @@ export class World {
         }
       }
     }
-    const br = map.bridge;
-    if (Math.min(br.a.x, br.b.x) < ox + CHUNK + 80 && Math.max(br.a.x, br.b.x) > ox - 80 && Math.min(br.a.y, br.b.y) < oy + CHUNK + 80 && Math.max(br.a.y, br.b.y) > oy - 80) {
-      drawBridge(ctx, br.a, br.b, this.seed);
-    }
-
     // Lacs (pas la mer) : disques par case pour des berges arrondies (berge, puis eau, puis eau profonde).
     // Près d'une embouchure, ils passent par paliers au bleu de la mer et s'effacent : l'eau peinte avec le sol prend le relais.
     const STEPS = 12;
@@ -329,6 +343,24 @@ export class World {
         }
       }
       ctx.globalAlpha = 1;
+      // marigots de la jungle : une eau verte et trouble, par paliers selon la part de jungle
+      const swamp: [number, number, number][] = [];
+      for (const [px, py] of water) {
+        const j = jungleMix(map, px, py);
+        if (j > 0.05) swamp.push([px, py, Math.min(3, Math.floor(j * 4))]);
+      }
+      for (let step = 0; step < 4; step++) {
+        ctx.fillStyle = `rgba(52,82,44,${0.14 * (step + 1)})`;
+        ctx.beginPath();
+        let any = false;
+        for (const [px, py, s] of swamp) {
+          if (s !== step) continue;
+          ctx.moveTo(px + 13.5, py);
+          ctx.arc(px, py, 13.5, 0, TAU);
+          any = true;
+        }
+        if (any) ctx.fill();
+      }
       // reflets
       ctx.strokeStyle = 'rgba(200,235,240,0.35)';
       ctx.lineWidth = 2;
@@ -404,6 +436,32 @@ export class World {
       const h = hash2(gx * 7 + i, gy * 13 - i, this.seed + 11);
       const x = (gx + hash2(gx, gy * 3 + i, this.seed + 12)) * DECO_CELL;
       const y = (gy + hash2(gx * 5 + i, gy, this.seed + 13)) * DECO_CELL;
+      if (this.map.isWater(x, y) && !this.map.isSea(x, y) && h < 0.16 && jungleMix(this.map, x, y) > 0.5) {
+        // nénuphars sur les marigots de la jungle, parfois en fleur
+        ctx.fillStyle = 'rgba(10,30,20,0.35)';
+        ctx.beginPath();
+        ctx.ellipse(x + 2, y + 2, 9, 5.5, 0, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = h < 0.08 ? '#4E8A3A' : '#5E9A44';
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.ellipse(x, y, 9, 5.5, 0, 0.35, TAU - 0.05);
+        ctx.closePath();
+        ctx.fill();
+        if (h < 0.05) {
+          ctx.fillStyle = '#F2C4D8';
+          for (let k = 0; k < 5; k++) {
+            ctx.beginPath();
+            ctx.ellipse(x - 2 + Math.cos(k * 1.26) * 3, y - 2 + Math.sin(k * 1.26) * 1.8, 2.4, 1.4, k * 1.26, 0, TAU);
+            ctx.fill();
+          }
+          ctx.fillStyle = '#F0D060';
+          ctx.beginPath();
+          ctx.arc(x - 2, y - 2, 1.4, 0, TAU);
+          ctx.fill();
+        }
+        continue;
+      }
       if (this.map.isForest(x, y) || this.map.isWater(x, y)) continue;
       if (this.map.shoreAt(x, y) > -BEACH) {
         // plage : coquillages, bois flotté, étoile de mer
@@ -434,7 +492,11 @@ export class World {
         continue;
       }
       const z = this.zone(x, y);
-      if (z === 6 && coastGreen(this.map, x, y) < 0.45) {
+      if (z === JUNGLE_ZONE) {
+        this.jungleDeco(ctx, x, y, h, gx * 7 + i);
+        continue;
+      }
+      if (z === DESERT_ZONE && coastGreen(this.map, x, y) < 0.45) {
         // Mer de sable : rides du vent, cailloux, touffes sèches, de rares ossements
         if (h < 0.35) {
           ctx.strokeStyle = 'rgba(150,112,64,0.35)';
@@ -508,14 +570,122 @@ export class World {
     }
   }
 
-  /** Taille d'un arbre (même hasard que WorldMap.decorSize). */
-  treeSize(x: number, y: number) {
-    return 26 + hash2(x | 0, y | 0, this.seed) * 16;
+  /**
+   * Sous-bois de la jungle : fougères en gerbe, grandes feuilles tombées, orchidées, champignons, racines et feuilles
+   * mortes ; dense, pour qu'on sente qu'il y a de la vie à chaque pas.
+   */
+  private jungleDeco(ctx: CanvasRenderingContext2D, x: number, y: number, h: number, seed: number) {
+    if (h < 0.3) {
+      // fougère : des frondes arquées, leurs folioles de part et d'autre
+      const n = 5 + Math.floor(h * 10);
+      for (let k = 0; k < n; k++) {
+        const a = -Math.PI / 2 + (k - (n - 1) / 2) * 0.42, len = 13 + hash2(k, seed, 151) * 7;
+        const ex = x + Math.cos(a) * len, ey = y + Math.sin(a) * len * 0.75 + 4;
+        ctx.strokeStyle = k % 2 ? '#2E6A30' : '#3A7A38';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(x, y + 2);
+        ctx.quadraticCurveTo(x + Math.cos(a) * len * 0.5, y + Math.sin(a) * len * 0.75 - 4, ex, ey);
+        ctx.stroke();
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        for (let f = 1; f < 5; f++) {
+          const t = f / 5, px = x + (ex - x) * t, py = y + 2 + (ey - y - 2) * t - Math.sin(t * Math.PI) * 4;
+          ctx.moveTo(px, py);
+          ctx.lineTo(px - Math.sin(a) * 3.5, py + Math.cos(a) * 3.5 - 1);
+          ctx.moveTo(px, py);
+          ctx.lineTo(px + Math.sin(a) * 3.5, py - Math.cos(a) * 3.5 - 1);
+        }
+        ctx.stroke();
+      }
+    } else if (h < 0.42) {
+      // grande feuille tombée, nervurée
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(h * 40);
+      ctx.fillStyle = h < 0.36 ? 'rgba(60,110,50,0.8)' : 'rgba(140,110,50,0.75)';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 11, 5.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(20,40,20,0.5)';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(10, 0);
+      for (const dx of [-5, 0, 5]) {
+        ctx.moveTo(dx, 0);
+        ctx.lineTo(dx + 3, -4);
+        ctx.moveTo(dx, 0);
+        ctx.lineTo(dx + 3, 4);
+      }
+      ctx.stroke();
+      ctx.restore();
+    } else if (h < 0.48) {
+      // orchidée : deux feuilles, une hampe, des fleurs roses ou violettes
+      ctx.fillStyle = '#3A7A38';
+      ctx.beginPath();
+      ctx.ellipse(x - 4, y, 6, 2.4, -0.3, 0, TAU);
+      ctx.ellipse(x + 4, y, 6, 2.4, 0.3, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = '#4E7A30';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.quadraticCurveTo(x + 2, y - 10, x + 7, y - 13);
+      ctx.stroke();
+      ctx.fillStyle = h < 0.45 ? '#D886C9' : '#B47AE0';
+      for (const [fx, fy] of [[2, -9], [5, -12], [8, -12]]) {
+        ctx.beginPath();
+        ctx.arc(x + fx, y + fy, 2.2, 0, TAU);
+        ctx.fill();
+      }
+    } else if (h < 0.53) {
+      // champignons orangés
+      for (const [dx, dy, r] of [[0, 0, 3.4], [5, 2, 2.4], [-4, 3, 2]]) {
+        ctx.fillStyle = '#EADFC6';
+        ctx.fillRect(x + dx - 0.8, y + dy - r, 1.6, r);
+        ctx.fillStyle = '#E8833A';
+        ctx.beginPath();
+        ctx.ellipse(x + dx, y + dy - r, r, r * 0.65, 0, Math.PI, 0);
+        ctx.fill();
+      }
+    } else if (h < 0.68) {
+      // feuilles mortes éparses
+      for (let k = 0; k < 3; k++) {
+        ctx.fillStyle = ['rgba(120,90,40,0.55)', 'rgba(150,120,50,0.5)', 'rgba(90,70,30,0.5)'][k];
+        ctx.beginPath();
+        ctx.ellipse(x + (hash2(k, seed, 152) - 0.5) * 16, y + (hash2(seed, k, 153) - 0.5) * 10, 3.2, 1.6, k * 1.3 + h * 9, 0, TAU);
+        ctx.fill();
+      }
+    } else if (h < 0.75) {
+      // racine qui affleure
+      ctx.strokeStyle = 'rgba(70,52,34,0.75)';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(x - 12, y + 2);
+      ctx.quadraticCurveTo(x - 2, y - 5, x + 12, y + 1);
+      ctx.stroke();
+    }
+  }
+
+  /**
+   * Taille d'un arbre (même hasard que WorldMap.decorSize) ; dans la jungle (z), les géants sont bien plus grands et
+   * les bambous un peu (le tronc, lui, garde sa taille : seul le dessin grandit).
+   */
+  treeSize(x: number, y: number, z = 0) {
+    const s = 26 + hash2(x | 0, y | 0, this.seed) * 16;
+    return z === JUNGLE_ZONE ? s * (this.isBamboo(x, y) ? 1.15 : 1.42) : s;
+  }
+
+  /** Arbre de la jungle qui est un bouquet de bambous (sinon, un géant à contreforts). */
+  isBamboo(x: number, y: number) {
+    return hash2(x | 0, y | 0, this.seed + 9) < 0.34;
   }
 
   /** Ombre portée d'un arbre, au sol (dessinée avant les créatures). */
-  treeShadow(ctx: CanvasRenderingContext2D, x: number, y: number) {
-    const s = this.treeSize(x, y);
+  treeShadow(ctx: CanvasRenderingContext2D, x: number, y: number, z = 0) {
+    const s = this.treeSize(x, y, z);
     ctx.fillStyle = 'rgba(8,14,12,0.35)';
     ctx.beginPath();
     ctx.ellipse(x + 8, y + s * 0.55, s * 1.05, s * 0.45, 0, 0, TAU);
@@ -529,9 +699,21 @@ export class World {
    * puis collée à la taille de l'arbre : plus aucun tracé vectoriel à chaque image.
    */
   tree(ctx: CanvasRenderingContext2D, x: number, y: number, z: number, fade = 1, shade = true) {
-    const s = this.treeSize(x, y), h = hash2(x | 0, y | 0, this.seed + 9);
+    const s = this.treeSize(x, y, z), h = hash2(x | 0, y | 0, this.seed + 9);
     const v = Math.floor(hash2(x | 0, y | 0, this.seed + 13) * TREE_VARIANTS);
-    if (z === 6) {
+    if (z === JUNGLE_ZONE) {
+      // Jungle : géants à contreforts et lianes, ou bouquets de bambous
+      if (shade) this.treeShadow(ctx, x, y, z);
+      const k = s / TREE_REF, bamboo = this.isBamboo(x, y);
+      if (!bamboo) ctx.drawImage(this.treeLayer(`jtrunk|${v}`, () => (g) => this.drawJungleTrunk(g, v)), x - TREE_BOX.l * k, y - TREE_BOX.t * k, TREE_BOX.w * k, TREE_BOX.h * k);
+      const img = bamboo ? this.treeLayer(`bamboo|${v}`, () => (g) => this.drawBamboo(g, v)) : this.treeLayer(`jleaves|${v}`, () => (g) => this.drawJungleCanopy(g, v));
+      const a = ctx.globalAlpha;
+      ctx.globalAlpha = a * fade;
+      ctx.drawImage(img, x - TREE_BOX.l * k, y - TREE_BOX.t * k, TREE_BOX.w * k, TREE_BOX.h * k);
+      ctx.globalAlpha = a;
+      return;
+    }
+    if (z === DESERT_ZONE) {
       // Mer de sable : cactus, palmiers sur la lisière verte de la côte
       if (shade) this.treeShadow(ctx, x, y);
       const palm = coastGreen(this.map, x, y) > 0.45;
@@ -656,6 +838,197 @@ export class World {
       ctx.beginPath();
       ctx.arc(top.x + dx, top.y + dy, 3, 0, TAU);
       ctx.fill();
+    }
+  }
+
+  /**
+   * Tronc d'un géant de la jungle, pied en (0, 0), à la taille TREE_REF : de grands contreforts qui s'évasent en
+   * planches, une écorce à côtes claires, de la mousse, et une liane qui s'y enroule.
+   */
+  private drawJungleTrunk(ctx: CanvasRenderingContext2D, v: number) {
+    const s = TREE_REF;
+    // contreforts : des lames de bois qui partent du tronc et plongent dans le sol
+    for (const [dx, w, col] of [[-1, 0.62, '#3E2E20'], [1, 0.58, '#3E2E20'], [-0.45, 0.4, '#54402C'], [0.5, 0.42, '#54402C']] as const) {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(dx * 3, -s * 0.4);
+      ctx.quadraticCurveTo(dx * s * 0.12, s * 0.2, dx * s * w, s * 0.5);
+      ctx.lineTo(dx * s * w * 0.55, s * 0.52);
+      ctx.quadraticCurveTo(dx * s * 0.04, s * 0.3, 0, -s * 0.2);
+      ctx.fill();
+    }
+    // tronc
+    ctx.fillStyle = '#4A3826';
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.13, s * 0.42);
+    ctx.lineTo(-s * 0.09, -s * 1.15);
+    ctx.lineTo(s * 0.09, -s * 1.15);
+    ctx.lineTo(s * 0.13, s * 0.42);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(160,130,95,0.35)'; // côtes de l'écorce
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (const dx of [-0.06, 0, 0.055]) {
+      ctx.moveTo(dx * s, s * 0.4);
+      ctx.lineTo(dx * s * 0.8, -s * 1.1);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#4E7A3A'; // mousse
+    for (const [mx, my, mr] of [[-0.08, -0.3, 0.07], [0.06, -0.7, 0.05], [-0.4, 0.35, 0.08], [0.42, 0.4, 0.07]]) {
+      ctx.beginPath();
+      ctx.ellipse(mx * s, my * s, mr * s, mr * s * 0.6, 0, 0, TAU);
+      ctx.fill();
+    }
+    // liane qui s'enroule autour du tronc
+    ctx.strokeStyle = '#3E6A2E';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    for (let k = 0; k <= 24; k++) {
+      const t = k / 24, yy = s * 0.35 - t * s * 1.45, xx = Math.sin(t * Math.PI * 3 + v) * s * 0.12;
+      if (k) ctx.lineTo(xx, yy);
+      else ctx.moveTo(xx, yy);
+    }
+    ctx.stroke();
+  }
+
+  /**
+   * Canopée d'un géant de la jungle, pied en (0, 0) : une large couronne en étages (ombre, feuillage, lumière sur le
+   * dessus), de grandes feuilles découpées qui débordent, des broméliacées en fleur, et des lianes qui pendent.
+   */
+  private drawJungleCanopy(ctx: CanvasRenderingContext2D, v: number) {
+    const s = TREE_REF, cy = -s * 1.32;
+    const lumps: [number, number, number][] = [];
+    for (let k = 0; k < 9; k++) {
+      const a = (k / 9) * TAU + v * 0.7, d = s * (0.62 + hash2(k, v, 131) * 0.2);
+      lumps.push([Math.cos(a) * d * 1.05, cy + Math.sin(a) * d * 0.45, s * (0.36 + hash2(v, k, 132) * 0.12)]);
+    }
+    lumps.push([0, cy, s * 0.6], [-s * 0.35, cy - s * 0.05, s * 0.45], [s * 0.38, cy + s * 0.02, s * 0.42]);
+    const blob = (dx: number, dy: number, grow: number) => {
+      ctx.beginPath();
+      for (const [lx, ly, lr] of lumps) {
+        ctx.moveTo(lx + dx + lr + grow, ly + dy);
+        ctx.arc(lx + dx, ly + dy, Math.max(1, lr + grow), 0, TAU);
+      }
+    };
+    // lianes qui pendent sous la couronne (derrière le feuillage)
+    for (let k = 0; k < 5; k++) liana(ctx, (k - 2) * s * 0.33 + (hash2(k, v, 133) - 0.5) * 8, cy + s * 0.2, s * (0.55 + hash2(v, k, 134) * 0.5), 0, k + v);
+    ctx.fillStyle = 'rgba(8,16,10,0.6)';
+    blob(0, 3, 3);
+    ctx.fill();
+    ctx.fillStyle = '#16351E';
+    blob(0, 0, 0);
+    ctx.fill();
+    ctx.fillStyle = '#21482A';
+    blob(-s * 0.06, -s * 0.08, -s * 0.1);
+    ctx.fill();
+    // grandes feuilles découpées qui débordent sur le pourtour
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * TAU + v * 1.3 + 0.2, lx = Math.cos(a) * s * 0.95, ly = cy + Math.sin(a) * s * 0.42, len = s * (0.32 + hash2(k, v, 135) * 0.12);
+      ctx.save();
+      ctx.translate(lx, ly);
+      ctx.rotate(a + Math.PI / 2 * 0);
+      ctx.fillStyle = k % 2 ? '#2E6A34' : '#3A7A3A';
+      ctx.beginPath();
+      ctx.ellipse(len * 0.5, 0, len * 0.55, len * 0.26, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(160,210,120,0.45)'; // nervure, entailles
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(len, 0);
+      for (let n = 1; n < 4; n++) {
+        ctx.moveTo((len * n) / 4, 0);
+        ctx.lineTo((len * n) / 4 + 3, -len * 0.22);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    // lumière sur le dessus de la couronne
+    ctx.fillStyle = '#3E7A3A';
+    for (const [lx, ly, lr] of lumps) {
+      if (ly > cy + 2) continue;
+      ctx.beginPath();
+      ctx.arc(lx - lr * 0.2, ly - lr * 0.35, lr * 0.45, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(150,210,110,0.35)';
+    for (const [lx, ly, lr] of lumps.slice(0, 5)) {
+      ctx.beginPath();
+      ctx.arc(lx - lr * 0.35, ly - lr * 0.5, lr * 0.2, 0, TAU);
+      ctx.fill();
+    }
+    // broméliacées en fleur, posées dans les branches
+    for (let k = 0; k < 3; k++) {
+      const fx = (hash2(k, v, 136) - 0.5) * s * 1.4, fy = cy + (hash2(v, k, 137) - 0.3) * s * 0.5;
+      ctx.fillStyle = '#3E7A3A';
+      for (const a of [-0.6, 0, 0.6]) {
+        ctx.beginPath();
+        ctx.ellipse(fx + Math.sin(a) * 4, fy - 3, 1.8, 5, a, 0, TAU);
+        ctx.fill();
+      }
+      ctx.fillStyle = k % 2 ? '#C8382E' : '#D8602A';
+      for (const a of [-0.35, 0, 0.35]) {
+        ctx.beginPath();
+        ctx.ellipse(fx + Math.sin(a) * 3, fy - 7, 0.9, 2.6, a, 0, TAU);
+        ctx.fill();
+      }
+    }
+  }
+
+  /**
+   * Bouquet de bambous, pied en (0, 0) : des tiges un peu penchées, nœuds sombres et reflet clair, et des gerbes de
+   * feuilles fines vers le haut.
+   */
+  private drawBamboo(ctx: CanvasRenderingContext2D, v: number) {
+    const s = TREE_REF, n = 6 + (v % 3);
+    ctx.fillStyle = 'rgba(8,16,10,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(0, s * 0.42, s * 0.42, s * 0.12, 0, 0, TAU);
+    ctx.fill();
+    const stalks = Array.from({ length: n }, (_, k) => {
+      const bx = (k / (n - 1) - 0.5) * s * 0.6 + (hash2(k, v, 141) - 0.5) * 6, h = s * (1.45 + hash2(v, k, 142) * 0.55), lean = (bx / s) * 0.5 + (hash2(k, k, v) - 0.5) * 0.25;
+      return { bx, h, lean, tone: hash2(k, v, 143) };
+    }).sort((a, b) => a.tone - b.tone);
+    for (const st of stalks) {
+      const tx = st.bx + st.lean * st.h, ty = s * 0.4 - st.h;
+      ctx.strokeStyle = st.tone < 0.4 ? '#5E8A34' : '#7FA846';
+      ctx.lineWidth = 3.6;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(st.bx, s * 0.4);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(220,240,160,0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(st.bx - 1, s * 0.38);
+      ctx.lineTo(tx - 1, ty + 4);
+      ctx.stroke();
+      // nœuds
+      ctx.strokeStyle = '#3E5E22';
+      ctx.lineWidth = 1.6;
+      for (let k = 1; k * 9 < st.h; k++) {
+        const t = (k * 9) / st.h, nx = st.bx + (tx - st.bx) * t, ny = s * 0.4 + (ty - s * 0.4) * t;
+        ctx.beginPath();
+        ctx.moveTo(nx - 2.4, ny);
+        ctx.lineTo(nx + 2.4, ny);
+        ctx.stroke();
+      }
+      // gerbes de feuilles fines, vers le haut de la tige
+      for (let k = 0; k < 4; k++) {
+        const t = 0.62 + k * 0.12, nx = st.bx + (tx - st.bx) * t, ny = s * 0.4 + (ty - s * 0.4) * t, side = k % 2 ? 1 : -1;
+        for (let f = 0; f < 3; f++) {
+          const a = side * (0.5 + f * 0.35) - Math.PI / 2 * 0.2, len = 9 + f * 2;
+          ctx.fillStyle = f === 1 ? '#6EA040' : '#4E8A34';
+          ctx.save();
+          ctx.translate(nx, ny);
+          ctx.rotate(a + (side > 0 ? 0 : Math.PI));
+          ctx.beginPath();
+          ctx.ellipse(len * 0.5, 0, len * 0.55, 1.7, 0.15 * side, 0, TAU);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
     }
   }
 
@@ -838,6 +1211,21 @@ export class World {
     ctx.fillRect(x - 5, y - h, 2, h);
     ctx.fillStyle = 'rgba(8,14,12,0.25)';
     ctx.fillRect(x + 3, y - h, 2, h);
+  }
+
+  /** Le pont, cassé ou réparé ; cassé, son nom au-dessus du pied (le prix : dans le panneau de construction). */
+  drawBridge(ctx: CanvasRenderingContext2D, built: boolean, t: number) {
+    const { a, b } = this.map.bridge;
+    drawBridge(ctx, a, b, this.seed, built, t);
+    if (built) return;
+    const label = `${BUILDINGS.bridge.name} · cassé`;
+    ctx.font = '700 15px "Pixelify Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+    ctx.strokeText(label, a.x, a.y - 60);
+    ctx.fillStyle = '#C9CFC2';
+    ctx.fillText(label, a.x, a.y - 60);
   }
 
   /** Palissade pas encore construite : un piquet de repère de loin en loin, et la corde tendue entre eux. */
@@ -1610,6 +1998,7 @@ export class World {
     ctx.fillStyle = g;
     outline(1);
     ctx.fill();
+    if (c.zone === JUNGLE_ZONE) this.templeFloor(ctx, c, outline);
     // éboulis et rochers le long des parois
     for (let i = 0; i < 46; i++) {
       const a = (i / 46) * TAU + hash2(i, c.id, this.seed) * 0.2, k = (0.9 + hash2(c.id, i, this.seed) * 0.12) * caveEdge(c, a);
@@ -1642,6 +2031,81 @@ export class World {
     ctx.fillText('Sortie', ex, ey + 54);
     this.caveCanvas.set(c.id, cv);
     return cv;
+  }
+
+  /**
+   * Sol d'un temple de la jungle : de grandes dalles de pierre (certaines fendues, d'autres mangées de mousse, des racines
+   * qui passent entre), un chemin de dalles claires de la sortie à l'autel, et l'autel rond du géant, gravé d'un soleil.
+   */
+  private templeFloor(ctx: CanvasRenderingContext2D, c: Cave, outline: (k: number, jag?: number) => void) {
+    const h = (i: number, j: number, k: number) => hash2(i * 31 + k, j * 17 + c.id, this.seed + 140);
+    ctx.save();
+    outline(0.98);
+    ctx.clip();
+    const S = 56;
+    for (let gy = -Math.ceil(CAVE_RY / S); gy <= Math.ceil(CAVE_RY / S); gy++) {
+      for (let gx = -Math.ceil(CAVE_RX / S) - 1; gx <= Math.ceil(CAVE_RX / S); gx++) {
+        const x = gx * S + (gy % 2 ? S / 2 : 0), y = gy * S * 0.62, w = S - 3, hh = S * 0.62 - 3, r = h(gx, gy, 1);
+        const lane = Math.abs(x + w / 2) < S * 0.9; // le chemin de l'autel : dalles plus claires
+        ctx.fillStyle = lane ? (r < 0.5 ? '#8A907A' : '#848A74') : r < 0.33 ? '#6A7060' : r < 0.66 ? '#646A5A' : '#5C6252';
+        ctx.fillRect(x, y, w, hh);
+        ctx.fillStyle = 'rgba(255,255,240,0.07)';
+        ctx.fillRect(x, y, w, 2);
+        ctx.fillStyle = 'rgba(10,14,8,0.3)';
+        ctx.fillRect(x, y + hh - 2, w, 2);
+        if (h(gx, gy, 2) < 0.18) {
+          // fissure
+          ctx.strokeStyle = 'rgba(20,24,18,0.55)';
+          ctx.lineWidth = 1.4;
+          ctx.beginPath();
+          ctx.moveTo(x + w * 0.2, y + 2);
+          ctx.lineTo(x + w * 0.45, y + hh * 0.5);
+          ctx.lineTo(x + w * 0.35, y + hh - 2);
+          ctx.stroke();
+        }
+        if (!lane && h(gx, gy, 3) < 0.25) {
+          // mousse qui a envahi la dalle
+          ctx.fillStyle = 'rgba(78,122,58,0.55)';
+          ctx.beginPath();
+          ctx.ellipse(x + w * (0.3 + h(gx, gy, 4) * 0.4), y + hh * 0.5, w * 0.35, hh * 0.4, 0, 0, TAU);
+          ctx.fill();
+        }
+      }
+    }
+    // racines qui serpentent entre les dalles
+    ctx.strokeStyle = 'rgba(74,58,38,0.8)';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    for (let k = 0; k < 5; k++) {
+      const a = h(k, 0, 5) * TAU, x0 = Math.cos(a) * CAVE_RX, y0 = Math.sin(a) * CAVE_RY;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo(x0 * 0.7 + (h(k, 1, 6) - 0.5) * 120, y0 * 0.7, x0 * 0.45, y0 * 0.45);
+      ctx.stroke();
+    }
+    ctx.restore();
+    // l'autel rond du géant, gravé d'un soleil, au fond
+    const ay = -CAVE_RY * 0.3;
+    ctx.fillStyle = 'rgba(8,12,8,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(6, ay + 10, 128, 54, 0, 0, TAU);
+    ctx.fill();
+    for (const [rx, ry, col] of [[124, 52, '#5E6454'], [112, 46, '#8A907A'], [80, 33, '#7C8370']] as const) {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.ellipse(0, ay, rx, ry, 0, 0, TAU);
+      ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(60,66,50,0.8)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0, ay, 24, 10, 0, 0, TAU);
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * TAU;
+      ctx.moveTo(Math.cos(a) * 30, ay + Math.sin(a) * 12.5);
+      ctx.lineTo(Math.cos(a) * 70, ay + Math.sin(a) * 29);
+    }
+    ctx.stroke();
   }
 
   /** Antre de la Mère Tisseuse : grandes toiles d'angle sur les parois, toiles au sol et cocons de proies. */
@@ -2096,56 +2560,119 @@ function shipBarrel(ctx: CanvasRenderingContext2D, x: number, y: number) {
 /**
  * Pont de bois entre l'île et l'îlot du village (coordonnées du monde) : son ombre sur l'eau, les pieux qui plongent,
  * des planches en travers, un peu irrégulières (une plus sombre, une décalée), et un garde-corps de chaque côté.
+ * Cassé (au début) : il ne reste que des bouts de tablier aux deux rives, des pieux penchés ou brisés au milieu, une corde
+ * qui pend, et des planches qui flottent au fil de l'eau.
  */
-function drawBridge(ctx: CanvasRenderingContext2D, a: { x: number; y: number }, b: { x: number; y: number }, seed: number) {
+export function drawBridge(ctx: CanvasRenderingContext2D, a: { x: number; y: number }, b: { x: number; y: number }, seed: number, built: boolean, t: number) {
   const l = Math.hypot(b.x - a.x, b.y - a.y), ang = Math.atan2(b.y - a.y, b.x - a.x), half = BRIDGE_W / 2;
+  const kept = (x: number) => built || x < l * 0.2 || x > l * 0.82 || (x > l * 0.46 && x < l * 0.52); // planches restées en place
   ctx.save();
   ctx.translate(a.x, a.y);
   ctx.rotate(ang);
-  // ombre portée sur l'eau, et remous autour des pieux
+  // ombre portée sur l'eau, là où il y a un tablier
   ctx.fillStyle = 'rgba(10,30,40,0.35)';
-  ctx.fillRect(4, -half + 8, l, BRIDGE_W);
-  for (let x = 30; x < l - 10; x += 70) {
+  if (built) ctx.fillRect(4, -half + 8, l, BRIDGE_W);
+  else {
+    ctx.fillRect(4, -half + 8, l * 0.2, BRIDGE_W);
+    ctx.fillRect(l * 0.82 + 4, -half + 8, l * 0.18, BRIDGE_W);
+  }
+  // pieux, et remous autour ; cassé : certains penchent, d'autres sont brisés au ras de l'eau
+  for (let x = 30, k = 0; x < l - 10; x += 70, k++) {
     for (const s of [-1, 1]) {
-      ctx.strokeStyle = 'rgba(226,240,236,0.45)';
+      const h = hash2(k, s, seed + 83), broken = !built && x > l * 0.2 && x < l * 0.82 && h < 0.45;
+      const ripple = (Math.sin(t * 2 + k + s) + 1) * 0.5;
+      ctx.strokeStyle = `rgba(226,240,236,${0.3 + ripple * 0.25})`;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.ellipse(x, s * (half - 3) + 10, 9, 3.5, 0, 0, TAU);
+      ctx.ellipse(x, s * (half - 3) + 10, 9 + ripple * 3, 3.5 + ripple, 0, 0, TAU);
       ctx.stroke();
+      ctx.save();
+      ctx.translate(x, s * (half - 3) + 10);
+      if (!built && !broken && x > l * 0.2 && x < l * 0.82) ctx.rotate((h - 0.5) * 0.7); // il penche
       ctx.fillStyle = '#3E2A1C';
-      ctx.fillRect(x - 4, s * (half - 3) - 2, 8, 12);
+      ctx.fillRect(-4, broken ? -5 : -12, 8, broken ? 5 : 12);
+      if (broken) {
+        ctx.fillStyle = '#6B4A33'; // l'éclat du bois cassé
+        ctx.beginPath();
+        ctx.moveTo(-4, -5);
+        ctx.lineTo(-1, -9);
+        ctx.lineTo(2, -6);
+        ctx.lineTo(4, -8);
+        ctx.lineTo(4, -5);
+        ctx.fill();
+      }
+      ctx.restore();
     }
   }
-  // longerons, puis planches en travers
+  // longerons (seulement sous le tablier qui reste), puis planches en travers
   ctx.fillStyle = '#4A3322';
-  ctx.fillRect(-6, -half + 2, l + 12, BRIDGE_W - 4);
+  if (built) ctx.fillRect(-6, -half + 2, l + 12, BRIDGE_W - 4);
+  else {
+    ctx.fillRect(-6, -half + 2, l * 0.2 + 6, BRIDGE_W - 4);
+    ctx.fillRect(l * 0.82, -half + 2, l * 0.18 + 6, BRIDGE_W - 4);
+    ctx.fillRect(l * 0.2, -half + 4, l * 0.1, 6); // un longeron qui dépasse dans le vide
+  }
   for (let x = -4, k = 0; x < l + 4; x += 12, k++) {
+    if (!kept(x)) continue;
     const h = hash2(k, 7, seed + 81), w = 10 + h * 1.5, dy = (hash2(k, 9, seed + 82) - 0.5) * 3;
-    ctx.fillStyle = h < 0.15 ? '#6B4A33' : h < 0.6 ? '#8B6A47' : '#9C7A52';
+    const loose = !built && x > l * 0.4 && x < l * 0.6; // une planche seule au milieu, de travers sur un pieu
+    ctx.save();
+    if (loose) {
+      ctx.translate(x, 0);
+      ctx.rotate(0.5);
+      ctx.translate(-x, 0);
+    }
+    ctx.fillStyle = h < 0.15 || !built ? '#6B4A33' : h < 0.6 ? '#8B6A47' : '#9C7A52';
     ctx.fillRect(x, -half + 3 + dy, w, BRIDGE_W - 6);
     ctx.fillStyle = 'rgba(255,230,190,0.12)';
     ctx.fillRect(x, -half + 3 + dy, w, 2);
     ctx.fillStyle = 'rgba(20,12,8,0.35)';
     ctx.fillRect(x + w - 1, -half + 3 + dy, 1, BRIDGE_W - 6);
+    ctx.restore();
   }
-  // garde-corps : une main courante et ses poteaux de chaque côté
+  if (!built) {
+    // planches qui flottent et dérivent doucement à côté
+    for (let k = 0; k < 5; k++) {
+      const fx = l * (0.28 + hash2(k, 3, seed + 84) * 0.5) + Math.sin(t * 0.6 + k) * 6, fy = (k % 2 ? 1 : -1) * (half + 16 + hash2(k, 4, seed + 84) * 40);
+      ctx.save();
+      ctx.translate(fx, fy + Math.sin(t * 1.3 + k * 2) * 2);
+      ctx.rotate(hash2(k, 5, seed + 84) * Math.PI);
+      ctx.fillStyle = 'rgba(10,30,40,0.3)';
+      ctx.fillRect(-15, -3, 32, 9);
+      ctx.fillStyle = '#7A5A3A';
+      ctx.fillRect(-16, -5, 32, 9);
+      ctx.restore();
+    }
+  }
+  // garde-corps : une main courante et ses poteaux de chaque côté ; cassé, une corde qui pend dans le vide d'un côté
   for (const s of [-1, 1]) {
     const y = s * (half - 2);
-    ctx.strokeStyle = '#3E2A1C';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(-4, y);
-    ctx.lineTo(l + 4, y);
-    ctx.stroke();
-    ctx.strokeStyle = '#7A5A3A';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(-4, y - 1);
-    ctx.lineTo(l + 4, y - 1);
-    ctx.stroke();
-    for (let x = 0; x <= l; x += 35) {
-      ctx.fillStyle = '#5B3F2C';
-      ctx.fillRect(x - 3, y - 3, 6, 6);
+    const spans: [number, number][] = built ? [[-4, l + 4]] : [[-4, l * 0.2], [l * 0.82, l + 4]];
+    for (const [x0, x1] of spans) {
+      ctx.strokeStyle = '#3E2A1C';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(x0, y);
+      ctx.lineTo(x1, y);
+      ctx.stroke();
+      ctx.strokeStyle = '#7A5A3A';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x0, y - 1);
+      ctx.lineTo(x1, y - 1);
+      ctx.stroke();
+      for (let x = Math.ceil(x0 / 35) * 35; x <= x1; x += 35) {
+        ctx.fillStyle = '#5B3F2C';
+        ctx.fillRect(x - 3, y - 3, 6, 6);
+      }
+    }
+    if (!built && s < 0) {
+      ctx.strokeStyle = '#B8A27A';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(l * 0.2, y);
+      ctx.quadraticCurveTo(l * 0.5, y + 34 + Math.sin(t * 1.2) * 3, l * 0.82, y);
+      ctx.stroke();
     }
   }
   ctx.restore();

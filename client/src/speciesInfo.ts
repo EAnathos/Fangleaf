@@ -24,6 +24,9 @@ export const SPECIES_DESC: Record<string, string> = {
   salamander: 'Lézard noir dont le dos rougeoie comme une braise. Vive et nerveuse, elle chasse en bande au ras de la lave : ses morsures brûlent.',
   ash_bat: 'Chauve-souris aux ailes de cendre, qui laisse une traînée d\'étincelles. Elle arrive en nuée et frappe vite : garde ta meute serrée.',
   lava_tortoise: 'Tortue géante qui porte un petit volcan sur sa carapace (tireur). Il gronde, puis crache de la lave en cloche : sors du cercle annoncé au sol.',
+  gorilla: 'Le seigneur de la jungle. De loin, il te bombarde de bananes (sors du cercle) ; de près, il cogne. Et parfois, il fracasse le sol autour de lui. Il se monte.',
+  croc: 'Il guette dans les marigots de la jungle : on ne voit que ses yeux. Ne longe pas l\'eau de trop près, il se jette sur ce qui passe au bord. Il se monte, dans l\'eau.',
+  masked: 'Petit homme de la jungle au grand masque de bois (tireur). Il chasse en bande, à la sarbacane : ses fléchettes filent vite, esquive de côté.',
 };
 
 /** Ce que dit chaque géant quand on vient lui parler (intro), puis son cri quand le combat commence. */
@@ -46,5 +49,8 @@ export const BOSS_LINES: Record<string, { intro: string; cry: string }> = {
   salamander_queen: { intro: 'Mes petits ont faim. Et toi, tu sens bon le roussi.', cry: 'À la braise, mes enfants !' },
   ash_lord: { intro: 'Ici, la lumière, c\'est la lave. Et moi, j\'aime le noir.', cry: 'Que la cendre t\'ensevelisse !' },
   mountain_tortoise: { intro: 'Hmm… Un visiteur. Le dernier, c\'était il y a mille ans. Je l\'ai pris pour un caillou.', cry: 'La montagne se réveille !' },
+  gorilla_king: { intro: 'Grrr. Toi, petit. Moi, grand. Toi, partir. Moi, garder bananes.', cry: 'BOUM BOUM BOUM (c\'est ma poitrine)' },
+  croc_king: { intro: '… (il ouvre un œil, puis la gueule, très grand, et attend que tu approches)', cry: 'Clac !' },
+  mask_lord: { intro: 'Les arbres m\'ont dit ton nom. Les masques m\'ont dit ta fin. Assieds-toi, nous allons parler… longtemps.', cry: 'Que la jungle te dévore !' },
   kraken: { intro: 'Un bateau… Il y a si longtemps qu\'aucun bateau n\'avait osé sortir. Je vais le ramener par le fond, comme les autres.', cry: 'Par le fond !' },
 };

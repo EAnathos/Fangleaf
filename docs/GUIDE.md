@@ -37,8 +37,9 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 
 On se réveille sur une plage inconnue, sans arme. Une épée est plantée dans le sable tout près : il faut tirer
 plusieurs fois dessus (**E**) pour la déterrer, et on ne peut pas se battre avant. Un chemin de cailloux mène de
-la plage à un **pont de bois** : il traverse un bras de mer jusqu'à l'**îlot du village**, d'abord à l'état de camp
-de fortune.
+la plage à un **pont de bois** qui traverse un bras de mer jusqu'à l'**îlot du village**. Le pont est cassé : on le
+répare (**E** à son pied) avec le bois et la pierre de son sac, ramassés sur la plage et alentour. De l'autre côté,
+le village n'est encore qu'un camp de fortune ; tant que le pont n'est pas réparé, on se réveille sur la plage.
 
 ## L'île et ses zones
 
@@ -50,14 +51,17 @@ s'éloigne de la plage :
 2. **Bois profonds** : Loups, Araignées sylvestres ; Lucioles la nuit ; un arbre abattu réveille parfois un **Tréant**.
 3. **Landes** : Sangliers, Ours des fourrés (ils chassent la nuit, dorment le jour), Lièvres des ronces.
 4. **Ruines moussues** : Golems de mousse, Feux follets, Guetteurs runiques.
-5. **Lacs brumeux** : Crapauds-mortiers, Serpents des brumes (dans l'eau), Crabes des berges.
-6. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Chacals fantômes la nuit ; tempêtes de sable. Un grand volcan s'y dresse.
-7. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles crachent de la lave en cloche) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
+5. **Lacs brumeux** : Crapauds-mortiers, Serpents des brumes (dans l'eau), Crabes des berges ; une brume légère y flotte.
+6. **Jungle**, sous la canopée (grands arbres à contreforts, bambous, lianes, marigots) : Gorilles des cimes (ils
+   lancent des bananes de loin, cognent de près et fracassent le sol ; ils se montent), Crocodiles des marais (tapis
+   dans l'eau, on ne voit que leurs yeux ; ils se jettent sur ce qui longe la rive ; ils se montent, dans l'eau) et
+   Petits Masqués à la sarbacane. Leurs géants dorment au fond de **temples** à degrés.
+7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Chacals fantômes la nuit ; tempêtes de sable. Un grand volcan s'y dresse.
+8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles crachent de la lave en cloche) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
 la zone suivante, il faut à la fois l'**Hôtel de ville** au bon niveau et avoir vaincu **tous les géants** de la
-zone (une fois suffit, pour tout le village). Pour la Mer de sable, il faut en plus avoir rapporté au vieil homme
-les parchemins des géants des Lacs brumeux. On peut toujours revenir en arrière.
+zone (une fois suffit, pour tout le village), et avoir rapporté au vieil homme leurs parchemins. On peut toujours revenir en arrière.
 
 La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, pour tout le village.
 
@@ -72,12 +76,12 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - La forge améliore séparément l'**arme** (dégâts) et l'**armure** (PV max et réduction des dégâts), ainsi que la
   **torche** (rayon de lumière la nuit), les **bottes** (vitesse) et la **selle** (vitesse des montures). Chaque
   amélioration coûte de l'or et du **bois** : celui du sac d'abord, puis celui de l'entrepôt du village.
-- **Tireurs** (Guetteur, Crapaud-mortier, Serpent) : ils s'immobilisent pour charger leur tir. On s'écarte de la
+- **Tireurs** (Guetteur, Crapaud-mortier, Serpent, Gorille, Petit Masqué) : ils s'immobilisent pour charger leur tir. On s'écarte de la
   trajectoire, ou on sort du cercle annoncé au sol.
 - **Hors du village** (et des camps établis), on ne régénère pas. Les monstres sauvages, eux, récupèrent si on
   cesse de les frapper.
-- **Mort** : on perd une part de son or, la meute ordinaire se disperse, les Alphas restent. On réapparaît au
-  village ou au dernier camp établi qu'on a dépassé.
+- **Mort** : on perd 15 % de son or et 10 % du bois et de la pierre de son sac (affiché en grand, en rouge), la meute
+  ordinaire se disperse, les Alphas restent. On réapparaît au village ou au dernier camp établi qu'on a dépassé.
 - **Relever** un coéquipier à terre : **R maintenu** près de lui, pendant le court délai où il reste au sol.
 
 ## Meute, apprivoisement et montures
@@ -138,7 +142,12 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   - **Pierre de passage** : voyage instantané vers les camps établis.
 - **Hôtel de ville** : en le construisant, on nomme le village (renommable ensuite). Chaque niveau débloque la
   suite (Marché, Pierre de passage, puis une porte de zone par niveau).
-- **Tableau du village** : géants battus, monstres apprivoisés et dons à l'entrepôt de chaque membre.
+- **Tableau du village** : une colonne par membre, en quatre catégories : combat (géants battus, premières victoires,
+  monstres vaincus, dégâts, plus gros coup, chutes, coéquipiers relevés), dressage (apprivoisés, essences, Alphas
+  éveillés et légendaires), récolte et village (bois, pierre, dons, or pour le village), exploration (coffres, livres,
+  distance, temps de jeu). Une couronne pour le meilleur de chaque ligne (le moins de chutes, pour les chutes).
+- Les **Alphas au repos** (rangés à la Tanière) se promènent sur l'îlot : ils font la sieste, se roulent par terre,
+  reniflent, se courent après et se chamaillent entre eux, ceux de tous les membres.
 - **École des dompteurs** : elle aussi au village, mais on ne la construit pas soi-même. Son plan dort dans un vieux
   coffre du **Camp avancé** : une fois le camp établi, **E** pour l'ouvrir (une fois pour tout le village). Aubin la
   bâtit ensuite contre de l'or, du bois et de la pierre, comme une étape du bateau ; le chantier prend un moment,

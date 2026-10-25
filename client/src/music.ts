@@ -2,7 +2,7 @@
 // arpèges, mélodie, percussions) par-dessus l'ambiance du lieu (vent, oiseaux, feu…). Les grottes n'en ont pas :
 // l'ambiance seule ; un géant réveillé y lance la musique de combat.
 
-export type Place = 'village' | 'camp' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5' | 'zone6' | 'cave' | 'boss';
+export type Place = 'village' | 'camp' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5' | 'zone6' | 'zone7' | 'cave' | 'boss';
 
 type Inst = 'pluck' | 'flute' | 'bell' | 'soft' | 'brass';
 /** Un morceau : tonalité, tempo, grille d'accords et les instruments qui la jouent. */
@@ -21,6 +21,7 @@ export interface Score {
 }
 
 const HIJAZ = [0, 1, 4, 5, 7, 8, 10]; // seconde augmentée : couleur des déserts
+const PENTA = [0, 3, 5, 7, 10]; // pentatonique mineure : la jungle
 const MAJ = [0, 2, 4, 5, 7, 9, 11], MIN = [0, 2, 3, 5, 7, 8, 10], MIX = [0, 2, 4, 5, 7, 9, 10], LYD = [0, 2, 4, 6, 7, 9, 11];
 
 export const MUSIC: Record<Place, { label: string; score: Score | null }> = {
@@ -31,7 +32,8 @@ export const MUSIC: Record<Place, { label: string; score: Score | null }> = {
   zone3: { label: 'Landes (zone 3)', score: { name: 'Chevauchée', bpm: 124, root: 98, scale: MIX, chords: [0, 6, 3, 4], bass: { type: 'triangle', vol: 0.1, pattern: [1, 0, 1, 1, 0, 1, 1, 0] }, lead: { inst: 'brass', vol: 0.04, density: 0.45, octave: 3 }, drums: { kick: [1, 0, 0, 1, 0, 0, 1, 0], hat: [0, 1, 0, 1, 0, 1, 0, 1], tom: [0, 0, 0, 0, 0, 0, 0, 1], vol: 0.45 }, echo: 0.12 } },
   zone4: { label: 'Ruines moussues (zone 4)', score: { name: 'Runes', bpm: 84, root: 110, scale: MIN, chords: [0, 5, 6, 4], pad: { type: 'sine', vol: 0.03, cutoff: 800 }, arp: { inst: 'bell', vol: 0.035, pattern: [0, 2, 1, 3, 2, 1, 0, 2], octave: 3 }, echo: 0.4 } },
   zone5: { label: 'Lacs brumeux (zone 5)', score: { name: 'Reflets', bpm: 84, root: 130.8, scale: LYD, chords: [0, 1, 5, 4], arp: { inst: 'pluck', vol: 0.05, pattern: [0, 2, 3, 2, 1, 2, 3, 2], octave: 2 }, pad: { type: 'triangle', vol: 0.025, cutoff: 1000 }, bass: { type: 'sine', vol: 0.07, pattern: [1, 0, 0, 0, 1, 0, 0, 0] }, echo: 0.3 } },
-  zone6: { label: 'Mer de sable (zone 6)', score: { name: 'Mirages', bpm: 88, root: 110, scale: HIJAZ, chords: [0, 1, 0, 6], pad: { type: 'triangle', vol: 0.025, cutoff: 900 }, arp: { inst: 'pluck', vol: 0.05, pattern: [0, 1, 2, 1, 3, 2, 1, 0], octave: 2 }, lead: { inst: 'flute', vol: 0.045, density: 0.35, octave: 3 }, drums: { kick: [1, 0, 0, 1, 0, 0, 1, 0], hat: [0, 0, 0, 0, 0, 0, 0, 0], tom: [0, 0, 1, 0, 0, 1, 0, 1], vol: 0.3 }, echo: 0.3 } },
+  zone6: { label: 'Jungle (zone 6)', score: { name: 'Canopée', bpm: 104, root: 110, scale: PENTA, chords: [0, 3, 4, 2], pad: { type: 'triangle', vol: 0.022, cutoff: 750 }, bass: { type: 'sine', vol: 0.08, pattern: [1, 0, 0, 1, 0, 1, 0, 0] }, arp: { inst: 'pluck', vol: 0.05, pattern: [0, 2, 1, 2, 0, 3, 1, 2], octave: 2 }, lead: { inst: 'flute', vol: 0.04, density: 0.3, octave: 3 }, drums: { kick: [1, 0, 0, 1, 0, 0, 1, 0], hat: [0, 1, 0, 1, 0, 1, 1, 1], tom: [0, 0, 1, 0, 1, 0, 0, 1], vol: 0.35 }, echo: 0.22 } },
+  zone7: { label: 'Mer de sable (zone 7)', score: { name: 'Mirages', bpm: 88, root: 110, scale: HIJAZ, chords: [0, 1, 0, 6], pad: { type: 'triangle', vol: 0.025, cutoff: 900 }, arp: { inst: 'pluck', vol: 0.05, pattern: [0, 1, 2, 1, 3, 2, 1, 0], octave: 2 }, lead: { inst: 'flute', vol: 0.045, density: 0.35, octave: 3 }, drums: { kick: [1, 0, 0, 1, 0, 0, 1, 0], hat: [0, 0, 0, 0, 0, 0, 0, 0], tom: [0, 0, 1, 0, 0, 1, 0, 1], vol: 0.3 }, echo: 0.3 } },
   cave: { label: 'Grottes', score: null }, // ambiance seule
   boss: { label: 'Combat de géant', score: { name: 'Duel', bpm: 152, root: 98, scale: MIN, chords: [0, 0, 5, 4], bass: { type: 'square', vol: 0.035, pattern: [1, 0, 1, 1, 0, 1, 1, 0] }, arp: { inst: 'pluck', vol: 0.05, pattern: [0, 1, 2, 3, 2, 1, 0, 1], octave: 2 }, drums: { kick: [1, 0, 0, 0, 1, 0, 0, 0], hat: [1, 1, 1, 1, 1, 1, 1, 1], vol: 0.4 }, echo: 0.1 } },
 };

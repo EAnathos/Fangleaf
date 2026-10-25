@@ -9,9 +9,9 @@ describe('Géants et grottes', () => {
     const r = room();
     const p = r.addPlayer('a', noop);
     const c = r.map.caves[0];
-    const perZone = [1, 2, 3, 4, 5, 6, 7, 8].map((z) => r.map.caves.filter((cv: { zone: number }) => cv.zone === z).length).join('');
-    check(r.map.caves.length === 19 && perZone === '22233331' && r.map.caves.every((cv: { boss: number; zone: number }) => SPECIES[cv.boss].boss && SPECIES[cv.boss].zone === cv.zone),
-      `19 grottes (${perZone} par zone : la 7e sous le volcan, la 8e en haute mer), un géant par espèce`);
+    const perZone = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((z) => r.map.caves.filter((cv: { zone: number }) => cv.zone === z).length).join('');
+    check(r.map.caves.length === 22 && perZone === '222333331' && r.map.caves.every((cv: { boss: number; zone: number }) => SPECIES[cv.boss].boss && SPECIES[cv.boss].zone === cv.zone),
+      `22 grottes (${perZone} par zone : la 6e, les temples de la jungle ; la 8e sous le volcan, la 9e en haute mer), un géant par espèce`);
     check(SPECIES.filter((sp) => !sp.boss && !sp.passive && sp.population).every((sp) => SPECIES.some((b) => b.boss && b.base === sp.key)), 'chaque espèce hostile a son géant (âme → Alpha légendaire ; sauf le Tréant, caché dans les arbres)');
     const f = r.createUnit(0, false, 0, 0);
     f.owner = p.id;

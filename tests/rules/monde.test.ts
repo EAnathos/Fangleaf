@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { CACTUS_CD, CACTUS_PRICK, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
+import { DESERT_ZONE, JUNGLE_ZONE, ZONES, CACTUS_CD, CACTUS_PRICK, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
 import { BEACH, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { sky } from '../../shared/weather.ts';
 import { Room } from '../../server/room.ts';
@@ -21,6 +21,9 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     for (const seed of [1, 42, 777, 123456789]) {
       const m = new WorldMap(seed);
       const d = Math.hypot(m.village.x - m.spawn.x, m.village.y - m.spawn.y);
+      const mid0 = { x: (m.bridge.a.x + m.bridge.b.x) / 2, y: (m.bridge.a.y + m.bridge.b.y) / 2 };
+      check(m.blocked(mid0.x, mid0.y), `graine ${seed} : au départ, le pont est cassé (on ne passe pas)`);
+      m.setBridge(true);
       let pathOk = true;
       // le long des chemins de terre (de la plage au pont, du pont à la porte), sur le pont, puis de la porte jusqu'au feu
       const lines = [...m.paths, [[m.bridge.a.x, m.bridge.a.y], [m.bridge.b.x, m.bridge.b.y]]];
@@ -44,18 +47,19 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
         if (m.blocked(m.gate.x + (m.village.x - m.gate.x) * t, m.gate.y + (m.village.y - m.gate.y) * t)) pathOk = false;
       }
       let water = 0, n = 0;
-      let lw = 0, ln = 0, dw = 0, dn = 0;
+      let lw = 0, ln = 0, dw = 0, dn = 0, jw = 0, jn = 0;
       for (let x = -WORLD_HALF + 20; x < WORLD_HALF; x += 80) {
         for (let y = -WORLD_HALF + 20; y < WORLD_HALF; y += 80) {
           if (m.isSea(x, y)) continue; // la mer ne compte pas : seulement les lacs de l'île
           const z = m.zoneAt(x, y);
           if (z === 5) ln++, lw += +m.isWater(x, y);
-          else if (z === 6) dn++, dw += +m.isWater(x, y);
+          else if (z === DESERT_ZONE) dn++, dw += +m.isWater(x, y);
+          else if (z === JUNGLE_ZONE) jn++, jw += +m.isWater(x, y);
           else n++, water += +m.isWater(x, y);
         }
       }
-      check(d >= 800 && !m.inVillage(m.spawn.x, m.spawn.y) && pathOk && water / n > 0.04 && water / n < 0.2 && lw / ln > 0.15 && dw / dn < 0.06,
-        `graine ${seed} : village à ${Math.round(d)} px de la plage, chemin libre, ${Math.round((100 * water) / n)} % de lacs (zone 5 : ${Math.round((100 * lw) / ln)} %, désert : ${Math.round((100 * dw) / dn)} % d'oasis)`);
+      check(d >= 800 && !m.inVillage(m.spawn.x, m.spawn.y) && pathOk && water / n > 0.04 && water / n < 0.2 && lw / ln > 0.15 && dw / dn < 0.06 && jw / jn > water / n,
+        `graine ${seed} : village à ${Math.round(d)} px de la plage, chemin libre, ${Math.round((100 * water) / n)} % de lacs (zone 5 : ${Math.round((100 * lw) / ln)} %, jungle : ${Math.round((100 * jw) / jn)} % de marigots, désert : ${Math.round((100 * dw) / dn)} % d'oasis)`);
       const sh = m.shoreAt(m.spawn.x, m.spawn.y), seaNear = [0, 1, 2, 3, 4, 5, 6, 7].some((k) => m.isSea(m.spawn.x + Math.cos(k * 0.785) * 450, m.spawn.y + Math.sin(k * 0.785) * 450));
       check(sh < 0 && sh > -BEACH * 2 && seaNear && !m.blocked(m.spawn.x, m.spawn.y), `graine ${seed} : arrivée sur la plage, la mer à deux pas (${Math.round(-sh)} px de l'eau)`);
       let edgeSea = true;
@@ -63,11 +67,11 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
       check(edgeSea, `graine ${seed} : une île, la mer profonde tout autour`);
       const site = m.sites[0], stone = m.stones[1];
       const reach = m.findPath(m.village.x, m.village.y + 40, stone.x, stone.y + 50, 500000);
-      const zones = [1, 2, 3, 4, 5, 6].map((z) => { const q = m.spineAt((m.zoneFrom(z) + m.zoneTo(z)) / 2); return m.zoneAt(q.x, q.y); }).join('');
+      const zones = [1, 2, 3, 4, 5, 6, 7].map((z) => { const q = m.spineAt((m.zoneFrom(z) + m.zoneTo(z)) / 2); return m.zoneAt(q.x, q.y); }).join('');
       const end = m.spineAt(m.length - 250);
       const reachEnd = m.findPath(stone.x, stone.y + 50, end.x, end.y, 600000);
-      check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '123456' && m.caves.filter((c) => c.zone <= 6).length === 15 && m.caves.filter((c) => c.zone === 7).length === 3 && m.caves.filter((c) => c.zone === 8).length === 1,
-        `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de l'île (Mer de sable) atteignable, 15 grottes sur l'île et 3 antres sous le volcan`);
+      check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '1234567' && m.caves.filter((c) => c.zone <= ZONES).length === 18 && m.caves.filter((c) => c.zone === ZONES + 1).length === 3 && m.caves.filter((c) => c.zone === ZONES + 2).length === 1,
+        `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de l'île (Mer de sable) atteignable, 18 grottes sur l'île (dont 3 temples dans la jungle) et 3 antres sous le volcan`);
       const mid = m.length / 2, c = m.spineAt(mid), nv = m.normalAt(mid), far = m.halfWidth(mid) + 1700;
       let shallow = false;
       for (let x = -WORLD_HALF + 50; x < WORLD_HALF && !shallow; x += 120) for (let y = -WORLD_HALF + 50; y < WORLD_HALF && !shallow; y += 120) shallow = m.isSea(x, y) && m.isWater(x, y);
@@ -188,21 +192,23 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
   });
 
   rule('Ordre des espèces figé : leur index sert dans les sauvegardes (essences, Alphas). On n\'ajoute qu\'à la fin.', () => {
-    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise kraken_tentacle kraken';
+    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise kraken_tentacle kraken gorilla croc masked gorilla_king croc_king mask_lord';
     check(SPECIES.map((sp) => sp.key).join(' ') === order, `ordre des ${SPECIES.length} espèces inchangé (sauvegardes intactes)`);
   });
 
-  rule('Mer de sable (zone 6) : porte après les Lacs brumeux, Hôtel de ville niveau 6 et parchemins des géants de la zone 5 rapportés.', () => {
-    const z5 = zoneBosses(5), z6 = zoneBosses(6);
-    check(gateHall(5) === 6 && HALL_MAX >= 6 && !gateOpen(5, 6, []) && gateOpen(5, 6, z5) && !gateOpen(5, 5, z5) && z6.length === 3,
-      `porte de la Mer de sable : Hôtel de ville niv. 6 et les ${z5.length} géants des Lacs ; ${z6.length} géants dans le désert`);
+  rule('Jungle (zone 6) puis Mer de sable (zone 7) : chaque porte demande son niveau d\'Hôtel de ville et les parchemins des géants de la zone d\'avant.', () => {
+    const z5 = zoneBosses(5), zj = zoneBosses(JUNGLE_ZONE), z7 = zoneBosses(DESERT_ZONE);
+    check(gateHall(5) === 6 && !gateOpen(5, 6, []) && gateOpen(5, 6, z5) && !gateOpen(5, 5, z5) && zj.length === 3,
+      `porte de la Jungle : Hôtel de ville niv. 6 et les ${z5.length} géants des Lacs ; ${zj.length} géants dans leurs temples`);
+    check(gateHall(6) === 7 && HALL_MAX >= 7 && !gateOpen(6, 7, z5) && gateOpen(6, 7, zj) && !gateOpen(6, 6, zj) && z7.length === 3,
+      `porte de la Mer de sable : Hôtel de ville niv. 7 et les géants de la Jungle ; ${z7.length} géants dans le désert`);
 
     const r = room();
     for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
     const p = r.addPlayer('dune', noop);
     const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
     // Ver des sables : sous le sable, intouchable ; arrivé sous sa cible, sortie annoncée, puis exposé et frappable.
-    const spot = r.map.freeNear(r.map.spineAt((r.map.zoneFrom(6) + r.map.zoneTo(6)) / 2).x, r.map.spineAt((r.map.zoneFrom(6) + r.map.zoneTo(6)) / 2).y);
+    const spot = r.map.freeNear(r.map.spineAt((r.map.zoneFrom(DESERT_ZONE) + r.map.zoneTo(DESERT_ZONE)) / 2).x, r.map.spineAt((r.map.zoneFrom(DESERT_ZONE) + r.map.zoneTo(DESERT_ZONE)) / 2).y);
     [p.x, p.y] = [spot.x, spot.y];
     const worm = r.createUnit(key('sandworm'), false, p.x + 60, p.y);
     const regrid = () => {
@@ -228,7 +234,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     r.hazards.length = 0;
     Object.assign(p, { dead: false, hp: 9999 }); // le ver a pu l'abattre : on le remet debout pour la suite
     // Suricates : ils vivent autour de leur tanière ; un dompteur sans fruit approche, et la colonie court s'y cacher.
-    check(r.map.dens.length >= 3 && r.map.dens.every((d: { x: number; y: number }) => r.map.zoneAt(d.x, d.y) === 6), `${r.map.dens.length} tanières de suricates dans la Mer de sable`);
+    check(r.map.dens.length >= 3 && r.map.dens.every((d: { x: number; y: number }) => r.map.zoneAt(d.x, d.y) === DESERT_ZONE), `${r.map.dens.length} tanières de suricates dans la Mer de sable`);
     const den = r.map.dens[0];
     const cats = [0, 1, 2].map((k) => r.createUnit(key('meerkat'), false, den.x + 40 + k * 20, den.y + 20));
     [p.x, p.y] = [den.x + 200, den.y];
@@ -281,7 +287,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     r.updateSpawns();
     const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
     const p = r.addPlayer('tempete', noop);
-    const q = r.map.freeNear(r.map.spineAt((r.map.zoneFrom(6) + r.map.zoneTo(6)) / 2).x, r.map.spineAt((r.map.zoneFrom(6) + r.map.zoneTo(6)) / 2).y);
+    const q = r.map.freeNear(r.map.spineAt((r.map.zoneFrom(DESERT_ZONE) + r.map.zoneTo(DESERT_ZONE)) / 2).x, r.map.spineAt((r.map.zoneFrom(DESERT_ZONE) + r.map.zoneTo(DESERT_ZONE)) / 2).y);
     [p.x, p.y] = [q.x, q.y];
     p.hp = p.maxHp = 1000;
     r.tick = 0;
@@ -306,7 +312,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
 
     // cactus : s'y frotter pique (pas les palmiers de la lisière verte)
     const cactus = r.map.decor.find((d: { kind: number }) => r.map.isCactus(d));
-    check(!!cactus && r.map.decor.some((d: { kind: number; x: number; y: number }) => d.kind === 0 && r.map.styleZone(d.x, d.y) === 6 && !r.map.isCactus(d)), 'des cactus dans le désert, des palmiers au bord de l\'eau');
+    check(!!cactus && r.map.decor.some((d: { kind: number; x: number; y: number }) => d.kind === 0 && r.map.styleZone(d.x, d.y) === DESERT_ZONE && !r.map.isCactus(d)), 'des cactus dans le désert, des palmiers au bord de l\'eau');
     const trunk = r.map.trunkOf(cactus);
     Date.now = realNow;
     [p.x, p.y, p.hp] = [trunk.x + trunk.r + p.r + 2, trunk.y, 1000];

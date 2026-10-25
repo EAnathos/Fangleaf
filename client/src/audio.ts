@@ -28,7 +28,7 @@ function load(): AudioSettings {
   }
 }
 
-export type Ambience = 'village' | 'camp' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5' | 'zone6' | 'cave' | 'boss'; // boss : grotte, géant réveillé
+export type Ambience = 'village' | 'camp' | 'zone1' | 'zone2' | 'zone3' | 'zone4' | 'zone5' | 'zone6' | 'zone7' | 'cave' | 'boss'; // boss : grotte, géant réveillé
 export type { Sfx } from './sfx.ts';
 
 /** Une ambiance en cours : son volume (pour le fondu) et de quoi tout arrêter. */
@@ -308,6 +308,22 @@ class Sound {
       bed('lowpass', 380, 0.7, 0.05, 120); // clapotis des lacs
       every(1.5, 4, drop);
     } else if (name === 'zone6') {
+      // jungle : air lourd et humide, insectes, oiseaux tropicaux, singes au loin, gouttes qui tombent des feuilles
+      pad([110, 164.8, 196], 'triangle', 600, 0.028);
+      bed('bandpass', 2600, 0.4, 0.03, 900);
+      every(0.8, 2.2, () => {
+        for (let k = 0; k < 6; k++) tone(3600 + Math.random() * 300, 3500, 0.025, 0.012, 'square', k * 0.045); // cigales
+      });
+      every(3, 7, () => {
+        const f = 1400 + Math.random() * 600; // oiseau tropical : un appel qui monte puis plonge
+        tone(f, f * 1.6, 0.12, 0.05, 'sine');
+        tone(f * 1.6, f * 0.8, 0.22, 0.045, 'sine', 0.13);
+      });
+      every(9, 18, () => {
+        for (let k = 0; k < 4; k++) tone(520 + k * 90, 900 + k * 120, 0.18, 0.03, 'triangle', k * 0.2); // singes au loin
+      });
+      every(1.2, 3, drop);
+    } else if (name === 'zone7') {
       pad([146.8, 196, 233.1], 'sine', 700, 0.025);
       bed('bandpass', 1100, 0.5, 0.05, 700); // vent qui siffle sur les dunes
       every(4, 9, () => tone(2600, 1700, 0.5, 0.03, 'sine')); // cri lointain d'un rapace

@@ -2,8 +2,8 @@
 
 import {
   bossMelee, sleeperBlocks,
-  alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
+  ARC_FLIGHT_S, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost,
@@ -12,7 +12,7 @@ import {
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
-import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
+import { STAT_KEYS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { HALL_ID, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky } from '../shared/weather.ts';
@@ -189,6 +189,7 @@ export interface Player {
   readKind: number; // discipline de la leçon en cours
   rally?: Buff; // encouragé par un cri de suricate
   guard?: Buff; // abrité par la carapace d'un escargot
+  legendAt?: number; // dernière attaque spéciale lancée par l'un de ses Alphas légendaires
 }
 
 type Ent = Unit | Player;
@@ -207,6 +208,25 @@ interface Dozer {
   wt: number; // secondes avant d'en changer
 }
 
+/**
+ * Alpha au repos (rangé à la Tanière, pas sur le terrain) : il se promène sur l'îlot du village, fait la sieste, se roule
+ * par terre, renifle, et joue avec les autres Alphas au repos (course-poursuite, chamaillerie). Purement décoratif.
+ */
+interface Pet {
+  id: number;
+  key: string; // dompteur (compte ou id) et espèce : un seul Alpha par espèce et par dompteur
+  s: number;
+  legend: boolean;
+  color: string; // couleur de son dompteur
+  x: number;
+  y: number;
+  wx: number; // où il va
+  wy: number;
+  act: PetAct;
+  until: number; // fin de ce qu'il fait (temps de simulation)
+  partner: number; // l'Alpha avec qui il joue (chase, flee, play), 0 sinon
+}
+
 /** Dompteur déconnecté, endormi près du feu du village avec ses monstres. */
 interface Sleeper {
   name: string;
@@ -216,6 +236,7 @@ interface Sleeper {
   x: number;
   y: number;
   pack: Dozer[];
+  rest: { s: number; legend: boolean }[]; // ses Alphas au repos (ils jouent sur l'îlot)
   stats: Stats; // pour le tableau du village
 }
 
@@ -233,12 +254,7 @@ interface Chest {
 const ACTIVE_R = VIEW_R + 500; // au-delà, les monstres sauvages restent immobiles (personne ne les voit)
 
 /** Statistiques lues d'un profil (champs manquants ou invalides : 0). */
-const statsOf = (s?: Partial<Stats>): Stats => ({
-  bosses: Math.max(0, Math.floor(Number(s?.bosses) || 0)),
-  tamed: Math.max(0, Math.floor(Number(s?.tamed) || 0)),
-  given: Math.max(0, Math.floor(Number(s?.given) || 0)),
-  spent: Math.max(0, Math.floor(Number(s?.spent) || 0)),
-});
+const statsOf = (s?: Partial<Stats>): Stats => Object.fromEntries(STAT_KEYS.map((k) => [k, Math.max(0, Math.floor(Number(s?.[k]) || 0))])) as unknown as Stats;
 
 /** Nom de village propre : sans caractères de contrôle, espaces réduits, 24 caractères au plus. */
 export const villageName = (s: unknown) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24);
@@ -304,9 +320,11 @@ export class Room {
   private caveBack: number[] = []; // temps de simulation de son retour
   private caveAt = new WeakMap<Player, number>(); // dernier passage de chaque dompteur (un double clic ne le fait pas ressortir aussitôt)
   private hazards: Hazard[] = [];
+  private legendAimed = new Map<number, number>(); // monstres visés par une attaque de légendaire → quand
   private shots: Shot[] = [];
   private chests: Chest[] = [];
   private sleepers = new Map<string, Sleeper>();
+  private pets = new Map<string, Pet>(); // Alphas au repos qui jouent sur l'îlot (clé : dompteur et espèce)
   private diffs = new Map<number, SnapshotDiff>(); // par spectateur : ce qu'il a déjà reçu (envoi différentiel) // membres déconnectés (compte, ou « invité:id »)
   private bushBack: number[] = []; // par buisson : temps de simulation où ses fruits repoussent (0 : garni)
   readonly map: WorldMap;
@@ -351,6 +369,9 @@ export class Room {
       for (const b of ['palisade', 'plot_forge', 'plot_den', 'plot_market'] as const) if (!this.buildings.includes(b)) this.buildings.push(b);
     }
     this.map.setPalisade(this.buildings.includes('palisade'));
+    // Village d'avant le pont cassé (déjà commencé) : son pont est déjà réparé.
+    if ((this.hall > 0 || this.buildings.length) && !this.buildings.includes('bridge')) this.buildings.push('bridge');
+    this.map.setBridge(this.buildings.includes('bridge'));
     this.beaten = indexes(saved.beaten, SPECIES.length).filter((s) => isBoss(s));
     this.stock.wood = Math.max(0, Math.floor(Number(saved.wood) || 0));
     this.stock.stone = Math.max(0, Math.floor(Number(saved.stone) || 0));
@@ -378,13 +399,13 @@ export class Room {
     const found = !!account?.profile?.village_found;
     // tout nouveau dompteur : sans arme (l'épée est plantée dans le sable), il se réveille à côté de l'œuf
     const armed = account?.profile ? account.profile.armed !== false : false;
-    const from = found ? { x: this.map.village.x, y: this.map.village.y + 40 } : this.map.spawn;
+    const from = found && this.buildings.includes('bridge') ? { x: this.map.village.x, y: this.map.village.y + 40 } : this.map.spawn; // pont cassé : la plage
     const a = Math.random() * Math.PI * 2, spread = armed ? 60 : 12;
     const at = this.map.freeNear(from.x + Math.cos(a) * spread, from.y + Math.sin(a) * spread);
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, saddle: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: { bosses: 0, tamed: 0, given: 0, spent: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, saddle: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: statsOf(), manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], seen: new Set(), tomes: Array(BOOKS).fill(0), learned: LESSON_KINDS.map(() => 0), readAt: 0, readKind: 0,
     };
@@ -479,6 +500,7 @@ export class Room {
     this.sleepers.set(key, {
       name: prof.name, color: PLAYER_COLORS[this.seatFor(key, prof.seat)], armor: clamp(Number(prof.armor) || 0, 0, ARMOR_MAX),
       cls: CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as string) : '', x: at.x, y: at.y, pack, stats: statsOf(prof.stats),
+      rest: (prof.alphas ?? []).filter((x) => x.rest && x.s in SPECIES).map((x) => ({ s: x.s, legend: !!x.legend })),
     });
     this.scaleBosses();
   }
@@ -502,6 +524,103 @@ export class Room {
         if (this.map.blocked(nx, ny)) d.wt = 0; // un bâtiment sur la route : autre promenade
         else [d.x, d.y] = [nx, ny];
       }
+    }
+  }
+
+  /** Alphas au repos qui doivent jouer sur l'îlot : ceux des dompteurs en ligne et des membres endormis au village. */
+  private updatePets() {
+    if (this.tick % TICK_HZ === 0) {
+      const want = new Map<string, { s: number; legend: boolean; color: string }>();
+      for (const p of this.players.values()) for (const r of p.resting) want.set(`${p.userId ?? p.id}:${r.s}`, { s: r.s, legend: r.legend, color: p.color });
+      for (const [k, z] of this.sleepers) for (const r of z.rest) want.set(`${k}:${r.s}`, { s: r.s, legend: r.legend, color: z.color });
+      for (const k of this.pets.keys()) if (!want.has(k)) this.pets.delete(k);
+      for (const [k, w] of want) {
+        const old = this.pets.get(k);
+        if (old) [old.legend, old.color] = [w.legend, w.color];
+        else {
+          const at = this.petSpot() ?? this.map.den;
+          this.pets.set(k, { id: this.nextId++, key: k, ...w, x: at.x, y: at.y, wx: at.x, wy: at.y, act: 'walk', until: this.time + Math.random() * 3, partner: 0 });
+        }
+      }
+    }
+    const byId = new Map([...this.pets.values()].map((p) => [p.id, p]));
+    for (const pet of this.pets.values()) {
+      const mate = pet.partner ? byId.get(pet.partner) : undefined;
+      if (pet.partner && (!mate || mate.partner !== pet.id)) [pet.act, pet.partner, pet.until] = ['walk', 0, 0]; // son camarade est parti
+      if (this.time >= pet.until) this.petNext(pet, byId);
+      const sp = SPECIES[pet.s].speed;
+      let speed = 0;
+      if (pet.act === 'walk') speed = sp * 0.35;
+      else if (pet.act === 'chase' && mate) [pet.wx, pet.wy, speed] = [mate.x, mate.y, Math.max(90, sp * 0.9)];
+      else if (pet.act === 'flee' && mate) {
+        // il file devant son poursuivant, en zigzag
+        const dx = pet.x - mate.x, dy = pet.y - mate.y, l = Math.hypot(dx, dy) || 1, wob = Math.sin(this.time * 3 + pet.id) * 0.8;
+        [pet.wx, pet.wy, speed] = [pet.x + ((dx - dy * wob) / l) * 60, pet.y + ((dy + dx * wob) / l) * 60, Math.max(85, sp * 0.85)];
+      } else if (pet.act === 'play' && mate) {
+        // chamaillerie : il tourne autour de son camarade, tout près
+        const a = this.time * 1.6 + (pet.id < mate.id ? 0 : Math.PI), cx = (pet.x + mate.x) / 2, cy = (pet.y + mate.y) / 2, rr = 22 + SPECIES[pet.s].r;
+        [pet.wx, pet.wy, speed] = [cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.6, Math.max(60, sp * 0.5)];
+      }
+      if (!speed) continue;
+      const dx = pet.wx - pet.x, dy = pet.wy - pet.y, len = Math.hypot(dx, dy);
+      if (len < 3) {
+        if (pet.act === 'walk' && Math.random() < 0.02) pet.until = this.time; // arrivé : il choisit autre chose
+        continue;
+      }
+      const step = Math.min(len, speed * DT), nx = pet.x + (dx / len) * step, ny = pet.y + (dy / len) * step;
+      if (!this.petGround(nx, ny)) {
+        if (pet.act === 'walk' || pet.act === 'flee') {
+          const at = this.petSpot(pet.x, pet.y);
+          if (at) [pet.wx, pet.wy] = [at.x, at.y];
+        }
+        continue;
+      }
+      [pet.x, pet.y] = [nx, ny];
+    }
+  }
+
+  /** Où un Alpha au repos peut aller : sur l'îlot, à terre (ni l'eau, ni le pont, ni un bâtiment), pas dans le feu. */
+  private petGround(x: number, y: number) {
+    const v = this.map.village;
+    return this.map.onIsle(x, y) && this.map.bridgeDist(x, y) > 80 && !this.map.blocked(x, y) && this.map.shoreAt(x, y) < -30 && Math.hypot(x - v.x, y - v.y) > 40;
+  }
+
+  /** Un coin de l'îlot où aller, près de (x, y) s'il est donné, sinon n'importe où. */
+  private petSpot(x?: number, y?: number) {
+    const v = this.map.village;
+    for (let k = 0; k < 30; k++) {
+      const a = Math.random() * Math.PI * 2, r = x === undefined ? Math.sqrt(Math.random()) * (VILLAGE_MIN_R + 150) : 60 + Math.random() * 220;
+      const px = (x ?? v.x) + Math.cos(a) * r, py = (y ?? v.y) + Math.sin(a) * r * 0.8;
+      if (this.petGround(px, py)) return { x: px, y: py };
+    }
+    return null;
+  }
+
+  /** Ce que fait ensuite un Alpha au repos : flâner, dormir, se rouler, renifler, ou aller jouer avec un autre. */
+  private petNext(pet: Pet, byId: Map<number, Pet>) {
+    if (pet.partner) {
+      // fin du jeu : chacun repart de son côté
+      const mate = byId.get(pet.partner);
+      if (mate && mate.partner === pet.id) [mate.act, mate.partner, mate.until] = ['walk', 0, this.time + 1 + Math.random() * 2];
+      pet.partner = 0;
+    }
+    const r = Math.random();
+    const free = [...byId.values()].filter((o) => o !== pet && !o.partner && o.act !== 'nap' && Math.hypot(o.x - pet.x, o.y - pet.y) < 700);
+    if (r < 0.35 && free.length) {
+      const mate = free[Math.floor(Math.random() * free.length)], dur = 4 + Math.random() * 4;
+      const kind = Math.random() < 0.5 ? 'chase' : 'play';
+      [pet.act, pet.partner, pet.until] = [kind, mate.id, this.time + dur];
+      [mate.act, mate.partner, mate.until] = [kind === 'chase' ? 'flee' : 'play', pet.id, this.time + dur];
+      this.events.push({ e: 'pet', id: pet.id, with: mate.id, act: kind });
+      return;
+    }
+    if (r < 0.45) [pet.act, pet.until] = ['nap', this.time + 8 + Math.random() * 10];
+    else if (r < 0.55) [pet.act, pet.until] = ['roll', this.time + 1.6];
+    else if (r < 0.67) [pet.act, pet.until] = ['sniff', this.time + 1.5 + Math.random() * 2];
+    else {
+      const at = this.petSpot(pet.x, pet.y);
+      if (at) [pet.wx, pet.wy] = [at.x, at.y];
+      [pet.act, pet.until] = ['walk', this.time + 3 + Math.random() * 5];
     }
   }
 
@@ -601,6 +720,7 @@ export class Room {
     } else if (ok(nx, p.y)) p.x = nx;
     else if (ok(p.x, ny)) p.y = ny;
     if (Math.abs(p.x - px) + Math.abs(p.y - py) > 1) p.movedAt = this.time;
+    p.stats.dist += Math.hypot(p.x - px, p.y - py); // tableau du village
     const fl = Math.hypot(fx, fy);
     if (fl > 0.01 && Number.isFinite(fl)) {
       p.fx = fx / fl;
@@ -642,6 +762,20 @@ export class Room {
     return true;
   }
 
+  /** L'or du dompteur, le bois et la pierre de son sac d'abord, puis de la réserve du village : s'il y a assez de tout, on paie. */
+  private payBag(p: Player, c: Cost) {
+    if (p.gold < c.gold || p.wood + this.stock.wood < c.wood || p.stone + this.stock.stone < c.stone) return false;
+    p.gold -= c.gold;
+    p.stats.spent += c.gold;
+    for (const k of ['wood', 'stone'] as const) {
+      const bag = Math.min(p[k], c[k]);
+      p[k] -= bag;
+      this.stock[k] -= c[k] - bag;
+    }
+    p.dirty = true;
+    return true;
+  }
+
   /** À l'entrepôt : le bois et la pierre du sac passent dans la réserve du village. */
   onDeposit(p: Player) {
     if (!this.near(p, this.map.store) || (!p.wood && !p.stone)) return;
@@ -668,8 +802,9 @@ export class Room {
     const needs = BUILDINGS[b].needs;
     if (needs && !this.buildings.includes(needs)) return; // emplacement à défricher d'abord
     if (b === 'school') return; // l'école, c'est Aubin qui la bâtit (onSchool)
-    if (this.hall < BUILDINGS[b].hall || !this.pay(p, buildingCost(b))) return;
+    if (this.hall < BUILDINGS[b].hall || !(b === 'bridge' ? this.payBag(p, buildingCost(b)) : this.pay(p, buildingCost(b)))) return;
     this.buildings.push(b);
+    if (b === 'bridge') this.map.setBridge(true);
     if (b === 'palisade') {
       this.map.setPalisade(true);
       // qui se tenait pile sur la ligne des pieux est poussé à côté
@@ -1069,7 +1204,7 @@ export class Room {
     const u = this.units.get(id);
     if (p.dead || !u || !u.alpha || u.owner !== p.id || u.reviveAt || mountSpeedOf(u.s) === 1) return;
     if (dist2(u.x, u.y, p.x, p.y) > MOUNT_REACH ** 2) return;
-    if (!p.saddle) return p.send({ t: 'error', msg: 'Il te faut une selle pour monter ton Alpha : la forge en vend.' });
+    if (!p.saddle) return p.send({ t: 'error', msg: 'Il te faut une selle pour monter ton Alpha.' });
     const water = swimMount(u.s) ? this.map.waterNear(p.x, p.y, SHORE_R) : null;
     if (swimMount(u.s) && !water) return p.send({ t: 'error', msg: 'Approche-toi de l\'eau pour monter ton serpent : il ne nage qu\'en eau.' });
     if (p.mount && !this.dismount(p)) return; // sur l'eau, loin de la rive : on garde le serpent
@@ -1146,6 +1281,7 @@ export class Room {
     this.updateVoyage();
     this.updateAwakenings();
     this.updateSleepers();
+    this.updatePets();
     if (this.tick % TICK_HZ === 0) {
       this.updateBoat();
       this.updateSchool();
@@ -1186,8 +1322,41 @@ export class Room {
     this.regen();
     this.alphaHeals();
     this.alphaShouts();
+    this.tallyStats();
     this.broadcast();
     this.events = [];
+  }
+
+  /**
+   * Tableau du village : ce qui se compte d'après les événements du tick (dégâts, récolte, essences, éveils, coffres,
+   * chutes, relevés), plus le temps de jeu ; les monstres vaincus et les géants se comptent là où ils tombent.
+   */
+  private tallyStats() {
+    const add = (id: number, k: keyof Stats, n = 1) => {
+      const p = this.players.get(id);
+      if (!p || !n) return;
+      p.stats[k] += n;
+      p.dirty = true;
+    };
+    for (const e of this.events) {
+      if (e.e === 'hit') {
+        if (this.players.has(e.b) || this.units.get(e.b)?.owner) continue; // seulement les coups portés aux sauvages (même achevés ce tick)
+        const a = this.players.get(e.a), owner = a ? a.id : this.units.get(e.a)?.owner ?? 0;
+        add(owner, 'dmg', Math.round(e.dmg));
+        if (a && e.dmg > a.stats.best) a.stats.best = Math.round(e.dmg);
+      } else if (e.e === 'res') {
+        add(e.to, 'wood', e.wood);
+        add(e.to, 'stone', e.stone);
+      } else if (e.e === 'essence') add(e.to, 'essences');
+      else if (e.e === 'awaken') add(e.by, 'awakened');
+      else if (e.e === 'legend') add(e.by, 'legends');
+      else if (e.e === 'chest') {
+        add(e.to, 'chests');
+        if (e.book !== undefined) add(e.to, 'books');
+      } else if (e.e === 'pdie') add(e.id, 'deaths');
+      else if (e.e === 'previve') add(e.by, 'revives');
+    }
+    if (this.tick % TICK_HZ === 0) for (const p of this.players.values()) p.stats.time++;
   }
 
   /** Bestiaire : chaque espèce sauvage (hors géants) croisée à l'écran y entre, pour ce dompteur. */
@@ -1276,6 +1445,7 @@ export class Room {
   /** Camp établi le plus avancé qui ne soit pas plus loin sur le couloir que (x, y) ; sinon le village. */
   respawnPoint(x: number, y: number) {
     const c = this.map.respawnSite(x, y, this.camps);
+    if (c < 0 && !this.buildings.includes('bridge')) return this.map.spawn; // pont cassé : on se réveille sur la plage
     return c < 0 ? this.map.village : this.map.sites[c];
   }
 
@@ -1398,7 +1568,7 @@ export class Room {
     }
     const sky = this.sky();
     this.night = sky.light < 0.5;
-    this.storm = this.zoneOpen(6) ? sky.storm : 0; // pas de tempête tant que le village n'a pas ouvert la porte du désert
+    this.storm = this.zoneOpen(DESERT_ZONE) ? sky.storm : 0; // pas de tempête tant que le village n'a pas ouvert la porte du désert
     this.rain = sky.rain;
     // Au lever du jour, les bêtes de nuit sauvages s'en vont, hors de la vue des dompteurs (on ne les voit pas disparaître).
     if (!this.isNight()) {
@@ -1424,7 +1594,7 @@ export class Room {
   private stormDamage() {
     if (this.storm < STORM_HARM || this.tick % TICK_HZ !== 0) return;
     for (const p of this.players.values()) {
-      if (p.dead || this.safe(p.x, p.y) || this.map.caveAt(p.x, p.y) || this.map.zoneAt(p.x, p.y) !== 6) continue;
+      if (p.dead || this.safe(p.x, p.y) || this.map.caveAt(p.x, p.y) || this.map.zoneAt(p.x, p.y) !== DESERT_ZONE) continue;
       this.damage(p, maxHpOf(p) * STORM_DPS * this.storm, p);
     }
   }
@@ -1947,17 +2117,38 @@ export class Room {
   private legendMove(u: Unit, t: Ent) {
     this.dropTrail(u);
     if (u.castUntil > this.time) return true;
-    const boss = bossOf(u.s);
-    const moves = (boss < 0 ? [] : BOSS_MOVES[SPECIES[boss].key] ?? []).filter((m): m is Extract<BossMove, { cd: number }> => 'cd' in m && m.kind !== 'summon');
+    // un légendaire : les attaques de son géant ; certains monstres ont aussi la leur (le gorille fracasse le sol)
+    const boss = u.legend ? bossOf(u.s) : -1;
+    const moves = [...(boss < 0 ? [] : BOSS_MOVES[SPECIES[boss].key] ?? []), ...(SPECIES[u.s].moves ?? [])].filter((m): m is Extract<BossMove, { cd: number }> => 'cd' in m && m.kind !== 'summon');
     if (!moves.length) return false;
-    if (u.moveCd.length !== moves.length) u.moveCd = moves.map((m) => m.cd * 0.5);
+    // recharges de départ tirées au hasard : deux légendaires éveillés ensemble ne frappent pas en rythme
+    if (u.moveCd.length !== moves.length) u.moveCd = moves.map((m) => m.cd * (0.3 + Math.random() * 0.9));
     moves.forEach((_, i) => (u.moveCd[i] -= DT));
     const i = moves.findIndex((_, k) => u.moveCd[k] <= 0);
     if (i < 0 || dist2(u.x, u.y, t.x, t.y) > 450 ** 2) return false;
-    u.moveCd[i] = moves[i].cd * LEGEND_MOVE_CD;
-    this.castMove(u, moves[i], t);
+    // un seul légendaire du même dompteur à la fois : les autres attendent un instant (leur attaque reste prête)
+    const owner = this.players.get(u.owner);
+    if (owner && this.time - (owner.legendAt ?? -Infinity) < LEGEND_STAGGER_S) return false;
+    if (owner) owner.legendAt = this.time;
+    u.moveCd[i] = moves[i].cd * LEGEND_MOVE_CD * (0.8 + Math.random() * 0.4);
+    const aim = this.legendTarget(u, t);
+    this.legendAimed.set(aim.id, this.time);
+    this.castMove(u, moves[i], aim);
     this.events.push({ e: 'move', id: u.id, kind: moves[i].kind });
     return u.castUntil > this.time;
+  }
+
+  /**
+   * Cible d'une attaque de légendaire : un ennemi au hasard autour de lui, de préférence un qu'aucun autre légendaire
+   * n'a visé ces dernières secondes (pas toutes les attaques sur le même monstre). À défaut, sa cible du moment.
+   */
+  private legendTarget(u: Unit, t: Ent): Ent {
+    for (const [id, at] of this.legendAimed) if (this.time - at > LEGEND_AIM_S) this.legendAimed.delete(id);
+    const near = this.wildNear(u.x, u.y, 380);
+    if (!near.length) return t;
+    const fresh = near.filter((e) => !this.legendAimed.has(e.id));
+    const pool = fresh.length ? fresh : near;
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
   /** Traînée de lave en cours : une flaque tous les quelques pas, qui brûle ceux qui marchent dedans puis refroidit. */
@@ -2262,6 +2453,7 @@ export class Room {
     u.atkCd -= DT;
     if (u.atkCd > 0) return;
     const t = this.nearest(u.x, u.y, u.r + 70, this.preyOf(u)) as Unit | undefined;
+    if (t && SPECIES[u.s].moves && this.legendMove(u, t)) return; // le gorille monté fracasse le sol
     if (!t || dist2(u.x, u.y, t.x, t.y) > (u.r + t.r + 14) ** 2) return;
     u.atkCd = u.atkCdBase;
     this.damage(t, u.dmg, u, true);
@@ -2389,7 +2581,7 @@ export class Room {
       id: this.nextId++, kind: SHOT_KINDS.indexOf(kind), x: u.x, y: u.y - u.r * 0.5, vx: 0, vy: 0, x0: u.x, y0: u.y - u.r * 0.5, tx, ty,
       start: this.time, left: range * 1.3, dmg, splash, wild: !u.owner, by: u, ...(pierce ? { pierced: new Set<number>() } : {}),
     };
-    if (kind === 'arc') {
+    if (lobbedShot(kind)) {
       const k = Math.min(1, range / d);
       shot.tx = u.x + (tx - u.x) * k;
       shot.ty = u.y + (ty - u.y) * k;
@@ -2412,7 +2604,7 @@ export class Room {
 
   private updateShots() {
     this.shots = this.shots.filter((s) => {
-      if (SHOT_KINDS[s.kind] === 'arc') {
+      if (lobbedShot(s.kind)) {
         if (this.time - s.start < ARC_FLIGHT_S) return true;
         for (const e of this.shotTargets(s, s.tx, s.ty, s.splash)) this.damage(e, s.dmg, s.by);
         this.events.push({ e: 'boom', x: Math.round(s.tx), y: Math.round(s.ty), r: s.splash, kind: 'splash', ...(s.by.owner ? { by: s.by.owner } : {}) });
@@ -2446,8 +2638,12 @@ export class Room {
   }
 
   private tryAttack(u: Unit, t: Ent) {
-    if (SPECIES[u.s].ranged && !isBoss(u.s)) return this.rangedAttack(u, t);
-    const range = u.r + t.r + 8;
+    const sp = SPECIES[u.s];
+    // un tireur qui cogne aussi (gorille) : collé à sa cible, il frappe au lieu de tirer
+    const brawl = sp.brawler && dist2(u.x, u.y, t.x, t.y) < (u.r + t.r + 50) ** 2;
+    if (sp.ranged && !isBoss(u.s) && !brawl) return this.rangedAttack(u, t);
+    u.windup = 0;
+    const range = u.r + t.r + 8 + (sp.reach ?? 0); // le crocodile se jette hors de l'eau sur ce qui passe au bord
     if (SPECIES[u.s].anchored) {
       // il ne bouge pas (le Kraken dans l'eau, un tentacule accroché au pont) : il frappe ce qui passe à portée
       if (isBoss(u.s)) return this.bossMelee(u);
@@ -2541,6 +2737,7 @@ export class Room {
         this.bossMelee(u); // même en préparant une attaque spéciale, il frappe ce qui le colle
         return;
       }
+      if (SPECIES[u.s].moves && this.legendMove(u, t)) return; // sa propre attaque spéciale (le gorille fracasse le sol)
       this.tryAttack(u, t);
       return;
     }
@@ -2803,7 +3000,7 @@ export class Room {
     if (!t) t = this.nearest(anchorX, anchorY, o.dead ? 120 : FOLLOW_ENGAGE_R, this.isWild, u.x, u.y);
     if (t) {
       u.target = t.id;
-      if (u.legend && this.legendMove(u, t)) return; // en pleine attaque spéciale
+      if ((u.legend || SPECIES[u.s].moves) && this.legendMove(u, t)) return; // en pleine attaque spéciale
       this.tryAttack(u, t);
       return;
     }
@@ -3026,11 +3223,13 @@ export class Room {
     p.reviveBy = 0;
     p.reviveT = 0;
     p.helping = false;
-    // Pénalité : une part de son or reste sur le champ de bataille.
-    const lost = Math.floor(p.gold * DEATH_GOLD_LOSS);
+    // Pénalité : une part de son or, de son bois et de sa pierre reste sur le champ de bataille.
+    const lost = Math.floor(p.gold * DEATH_GOLD_LOSS), wood = Math.floor(p.wood * DEATH_RES_LOSS), stone = Math.floor(p.stone * DEATH_RES_LOSS);
     p.gold -= lost;
-    if (lost) p.dirty = true;
-    this.events.push({ e: 'pdie', id: p.id, gold: lost });
+    p.wood -= wood;
+    p.stone -= stone;
+    if (lost || wood || stone) p.dirty = true;
+    this.events.push({ e: 'pdie', id: p.id, gold: lost, wood, stone });
     // La meute se disperse : seuls les Alphas restent fidèles.
     let n = 0;
     p.army = p.army.filter((id) => {
@@ -3103,6 +3302,7 @@ export class Room {
     const creditId = by.kind === 'p' ? by.id : by.owner;
     const credit = this.players.get(creditId);
     const sp = SPECIES[u.s];
+    if (credit && !sp.minion && !u.summoner) credit.stats.kills++; // tableau du village
     const gold = sp.gold;
     const boss = isBoss(u.s);
     for (const p of this.players.values()) {
@@ -3130,6 +3330,7 @@ export class Room {
       for (const q of this.players.values()) {
         if (!u.hitters.has(q.id)) continue;
         q.stats.bosses++;
+        if (!this.beaten.includes(u.s)) q.stats.firsts++; // la première victoire du village sur lui
         q.dirty = true;
       }
       if (!this.beaten.includes(u.s)) {
@@ -3336,6 +3537,11 @@ export class Room {
           dozers.push([d.id, d.s, (d.alpha ? UNIT_FLAG_ALPHA : 0) | (d.legend ? UNIT_FLAG_LEGEND : 0) | (d.asleep ? UNIT_FLAG_DORMANT : 0), Math.round(d.x), Math.round(d.y), k]);
         }
       }
+      const pets: PetTuple[] = [];
+      for (const pet of this.pets.values()) {
+        if (dist2(pet.x, pet.y, viewer.x, viewer.y) > vr2) continue;
+        pets.push([pet.id, pet.s, UNIT_FLAG_ALPHA | (pet.legend ? UNIT_FLAG_LEGEND : 0), Math.round(pet.x), Math.round(pet.y), pet.color, PET_ACTS.indexOf(pet.act), pet.partner]);
+      }
       const bare: number[] = [];
       for (const b of this.map.bushes) if (this.bushBack[b.id] > this.time && dist2(b.x, b.y, viewer.x, viewer.y) <= vr2) bare.push(b.id);
       const trees: [number, number][] = [];
@@ -3357,7 +3563,7 @@ export class Room {
       const shots: ShotTuple[] = [];
       for (const sh of this.shots) {
         if (dist2(sh.x, sh.y, viewer.x, viewer.y) > vr2) continue;
-        shots.push(SHOT_KINDS[sh.kind] === 'arc'
+        shots.push(lobbedShot(sh.kind)
           ? [sh.id, sh.kind, Math.round(sh.x0), Math.round(sh.y0), Math.round(sh.tx), Math.round(sh.ty), Math.min(100, Math.round((100 * (this.time - sh.start)) / ARC_FLIGHT_S)), sh.by.owner]
           : [sh.id, sh.kind, Math.round(sh.x), Math.round(sh.y), Math.round(sh.vx), Math.round(sh.vy), 0, sh.by.owner]);
       }
@@ -3371,7 +3577,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, ev });
     }
   }
 }

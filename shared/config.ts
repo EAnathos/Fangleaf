@@ -21,7 +21,7 @@ export const SCHOOL_OFFSET = { x: 405, y: 140 }; // École des dompteurs (bâtie
 export const BUILDING_REACH = 110;
 // Bâtiments du village : construits par n'importe quel membre contre de l'or, une fois pour tout le village.
 // Il faut aussi du bois et de la pierre (récoltés sur la carte), et parfois un Hôtel de ville assez développé.
-export type BuildingId = 'forge' | 'den' | 'market' | 'stone' | 'palisade' | 'plot_forge' | 'plot_den' | 'plot_market' | 'forge2' | 'school';
+export type BuildingId = 'forge' | 'den' | 'market' | 'stone' | 'palisade' | 'plot_forge' | 'plot_den' | 'plot_market' | 'forge2' | 'school' | 'bridge';
 export interface Cost {
   gold: number;
   wood: number;
@@ -30,6 +30,9 @@ export interface Cost {
 // Mise en place du camp : au départ, il n'y a que le feu. On monte la palissade, puis on défriche l'emplacement
 // de chaque bâtiment avant de pouvoir le bâtir (needs : ce qu'il faut avoir fait avant).
 export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: number; stone: number; hall: number; desc: string; needs?: BuildingId }> = {
+  // le vieux pont qui mène à l'îlot du village est cassé : on le répare avec le bois et la pierre de son sac (l'entrepôt
+  // est de l'autre côté), avant tout le reste
+  bridge: { name: 'Pont de bois', cost: 0, wood: 12, stone: 6, hall: 0, desc: 'Le vieux pont qui mène à l\'îlot du village est cassé. Répare-le avec le bois et la pierre de ton sac.' },
   palisade: { name: 'Palissade', cost: 0, wood: 15, stone: 0, hall: 0, desc: 'Les pieux du village, et ses quatre portes. Il la faut pour bâtir l\'Hôtel de ville.' },
   plot_forge: { name: 'Emplacement de la forge', cost: 0, wood: 4, stone: 4, hall: 0, desc: 'Défricher et aplanir le terrain de la forge.' },
   plot_den: { name: 'Emplacement de la Tanière', cost: 0, wood: 8, stone: 4, hall: 0, desc: 'Défricher le terrain de la Tanière.' },
@@ -61,7 +64,8 @@ export const HALL: (Cost & { unlock: string })[] = [
   { gold: 500, wood: 160, stone: 140, unlock: 'Porte des Landes (zone 3)' },
   { gold: 1500, wood: 350, stone: 300, unlock: 'Porte des Ruines moussues (zone 4) · Grande forge' },
   { gold: 3000, wood: 600, stone: 550, unlock: 'Porte des Lacs brumeux (zone 5)' },
-  { gold: 6000, wood: 1000, stone: 900, unlock: 'Porte de la Mer de sable (zone 6)' },
+  { gold: 4500, wood: 800, stone: 700, unlock: 'Porte de la Jungle (zone 6)' },
+  { gold: 6000, wood: 1000, stone: 900, unlock: 'Porte de la Mer de sable (zone 7)' },
 ];
 export const HALL_MAX = HALL.length;
 /** Géants d'une zone (index d'espèce) : il faut rapporter tous leurs parchemins pour ouvrir la porte de la zone suivante. */
@@ -96,7 +100,7 @@ export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[];
 export const monsterBuyPrice = (species: number) => SPECIES[species].gold * 12;
 export const monsterSellPrice = (species: number) => SPECIES[species].gold * 4;
 // Grottes : fermées au départ, débloquées pour tout le village contre de l'or, bien plus cher dans les dernières zones.
-const CAVE_UNLOCK = [150, 300, 450, 1500, 3000, 6000, 6000];
+const CAVE_UNLOCK = [150, 300, 450, 1500, 3000, 4500, 6000, 6000]; // par zone (la Jungle : ses temples)
 export const caveUnlockCost = (zone: number) => CAVE_UNLOCK[zone - 1] ?? 150 * zone;
 // Camps : un emplacement au bout de la zone 4, établi par n'importe quel membre du village contre de l'or.
 export const CAMP_COST = 2000;
@@ -120,7 +124,7 @@ export const SCHOOL_BUILD_MS = 20 * 60 * 1000;
 export const PLAN_REACH = 80; // pour ouvrir le coffre du plan
 // Les coffres des géants lâchent parfois un livre d'apprentissage.
 // Il y a plusieurs disciplines (meute, apprivoisement, essences, récolte), chacune en trois tomes : le tome dépend de
-// la zone du géant (I : zones 1-2, II : 3-4, III : 5-6). On n'a qu'un exemplaire de chaque tome, qui enseigne une leçon
+// la zone du géant (I : zones 1-2, II : 3-4, III : 5 à 7). On n'a qu'un exemplaire de chaque tome, qui enseigne une leçon
 // de sa discipline, dans l'ordre (le tome II demande d'avoir lu le tome I) : trois leçons par discipline en tout.
 // À part, la Maîtrise des Alphas n'a qu'un tome, que seuls les coffres des géants du volcan renferment.
 // Une leçon lue à l'école prend 30 minutes.
@@ -219,7 +223,8 @@ export const CLASS_CHANGE_COST = 50; // la première classe est gratuite
 export const classOf = (cls: ClassId | null) => CLASSES[cls ?? 'warrior'];
 export const PLAYER_ATK_CD = 0.55;
 export const PLAYER_RESPAWN_S = 5;
-export const DEATH_GOLD_LOSS = 0.1; // part de son or perdue à chaque mort
+export const DEATH_GOLD_LOSS = 0.15; // part de son or perdue à chaque mort…
+export const DEATH_RES_LOSS = 0.1; // … et du bois et de la pierre de son sac
 export const MAGE_SPLASH_EDGE = 0.4; // orbe du mage : dégâts au bord de l'explosion (pleins au point d'impact)
 /** Avec un autre dompteur dans le village, on reste à terre ce temps-là : il peut venir nous relever. */
 export const REVIVE_WINDOW_S = 10;
@@ -370,12 +375,12 @@ export const gearCost = (what: Gear, lvl: number): Cost => ({
 // (1 essence par monstre de l'espèce vaincu), puis on le renforce, de plus en plus cher.
 // Montures : certains Alphas éveillés se chevauchent. Vitesse multipliée, et la monture encaisse
 // une partie des coups (elle peut tomber : on est désarçonné, elle ressuscite comme tout Alpha).
-export const MOUNTS: Record<string, number> = { wolf: 1.6, boar: 1.4, bear: 1.25, snail: 0.6, serpent: 1.5, vulture: 1.5 }; // l'escargot se monte, mais ralentit
+export const MOUNTS: Record<string, number> = { wolf: 1.6, boar: 1.4, bear: 1.25, snail: 0.6, serpent: 1.5, vulture: 1.5, gorilla: 1.35, croc: 1.45 }; // l'escargot se monte, mais ralentit
 /**
  * Montures nageuses (le serpent) : on ne va qu'en eau avec elles. On embarque près de l'eau (à SHORE_R au plus) :
  * on est posé sur l'eau. On ne descend que près d'une rive (posé sur la terre ferme). Si la monture tombe sur l'eau, on se noie.
  */
-export const SWIM_MOUNTS = new Set(['serpent']);
+export const SWIM_MOUNTS = new Set(['serpent', 'croc']);
 /** Montures volantes (le vautour) : on survole l'eau, les rochers et les arbres, pas la forêt qui borde le couloir. */
 export const FLY_MOUNTS = new Set(['vulture']);
 export const flyMount = (species: number) => FLY_MOUNTS.has(SPECIES_KEYS[species]);
@@ -465,6 +470,8 @@ export const LEGEND_MULT = { hp: 1.5, dmg: 1.5, size: 1.15 };
 // Il hérite aussi des attaques spéciales de son géant, lancées seul en combat : un peu moins fortes et moins fréquentes.
 export const LEGEND_MOVE_DMG = 0.6;
 export const LEGEND_MOVE_CD = 1.3;
+export const LEGEND_STAGGER_S = 1.2; // deux attaques spéciales des légendaires d'un même dompteur sont espacées d'au moins ce temps
+export const LEGEND_AIM_S = 2.5; // un monstre déjà visé par un légendaire depuis moins que ça : les autres en choisissent un autre
 /** Bonus de collection : +5 % de PV et de dégâts à tous les Alphas par Alpha éveillé (3 Alphas = +15 %). */
 export const COLLECTION_BONUS = 0.05;
 export const collectionMult = (alphaCount: number) => 1 + COLLECTION_BONUS * Math.max(0, alphaCount);
@@ -529,6 +536,11 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
     { kind: 'ink', cd: 7, from: 2 }, { kind: 'lash', cd: 3, n: 3, from: 2 },
     { kind: 'mortar', cd: 6, n: 6, from: 3 }, { kind: 'summon', cd: 8, n: 3, max: 6, minion: 'kraken_tentacle', from: 3 },
   ],
+  // Jungle : le roi gorille fracasse le sol et fait pleuvoir les bananes ; le vieux crocodile charge et fouette de la
+  // queue ; le Grand Masque crache ses fléchettes, empoisonne l'air, disparaît et appelle les siens
+  gorilla_king: [{ kind: 'slam', cd: 6, power: 3 }, { kind: 'mortar', cd: 7, n: 6 }, { kind: 'leap', cd: 8 }, { kind: 'enrage', below: 0.3 }],
+  croc_king: [{ kind: 'charge', cd: 4 }, { kind: 'slam', cd: 7, power: 2 }, { kind: 'enrage', below: 0.35 }],
+  mask_lord: [{ kind: 'volley', cd: 4, n: 5, shot: 'bolt' }, { kind: 'spores', cd: 6 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
   mountain_tortoise: [{ kind: 'mortar', cd: 5, n: 6 }, { kind: 'spin', cd: 10, arms: 4, dur: 4 }, { kind: 'trail', cd: 12, dur: 5 }, { kind: 'slam', cd: 7, power: 3 }, { kind: 'enrage', below: 0.3 }],
 };
 /** Coup ordinaire d'un géant : une seule cible (deux pour la reine des Gluants et l'ours), dégâts multipliés. */
@@ -580,6 +592,9 @@ export interface Species {
   skittish?: boolean; // sauvage, il détale devant un dompteur qui approche sans fruit en main (lièvre)
   awaken?: number; // essences pour éveiller son Alpha, si elles ne suivent pas la règle (espèce rare)
   passive?: boolean; // sauvage, il n'attaque jamais : il broute les buissons à fruits et s'enfuit quand on le frappe
+  brawler?: boolean; // tireur qui cogne aussi : une cible collée à lui, il la frappe au corps à corps au lieu de tirer (gorille)
+  reach?: number; // portée en plus au corps à corps (le crocodile se jette hors de l'eau sur ce qui passe au bord)
+  moves?: BossMove[]; // attaques spéciales d'un monstre ordinaire (le gorille fracasse le sol), sauvage comme apprivoisé
 }
 
 /**
@@ -587,13 +602,15 @@ export interface Species {
  * arc : tir en cloche qui retombe là où était la cible (cercle annoncé au sol), dégâts de zone.
  */
 export interface Ranged {
-  kind: 'bolt' | 'arc' | 'jet';
+  kind: 'bolt' | 'arc' | 'jet' | 'banana' | 'dart'; // banana : lancée en cloche (comme arc) ; dart : fléchette de sarbacane (comme jet)
   range: number;
   windup: number; // s d'immobilité à charger le tir (lisible : on voit venir le coup)
   speed: number; // px/s (bolt, jet) ; arc : durée de vol fixe
   splash?: number; // arc : rayon des dégâts à l'impact
 }
-export const SHOT_KINDS = ['bolt', 'arc', 'jet'] as const;
+export const SHOT_KINDS = ['bolt', 'arc', 'jet', 'banana', 'dart'] as const; // n'ajouter qu'à la fin
+/** Tir en cloche (il retombe là où était la cible, cercle annoncé au sol) : arc, banane du gorille. */
+export const lobbedShot = (kind: number | Ranged['kind']) => { const k = typeof kind === 'number' ? SHOT_KINDS[kind] : kind; return k === 'arc' || k === 'banana'; };
 export const ARC_FLIGHT_S = 0.9;
 
 // Deux à trois espèces par zone, progression marquée d'une zone à l'autre (PV et dégâts ×2,5 à ×3).
@@ -633,27 +650,36 @@ export const SPECIES: Species[] = [
   // Gibier de nuit : il n'apparaît qu'une fois la nuit tombée, et s'en va au lever du jour.
   { key: 'firefly', name: 'Luciole', color: '#E4F07A', r: 11, hp: 20, dmg: 1, speed: 70, atkCd: 1.4, gold: 4, zone: 2, population: 24, pack: [3, 5], passive: true, night: true },
   // Zone 6 (Mer de sable) : suricates craintifs autour de leurs tanières, vers fouisseurs, vautours ; chacals fantômes la nuit.
-  { key: 'meerkat', name: 'Suricate', color: '#C9A06A', r: 12, hp: 60, dmg: 3, speed: 125, atkCd: 1.2, gold: 8, zone: 6, population: 26, pack: [3, 6], passive: true, shy: true },
-  { key: 'sandworm', name: 'Ver des sables', color: '#B98A5A', r: 26, hp: 2600, dmg: 120, speed: 115, atkCd: 1.6, gold: 100, zone: 6, population: 16, pack: [1, 1], burrows: true },
-  { key: 'vulture', name: 'Vautour', color: '#4A3A30', r: 21, hp: 1700, dmg: 110, speed: 150, atkCd: 1.1, gold: 90, zone: 6, population: 18, pack: [1, 2], flies: true },
-  { key: 'jackal', name: 'Chacal fantôme', color: '#CDBB98', r: 18, hp: 1400, dmg: 90, speed: 175, atkCd: 0.9, gold: 80, zone: 6, population: 24, pack: [4, 6], night: true },
+  { key: 'meerkat', name: 'Suricate', color: '#C9A06A', r: 12, hp: 60, dmg: 3, speed: 125, atkCd: 1.2, gold: 8, zone: 7, population: 26, pack: [3, 6], passive: true, shy: true },
+  { key: 'sandworm', name: 'Ver des sables', color: '#B98A5A', r: 26, hp: 2600, dmg: 120, speed: 115, atkCd: 1.6, gold: 100, zone: 7, population: 16, pack: [1, 1], burrows: true },
+  { key: 'vulture', name: 'Vautour', color: '#4A3A30', r: 21, hp: 1700, dmg: 110, speed: 150, atkCd: 1.1, gold: 90, zone: 7, population: 18, pack: [1, 2], flies: true },
+  { key: 'jackal', name: 'Chacal fantôme', color: '#CDBB98', r: 18, hp: 1400, dmg: 90, speed: 175, atkCd: 0.9, gold: 80, zone: 7, population: 24, pack: [4, 6], night: true },
   // Géants de la Mer de sable : une grotte chacun.
-  { key: 'sand_queen', name: 'Reine des sables', color: '#A87A4A', r: 66, hp: 62000, dmg: 230, speed: 190, atkCd: 1.4, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Dunebouche, la Reine des Sables', sprite: 'sandworm', base: 'sandworm' },
-  { key: 'vulture_king', name: 'Roi-Vautour', color: '#3A2C24', r: 60, hp: 54000, dmg: 215, speed: 200, atkCd: 1.2, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Charognard, le Roi des Cieux', sprite: 'vulture', base: 'vulture' },
-  { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 50000, dmg: 205, speed: 220, atkCd: 0.9, gold: 2500, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Anubeth, le Chacal de la Lune', sprite: 'jackal', base: 'jackal' },
+  { key: 'sand_queen', name: 'Reine des sables', color: '#A87A4A', r: 66, hp: 62000, dmg: 230, speed: 190, atkCd: 1.4, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Dunebouche, la Reine des Sables', sprite: 'sandworm', base: 'sandworm' },
+  { key: 'vulture_king', name: 'Roi-Vautour', color: '#3A2C24', r: 60, hp: 54000, dmg: 215, speed: 200, atkCd: 1.2, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Charognard, le Roi des Cieux', sprite: 'vulture', base: 'vulture' },
+  { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 50000, dmg: 205, speed: 220, atkCd: 0.9, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Anubeth, le Chacal de la Lune', sprite: 'jackal', base: 'jackal' },
   // Bois profonds : le Tréant dort dans un arbre ; il en sort parfois quand on l'abat (jamais d'apparition ailleurs).
   { key: 'treant', name: 'Tréant', color: '#6B4E30', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1], awaken: 20 }, // rare : éveil moins cher
   // Entrailles du volcan (zone 7, sous la Mer de sable) : trois espèces qu'on ne voit nulle part ailleurs, et leurs géants
   // (un antre chacun dans la salle).
-  { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 3600, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 7, population: 16, pack: [2, 4] },
-  { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 2800, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 7, population: 14, pack: [3, 5] },
-  { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 9000, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 7, population: 10, pack: [1, 1], ranged: { kind: 'arc', range: 360, windup: 0.7, speed: 0, splash: 60 } },
-  { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Pyrrha, la Mère des Braises', sprite: 'salamander', base: 'salamander' },
-  { key: 'ash_lord', name: 'Seigneur des cendres', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Noctembre, l\'Aile de Cendre', sprite: 'ash_bat', base: 'ash_bat' },
-  { key: 'mountain_tortoise', name: 'Tortue-Montagne', color: '#40342E', r: 70, hp: 170000, dmg: 520, speed: 185, atkCd: 1.5, gold: 5000, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Cratère, la Montagne qui Marche', sprite: 'lava_tortoise', base: 'lava_tortoise' },
+  { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 3600, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 8, population: 16, pack: [2, 4] },
+  { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 2800, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 8, population: 14, pack: [3, 5] },
+  { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 9000, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 8, population: 10, pack: [1, 1], ranged: { kind: 'arc', range: 360, windup: 0.7, speed: 0, splash: 60 } },
+  { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, title: 'Pyrrha, la Mère des Braises', sprite: 'salamander', base: 'salamander' },
+  { key: 'ash_lord', name: 'Seigneur des cendres', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, title: 'Noctembre, l\'Aile de Cendre', sprite: 'ash_bat', base: 'ash_bat' },
+  { key: 'mountain_tortoise', name: 'Tortue-Montagne', color: '#40342E', r: 70, hp: 170000, dmg: 520, speed: 185, atkCd: 1.5, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Cratère, la Montagne qui Marche', sprite: 'lava_tortoise', base: 'lava_tortoise' },
   // Haute mer : le Kraken attaque le bateau sur la route du Colisée ; ses tentacules s'accrochent au pont.
-  { key: 'kraken_tentacle', name: 'Tentacule du Kraken', color: '#7A4A8A', r: 32, hp: 9000, dmg: 260, speed: 0, atkCd: 1.3, gold: 0, zone: 8, population: 0, pack: [1, 1], anchored: true, minion: true },
-  { key: 'kraken', name: 'Kraken', color: '#6A3E7E', r: 100, hp: 130000, dmg: 480, speed: 0, atkCd: 1.6, gold: 7000, zone: 8, population: 0, pack: [1, 1], boss: true, title: 'Léviathys, le Kraken des Abysses', anchored: true, phases: 3 },
+  { key: 'kraken_tentacle', name: 'Tentacule du Kraken', color: '#7A4A8A', r: 32, hp: 9000, dmg: 260, speed: 0, atkCd: 1.3, gold: 0, zone: 9, population: 0, pack: [1, 1], anchored: true, minion: true },
+  { key: 'kraken', name: 'Kraken', color: '#6A3E7E', r: 100, hp: 130000, dmg: 480, speed: 0, atkCd: 1.6, gold: 7000, zone: 9, population: 0, pack: [1, 1], boss: true, title: 'Léviathys, le Kraken des Abysses', anchored: true, phases: 3 },
+  // Jungle (zone 6, entre les Lacs brumeux et le désert) : gorilles (bananes à distance, poings au contact, il fracasse le
+  // sol), crocodiles tapis dans l'eau (on ne voit que leur tête), petits hommes masqués à la sarbacane. Leurs géants
+  // dorment au fond de temples.
+  { key: 'gorilla', name: 'Gorille des cimes', color: '#3E3A38', r: 24, hp: 1500, dmg: 80, speed: 110, atkCd: 1.3, gold: 60, zone: 6, population: 20, pack: [1, 2], ranged: { kind: 'banana', range: 300, windup: 0.5, speed: 0, splash: 46 }, brawler: true, moves: [{ kind: 'slam', cd: 8, power: 1.6 }] },
+  { key: 'croc', name: 'Crocodile des marais', color: '#56703F', r: 24, hp: 1400, dmg: 95, speed: 100, atkCd: 1.5, gold: 58, zone: 6, population: 16, pack: [1, 1], swim: true, reach: 46 },
+  { key: 'masked', name: 'Petit Masqué', color: '#A0603A', r: 17, hp: 800, dmg: 60, speed: 150, atkCd: 1.3, gold: 45, zone: 6, population: 22, pack: [2, 4], ranged: { kind: 'dart', range: 330, windup: 0.4, speed: 620 } },
+  { key: 'gorilla_king', name: 'Roi Gorille', color: '#2E2A28', r: 66, hp: 42000, dmg: 160, speed: 195, atkCd: 1.3, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Mbolo, le Roi des Cimes', sprite: 'gorilla', base: 'gorilla' },
+  { key: 'croc_king', name: 'Crocodile Ancien', color: '#3F5A30', r: 66, hp: 46000, dmg: 170, speed: 185, atkCd: 1.4, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Croc, Gardien des Eaux Noires', sprite: 'croc', base: 'croc' },
+  { key: 'mask_lord', name: 'Grand Masque', color: '#8A4A2A', r: 57, hp: 38000, dmg: 150, speed: 205, atkCd: 1.1, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Tlaloq, l\'Esprit Masqué', sprite: 'masked', base: 'masked' },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);
@@ -662,13 +688,16 @@ export const SPECIES_KEYS = SPECIES.map((s) => s.key);
 export const SPECIES_BY_ZONE = SPECIES.map((_, i) => i).filter((i) => !SPECIES[i].minion).sort((a, b) => SPECIES[a].zone - SPECIES[b].zone || a - b);
 
 // Le monde est une île (voir worldmap.ts) découpée en ZONES zones successives, de plus en plus loin de la plage d'arrivée.
-export const ZONES = 6; // la Mer de sable va jusqu'au bout de l'île
+export const ZONES = 7; // la Mer de sable va jusqu'au bout de l'île
+export const LAKES_ZONE = 5; // Lacs brumeux : une brume légère flotte sur toute la zone
+export const JUNGLE_ZONE = 6; // Jungle, entre les Lacs brumeux et le désert : grands arbres, bambous, lianes, sous la canopée
+export const DESERT_ZONE = 7; // Mer de sable, la dernière (son volcan)
 /** Longueur de chaque zone le long de l'île, en parts (la Mer de sable est plus grande : son volcan y tient). */
-export const ZONE_WEIGHTS = [1, 1, 1, 1, 1, 1.6];
+export const ZONE_WEIGHTS = [1, 1, 1, 1, 1, 1.1, 1.6];
 // Sous le volcan de la Mer de sable : une zone de plus, souterraine (une grande salle hors de l'île), ses monstres et
 // trois antres de géants. Les trois vaincus, le cœur volcanique se libère au centre de la salle.
 export const VOLCANO_ZONE = ZONES + 1;
-export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Mer de sable', 'Entrailles du volcan', 'Haute mer'];
+export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Jungle', 'Mer de sable', 'Entrailles du volcan', 'Haute mer'];
 // En haute mer : une fois le bateau prêt, on prend la mer vers le Colisée ; le Kraken attaque le bateau en chemin.
 // Le pont du bateau est une « grotte » hors de l'île (son entrée : le bateau, au bout de l'île).
 export const VOYAGE_ZONE = VOLCANO_ZONE + 1;

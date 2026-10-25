@@ -8,7 +8,24 @@ export interface Stats {
   tamed: number; // monstres apprivoisés
   given: number; // bois et pierre donnés à l'entrepôt
   spent: number; // or dépensé pour le village (bâtiments, Hôtel de ville, bateau, camps)
+  firsts: number; // premières victoires du village sur un géant, auxquelles il a pris part
+  kills: number; // monstres sauvages vaincus (par lui ou sa meute)
+  dmg: number; // dégâts infligés aux monstres sauvages (par lui ou sa meute)
+  best: number; // son plus gros coup
+  deaths: number; // chutes
+  revives: number; // coéquipiers relevés
+  essences: number; // essences recueillies
+  awakened: number; // Alphas éveillés
+  legends: number; // Alphas rendus légendaires
+  wood: number; // bois récolté
+  stone: number; // pierre récoltée
+  chests: number; // coffres de géants ouverts
+  books: number; // livres d'apprentissage trouvés
+  dist: number; // distance parcourue (px)
+  time: number; // temps de jeu dans ce village (s)
 }
+/** Clés des statistiques, dans l'ordre du tableau (STAT_KEYS). */
+export const STAT_KEYS = ['bosses', 'firsts', 'kills', 'dmg', 'best', 'deaths', 'revives', 'tamed', 'essences', 'awakened', 'legends', 'wood', 'stone', 'given', 'spent', 'chests', 'books', 'dist', 'time'] as const satisfies readonly (keyof Stats)[];
 /** Ligne du tableau du village. */
 export interface BoardRow extends Stats {
   name: string;
@@ -141,6 +158,15 @@ export type SleeperTuple = [string, string, number, string, number, number];
 /** Monstre d'un dompteur endormi : [id, espèce, flags (UNIT_FLAG_ALPHA, _LEGEND, _DORMANT = endormi), x, y, index du dompteur dans sleepers]. */
 export type DozerTuple = [number, number, number, number, number, number];
 
+/**
+ * Alpha au repos (rangé à la Tanière) qui se promène sur l'îlot du village : [id, espèce, flags (UNIT_FLAG_ALPHA, _LEGEND),
+ * x, y, couleur de son dompteur, ce qu'il fait (index dans PET_ACTS), id de l'Alpha avec qui il joue (0 : personne)].
+ */
+export type PetTuple = [number, number, number, number, number, string, number, number];
+/** Ce que fait un Alpha au repos : il flâne, fait la sieste, se roule par terre, renifle, en poursuit un autre, ou joue avec. */
+export const PET_ACTS = ['walk', 'nap', 'roll', 'sniff', 'chase', 'flee', 'play'] as const; // n'ajouter qu'à la fin
+export type PetAct = (typeof PET_ACTS)[number];
+
 export const UNIT_FLAG_ALPHA = 1;
 export const UNIT_FLAG_MOUNTED = 2; // Alpha chevauché : dessiné sous son dompteur
 export const UNIT_FLAG_LEGEND = 4; // Alpha légendaire
@@ -182,8 +208,9 @@ export type GameEvent =
   | { e: 'awaken'; id: number; by: number; s: number } // Alpha éveillé à la tanière
   | { e: 'revive'; id: number }
   | { e: 'heal'; id: number; n: number } // un Alpha lièvre soigne son dompteur
+  | { e: 'pet'; id: number; with: number; act: 'chase' | 'play' } // deux Alphas au repos se mettent à jouer
   | { e: 'shout'; id: number; kind: 'rally' | 'guard'; r: number } // un Alpha suricate pousse son cri (rally), un escargot dresse sa carapace (guard) : les alliés à r en profitent
-  | { e: 'pdie'; id: number; gold: number } // gold : or perdu dans la chute
+  | { e: 'pdie'; id: number; gold: number; wood?: number; stone?: number } // or, bois et pierre perdus dans la chute
   | { e: 'previve'; id: number; by: number } // dompteur relevé sur place par un coéquipier
   | { e: 'upgrade'; id: number; what: Gear; lvl: number }
   | { e: 'alphaUp'; id: number; by: number; s: number; lvl: number }
@@ -220,6 +247,7 @@ export interface Snapshot {
   banned: { id: string; name: string }[]; // comptes bannis du village (envoyé au seul fondateur)
   sleepers: SleeperTuple[]; // dompteurs déconnectés qui dorment au village
   dozers: DozerTuple[]; // leurs monstres, qui flânent ou dorment autour d'eux
+  pets: PetTuple[]; // Alphas au repos des membres, qui se promènent et jouent sur l'îlot du village
   bare: number[]; // buissons proches dont les fruits ont été mangés (ils repoussent)
   trees: [number, number][]; // arbres proches entamés ou abattus : [index dans decor, pv %] (absents : intacts)
   caves: number[]; // par grotte : secondes avant le retour du mini-boss (0 = présent)
