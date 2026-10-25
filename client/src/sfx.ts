@@ -21,7 +21,7 @@ export interface Synth {
 
 export type Sfx =
   | 'hurt' | 'swing' | 'arrow' | 'orb' | 'pick' | 'chop' | 'chest'
-  | 'roar' | 'boom' | 'death' | 'fanfare' | 'blip' | 'pop' | 'thunk' | 'chime';
+  | 'roar' | 'boom' | 'death' | 'fanfare' | 'blip' | 'pop' | 'thunk' | 'chime' | 'shout' | 'shell';
 
 export interface SfxDef {
   label: string;
@@ -98,6 +98,19 @@ export const SFX: Record<Sfx, SfxDef> = {
   thunk: {
     label: 'Dépôt à l\'entrepôt', when: 'Tu vides ton sac de bois et de pierre.',
     play: (s) => { s.tone(230, 210, 0.1, 0.25, 'triangle'); s.thump(120, 60, 0.15, 0.4, 0.09); s.hiss('lowpass', 900, 0.12, 0.2, 400, 0.1); },
+  },
+  shout: {
+    label: 'Cri du suricate', when: 'Un Alpha suricate se dresse et crie : les alliés autour de lui frappent plus fort.',
+    play: (s) => {
+      // trois jappements aigus qui montent, puis un appel plus long
+      for (let k = 0; k < 3; k++) s.tone(1500 + k * 180, 2300 + k * 220, 0.07, 0.12, 'square', k * 0.09);
+      s.tone(1900, 2900, 0.22, 0.1, 'triangle', 0.3);
+      s.hiss('bandpass', 3200, 0.2, 0.06, 4200, 0.3, 4);
+    },
+  },
+  shell: {
+    label: 'Carapace de l\'escargot', when: 'Un Alpha escargot dresse sa carapace : les alliés autour de lui encaissent moins.',
+    play: (s) => { s.thump(160, 70, 0.18, 0.35); s.bell(880, 0.7, 0.08, 1.41, 1.5, 0.05); s.bell(1320, 0.6, 0.05, 1.41, 1.2, 0.12); },
   },
   chime: {
     label: 'Relevé, Alpha éveillé', when: 'Un coéquipier te relève, un Alpha s\'éveille.',

@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT } from '../../shared/config.ts';
+import { ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, alphaPerk, alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT } from '../../shared/config.ts';
 
 describe('Alphas de la Tanière', () => {
   rule('Tanière : éveiller un Alpha avec des essences, le renforcer (de plus en plus cher), sauvegarde du profil.', () => {
@@ -190,24 +190,12 @@ describe('Alphas de la Tanière', () => {
     check(r.hazards.filter((h: { kind: number }) => h.kind === 2).length === 1, 'Champignon légendaire : une seule zone de spores');
   });
 
-  rule('Alpha escargot : il protège son dompteur ; Alpha lièvre : il le soigne un peu, et sa meute proche.', () => {
+  rule('Alpha lièvre : il soigne un peu son dompteur, et sa meute proche.', () => {
     const r = room();
     const p = r.addPlayer('a', noop);
     p.x = r.map.spawn.x;
     p.y = r.map.spawn.y;
-    const foe = r.createUnit(0, false, p.x + 400, p.y);
-    p.hp = 1000;
-    r.damage(p, 100, foe);
-    const bare = 1000 - p.hp;
-    const snailS = SPECIES.findIndex((s) => s.key === 'snail'), hareS = SPECIES.findIndex((s) => s.key === 'hare');
-    const snail = r.spawnAlpha(p, snailS, 10, false);
-    p.hp = 1000;
-    r.damage(p, 100, foe);
-    check(bare === 100 && 1000 - p.hp === 82, `escargot niv. 10 : 100 dégâts → ${1000 - p.hp} (au lieu de ${bare})`);
-    snail.reviveAt = r.time + 30;
-    p.hp = 1000;
-    r.damage(p, 100, foe);
-    check(1000 - p.hp === 100, 'escargot en train de ressusciter : plus de protection');
+    const hareS = SPECIES.findIndex((s) => s.key === 'hare');
     const hare = r.spawnAlpha(p, hareS, 0, false);
     [hare.x, hare.y] = [p.x + 50, p.y];
     const ally = r.createUnit(0, false, p.x - 60, p.y);
@@ -223,5 +211,56 @@ describe('Alphas de la Tanière', () => {
       evs.push(...r.events.filter((e: { e: string }) => e.e === 'heal'));
     }
     check(evs.length === 1 && p.hp === 10 + Math.round(max * 0.03) && ally.hp > 1, `lièvre : +${evs[0]?.n} PV en 3 s pour son dompteur (${max} PV max), et la meute proche est soignée`);
+  });
+
+  rule('Cri du suricate, carapace de l\'escargot : au combat, tous les alliés proches en profitent un moment, puis la compétence se recharge.', () => {
+    const r = room();
+    const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
+    for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id); // le champ de bataille, sans témoin
+    const p = r.addPlayer('chef', noop), q = r.addPlayer('ami', noop);
+    const at = r.map.spineAt(r.map.zoneFrom(2) + 600);
+    [p.x, p.y, q.x, q.y] = [at.x, at.y, at.x + 90, at.y];
+    const meerkat = r.spawnAlpha(p, key('meerkat'), 2, false);
+    [meerkat.x, meerkat.y] = [at.x + 20, at.y + 20];
+    const pet = r.createUnit(key('wolf'), false, at.x - 60, at.y);
+    r.makeTamed(pet, q);
+    const far = r.createUnit(key('wolf'), false, at.x + ALPHA_SHOUT_R + 200, at.y);
+    r.makeTamed(far, q);
+    [far.x, far.y] = [at.x + ALPHA_SHOUT_R + 200, at.y];
+    const sync = () => {
+      r.grid.clear();
+      for (const e of [p, q, ...r.units.values()]) r.grid.insert(e);
+      r.tick = 5;
+      r.alphaShouts();
+    };
+    sync();
+    check(r.buffOf(p, 'rally') === 0, 'pas d\'ennemi en vue : il ne crie pas');
+    const wolf = r.createUnit(key('wolf'), false, at.x + 150, at.y);
+    sync();
+    const v = alphaPerk(key('meerkat'), 2)!.value;
+    check(r.events.some((e: { e: string; kind?: string }) => e.e === 'shout' && e.kind === 'rally'), 'un ennemi approche : le suricate se dresse et crie');
+    check(Math.abs(r.buffOf(p, 'rally') - v) < 1e-9 && r.buffOf(q, 'rally') === v && r.buffOf(pet, 'rally') === v, `son dompteur, l'autre dompteur et sa meute : +${Math.round(v * 100)} % de dégâts`);
+    check(r.buffOf(far, 'rally') === 0 && r.buffOf(wolf, 'rally') === 0, 'trop loin, ou ennemi : rien');
+    const hp = wolf.hp;
+    r.damage(wolf, 10, pet);
+    check(Math.abs(hp - wolf.hp - 10 * (1 + v)) < 1e-6, `le loup de l'ami frappe plus fort (${(hp - wolf.hp).toFixed(1)} au lieu de 10)`);
+    r.time += ALPHA_SHOUT_S + 0.1;
+    check(r.buffOf(p, 'rally') === 0, `au bout de ${ALPHA_SHOUT_S} s, l'effet retombe`);
+    sync();
+    check(r.buffOf(p, 'rally') === 0, `recharge : ${ALPHA_SHOUT_CD} s, un peu plus que l'effet`);
+    r.time += ALPHA_SHOUT_CD - ALPHA_SHOUT_S;
+    sync();
+    check(r.buffOf(p, 'rally') > 0, 'rechargé : il crie à nouveau');
+
+    // L'escargot de l'ami : sa carapace abrite aussi le dompteur d'à côté et les meutes.
+    const snail = r.spawnAlpha(q, key('snail'), 0, false);
+    [snail.x, snail.y] = [at.x + 60, at.y - 20];
+    sync();
+    const g = alphaPerk(key('snail'), 0)!.value, before = pet.hp;
+    check(r.buffOf(p, 'guard') === g && r.buffOf(meerkat, 'guard') === g, `carapace : −${Math.round(g * 100)} % de dégâts reçus pour tous les alliés proches`);
+    r.damage(pet, 20, wolf);
+    check(Math.abs(before - pet.hp - 20 * (1 - g)) < 1e-6, `un coup de 20 sur la meute : ${(before - pet.hp).toFixed(1)}`);
+    const st = r.players.get(p.id), flags = r.buffOf(st, 'guard') && r.buffOf(st, 'rally');
+    check(flags, 'les deux effets se cumulent');
   });
 });

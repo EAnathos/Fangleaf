@@ -1,9 +1,9 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, mountSpeedOf, SCHOOL_CAMP, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
-import { HAZARD_STYLES, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
+import { HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
 import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST } from './anim.ts';
 import { type Ambience, sound } from './audio.ts';
@@ -15,7 +15,7 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBush, drawChest, drawHazard, drawLaser, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
@@ -28,11 +28,12 @@ import { drawSubmerged, drawVoyage } from './voyage.ts';
 const bossName = (s: number) => SPECIES[s].title ?? SPECIES[s].name;
 const MIST_FADE_S = 2.5; // une brume qui se lève met ce temps à se dissiper
 const SPRITE_FPS = 20; // animation des monstres (images par seconde)
+const SHOUT_ANIM_S = 1.1; // un Alpha suricate se dresse et crie (un escargot dresse sa carapace) pendant ce temps-là
 const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
 
 const FLY_HEIGHT = 2.2; // hauteur de vol à dos de vautour (en rayons de l'oiseau)
 
-const GEAR_NAMES = { weapon: 'Arme améliorée', armor: 'Armure améliorée', torch: 'Torche améliorée', boots: 'Bottes améliorées' };
+const GEAR_NAMES = { weapon: 'Arme améliorée', armor: 'Armure améliorée', torch: 'Torche améliorée', boots: 'Bottes améliorées', saddle: 'Selle améliorée' };
 
 // En local seulement : ?ciel=nuit, ?ciel=pluie, ?ciel=orage (nuit et pluie) ou ?ciel=tempete (dans la Mer de sable) pour voir le ciel sans attendre.
 const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1 }, tempete: { storm: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
@@ -122,6 +123,8 @@ export class Game {
     this.hud.onHeart = () => net.send({ t: 'heart' });
     this.hud.onScrollGive = () => net.send({ t: 'scrollGive' });
     this.hud.onBoat = () => net.send({ t: 'boat' });
+    this.hud.onPlan = () => net.send({ t: 'plan' });
+    this.hud.onSchool = () => net.send({ t: 'school' });
     this.hud.onReset = () => net.send({ t: 'reset' });
     this.hud.onQuit = () => {
       net.close(); // le serveur sauvegarde la progression à la déconnexion
@@ -135,7 +138,7 @@ export class Game {
     this.hud.onQuality = () => this.resize();
     const hints = () => {
       if (!touchOnly) this.hud.toast(`ZQSD / flèches pour bouger · ${settings.attack === 'click' ? 'clic gauche pour attaquer' : 'attaque auto'} · ${keyLabel('interact')} près d'un bâtiment · touches et attaque : Échap › Paramètres`);
-      if (armed && !villageFound) this.hud.toast('Suis le chemin de terre jusqu\'au village (étoile dorée : clique sur la minicarte).');
+      if (armed && !villageFound) this.hud.toast('Suis le chemin jusqu\'au pont de bois : le village est sur l\'îlot d\'en face (étoile dorée : clique sur la minicarte).');
     };
     // Tout premier réveil sur l'île (pas encore d'épée) : on ouvre les yeux, sans comprendre ce qu'on fait là.
     const key = `fangleaf.woke.${code}`;
@@ -242,6 +245,7 @@ export class Game {
       else if (st && !st.dead && b?.sword) this.net.send({ t: 'sword' });
       else if (st && !st.dead && b?.scroll !== undefined) this.net.send({ t: 'scroll', cave: b.scroll });
       else if (st && !st.dead && b?.heart) this.net.send({ t: 'heart' });
+      else if (st && !st.dead && b?.plan) this.net.send({ t: 'plan' });
       else if (st && !st.dead && b?.chest !== undefined) this.net.send({ t: 'chest', id: b.chest });
       else if (st && !st.dead && b?.cave) this.net.send({ t: 'cave', id: b.cave.id, enter: b.cave.enter });
     } else if (key === 'Escape') {
@@ -285,6 +289,7 @@ export class Game {
       }
       return this.net.send({ t: 'mount', id: 0 });
     }
+    if (!st.saddle && st.army.some((a) => a.alpha && MOUNTS[SPECIES[a.species].key])) return this.hud.toast('Il te faut une selle pour monter ton Alpha : la forge en vend.');
     const candidates = (this.net.latest?.units ?? []).filter(
       (u) => u[6] === this.myId && u[2] & UNIT_FLAG_ALPHA && MOUNTS[SPECIES[u[1]].key] && Math.hypot(u[3] - this.me.x, u[4] - this.me.y) < MOUNT_REACH,
     );
@@ -321,7 +326,7 @@ export class Game {
     if (area === this.area) return;
     const first = this.area === '';
     this.area = area;
-    if (area === 'camp') this.hud.banner(first && this.hud.sword < SWORD_PULLS ? 'Une plage inconnue' : 'Plage du naufrage', first ? (this.hud.sword < SWORD_PULLS ? 'Quelque chose brille dans le sable' : 'Suis le chemin de cailloux jusqu\'au feu de camp') : 'De retour sur la plage');
+    if (area === 'camp') this.hud.banner(first && this.hud.sword < SWORD_PULLS ? 'Une plage inconnue' : 'Plage du naufrage', first ? (this.hud.sword < SWORD_PULLS ? 'Quelque chose brille dans le sable' : 'Suis le chemin de cailloux jusqu\'au pont') : 'De retour sur la plage');
     else if (area === 'village') this.hud.banner('Village', '');
     else if (area.startsWith('site')) {
       this.hud.banner(campName(site), ''); // juste le nom du camp, établi ou non
@@ -586,6 +591,11 @@ export class Game {
       case 'chest':
         if (e.to === me) sound.play('chest');
         break;
+      case 'shout': {
+        const u = this.posOf(e.id, this.net.latest?.players ?? []);
+        if (u) sound.play(e.kind === 'rally' ? 'shout' : 'shell', near(u.x, u.y));
+        break;
+      }
       case 'challenge':
         sound.play('roar');
         break;
@@ -816,6 +826,14 @@ export class Game {
         sound.play('fanfare', e.done ? 1 : 0.5);
         break;
       }
+      case 'plan':
+        this.hud.toast(e.by === this.myId ? 'Le plan de l\'École des dompteurs ! Aubin saura la bâtir au village.' : `${name(e.by)} a trouvé le plan de l'École des dompteurs : Aubin peut la bâtir au village.`, 'good');
+        if (e.by === this.myId) sound.play('chest');
+        break;
+      case 'school':
+        this.hud.toast(e.done ? 'L\'École des dompteurs est ouverte, au village !' : `${e.by === this.myId ? 'Tu as' : `${name(e.by)} a`} lancé le chantier de l'école (${Math.round(SCHOOL_BUILD_MS / 60000)} min).`, 'good');
+        sound.play('fanfare', e.done ? 1 : 0.5);
+        break;
       case 'eat': {
         const b = this.map.bushes[e.bush];
         if (b) this.fx.burst(b.x, b.y - 10, '#C8323C', 8, 80);
@@ -959,6 +977,17 @@ export class Game {
         if (p) this.fx.text(p.x, p.y - 34, `+${e.n}`, '#7FCB5B', e.id === this.myId ? 15 : 12, 0.9);
         break;
       }
+      case 'shout': {
+        // le suricate se dresse et crie, l'escargot dresse sa carapace : une onde part de lui jusqu'aux alliés touchés
+        const u = this.posOf(e.id, players);
+        this.shouts.set(e.id, this.time);
+        if (u) {
+          const col = e.kind === 'rally' ? '#F0B64A' : '#7FC8E8';
+          this.fx.ring(u.x, u.y, col, 14, e.r, 0.7);
+          this.fx.ring(u.x, u.y, col, 8, e.r * 0.6, 0.5);
+        }
+        break;
+      }
       case 'revive': {
         const u = this.posOf(e.id, players);
         if (u) this.fx.ring(u.x, u.y, '#B48CFF', 60, 10, 0.8);
@@ -978,7 +1007,7 @@ export class Game {
       }
       case 'upgrade':
         if (e.id === this.myId) {
-          this.hud.toast(e.what === 'torch' && e.lvl === 1 ? 'Torche achetée : tu y verras plus clair la nuit' : `${GEAR_NAMES[e.what]} — niveau ${e.lvl}`, 'good');
+          this.hud.toast(e.what === 'torch' && e.lvl === 1 ? 'Torche achetée : tu y verras plus clair la nuit' : e.what === 'saddle' && e.lvl === 1 ? `Selle achetée : tu peux monter tes Alphas (${keyLabel('mount')})` : `${GEAR_NAMES[e.what]} — niveau ${e.lvl}`, 'good');
           this.fx.ring(this.me.x, this.me.y, '#F0B64A', 10, 60);
         }
         break;
@@ -1062,7 +1091,7 @@ export class Game {
       // Même règle que le serveur : pas d'eau, on glisse le long des berges.
       const swimming = !!st?.mount && swimMount(st.mount.species); // sur le serpent : seulement l'eau
       const flying = !!st?.mount && flyMount(st.mount.species); // à dos de vautour : par-dessus l'eau et les obstacles
-      const speed = PLAYER_SPEED * (st?.mount ? mountSpeedOf(st.mount.species) : bootsSpeed(st?.boots ?? 0)) * (st?.slowed ? WEB_SLOW : 1);
+      const speed = PLAYER_SPEED * (st?.mount ? rideSpeed(st.mount.species, st.saddle ?? 1) : bootsSpeed(st?.boots ?? 0)) * (st?.slowed ? WEB_SLOW : 1);
       // (bords du monde et intérieurs de grotte : gérés par blocked())
       const nx = this.me.x + dx * speed * dt, ny = this.me.y + dy * speed * dt;
       // Même règle que le serveur pour les portes fermées : on ne les franchit pas en avançant.
@@ -1144,6 +1173,7 @@ export class Game {
     this.hud.bare = this.net.latest?.bare ?? [];
     this.hud.beaten = this.net.latest?.beaten ?? [];
     this.hud.heart = this.net.latest?.heart ?? 0;
+    this.hud.school = this.net.latest?.school ?? [0, 0];
     this.watchGates();
     this.hud.sleepers = (view?.units ?? []).flatMap((u) => {
       const cave = u[2] & UNIT_FLAG_DORMANT ? this.map.caveAt(u[3], u[4]) : undefined;
@@ -1187,12 +1217,22 @@ export class Game {
    * change : flash, sens, charge…) et recollée à sa position à chaque image : le tracé vectoriel coûte 3 fois moins.
    * Les monstres sont décalés dans le temps pour ne pas tous se redessiner pendant la même image.
    */
+  /** Cri d'un Alpha suricate (ou carapace d'un escargot) : avancement de 0 à 1 pendant la seconde qui suit, 0 sinon. */
+  private shoutOf(id: number) {
+    const at = this.shouts.get(id);
+    if (at === undefined) return 0;
+    const k = (this.time - at) / SHOUT_ANIM_S;
+    if (k < 1) return Math.max(0.001, k);
+    this.shouts.delete(id);
+    return 0;
+  }
+
   private drawUnitCached(ctx: CanvasRenderingContext2D, id: number, look: UnitLook, pose: Pose = REST) {
     const r = look.r, res = this.scale;
     const l = r * 2.6, t = r * 2.9, w = r * 5.2, h = r * 4.8; // de quoi contenir aura, couronne, pattes et bond
-    const key = `${look.species}|${look.alpha}|${look.legend}|${look.wild}|${look.ownerColor}|${look.face}|${look.flash}|${r}|${look.inWater}|${Math.round((look.charge ?? 0) * 8)}|${look.moving}|${res}`;
+    const key = `${look.species}|${look.alpha}|${look.legend}|${look.wild}|${look.ownerColor}|${look.face}|${look.flash}|${r}|${look.inWater}|${Math.round((look.charge ?? 0) * 8)}|${look.moving}|${Math.ceil((look.shout ?? 0) * 12)}|${res}`;
     const sprite = SPECIES[look.species].sprite ?? SPECIES[look.species].key;
-    const fps = look.moving && hops(sprite) ? 60 : settings.display.quality === 'low' ? 12 : SPRITE_FPS; // un bond se dessine à pleine cadence
+    const fps = (look.moving && hops(sprite)) || look.shout ? 60 : settings.display.quality === 'low' ? 12 : SPRITE_FPS; // un bond, un cri se dessinent à pleine cadence
     const frame = Math.floor(look.t * fps + (id % 7) / 7);
     let e = this.sprites.get(id);
     if (!e || e.key !== key || e.frame !== frame) {
@@ -1220,6 +1260,7 @@ export class Game {
   }
   private drawList: { y: number; draw: () => void }[] = [];
   private lunges = new Map<number, { at: number; ang: number }>(); // monstre → dernier coup au corps à corps
+  private shouts = new Map<number, number>(); // Alpha suricate ou escargot → moment de son dernier cri (ou carapace)
   private fired = new Map<string, number>(); // zone d'attaque → moment de son impact (vu par ce client)
 
   /**
@@ -1451,8 +1492,15 @@ export class Game {
       if (c.zone === VOYAGE_ZONE || !inView(c.entrance.x, c.entrance.y, 160)) continue; // le large : on y part depuis le bateau
       list.push({ y: c.entrance.y + 20, draw: () => this.world.drawCaveEntrance(ctx, c, this.time, !this.hud.caves[c.id]) });
     }
-    const sc = this.map.school;
-    if (inView(sc.x, sc.y, 120)) list.push({ y: sc.y, draw: () => this.world.drawSchool(ctx, camps.includes(SCHOOL_CAMP), this.hud.buildings.includes('school'), this.time) });
+    const sc = this.map.school, [plan, wait] = this.hud.school;
+    const schoolState = this.hud.buildings.includes('school') ? 'built' : wait ? 'building' : plan ? 'plan' : 'none';
+    if (inView(sc.x, sc.y, 140)) list.push({ y: sc.y, draw: () => this.world.drawSchool(ctx, schoolState, wait, this.time) });
+    // le vieux coffre du Camp avancé, avec le plan de l'école, tant que personne ne l'a ouvert
+    const pc = this.map.planChest;
+    if (camps.includes(SCHOOL_CAMP) && !plan && inView(pc.x, pc.y, 80)) list.push({ y: pc.y, draw: () => {
+      drawChest(ctx, pc.x, pc.y, 0, this.time);
+      drawQuestMark(ctx, pc.x, pc.y - 46, this.time);
+    } });
     // le volcan de la Mer de sable : trié par le devant de sa base (on passe devant, on disparaît derrière)
     const vc = this.map.volcano;
     if (!here && inView(vc.x, vc.y - VOLCANO_H / 2, VOLCANO_R + 700)) list.push({ y: vc.y + VOLCANO_R * VOLCANO_RY, draw: () => drawVolcano(ctx, this.map, this.time, volcanoOpen(this.hud.beaten)) });
@@ -1475,8 +1523,8 @@ export class Game {
     }
     // Palissade du village : pieux hauts, triés avec les créatures (on passe derrière) ; pas encore construite : son tracé.
     const palisade = this.hud.buildings.includes('palisade');
-    if (!here && !palisade && inView(village.x, village.y, VILLAGE_R + 60)) this.world.drawPalisadePlan(ctx);
-    if (!here && palisade && inView(village.x, village.y, VILLAGE_R + 60)) {
+    if (!here && !palisade && inView(village.x, village.y, VILLAGE_R * 1.3 + 60)) this.world.drawPalisadePlan(ctx);
+    if (!here && palisade && inView(village.x, village.y, VILLAGE_R * 1.3 + 60)) {
       this.world.stakes.forEach((st, k) => inView(st.x, st.y, 40) && list.push({ y: st.y, draw: () => this.world.drawStake(ctx, k) }));
       this.world.gatePosts.forEach((g, k) => inView(g.x, g.y, 60) && list.push({ y: g.y, draw: () => this.world.drawGatePost(ctx, k, this.time) }));
     }
@@ -1621,7 +1669,7 @@ export class Game {
         return {
           x, y, r, species: s, alpha, wild: owner === 0, ownerColor: owner ? colorOf.get(owner) : undefined,
           face: f.face, t: flags & UNIT_FLAG_ASLEEP ? 0 : this.time, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, legend,
-          charge, inWater: !!SPECIES[s].swim && this.map.isWater(x, y), moving: this.time - f.movedAt < 0.2,
+          charge, inWater: !!SPECIES[s].swim && this.map.isWater(x, y), moving: this.time - f.movedAt < 0.2, shout: this.shoutOf(id),
         };
       };
       // clignement : sa silhouette se forme déjà au point d'arrivée
@@ -1656,6 +1704,7 @@ export class Game {
               ctx.fillText(`Phase ${ph}/${SPECIES[s].phases}`, x, y - r * 1.6 + 12);
             }
           } else if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
+          if (flags & (UNIT_FLAG_RALLY | UNIT_FLAG_GUARD)) drawBuffs(ctx, x, y - r * (alpha ? 1.7 : 1.3) - (hp < 100 ? 18 : 10), flags, this.time, id);
         },
       });
     }
@@ -1725,7 +1774,7 @@ export class Game {
             } else this.drawUnitCached(ctx, p.mount.id, {
               x, y, r: mr, species: p.mount.species, alpha: true, wild: false, ownerColor: p.color, legend: p.mount.legend,
               face: fx < -0.1 ? -1 : 1, t: this.time * (isMe && this.me.moving ? 1.8 : 1), seed: p.mount.id,
-              flash: (this.flashes.get(p.mount.id) ?? 0) > this.time, inWater: swimMount(p.mount.species) && this.map.isWater(x, y),
+              flash: (this.flashes.get(p.mount.id) ?? 0) > this.time, inWater: swimMount(p.mount.species) && this.map.isWater(x, y), shout: this.shoutOf(p.mount.id),
             });
             const swim = swimMount(p.mount.species); // serpent : assis bas sur ses anneaux, derrière son cou dressé
             if (!flyMount(p.mount.species)) {
@@ -1744,6 +1793,7 @@ export class Game {
           );
           if (p.torch && sky.light < 0.85) drawTorch(ctx, x + back - (fx < -0.1 ? -15 : 15), y - lift - 2, p.torch, this.time); // de l'autre main
           if (p.slowed) drawWebbed(ctx, x, y - lift, this.time);
+          if (p.buffs) drawBuffs(ctx, x, y - lift - 64, p.buffs, this.time, p.id);
           if (!isMe && p.hp < p.maxHp) hpBar(ctx, x, y + 26, 34, (100 * p.hp) / p.maxHp, '#7FCB5B');
         },
       });

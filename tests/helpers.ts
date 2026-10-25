@@ -42,11 +42,13 @@ export const ALL_BOSSES = SPECIES.map((sp, i) => (sp.boss ? i : -1)).filter((i) 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const room = (): any => new Room('TEST', undefined, { buildings: [...BUILDING_IDS], unlocked: ALL_CAVES, hall: HALL_MAX, beaten: ALL_BOSSES, told: ALL_BOSSES });
 
-// Un dompteur sans compte arrive sans arme (l'épée est plantée sur la plage) : les tests le veulent armé, sauf celui de l'épée.
+// Un dompteur sans compte arrive sans arme (l'épée est plantée sur la plage) et sans selle : les tests le veulent armé et en
+// selle, sauf ceux de l'épée et de la selle.
 /** L'arrivée d'origine, sans arme (pour les tests de l'épée). */
 export const unarmedAdd = Room.prototype.addPlayer;
 Room.prototype.addPlayer = function (this: Room, ...args: Parameters<Room['addPlayer']>) {
   const p = unarmedAdd.apply(this, args);
   p.sword = SWORD_PULLS;
+  p.saddle = 1;
   return p;
 };

@@ -37,7 +37,8 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 
 On se réveille sur une plage inconnue, sans arme. Une épée est plantée dans le sable tout près : il faut tirer
 plusieurs fois dessus (**E**) pour la déterrer, et on ne peut pas se battre avant. Un chemin de cailloux mène de
-la plage au village, d'abord à l'état de camp de fortune.
+la plage à un **pont de bois** : il traverse un bras de mer jusqu'à l'**îlot du village**, d'abord à l'état de camp
+de fortune.
 
 ## L'île et ses zones
 
@@ -69,7 +70,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Spécialisations** : au-delà d'un certain niveau d'arme, la **Grande forge** permet de spécialiser sa classe :
   Berserker ou Gardien (guerrier), Tireur d'élite ou Rôdeur (archer), Pyromancien ou Druide (mage).
 - La forge améliore séparément l'**arme** (dégâts) et l'**armure** (PV max et réduction des dégâts), ainsi que la
-  **torche** (rayon de lumière la nuit) et les **bottes** (vitesse).
+  **torche** (rayon de lumière la nuit), les **bottes** (vitesse) et la **selle** (vitesse des montures). Chaque
+  amélioration coûte de l'or et du **bois** : celui du sac d'abord, puis celui de l'entrepôt du village.
 - **Tireurs** (Guetteur, Crapaud-mortier, Serpent) : ils s'immobilisent pour charger leur tir. On s'écarte de la
   trajectoire, ou on sort du cercle annoncé au sol.
 - **Hors du village** (et des camps établis), on ne régénère pas. Les monstres sauvages, eux, récupèrent si on
@@ -84,8 +86,9 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   La meute suit son dompteur et combat seule ; trop loin, elle lâche sa cible et revient.
 - La meute ordinaire est sauvegardée avec la progression, mais se disperse à la mort.
 - Au village et dans les camps, la meute se promène librement autour de son dompteur.
-- **Montures** (**F**) : certains Alphas se chevauchent (Loup, Sanglier, Ours, Escargot, Serpent, Vautour). La
-  monture encaisse une partie des coups ; si elle tombe, on est désarçonné.
+- **Montures** (**F**) : certains Alphas se chevauchent (Loup, Sanglier, Ours, Escargot, Serpent, Vautour), à
+  condition d'avoir une **selle** (achetée à la forge, plus rapide en l'améliorant). La monture encaisse une partie
+  des coups ; si elle tombe, on est désarçonné.
   - Le **Serpent des brumes** ne va qu'en eau : on embarque près de l'eau, on descend au bord d'une rive, et
     s'il tombe en pleine eau, on se noie.
   - Le **Vautour** vole : il passe au-dessus de l'eau, des rochers et des arbres.
@@ -100,8 +103,10 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - On le **renforce** avec des essences, de plus en plus cher à chaque niveau, et un peu plus dans les zones lointaines.
 - Seuls quelques Alphas sont **équipés** à la fois ; les autres se reposent à la Tanière.
 - **Bonus de collection** : chaque Alpha éveillé renforce tous les autres.
-- **Alphas à pouvoir** : l'Escargot protège son dompteur, le Lièvre soigne son dompteur et la meute proche, le
-  Suricate augmente les dégâts de son dompteur.
+- **Alphas à pouvoir** : le Lièvre soigne son dompteur et la meute proche. Le Suricate et l'Escargot ont une
+  compétence, lancée seule au combat dès qu'elle est rechargée : le Suricate se dresse et crie (les alliés autour de lui
+  frappent plus fort), l'Escargot dresse sa carapace (ils encaissent moins). Elle profite à tous les alliés proches,
+  dompteurs et meutes, pendant quelques secondes : une épée et ses flèches, ou un bouclier, au-dessus de leur tête.
 - **Alpha légendaire** : l'âme du géant d'une espèce (voir [Grottes et géants](#grottes-et-géants)) permet le
   **double éveil** de l'Alpha de cette espèce. Légendaire, il lance seul l'attaque spéciale de son géant.
 - **Bestiaire** (onglet de la Tanière) : chaque espèce croisée y entre, avec ses stats et comment la combattre.
@@ -122,7 +127,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 
 ## Village et bâtiments
 
-- Le village est la zone sûre : on s'y soigne, on y réapparaît.
+- Le village, sur son îlot relié à l'île par un pont de bois, est la zone sûre : on s'y soigne, on y réapparaît, et
+  les monstres sauvages ne passent pas le pont. Sa palissade n'est pas ronde : large d'est en ouest, quatre portes.
 - Au départ, ce n'est qu'un camp : on monte la **palissade**, puis on **défriche** chaque emplacement avant d'y
   bâtir. Chaque bâtiment se construit **une fois pour tout le village**, avec l'or de celui qui le paie et le bois
   et la pierre de la réserve commune :
@@ -133,13 +139,17 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Hôtel de ville** : en le construisant, on nomme le village (renommable ensuite). Chaque niveau débloque la
   suite (Marché, Pierre de passage, puis une porte de zone par niveau).
 - **Tableau du village** : géants battus, monstres apprivoisés et dons à l'entrepôt de chaque membre.
+- **École des dompteurs** : elle aussi au village, mais on ne la construit pas soi-même. Son plan dort dans un vieux
+  coffre du **Camp avancé** : une fois le camp établi, **E** pour l'ouvrir (une fois pour tout le village). Aubin la
+  bâtit ensuite contre de l'or, du bois et de la pierre, comme une étape du bateau ; le chantier prend un moment,
+  même quand personne n'est là.
 
 ## Camps et voyages
 
 - Un **emplacement de camp** attend au bout de la zone 4. Le village l'établit contre de l'or (un seul membre
   paie) : feu qui soigne, réapparition sur place, Pierre de passage.
 - **E** devant une Pierre de passage : voyager d'un camp à l'autre avec sa meute.
-- **École des dompteurs** : une fois le Camp avancé établi, le village peut bâtir l'école dans le camp. Les coffres
+- **École des dompteurs** (au village, voir plus haut ; son plan est au Camp avancé). Les coffres
   des géants cachent parfois un **livre d'apprentissage**, d'une discipline au hasard :
   **Meute** (une place de plus), **Apprivoisement**, **Essences** ou **Récolte** (meilleures chances, plus de bois et
   de pierre). Son tome dépend de la zone du géant (I : Lisière et Bois profonds ; II : Landes et Ruines moussues ;

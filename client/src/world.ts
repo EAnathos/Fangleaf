@@ -3,7 +3,7 @@
 
 import { BUILDINGS, CAVE_RX, CAVE_RY, DEN_OFFSET, FORGE_OFFSET, BOARD_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, campName } from '../../shared/config.ts';
 import { fbm, hash2 } from '../../shared/math.ts';
-import { BEACH, caveEdge, coastGreen, MAP_CELL, MOUTH_FADE, SEA_SHALLOW, type Cave, type WorldMap } from '../../shared/worldmap.ts';
+import { atVillageGate, BEACH, BRIDGE_W, caveEdge, coastGreen, MAP_CELL, MOUTH_FADE, SEA_SHALLOW, VILLAGE_GATES, villageEdge, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 import { maxDpr, settings } from './settings.ts';
 import { drawCocoon, drawEntrance, drawWeb, INSIDE, insideProp } from './caves.ts';
 
@@ -28,6 +28,11 @@ const VILLAGE_GROUND = [79, 101, 63]; // herbe de la place, tondue
 
 // Style commun à tous les chemins de terre : liseré sombre, terre, trace claire au centre. [r, g, b, alpha, largeur]
 const PATH_PASSES: [number, number, number, number, number][] = [[60, 50, 32, 0.35, 50], [110, 97, 66, 1, 40], [140, 124, 88, 0.35, 14]];
+/** 75 → « 1:15 », 3700 → « 1:01:40 ». */
+const clockOf = (sec: number) => {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), x = String(Math.floor(sec % 60)).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`;
+};
 const rgba = (p: number[], a = p[3]) => `rgba(${p[0]},${p[1]},${p[2]},${a})`;
 
 // Emprise au sol de chaque bâtiment (décalage depuis le centre du village), pour dessiner son chantier.
@@ -50,7 +55,7 @@ const VILLAGE_BLEND = 240;
 
 /** Part du village dans le sol d'un point : 1 jusqu'à la palissade, puis 0 au bout du fondu, au bord irrégulier. */
 export function villageMix(map: WorldMap, x: number, y: number) {
-  const d = Math.hypot(x - map.village.x, y - map.village.y) - VILLAGE_R;
+  const d = Math.hypot(x - map.village.x, y - map.village.y) - villageEdge(Math.atan2(y - map.village.y, x - map.village.x));
   if (d <= 0) return 1;
   if (d >= VILLAGE_BLEND * 1.25) return 0;
   const u = Math.min(1, Math.max(0, d / VILLAGE_BLEND + (fbm(x / 160, y / 160, map.seed + 74, 2) - 0.5) * 0.5));
@@ -117,7 +122,7 @@ const rgb = (c: number[], k: number) => `rgb(${(c[0] * k) | 0},${(c[1] * k) | 0}
 export class World {
   private chunks = new Map<string, HTMLCanvasElement>();
   readonly village: HTMLCanvasElement;
-  readonly villageSize = (VILLAGE_R + 90) * 2;
+  readonly villageSize = (VILLAGE_R * 1.3 + 120) * 2;
   readonly camp: HTMLCanvasElement;
   readonly campSize = 420;
   readonly seed: number;
@@ -128,17 +133,31 @@ export class World {
 
   constructor(readonly map: WorldMap) {
     this.seed = map.seed;
-    const v = map.village, n = 160;
-    const at = (a: number) => ({ x: v.x + Math.cos(a) * VILLAGE_R, y: v.y + Math.sin(a) * VILLAGE_R });
-    const open = (a: number) => [0, 1, 2, 3, 4].some((g) => Math.abs(a - (g * Math.PI) / 2) < 0.085);
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * TAU;
-      if (open(a)) continue;
-      // traverse jusqu'au pieu suivant, sauf devant une porte
-      const b = ((i + 1) / n) * TAU;
-      this.stakes.push({ ...at(a), h: 20 + ((i * 7) % 5) * 1.6, next: open(b) ? undefined : at(b) });
+    const v = map.village;
+    const at = (a: number) => ({ x: v.x + Math.cos(a) * villageEdge(a), y: v.y + Math.sin(a) * villageEdge(a) });
+    // un pieu tous les 18 px environ le long de la palissade (elle n'est pas ronde : on suit son contour)
+    const marks: number[] = [];
+    for (let a = 0, prev = at(0); a < TAU; a += 0.002) {
+      const p = at(a);
+      if (!marks.length || Math.hypot(p.x - prev.x, p.y - prev.y) >= 18) {
+        marks.push(a);
+        prev = p;
+      }
     }
-    for (let side = 0; side < 4; side++) for (const s of [-1, 1]) this.gatePosts.push({ ...at((side * Math.PI) / 2 + s * 0.1), side, s });
+    marks.forEach((a, i) => {
+      if (atVillageGate(a)) return;
+      // traverse jusqu'au pieu suivant, sauf devant une porte
+      const b = marks[(i + 1) % marks.length];
+      this.stakes.push({ ...at(a), h: 20 + ((i * 7) % 5) * 1.6, next: atVillageGate(b) ? undefined : at(b) });
+    });
+    // poteaux de chaque porte, de part et d'autre de son ouverture
+    VILLAGE_GATES.forEach((g, side) => {
+      for (const s of [-1, 1]) {
+        let a = g;
+        while (atVillageGate(a) && Math.abs(a - g) < 1) a += s * 0.002;
+        this.gatePosts.push({ ...at(a), side: (side + 4) % 4, s });
+      }
+    });
     this.village = this.drawVillage();
     this.camp = this.drawCamp();
   }
@@ -246,31 +265,37 @@ export class World {
     }
     ctx.stroke();
 
-    // Petit chemin de la plage au village : sable tassé, bordé de petits cailloux.
-    // Bouts droits : le raccord avec la route du village, dans le même axe, est invisible.
-    ctx.strokeStyle = 'rgba(214,196,150,0.9)';
-    ctx.lineWidth = 26;
-    ctx.lineCap = 'butt';
-    ctx.beginPath();
-    map.path.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(160,140,100,0.35)';
-    ctx.lineWidth = 8;
-    ctx.stroke();
-    for (let i = 1; i < map.path.length; i++) {
-      const [ax, ay] = map.path[i - 1], [bx, by] = map.path[i], l = Math.hypot(bx - ax, by - ay) || 1;
-      const nx = -(by - ay) / l, ny = (bx - ax) / l;
-      for (let d = 0; d < l; d += 12) {
-        const x = ax + ((bx - ax) * d) / l, y = ay + ((by - ay) * d) / l, h = hash2(Math.round(x), Math.round(y), this.seed + 64);
-        if (x < ox - 20 || x > ox + CHUNK + 20 || y < oy - 20 || y > oy + CHUNK + 20) continue;
-        for (const side of [-1, 1]) {
-          const off = side * (13 + h * 4), r = 2.5 + hash2(Math.round(y), side, this.seed + 65) * 2.5;
-          ctx.fillStyle = side > 0 ? '#8C8F88' : '#A3A69E';
-          ctx.beginPath();
-          ctx.ellipse(x + nx * off, y + ny * off, r, r * 0.75, h * 3, 0, TAU);
-          ctx.fill();
+    // Petits chemins (de la plage au pont, du pont au village) : sable tassé, bordé de petits cailloux.
+    // Bouts droits : le raccord avec le pont et la route du village, dans le même axe, est invisible.
+    for (const path of map.paths) {
+      ctx.strokeStyle = 'rgba(214,196,150,0.9)';
+      ctx.lineWidth = 26;
+      ctx.lineCap = 'butt';
+      ctx.beginPath();
+      path.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(160,140,100,0.35)';
+      ctx.lineWidth = 8;
+      ctx.stroke();
+      for (let i = 1; i < path.length; i++) {
+        const [ax, ay] = path[i - 1], [bx, by] = path[i], l = Math.hypot(bx - ax, by - ay) || 1;
+        const nx = -(by - ay) / l, ny = (bx - ax) / l;
+        for (let d = 0; d < l; d += 12) {
+          const x = ax + ((bx - ax) * d) / l, y = ay + ((by - ay) * d) / l, h = hash2(Math.round(x), Math.round(y), this.seed + 64);
+          if (x < ox - 20 || x > ox + CHUNK + 20 || y < oy - 20 || y > oy + CHUNK + 20) continue;
+          for (const side of [-1, 1]) {
+            const off = side * (13 + h * 4), r = 2.5 + hash2(Math.round(y), side, this.seed + 65) * 2.5;
+            ctx.fillStyle = side > 0 ? '#8C8F88' : '#A3A69E';
+            ctx.beginPath();
+            ctx.ellipse(x + nx * off, y + ny * off, r, r * 0.75, h * 3, 0, TAU);
+            ctx.fill();
+          }
         }
       }
+    }
+    const br = map.bridge;
+    if (Math.min(br.a.x, br.b.x) < ox + CHUNK + 80 && Math.max(br.a.x, br.b.x) > ox - 80 && Math.min(br.a.y, br.b.y) < oy + CHUNK + 80 && Math.max(br.a.y, br.b.y) > oy - 80) {
+      drawBridge(ctx, br.a, br.b, this.seed);
     }
 
     // Lacs (pas la mer) : disques par case pour des berges arrondies (berge, puis eau, puis eau profonde).
@@ -747,14 +772,14 @@ export class World {
     PATH_PASSES.forEach((pass, k) => {
       for (const side of [0, 1, 2, 3]) {
         const ang = (side * Math.PI) / 2, cx = Math.cos(ang), cy = Math.sin(ang);
-        const toGate = linked.includes(side);
-        const end = toGate ? VILLAGE_R + 60 : VILLAGE_R + 85;
+        const toGate = linked.includes(side), edge = villageEdge(ang);
+        const end = toGate ? edge + 60 : edge + 85;
         const from = k === 2 ? 112 : 0; // la trace claire ne traverse pas la place
         if (toGate) ctx.strokeStyle = rgba(pass);
         else {
           const grad = ctx.createLinearGradient(0, 0, cx * end, cy * end);
           grad.addColorStop(0, rgba(pass));
-          grad.addColorStop((VILLAGE_R - 10) / end, rgba(pass));
+          grad.addColorStop((edge - 10) / end, rgba(pass));
           grad.addColorStop(1, rgba(pass, 0));
           ctx.strokeStyle = grad;
         }
@@ -822,7 +847,11 @@ export class World {
     ctx.lineWidth = 1.5;
     ctx.setLineDash([6, 8]);
     ctx.beginPath();
-    ctx.arc(v.x, v.y, VILLAGE_R, 0, TAU);
+    for (let i = 0; i <= 120; i++) {
+      const a = (i / 120) * TAU, r = villageEdge(a);
+      if (i) ctx.lineTo(v.x + Math.cos(a) * r, v.y + Math.sin(a) * r);
+      else ctx.moveTo(v.x + r, v.y);
+    }
     ctx.stroke();
     ctx.setLineDash([]);
     for (let k = 0; k < this.stakes.length; k += 8) {
@@ -1726,10 +1755,11 @@ export class World {
   }
 
   /**
-   * École des dompteurs, dans le Camp avancé : une estrade de pierre ; le camp établi, son chantier (piquets et
-   * planches) ; bâtie, une maison à colombages, un grand livre ouvert au-dessus de la porte et une lanterne.
+   * École des dompteurs, au village : un terrain en friche tant que son plan n'est pas trouvé (au Camp avancé), le terrain
+   * piqueté une fois le plan rapporté, le chantier d'Aubin (échafaudage, compte à rebours), puis la maison au grand livre.
    */
-  drawSchool(ctx: CanvasRenderingContext2D, camp: boolean, built: boolean, t: number) {
+  drawSchool(ctx: CanvasRenderingContext2D, state: 'none' | 'plan' | 'building' | 'built', left: number, t: number) {
+    const built = state === 'built', camp = state !== 'none';
     const { x, y } = this.map.school;
     ctx.save();
     ctx.translate(x, y);
@@ -1795,15 +1825,56 @@ export class World {
         ctx.fillRect(-22 + k * 3, -12 - k * 5, 44, 5);
       }
     }
-    if (camp && !built) {
-      // bâtie, l'enseigne au livre suffit (son nom couvrirait celui du camp)
-      ctx.font = '700 13px "Pixelify Sans", sans-serif';
-      ctx.textAlign = 'center';
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(16,24,26,0.85)';
-      ctx.strokeText('Chantier de l\'école', 0, -50);
+    if (state === 'building') {
+      // échafaudage d'Aubin : deux montants, une traverse, et les murs qui montent avec le temps
+      ctx.fillStyle = '#E2D3B0';
+      ctx.fillRect(-36, -26, 72, 22);
+      ctx.strokeStyle = '#7A5A3A';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (const px of [-44, 44]) {
+        ctx.moveTo(px, -2);
+        ctx.lineTo(px, -70);
+      }
+      ctx.moveTo(-48, -46);
+      ctx.lineTo(48, -46);
+      ctx.moveTo(-44, -6);
+      ctx.lineTo(44, -66);
+      ctx.stroke();
+      const swing = Math.sin(t * 6) * 0.5;
+      ctx.fillStyle = '#C9CFC2'; // le marteau qui va et vient
+      ctx.save();
+      ctx.translate(30, -46);
+      ctx.rotate(swing);
+      ctx.fillRect(-1.5, -14, 3, 14);
+      ctx.fillRect(-5, -17, 10, 5);
+      ctx.restore();
+    }
+    if (state === 'none') {
+      // terrain en friche : quelques broussailles et cailloux à la place de l'estrade
+      for (let k = 0; k < 7; k++) {
+        const px = -44 + hash2(k, 11, this.seed) * 88, py = -16 + hash2(k, 12, this.seed) * 22;
+        ctx.fillStyle = k % 2 ? '#2E4A2C' : '#6E726C';
+        ctx.beginPath();
+        ctx.ellipse(px, py, k % 2 ? 10 : 7, k % 2 ? 8 : 5, 0, 0, TAU);
+        ctx.fill();
+      }
+    }
+    const label = built ? 'École des dompteurs' : state === 'building' ? `Chantier de l'école · ${clockOf(left)}` : 'École des dompteurs';
+    const sub = state === 'none' ? 'son plan : au Camp avancé' : state === 'plan' ? 'Aubin peut la bâtir' : '';
+    ctx.font = '700 15px "Pixelify Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+    const ly = built ? -104 : state === 'building' ? -84 : -40;
+    ctx.strokeText(label, 0, ly);
+    ctx.fillStyle = built ? '#F0B64A' : state === 'none' ? '#A9B3A6' : '#C9CFC2';
+    ctx.fillText(label, 0, ly);
+    if (sub) {
+      ctx.font = '600 13px Outfit, sans-serif';
+      ctx.strokeText(sub, 0, ly + 17);
       ctx.fillStyle = '#C9CFC2';
-      ctx.fillText('Chantier de l\'école', 0, -50);
+      ctx.fillText(sub, 0, ly + 17);
     }
     ctx.restore();
   }
@@ -2022,6 +2093,64 @@ function shipBarrel(ctx: CanvasRenderingContext2D, x: number, y: number) {
  * Épave coupée en deux, un peu délabrée : la poupe et la proue séparées par une bande de sable, membrures à nu aux
  * cassures, beaupré cassé ; entre les deux, des planches et un tonneau ; à côté, un bout de mât et sa voile déchirée.
  */
+/**
+ * Pont de bois entre l'île et l'îlot du village (coordonnées du monde) : son ombre sur l'eau, les pieux qui plongent,
+ * des planches en travers, un peu irrégulières (une plus sombre, une décalée), et un garde-corps de chaque côté.
+ */
+function drawBridge(ctx: CanvasRenderingContext2D, a: { x: number; y: number }, b: { x: number; y: number }, seed: number) {
+  const l = Math.hypot(b.x - a.x, b.y - a.y), ang = Math.atan2(b.y - a.y, b.x - a.x), half = BRIDGE_W / 2;
+  ctx.save();
+  ctx.translate(a.x, a.y);
+  ctx.rotate(ang);
+  // ombre portée sur l'eau, et remous autour des pieux
+  ctx.fillStyle = 'rgba(10,30,40,0.35)';
+  ctx.fillRect(4, -half + 8, l, BRIDGE_W);
+  for (let x = 30; x < l - 10; x += 70) {
+    for (const s of [-1, 1]) {
+      ctx.strokeStyle = 'rgba(226,240,236,0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(x, s * (half - 3) + 10, 9, 3.5, 0, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = '#3E2A1C';
+      ctx.fillRect(x - 4, s * (half - 3) - 2, 8, 12);
+    }
+  }
+  // longerons, puis planches en travers
+  ctx.fillStyle = '#4A3322';
+  ctx.fillRect(-6, -half + 2, l + 12, BRIDGE_W - 4);
+  for (let x = -4, k = 0; x < l + 4; x += 12, k++) {
+    const h = hash2(k, 7, seed + 81), w = 10 + h * 1.5, dy = (hash2(k, 9, seed + 82) - 0.5) * 3;
+    ctx.fillStyle = h < 0.15 ? '#6B4A33' : h < 0.6 ? '#8B6A47' : '#9C7A52';
+    ctx.fillRect(x, -half + 3 + dy, w, BRIDGE_W - 6);
+    ctx.fillStyle = 'rgba(255,230,190,0.12)';
+    ctx.fillRect(x, -half + 3 + dy, w, 2);
+    ctx.fillStyle = 'rgba(20,12,8,0.35)';
+    ctx.fillRect(x + w - 1, -half + 3 + dy, 1, BRIDGE_W - 6);
+  }
+  // garde-corps : une main courante et ses poteaux de chaque côté
+  for (const s of [-1, 1]) {
+    const y = s * (half - 2);
+    ctx.strokeStyle = '#3E2A1C';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-4, y);
+    ctx.lineTo(l + 4, y);
+    ctx.stroke();
+    ctx.strokeStyle = '#7A5A3A';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-4, y - 1);
+    ctx.lineTo(l + 4, y - 1);
+    ctx.stroke();
+    for (let x = 0; x <= l; x += 35) {
+      ctx.fillStyle = '#5B3F2C';
+      ctx.fillRect(x - 3, y - 3, 6, 6);
+    }
+  }
+  ctx.restore();
+}
+
 function drawShipwreck(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = 'rgba(8,14,12,0.28)';
   ctx.beginPath();

@@ -4,7 +4,8 @@
 //   « colonne » (une ligne courbe) : la côte est à une distance variable de cette colonne, au bord bruité.
 // - Mer peu profonde le long de la côte (le serpent y nage), puis mer profonde, infranchissable.
 // - Relief : des collines qui montent et descendent (affichage seulement, rien d'infranchissable).
-// - On arrive sur la plage d'un bout de l'île (une épave, des planches) ; un chemin de cailloux mène au village.
+// - On arrive sur la plage d'un bout de l'île (une épave, des planches) ; un chemin de cailloux mène au pont de bois
+//   qui traverse un bras de mer jusqu'à l'îlot du village (palissade irrégulière, pas ronde).
 // - Zones de danger : ZONES bandes successives à travers l'île, de plus en plus loin de la plage, frontières bruitées ;
 //   la zone 5 (Lacs brumeux) est criblée de lacs, parfois ouverts sur la mer, où nagent les Serpents des brumes ; la 6 (Mer de sable)
 //   n'a que de rares oasis et une lisière verte le long de la côte (jusqu'au bout de l'île : la transition avec la mer).
@@ -17,7 +18,7 @@
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = mer profonde).
 
-import { CAMP_R, CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
+import { CAMP_R, CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, SCHOOL_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, type BuildingId, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -42,8 +43,26 @@ export const COAST_GREEN = 700; // largeur de la lisière verte entre le sable d
 export const MOUTH_FADE = 320; // embouchure : sur cette distance (à travers l'eau), l'eau d'un lac passe à celle de la mer
 const NB8 = [-N - 1, -N, -N + 1, -1, 1, N - 1, N, N + 1];
 const CAVE_GAP = 4000; // > VIEW_R + 2 × CAVE_RX + la demi-largeur de l'écran
-const VILLAGE_ARC = 800; // abscisse du village le long de la colonne
-const ZONE1_EXTRA = VILLAGE_ARC + VILLAGE_R; // la zone 1 commence par la plage et le village : elle est plus longue
+const BRIDGE_ARC: [number, number] = [450, 850]; // abscisse (le long de la colonne) du pied du pont, côté île
+const GATE0_AFTER = 600; // la porte de la Lisière coupe le couloir à cette distance du pied du pont
+const ZONE1_EXTRA = 1160; // la zone 1 commence par la plage et le chemin du pont : elle est plus longue
+const ISLE_MARGIN = 250; // de la palissade à la côte de l'îlot du village (sa plage)
+const BRIDGE_GAP = 300; // largeur du bras de mer entre l'île et l'îlot, au plus étroit
+export const BRIDGE_W = 64; // largeur du pont de bois
+/**
+ * Palissade du village : distance du feu à la palissade dans la direction a (radians, 0 vers l'est, y vers le bas).
+ * Une forme fixe, irrégulière : large d'est en ouest, plus serrée au sud. Les bâtiments sont placés pour y tenir.
+ */
+export const villageEdge = (a: number) => VILLAGE_R * (1 + 0.14 * Math.cos(2 * a) + 0.06 * Math.sin(3 * a + 0.8) + 0.035 * Math.cos(5 * a + 2.1));
+/** Portes du village : aux quatre points cardinaux (angles), à ± VILLAGE_GATE_W / 2 px de part et d'autre. */
+export const VILLAGE_GATES = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+const VILLAGE_GATE_W = 92;
+/** Angle a dans l'ouverture d'une porte de la palissade. */
+export const atVillageGate = (a: number) =>
+  VILLAGE_GATES.some((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) * villageEdge(g) < VILLAGE_GATE_W / 2);
+/** Plus petite distance du feu à la palissade. */
+export const VILLAGE_MIN_R = Math.min(...Array.from({ length: 360 }, (_, i) => villageEdge((i / 180) * Math.PI)));
+const VILLAGE_MAX_R = Math.max(...Array.from({ length: 360 }, (_, i) => villageEdge((i / 180) * Math.PI)));
 const TAU = Math.PI * 2;
 /** ZONE_CUM[z] : parts de zone cumulées jusqu'à la fin de la zone z. */
 const ZONE_CUM = ZONE_WEIGHTS.reduce((acc, w) => [...acc, acc[acc.length - 1] + w], [0]);
@@ -159,8 +178,10 @@ export class WorldMap {
   readonly spine: Pt[];
   readonly length: number; // longueur réelle de la colonne
   readonly spawn: Pt;
-  readonly village: Pt;
-  readonly gate: Pt; // porte du village côté plage, où arrive le chemin de cailloux
+  readonly village: Pt; // le feu du village, au centre de son îlot
+  readonly gate: Pt; // porte du village côté pont, où arrive le chemin
+  readonly bridge: { a: Pt; b: Pt } = { a: { x: 0, y: 0 }, b: { x: 0, y: 0 } }; // pont de bois : de la côte de l'île (a) à celle de l'îlot (b)
+  private isleNoise = 0; // phase du bruit de la côte de l'îlot
   readonly forge: Pt;
   readonly den: Pt;
   readonly market: Pt;
@@ -184,13 +205,14 @@ export class WorldMap {
   /** La salle sous le volcan : une grotte (hors du monde) de la zone VOLCANO_ZONE, plus grande, sans géant à elle. */
   depths: Cave = { id: HALL_ID, zone: VOLCANO_ZONE, boss: -1, entrance: { x: 0, y: 0 }, inside: { x: 0, y: 0 }, exit: { x: 0, y: 0 }, rx: HALL_RX, ry: HALL_RY };
   readonly lavaPools: { x: number; y: number; r: number }[] = []; // mares de lave de la salle (infranchissables)
-  school: Pt = { x: 0, y: 0 }; // École des dompteurs, dans le premier camp (sur le côté de la piste)
+  school: Pt = { x: 0, y: 0 }; // École des dompteurs, au village
+  planChest: Pt = { x: 0, y: 0 }; // coffre du plan de l'école, dans le premier camp (sur le côté de la piste)
   readonly caves: Cave[] = [];
   readonly ores: Ore[] = [];
   readonly decor: Decor[] = [];
   readonly bushes: Bush[] = []; // buissons à fruits (décor franchissable : le gibier vient y manger)
   readonly dens: Pt[] = []; // tanières de suricates (Mer de sable) : buttes percées de trous, franchissables
-  readonly path: [number, number][] = []; // chemin de terre du camp à la porte du village
+  readonly paths: [number, number][][] = []; // chemins de terre : de la plage au pont, puis du pont à la porte du village
   private buckets = new Map<number, number[]>(); // décor par case de 256 px
   readonly deepWater: number[][] = []; // par zone : x, y à la suite de points en eau profonde
   private segs = new Map<number, number[]>(); // segments de chemin par case de 256 px (ax, ay, bx, by à la suite)
@@ -232,8 +254,11 @@ export class WorldMap {
     // un peu plus haut, vers l'intérieur de l'île
     this.egg = { x: this.spawn.x + (ox > 0 ? -36 : 36), y: this.spawn.y + 8 };
     this.sword = { x: this.spawn.x - ox * 130 + oy * 40, y: this.spawn.y - oy * 130 - ox * 40 };
-    const village = (this.village = this.spineAt(VILLAGE_ARC));
-    this.gate = this.gateToward(this.spawn);
+    const isle = this.placeIsle();
+    const village = (this.village = isle.c);
+    this.gate = { x: village.x - isle.dir.x * (villageEdge(isle.back) + 60), y: village.y - isle.dir.y * (villageEdge(isle.back) + 60) };
+    this.stampIsle(isle.arc);
+    this.placeBridge();
     // épave : la barque échouée côté mer, des planches éparpillées autour
     const wr = rng(seed ^ 0xb0a7), out = Math.atan2(oy, ox);
     this.wreck.out = out;
@@ -249,7 +274,8 @@ export class WorldMap {
     this.store = { x: village.x + STORE_OFFSET.x, y: village.y + STORE_OFFSET.y };
     this.elder = { x: village.x + ELDER_OFFSET.x, y: village.y + ELDER_OFFSET.y };
     this.board = { x: village.x + BOARD_OFFSET.x, y: village.y + BOARD_OFFSET.y };
-    for (const s of [VILLAGE_ARC + VILLAGE_R + 200, ...Array.from({ length: ZONES - 1 }, (_, k) => this.zoneTo(k + 1))]) if (s < this.length - 300) this.gates.push(s);
+    this.school = { x: village.x + SCHOOL_OFFSET.x, y: village.y + SCHOOL_OFFSET.y };
+    for (const s of [isle.arc + GATE0_AFTER, ...Array.from({ length: ZONES - 1 }, (_, k) => this.zoneTo(k + 1))]) if (s < this.length - 300) this.gates.push(s);
     this.stones.push({ x: village.x + VILLAGE_STONE_OFFSET.x, y: village.y + VILLAGE_STONE_OFFSET.y });
     for (const s of [this.zoneTo(4)]) {
       const at = s - 650, site = this.spineAt(at), from = this.spineAt(at - 300);
@@ -262,9 +288,9 @@ export class WorldMap {
       this.stones.push({ x: site.x + st.x, y: site.y + st.y });
     }
 
-    this.buildPath();
+    this.buildPath(isle.dir);
     this.indexPaths();
-    this.placeSchool();
+    this.placePlanChest();
     this.placeVolcano();
 
     // Lacs : seulement dans l'île, hors de la voie centrale, de la plage, du village et des emplacements de camp.
@@ -281,7 +307,7 @@ export class WorldMap {
           (w5 < 0.5 && this.shore[k] > -BEACH - 120) || // plage au sec (sauf aux Lacs brumeux : les lacs y rejoignent la mer)
           // voie centrale au sec, au bord très irrégulier (jamais moins d'une centaine de px de chaque côté de la colonne)
           this.cdist[k] < LANE + (fbm(p.x / 500, p.y / 500, this.seed + 95, 2) - 0.5) * 700 ||
-          dist2(p.x, p.y, village.x, village.y) < (VILLAGE_R + 160) ** 2 ||
+          this.inVillage(p.x, p.y, ISLE_MARGIN + 300) || // l'îlot du village, tout entier
           dist2(p.x, p.y, this.spawn.x, this.spawn.y) < 320 ** 2 ||
           dist2(p.x, p.y, this.shipwreck.x, this.shipwreck.y) < 260 ** 2 ||
           this.sites.some((c) => dist2(p.x, p.y, c.x, c.y) < 380 ** 2) ||
@@ -298,6 +324,7 @@ export class WorldMap {
       }
     }
     this.cleanWater(keepDry);
+    this.stampBridge();
     this.buildMouths();
     this.buildWetDist();
     // l'épave : poupe et proue solides (le reste, des débris sur le sable, se traverse)
@@ -316,7 +343,7 @@ export class WorldMap {
     const bosses = SPECIES.map((sp, i) => (sp.boss ? i : -1)).filter((i) => i >= 0).sort((x, y) => SPECIES[x].zone - SPECIES[y].zone || x - y);
     for (const boss of bosses.filter((b) => SPECIES[b].zone <= ZONES)) {
       const z = SPECIES[boss].zone;
-      const lo = z === 1 ? VILLAGE_ARC + VILLAGE_R + 600 : this.zoneFrom(z) + 300, hi = this.zoneTo(z) - 300;
+      const lo = z === 1 ? this.gates[0] + 450 : this.zoneFrom(z) + 300, hi = this.zoneTo(z) - 300;
       // Écart entre grottes assoupli si la zone est trop encombrée (lacs, camp) : jamais de géant manquant.
       // Dernier recours (petite île, zone criblée de lacs) : tout près de la voie centrale, toujours au sec.
       for (const [gap, near] of [[1000, false], [750, false], [500, false], [350, false], [250, false], [220, true]] as const) {
@@ -697,42 +724,156 @@ export class WorldMap {
     return this.water[this.cellOf(x, y)] === 3;
   }
 
-  /** Porte du village (aux 4 points cardinaux) la plus proche de la direction de p. */
-  private gateToward(p: Pt, not?: Pt) {
-    const v = this.village;
-    const gates = [0, 1, 2, 3].map((g) => ({ x: v.x + Math.cos((g * Math.PI) / 2) * (VILLAGE_R + 60), y: v.y + Math.sin((g * Math.PI) / 2) * (VILLAGE_R + 60) }));
-    return gates
-      .filter((g) => !not || dist2(g.x, g.y, not.x, not.y) > 1)
-      .sort((a, b) => dist2(a.x, a.y, p.x, p.y) - dist2(b.x, b.y, p.x, p.y))[0];
+  /**
+   * L'îlot du village, au large de la côte, à côté de la plage d'arrivée : sa porte côté île regarde un point cardinal,
+   * le pont part de là, droit, jusqu'à la côte de l'île (pied du pont à une abscisse BRIDGE_ARC le long de la colonne).
+   * Toute sa côte reste à BRIDGE_GAP au moins de l'île (un vrai bras de mer), et dans le monde. Rend son centre (le feu),
+   * la direction de l'île vers l'îlot (dir), l'angle de sa porte côté pont (back) et l'abscisse du pied du pont.
+   */
+  private placeIsle() {
+    this.isleNoise = rng(this.seed ^ 0x15e7)() * TAU;
+    const dirs: Pt[] = [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 0, y: -1 }];
+    const lim = WORLD_HALF - SEA_SHALLOW - 200;
+    const attempt = (arc: number, side: number, gap: number, tol: number) => {
+      const nn = this.normalAt(arc), n = { x: nn.x * side, y: nn.y * side };
+      const dir = dirs.reduce((b, d) => (d.x * n.x + d.y * n.y > b.x * n.x + b.y * n.y ? d : b));
+      const S = this.spineAt(arc);
+      let t = 0;
+      while (t < 5000 && this.shoreAt(S.x + dir.x * t, S.y + dir.y * t) < 0) t += 8;
+      const M = { x: S.x + dir.x * t, y: S.y + dir.y * t }, foot = this.arc[this.cellOf(M.x, M.y)];
+      if (t >= 5000 || Math.abs(foot - (BRIDGE_ARC[0] + BRIDGE_ARC[1]) / 2) > tol) return null;
+      const back = Math.atan2(-dir.y, -dir.x);
+      for (let k = gap + this.isleEdge(back); k < gap + 900 + this.isleEdge(back); k += 30) {
+        const c = { x: M.x + dir.x * k, y: M.y + dir.y * k };
+        if (Math.abs(c.x) + VILLAGE_MAX_R + ISLE_MARGIN + 120 > lim || Math.abs(c.y) + VILLAGE_MAX_R + ISLE_MARGIN + 120 > lim) return null;
+        let ok = true;
+        for (let i = 0; i < 90 && ok; i++) {
+          const a = (i / 90) * TAU, r = this.isleEdge(a) + 60;
+          if (this.shoreAt(c.x + Math.cos(a) * r, c.y + Math.sin(a) * r) < gap) ok = false;
+        }
+        if (ok) return { c, dir, back, arc: foot };
+      }
+      return null;
+    };
+    const first = rng(this.seed ^ 0x51de)() < 0.5 ? 1 : -1;
+    // le pied du pont le plus près du milieu de BRIDGE_ARC (de préférence du côté first)
+    const mid = (BRIDGE_ARC[0] + BRIDGE_ARC[1]) / 2;
+    for (const [gap, tol] of [[BRIDGE_GAP, 200], [BRIDGE_GAP, 600], [BRIDGE_GAP * 0.7, 1200], [BRIDGE_GAP * 0.5, 4000]]) {
+      let best: ReturnType<typeof attempt> = null;
+      for (let arc = 200; arc <= 2600; arc += 50) {
+        for (const side of [first, -first]) {
+          const got = attempt(arc, side, gap, tol);
+          if (got && (!best || Math.abs(got.arc - mid) < Math.abs(best.arc - mid) - 1)) best = got;
+        }
+      }
+      if (best) return best;
+    }
+    // (jamais vu) : en face du milieu du chemin, côté first, sans vérifier
+    const arc = (BRIDGE_ARC[0] + BRIDGE_ARC[1]) / 2, n = this.normalAt(arc), S = this.spineAt(arc);
+    const dir = Math.abs(n.x) > Math.abs(n.y) ? { x: Math.sign(n.x * first), y: 0 } : { x: 0, y: Math.sign(n.y * first) };
+    const d = this.halfWidth(arc) + 600 + BRIDGE_GAP + VILLAGE_MAX_R + ISLE_MARGIN;
+    return { c: { x: S.x + dir.x * d, y: S.y + dir.y * d }, dir, back: Math.atan2(-dir.y, -dir.x), arc };
   }
 
-  /** Chemin : il serpente depuis le camp puis se redresse pour arriver dans l'axe de la porte. */
-  private buildPath() {
-    const { spawn: a, gate: g, village: v } = this;
-    this.path.push(...this.approach(a, g, v, true));
+  /** Côte de l'îlot du village dans la direction a, depuis le feu (avant le bruit fin) : la palissade, sa plage, des criques. */
+  private isleEdge(a: number) {
+    const k = this.isleNoise;
+    return villageEdge(a) + ISLE_MARGIN + Math.sin(a * 2 + k) * 45 + Math.sin(a * 5 + k * 1.7) * 30 + Math.sin(a * 9 + k * 0.6) * 14;
   }
 
-  /** Segment d'approche d'une porte : ondulation légère, puis alignement dans l'axe de la porte. */
-  private approach(a: Pt, g: Pt, v: Pt, wobble: boolean): [number, number][] {
-    const out: [number, number][] = [];
-    const ox = (g.x - v.x) / Math.hypot(g.x - v.x, g.y - v.y), oy = (g.y - v.y) / Math.hypot(g.x - v.x, g.y - v.y);
-    const b = { x: g.x + ox * 170, y: g.y + oy * 170 };
-    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
-    for (let i = 0; i <= 30; i++) {
-      const t = i / 30, w = wobble ? Math.sin(t * Math.PI * 3 + this.seed) * 45 * Math.sin(t * Math.PI) : 0;
-      out.push([a.x + dx * t + (-dy / len) * w, a.y + dy * t + (dx / len) * w]);
+  /**
+   * Pose l'îlot sur la carte (côte, mer peu profonde puis profonde autour). Ses cases, le bras de mer et le pont prennent
+   * au plus l'abscisse du pied du pont : la porte de la Lisière, plus loin sur le couloir, ne les coupe jamais.
+   */
+  private stampIsle(footArc: number) {
+    const v = this.village, far = SEA_SHALLOW + 560, R = VILLAGE_MAX_R + ISLE_MARGIN + 120 + far; // jusqu'au bleu du large (voir seaColor)
+    const i0 = Math.max(0, Math.floor((v.x - R + WORLD_HALF) / MAP_CELL)), i1 = Math.min(N - 1, Math.floor((v.x + R + WORLD_HALF) / MAP_CELL));
+    const j0 = Math.max(0, Math.floor((v.y - R + WORLD_HALF) / MAP_CELL)), j1 = Math.min(N - 1, Math.floor((v.y + R + WORLD_HALF) / MAP_CELL));
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const c = j * N + i, px = -WORLD_HALF + (i + 0.5) * MAP_CELL, py = -WORLD_HALF + (j + 0.5) * MAP_CELL;
+        const d = Math.hypot(px - v.x, py - v.y) - this.isleEdge(Math.atan2(py - v.y, px - v.x)) - (fbm(px / 160, py / 160, this.seed + 98, 2) - 0.5) * 90;
+        if (d >= far) continue;
+        if (this.shore[c] >= 0) this.arc[c] = Math.min(this.arc[c], footArc); // pas l'île elle-même
+        if (d >= this.shore[c]) continue;
+        this.shore[c] = d;
+        this.water[c] = d > SEA_SHALLOW ? 3 : d > 0 ? 1 : 0;
+      }
     }
-    const c = { x: g.x + ox * 90, y: g.y + oy * 90 };
-    for (let i = 1; i <= 12; i++) {
-      const t = i / 12, m = 1 - t;
-      out.push([m * m * b.x + 2 * m * t * c.x + t * t * g.x, m * m * b.y + 2 * m * t * c.y + t * t * g.y]);
+  }
+
+  /** Le pont de bois : du pied, sur l'île, à l'îlot, dans l'axe de la porte. */
+  private placeBridge() {
+    const v = this.village, g = this.gate, l = Math.hypot(g.x - v.x, g.y - v.y), ux = (g.x - v.x) / l, uy = (g.y - v.y) / l;
+    // de la porte vers l'île : la côte de l'îlot (b), puis celle de l'île (a)
+    let t = 0;
+    while (t < 3000 && this.shoreAt(g.x + ux * t, g.y + uy * t) < 0) t += 4;
+    const b = { x: g.x + ux * t, y: g.y + uy * t };
+    while (t < 5000 && this.shoreAt(g.x + ux * t, g.y + uy * t) >= 0) t += 4;
+    const a = { x: g.x + ux * t, y: g.y + uy * t };
+    Object.assign(this.bridge, { a: { x: a.x + ux * 30, y: a.y + uy * 30 }, b: { x: b.x - ux * 30, y: b.y - uy * 30 } });
+  }
+
+  /** Les planches du pont se marchent (la mer dessous) : une fois l'eau nettoyée, ses cases deviennent praticables. */
+  private stampBridge() {
+    const { a: A, b: B } = this.bridge, half = BRIDGE_W / 2;
+    for (let j = Math.floor((Math.min(A.y, B.y) - half + WORLD_HALF) / MAP_CELL); j <= Math.floor((Math.max(A.y, B.y) + half + WORLD_HALF) / MAP_CELL); j++) {
+      for (let i = Math.floor((Math.min(A.x, B.x) - half + WORLD_HALF) / MAP_CELL); i <= Math.floor((Math.max(A.x, B.x) + half + WORLD_HALF) / MAP_CELL); i++) {
+        if (i < 0 || j < 0 || i >= N || j >= N) continue;
+        const k = j * N + i, px = -WORLD_HALF + (i + 0.5) * MAP_CELL, py = -WORLD_HALF + (j + 0.5) * MAP_CELL;
+        if (this.bridgeDist(px, py) < half - 4 && (this.water[k] === 1 || this.water[k] === 3)) this.water[k] = 0;
+      }
     }
-    return out;
+  }
+
+  /** Distance au milieu du pont (dans sa longueur). */
+  bridgeDist(x: number, y: number) {
+    const { a, b } = this.bridge, dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1;
+    const t = clamp(((x - a.x) * dx + (y - a.y) * dy) / l2, 0, 1);
+    return Math.hypot(x - a.x - t * dx, y - a.y - t * dy);
+  }
+
+  /** Sur l'îlot du village (sa plage comprise) ou sur son pont : à l'abri, les monstres sauvages n'y vont pas. */
+  onIsle(x: number, y: number) {
+    if (x >= WORLD_HALF) return false;
+    const v = this.village, d = Math.hypot(x - v.x, y - v.y);
+    return d < this.isleEdge(Math.atan2(y - v.y, x - v.x)) + 50 || this.bridgeDist(x, y) < BRIDGE_W;
+  }
+
+  /**
+   * Chemins : de la plage au pied du pont (il serpente, par le milieu de l'île si la ligne droite longe l'eau, puis
+   * arrive dans l'axe du pont), et sur l'îlot, du bout du pont à la porte du village.
+   */
+  private buildPath(dir: Pt) {
+    const { spawn, bridge } = this, a = bridge.a, ux = -dir.x, uy = -dir.y; // de l'îlot vers l'île
+    // un peu dans les terres, dans l'axe du pont : le chemin y arrive droit
+    let t = 40;
+    while (t < 260 && this.shoreAt(a.x + ux * t, a.y + uy * t) < -40) t += 10;
+    const q = { x: a.x + ux * Math.max(60, t - 40), y: a.y + uy * Math.max(60, t - 40) };
+    const dry = (p: Pt, r: Pt) => {
+      for (let k = 1; k < 40; k++) if (this.shoreAt(p.x + ((r.x - p.x) * k) / 40, p.y + ((r.y - p.y) * k) / 40) > -90) return false;
+      return true;
+    };
+    const via = dry(spawn, q) ? [] : [this.spineAt(this.arcAt(q.x, q.y) * 0.5), this.spineAt(this.arcAt(q.x, q.y))].filter((p, i, all) => i === 0 || !dry(all[i - 1], q));
+    const line: [number, number][] = [];
+    const wob = (p: Pt, r: Pt, n: number, amp: number) => {
+      const dx = r.x - p.x, dy = r.y - p.y, len = Math.hypot(dx, dy) || 1;
+      for (let i = line.length ? 1 : 0; i <= n; i++) {
+        const k = i / n, w = Math.sin(k * Math.PI * 3 + this.seed) * amp * Math.sin(k * Math.PI);
+        line.push([p.x + dx * k + (-dy / len) * w, p.y + dy * k + (dx / len) * w]);
+      }
+    };
+    const stops = [spawn, ...via, q];
+    for (let k = 1; k < stops.length; k++) wob(stops[k - 1], stops[k], 20, 45);
+    line.push([a.x, a.y]);
+    this.paths.push(line);
+    // sur l'îlot : du bout du pont à la porte, tout droit
+    this.paths.push([[bridge.b.x, bridge.b.y], [this.gate.x, this.gate.y]]);
   }
 
   /** Range les segments du chemin par case de 256 px (marge de 260 px) pour pathDist. */
   private indexPaths() {
-    for (const line of [this.path]) {
+    for (const line of this.paths) {
       for (let i = 1; i < line.length; i++) {
         const [ax, ay] = line[i - 1], [bx, by] = line[i];
         for (let gx = Math.floor((Math.min(ax, bx) - 260) / BUCKET); gx <= Math.floor((Math.max(ax, bx) + 260) / BUCKET); gx++) {
@@ -826,9 +967,9 @@ export class WorldMap {
     for (const res of ['stone'] as const) {
       let early = 0, total = 0;
       for (let tries = 0; tries < 8000 && total < 70; tries++) {
-        // les 4 premiers entre le camp et le village, les autres tout le long du couloir
-        const first = early < 4 && tries < 2000;
-        const s = first ? rand() * Math.max(200, VILLAGE_ARC - VILLAGE_R) : 650 + rand() * (this.length - 900);
+        // les 4 premiers entre la plage et le pont, les autres tout le long du couloir
+        const first = early < 4 && tries < 2000, bridgeArc = this.gates[0] - GATE0_AFTER;
+        const s = first ? 150 + rand() * Math.max(200, bridgeArc - 100) : 650 + rand() * (this.length - 900);
         const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
         const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 90);
         const x = sx + n.x * off, y = sy + n.y * off;
@@ -839,7 +980,7 @@ export class WorldMap {
         this.ores.push({ id: this.ores.length, x, y, zone: this.zoneAt(x, y), res });
         this.solidOre(this.ores[this.ores.length - 1]);
         total++;
-        if (s < VILLAGE_ARC) early++;
+        if (first) early++;
       }
     }
   }
@@ -873,11 +1014,10 @@ export class WorldMap {
   }
 
   /**
-   * École des dompteurs, dans le premier camp : la place la plus proche du feu où la maison (dessinée droite, quel que
-   * soit le sens de la piste) ne touche ni le feu, ni une tente, ni le fanion, ni la Pierre de passage, ni la piste,
-   * et ne monte pas sur le nom du camp.
+   * Coffre du plan de l'École des dompteurs, dans le premier camp : la place la plus proche du feu où il ne touche ni le
+   * feu, ni une tente, ni le fanion, ni la Pierre de passage, ni la piste, et ne monte pas sur le nom du camp.
    */
-  private placeSchool() {
+  private placePlanChest() {
     const site = this.sites[0];
     if (!site) return;
     const lay = this.siteLayout[0], st = this.stones[1];
@@ -890,20 +1030,20 @@ export class WorldMap {
       at(st.x - site.x, st.y - site.y, [-22, -64, 22, 14]),
       [-110, -190, 110, -150], // nom du camp
     ];
-    const house: Box = [-54, -96, 54, 12];
+    const house: Box = [-30, -40, 30, 14];
     const free = (x: number, y: number, gap: number) =>
       others.every((o) => { const h = at(x, y, house); return h[2] < o[0] || h[0] > o[2] || h[3] < o[1] || h[1] > o[3]; }) &&
       this.pathDist(site.x + x, site.y + y) > gap;
     // d'abord bien à l'écart de la piste, puis un peu plus près si le camp est trop serré
     for (const gap of [70, 50, 35]) {
-      for (let r = 90; r <= 190; r += 10) {
+      for (let r = 80; r <= 190; r += 10) {
         for (let k = 0; k < 48; k++) {
           const ang = (k / 48) * Math.PI * 2, x = Math.cos(ang) * r, y = Math.sin(ang) * r * 0.75;
-          if (free(x, y, gap)) return void (this.school = { x: site.x + x, y: site.y + y });
+          if (free(x, y, gap)) return void (this.planChest = { x: site.x + x, y: site.y + y });
         }
       }
     }
-    this.school = { x: site.x, y: site.y + 150 }; // (jamais vu) : sous le feu
+    this.planChest = { x: site.x, y: site.y + 150 }; // (jamais vu) : sous le feu
   }
 
   /** Palissade construite (solide) ou non (on passe). Seules ses cases encore libres changent. */
@@ -1049,10 +1189,9 @@ export class WorldMap {
     // palissade du village, avec ses 4 portes : ses cases ne deviennent solides qu'une fois construite (setPalisade)
     const v = this.village;
     const marked = new Set<number>();
-    for (let a = 0; a < Math.PI * 2; a += 0.02) {
-      const nearGate = [0, 1, 2, 3, 4].some((g) => Math.abs(a - (g * Math.PI) / 2) < 0.1);
-      if (nearGate) continue;
-      const px = v.x + Math.cos(a) * VILLAGE_R, py = v.y + Math.sin(a) * VILLAGE_R, r = 13;
+    for (let a = 0; a < Math.PI * 2; a += 0.015) {
+      if (atVillageGate(a)) continue;
+      const px = v.x + Math.cos(a) * villageEdge(a), py = v.y + Math.sin(a) * villageEdge(a), r = 13;
       for (let j = Math.floor((py - r + WORLD_HALF) / MAP_CELL); j <= Math.floor((py + r + WORLD_HALF) / MAP_CELL); j++) {
         for (let i = Math.floor((px - r + WORLD_HALF) / MAP_CELL); i <= Math.floor((px + r + WORLD_HALF) / MAP_CELL); i++) {
           const cx = -WORLD_HALF + (i + 0.5) * MAP_CELL, cy = -WORLD_HALF + (j + 0.5) * MAP_CELL, c = j * N + i;
@@ -1075,7 +1214,8 @@ export class WorldMap {
     // emplacements de camp : cercle de pierres du feu ; Pierres de passage
     for (const c of this.sites) this.solidDisc(c.x, c.y, 26);
     for (const st of this.stones) this.solidDisc(st.x, st.y, 18);
-    this.solidRect(this.school.x - 44, this.school.y - 22, this.school.x + 44, this.school.y + 6); // l'école (même pas encore bâtie : son estrade)
+    this.solidRect(this.school.x - 54, this.school.y - 24, this.school.x + 54, this.school.y + 8); // l'école (même pas encore bâtie : son chantier)
+    if (this.sites.length) this.solidRect(this.planChest.x - 18, this.planChest.y - 10, this.planChest.x + 18, this.planChest.y + 6); // coffre du plan
     // butte rocheuse des grottes (l'ouverture, devant, reste libre)
     for (const c of this.caves) {
       const { x, y } = c.entrance;
@@ -1328,8 +1468,11 @@ export class WorldMap {
     return this.sites.findIndex((c) => dist2(x, y, c.x, c.y) < r * r);
   }
 
+  /** Dans la palissade (élargie de margin). */
   inVillage(x: number, y: number, margin = 0) {
-    return dist2(x, y, this.village.x, this.village.y) < (VILLAGE_R + margin) ** 2;
+    const dx = x - this.village.x, dy = y - this.village.y, d2 = dx * dx + dy * dy;
+    if (d2 > (VILLAGE_MAX_R + margin) ** 2) return false;
+    return d2 < (VILLAGE_MIN_R + margin) ** 2 || d2 < (villageEdge(Math.atan2(dy, dx)) + margin) ** 2;
   }
 
   /** Ligne droite praticable entre deux points (échantillonnée tous les 8 px). */

@@ -3,7 +3,7 @@
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
 import { CACTUS_CD, CACTUS_PRICK, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
-import { BEACH, WorldMap } from '../../shared/worldmap.ts';
+import { BEACH, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { sky } from '../../shared/weather.ts';
 import { Room } from '../../server/room.ts';
 
@@ -17,19 +17,29 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     check([1, 2, 3].every((z) => zones.get(z) === 2) && zones.get(4) === 3 && zones.get(5) === 3, 'deux espèces hostiles par zone, trois en zones 4 et 5');
   });
 
-  rule('Carte générée : un long couloir depuis un bord (haut, droite ou bas), village loin du camp, chemin praticable.', () => {
+  rule('Carte générée : un long couloir depuis un bord (haut, droite ou bas), village sur son îlot, chemin et pont praticables.', () => {
     for (const seed of [1, 42, 777, 123456789]) {
       const m = new WorldMap(seed);
       const d = Math.hypot(m.village.x - m.spawn.x, m.village.y - m.spawn.y);
       let pathOk = true;
-      // le long du chemin de terre (hors cercle de pierres du camp), puis de la porte jusqu'au feu de camp
-      for (let i = 1; i < m.path.length; i++) {
-        const [ax, ay] = m.path[i - 1], [bx, by] = m.path[i];
-        for (let t = 0; t <= 1; t += 0.1) {
-          const x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
-          if (Math.hypot(x - m.spawn.x, y - m.spawn.y) > 40 && m.blocked(x, y)) pathOk = false;
+      // le long des chemins de terre (de la plage au pont, du pont à la porte), sur le pont, puis de la porte jusqu'au feu
+      const lines = [...m.paths, [[m.bridge.a.x, m.bridge.a.y], [m.bridge.b.x, m.bridge.b.y]]];
+      for (const line of lines) {
+        for (let i = 1; i < line.length; i++) {
+          const [ax, ay] = line[i - 1], [bx, by] = line[i];
+          for (let t = 0; t <= 1; t += 0.05) {
+            const x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
+            if (Math.hypot(x - m.spawn.x, y - m.spawn.y) > 40 && m.blocked(x, y)) pathOk = false;
+          }
         }
       }
+      // un vrai îlot : de part et d'autre du milieu du pont, la mer ; le village et le pont, à l'abri
+      const bm = { x: (m.bridge.a.x + m.bridge.b.x) / 2, y: (m.bridge.a.y + m.bridge.b.y) / 2 };
+      const bl = Math.hypot(m.bridge.b.x - m.bridge.a.x, m.bridge.b.y - m.bridge.a.y), nx = -(m.bridge.b.y - m.bridge.a.y) / bl, ny = (m.bridge.b.x - m.bridge.a.x) / bl;
+      const isle = [-1, 1].every((k) => m.isSea(bm.x + nx * k * 90, bm.y + ny * k * 90) && m.isWater(bm.x + nx * k * 90, bm.y + ny * k * 90)) && m.isSea(bm.x, bm.y) && !m.blocked(bm.x, bm.y);
+      check(isle && bl >= 200 && m.onIsle(m.village.x, m.village.y) && m.onIsle(bm.x, bm.y) && !m.onIsle(m.spawn.x, m.spawn.y) && m.zoneAt(m.village.x, m.village.y) === 1,
+        `graine ${seed} : village sur un îlot, relié par un pont de ${Math.round(bl)} px au-dessus de la mer`);
+      check(m.arcAt(m.bridge.a.x, m.bridge.a.y) < m.gates[0] && m.arcAt(m.village.x, m.village.y) < m.gates[0], `graine ${seed} : le pont et le village avant la porte de la Lisière`);
       for (let t = 0; t <= 0.85; t += 0.01) {
         if (m.blocked(m.gate.x + (m.village.x - m.gate.x) * t, m.gate.y + (m.village.y - m.gate.y) * t)) pathOk = false;
       }
@@ -128,13 +138,19 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     const m = new WorldMap(42);
     const tree = m.decor.find((d) => d.kind === 0)!;
     check(m.blocked(tree.x, tree.y + m.decorSize(tree) * 0.15), `les arbres bloquent (${m.decor.filter((d) => d.kind === 0).length} arbres)`);
-    const v = m.village;
-    check(!m.blocked(v.x + Math.cos(0.7) * 360, v.y + Math.sin(0.7) * 360), 'palissade pas encore construite : on passe');
+    const v = m.village, wall = (a: number) => ({ x: v.x + Math.cos(a) * villageEdge(a), y: v.y + Math.sin(a) * villageEdge(a) });
+    check(!m.blocked(wall(0.7).x, wall(0.7).y), 'palissade pas encore construite : on passe');
     m.setPalisade(true);
-    check(m.blocked(v.x + Math.cos(0.7) * 360, v.y + Math.sin(0.7) * 360), 'construite, la palissade bloque');
-    check([0, 1, 2, 3].every((g) => !m.blocked(v.x + Math.cos((g * Math.PI) / 2) * 360, v.y + Math.sin((g * Math.PI) / 2) * 360)), 'les 4 portes laissent passer');
+    check([0.7, 2.2, 3.9, 5.3].every((a) => m.blocked(wall(a).x, wall(a).y)), 'construite, la palissade bloque (tout le long de son contour, qui n\'est pas rond)');
+    check(Math.max(villageEdge(0), villageEdge(Math.PI)) > 1.25 * villageEdge(Math.PI / 2), `pas ronde : plus large d'est en ouest (${Math.round(villageEdge(0))} px) que du nord au sud (${Math.round(villageEdge(Math.PI / 2))} px)`);
+    check([0, 1, 2, 3].every((g) => !m.blocked(wall((g * Math.PI) / 2).x, wall((g * Math.PI) / 2).y)), 'les 4 portes laissent passer');
     check(!m.blocked(m.forge.x, m.forge.y + 70) && !m.blocked(m.den.x, m.den.y + 70), 'on peut approcher de la forge et de la tanière');
-    check(m.blocked(m.forge.x - 40, m.forge.y) && m.blocked(v.x - 180, v.y - 140), 'la forge et les huttes sont solides');
+    check(m.blocked(m.forge.x - 40, m.forge.y) && m.blocked(m.market.x, m.market.y + 10), 'la forge et les huttes sont solides');
+    // les bâtiments tiennent dans la palissade, à l'écart des quatre routes
+    const boxes = [[m.forge, 80, 44], [m.den, 84, 50], [m.market, 58, 46], [m.hall, 64, 56], [m.store, 44, 40], [m.board, 30, 54], [m.school, 54, 96], [m.stones[0], 24, 60]] as const;
+    const inside = boxes.every(([b, w, h]) => [[-w, -h], [w, -h], [-w, 12], [w, 12]].every(([dx, dy]) => m.inVillage(b.x + dx, b.y + dy, -30)));
+    const offRoads = boxes.every(([b, w]) => Math.abs(b.x - v.x) > w + 26 && Math.abs(b.y - v.y) > 40);
+    check(inside && offRoads, 'chaque bâtiment tient dans la palissade, hors des routes qui mènent aux portes');
   });
 
   rule('Recherche de chemin : contourner la palissade par une porte au lieu de foncer dans le mur.', () => {
@@ -142,8 +158,9 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     r.units.clear();
     const p = r.addPlayer('a', noop);
     const v = r.map.village;
-    [p.x, p.y] = [v.x + Math.cos(0.75) * 250, v.y + Math.sin(0.75) * 250]; // dans le village, près du mur
-    const out = r.map.freeNear(v.x + Math.cos(0.75) * 470, v.y + Math.sin(0.75) * 470); // juste derrière le mur
+    const e = villageEdge(0.75);
+    [p.x, p.y] = [v.x + Math.cos(0.75) * (e - 110), v.y + Math.sin(0.75) * (e - 110)]; // dans le village, près du mur
+    const out = r.map.freeNear(v.x + Math.cos(0.75) * (e + 110), v.y + Math.sin(0.75) * (e + 110)); // juste derrière le mur
     const path = r.map.findPath(out.x, out.y, p.x, p.y);
     let ok = !!path;
     let prev = out;
@@ -307,13 +324,6 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     r.cactusDamage();
     const other = r.map.treesNear(p.x, p.y, p.r + 10).some((i: number) => r.map.isCactus(r.map.decor[i]));
     check(other || p.hp === 1000, 'à distance, rien');
-
-    // Alpha suricate : il encourage son dompteur (+8 % de dégâts, plus en le renforçant), comme l'escargot le protège.
-    const r2 = room();
-    const p2 = r2.addPlayer('chef', noop);
-    check(r2.rallyOf(p2) === 0, 'sans Alpha suricate : pas de bonus');
-    r2.spawnAlpha(p2, key('meerkat'), 2, false);
-    check(Math.abs(r2.rallyOf(p2) - 0.1) < 1e-9, `Alpha suricate niv. 2 : +${Math.round(r2.rallyOf(p2) * 100)} % de dégâts pour son dompteur`);
 
     // Vautour : il se chevauche et vole, par-dessus l'eau ; on se pose sur la terre ferme.
     const r3 = room();

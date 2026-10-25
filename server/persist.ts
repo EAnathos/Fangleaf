@@ -18,6 +18,7 @@ export interface Profile {
   armor: number;
   torch?: number; // 0 : pas de torche (absent dans les sauvegardes d'avant la migration 015)
   boots?: number;
+  saddle?: number; // selle (0 : aucune, on ne monte pas sur ses Alphas) ; absente avant la migration 025
   scrolls?: number[]; // parchemins portés (géant de chacun), pas encore donnés au vieil homme
   armed?: boolean; // épée déterrée (absent dans les sauvegardes d'avant la migration 017 : armé)
   essences: number[];
@@ -70,6 +71,8 @@ export interface VillageSave {
   told: number[]; // parchemins (géant de chacun) donnés au vieil homme, dans l'ordre : ses souvenirs retrouvés
   boat: number; // étapes du bateau achevées (0 à 4)
   boatAt: number; // fin de l'étape en cours (horodatage ms ; 0 : aucune)
+  plan: boolean; // plan de l'École des dompteurs trouvé (migration 025)
+  schoolAt: number; // fin du chantier de l'école par Aubin (horodatage ms ; 0 : aucun)
   beaten: number[];
   heart: number; // cœur volcanique : 0 sous le volcan, 1 pris, 2 installé dans le bateau (migration 023)
   wood: number; // réserve commune
@@ -80,13 +83,13 @@ export interface VillageSave {
 /** Graine et biens communs d'un village enregistré, ou null s'il n'existe pas. */
 export async function findVillage(code: string): Promise<({ seed: number; founder: string | null } & VillageSave) | null> {
   if (!db) return null;
-  const { data, error } = await db.from('villages').select('seed, name, told, boat, boat_at, camps, buildings, caves, hall, beaten, heart, wood, stone, banned, created_by').eq('code', code).maybeSingle();
+  const { data, error } = await db.from('villages').select('seed, name, told, boat, boat_at, school_plan, school_at, camps, buildings, caves, hall, beaten, heart, wood, stone, banned, created_by').eq('code', code).maybeSingle();
   if (error) throw new Error(`Lecture du village impossible : ${error.message}`);
   const list = (v: unknown) => (Array.isArray(v) ? v : []);
   return data
     ? {
       seed: Number(data.seed), camps: list(data.camps).map(Number), buildings: list(data.buildings), unlocked: list(data.caves).map(Number),
-      hall: Number(data.hall ?? 0), name: String(data.name ?? ''), told: list(data.told).map(Number), boat: Number(data.boat ?? 0), boatAt: Number(data.boat_at ?? 0), beaten: list(data.beaten).map(Number), heart: Number(data.heart ?? 0), wood: Number(data.wood ?? 0), stone: Number(data.stone ?? 0),
+      hall: Number(data.hall ?? 0), name: String(data.name ?? ''), told: list(data.told).map(Number), boat: Number(data.boat ?? 0), boatAt: Number(data.boat_at ?? 0), plan: !!data.school_plan, schoolAt: Number(data.school_at ?? 0), beaten: list(data.beaten).map(Number), heart: Number(data.heart ?? 0), wood: Number(data.wood ?? 0), stone: Number(data.stone ?? 0),
       banned: list(data.banned).filter((b) => b && typeof b.id === 'string').map((b) => ({ id: String(b.id), name: String(b.name ?? '') })),
       founder: data.created_by ?? null,
     }
@@ -133,7 +136,7 @@ export async function leaveVillage(userId: string, code: string): Promise<{ dele
 /** Biens communs du village (partagés par tous ses membres). */
 export async function saveVillage(code: string, v: VillageSave) {
   if (!db) return;
-  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked, hall: v.hall, name: v.name, told: v.told, boat: v.boat, boat_at: v.boatAt, beaten: v.beaten, heart: v.heart, wood: v.wood, stone: v.stone, banned: v.banned }).eq('code', code);
+  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked, hall: v.hall, name: v.name, told: v.told, boat: v.boat, boat_at: v.boatAt, school_plan: v.plan, school_at: v.schoolAt, beaten: v.beaten, heart: v.heart, wood: v.wood, stone: v.stone, banned: v.banned }).eq('code', code);
   if (error) console.error('Sauvegarde du village impossible :', error.message);
 }
 
@@ -147,7 +150,7 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   if (!db) return null;
   const { data, error } = await db
     .from('progress')
-    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, armed, scrolls, essences, alphas, village_found, class, spec, specs, pack, seen, stats, tomes, learned, read_at, read_kind, seat')
+    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, saddle, armed, scrolls, essences, alphas, village_found, class, spec, specs, pack, seen, stats, tomes, learned, read_at, read_kind, seat')
     .eq('user_id', userId)
     .eq('village_code', code)
     .maybeSingle();

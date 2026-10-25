@@ -1,12 +1,12 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  alphaEquipMax, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsCost, bootsSpeed, type Gear, TORCH_MAX, TORCH_NAMES, torchCost, torchRadius, armyCap, lessonsOf, LESSONS_PER_TOME, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, BUILDING_REACH,
+  alphaEquipMax, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
 import type { BoardRow, PlayerState, UnitTuple } from '../../shared/protocol.ts';
-import { HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
+import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
 import { armorColor, drawElder, drawHatchling, drawUnit } from './sprites.ts';
 import { CHAPTER_TITLES, ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD } from './elder.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
@@ -33,6 +33,7 @@ export interface Spot {
   sword?: boolean; // épée plantée dans le sable : tirer dessus
   scroll?: number; // grotte dont on ramasse le parchemin
   heart?: boolean; // cœur volcanique : le prendre sur son autel, ou l'installer dans le bateau
+  plan?: boolean; // coffre du Camp avancé : le plan de l'École des dompteurs
 }
 /** Géant endormi dans sa grotte : on peut aller lui parler. */
 export interface Sleeper {
@@ -56,6 +57,7 @@ export interface VillageView {
   lore: [number, number, number]; // souvenirs du vieil homme, étapes du bateau, secondes avant la fin de l'étape en cours
   beaten: number[]; // géants vaincus par le village
   heart: number; // cœur volcanique : 0 sur son autel, HEART_TAKEN pris, HEART_IN_BOAT installé dans le bateau
+  school: [number, number]; // École des dompteurs : plan trouvé (0/1), secondes avant la fin du chantier d'Aubin
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 const ROMAN = ['I', 'II', 'III'];
@@ -97,8 +99,10 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
         ? { panel: 'travel', pos: map.stones[i + 1], label: 'E — Pierre de passage', at: i }
         : { panel: 'camp', pos: site, label: 'E — Établir le camp', at: i },
     ),
-    // l'École des dompteurs, au bord du Camp avancé une fois établi
-    ...(v.camps.includes(SCHOOL_CAMP) ? [building('school', map.school, { panel: 'school', pos: map.school, label: 'E — École des dompteurs' })] : []),
+    // l'École des dompteurs, au village une fois bâtie par Aubin ; son plan, dans un coffre du Camp avancé une fois établi
+    ...(v.buildings.includes('school') ? [{ panel: 'school' as const, pos: map.school, label: 'E — École des dompteurs' }]
+      : [{ pos: map.school, reach: 90, label: v.school[1] ? `Aubin bâtit l'école · ${clock(v.school[1])}` : v.school[0] ? 'École des dompteurs : Aubin peut la bâtir' : 'École des dompteurs : son plan est au Camp avancé' }]),
+    ...(v.camps.includes(SCHOOL_CAMP) && !v.school[0] ? [{ plan: true, pos: map.planChest, reach: PLAN_REACH, label: 'E — Ouvrir le vieux coffre' }] : []),
     // le volcan : sa bouche (scellée tant que les géants de la Mer de sable sont debout), la sortie de ses entrailles,
     // et l'autel du cœur, au centre
     volcanoOpen(v.beaten)
@@ -158,15 +162,28 @@ const setClass = (el: HTMLElement, v: string) => void (el.className !== v && (el
 const setStyle = (el: HTMLElement, k: 'width' | 'color', v: string) => void (el.style[k] !== v && (el.style[k] = v));
 /**
  * Bouton du jeu : au doigt, il agit dès que le doigt se pose. Un autre doigt qui tient le déplacement n'empêche rien
- * (le navigateur ne déclenche pas de clic pendant un geste à deux doigts) ; le clic qui suit est ignoré.
+ * (le navigateur ne déclenche pas de clic pendant un geste à deux doigts).
+ * Le clic que le navigateur fabrique ensuite, au lever du doigt, ne doit rien refaire : il est annulé à la source
+ * (touchend), et, au cas où il passerait quand même, ignoré partout pendant un moment (le bouton a pu changer de rôle,
+ * « Entrer » devenu « Sortir », ou un panneau s'ouvrir sous le doigt).
  */
 const tapAt = new WeakMap<HTMLElement, number>();
+let ghostUntil = 0;
+addEventListener('click', (e) => {
+  if (performance.now() >= ghostUntil || !e.isTrusted) return;
+  e.stopPropagation();
+  e.preventDefault();
+}, true);
 const onTap = (el: HTMLElement, fn: () => void) => {
   el.onpointerdown = (e) => {
     if (e.pointerType === 'mouse') return;
-    tapAt.set(el, performance.now());
+    const now = performance.now();
+    if (now - (tapAt.get(el) ?? -Infinity) < 250) return; // le même toucher signalé deux fois
+    tapAt.set(el, now);
+    ghostUntil = now + 800;
     fn();
   };
+  el.ontouchend = (e) => e.cancelable && e.preventDefault(); // pas de clic fabriqué après le toucher
   el.onclick = () => void (performance.now() - (tapAt.get(el) ?? -Infinity) > 700 && fn());
 };
 const pct = (n: number) => `${Math.round(n * 100)} %`;
@@ -223,12 +240,15 @@ export class Hud {
   onScroll = (_cave: number) => {};
   onHeart = () => {};
   heart = 0; // cœur volcanique (0, HEART_TAKEN, HEART_IN_BOAT)
+  school: [number, number] = [0, 0]; // École des dompteurs : plan trouvé (0/1), secondes avant la fin du chantier d'Aubin
   /** Géants dont le vieil homme attend le parchemin : ceux de l'île (ceux du volcan n'en laissent pas). */
   private islandCaves() {
     return this.map.caves.filter((c) => c.zone < VOLCANO_ZONE).length;
   }
   onScrollGive = () => {};
   onBoat = () => {};
+  onPlan = () => {}; // coffre du Camp avancé : le plan de l'école
+  onSchool = () => {}; // donner à Aubin les ressources de l'école
   onSword = () => {};
   onRide = () => {}; // bouton selle (mobile) : monter ou descendre
   onDeposit = () => {};
@@ -247,7 +267,7 @@ export class Hud {
   private npcWho = 0; // nouveau-né à qui l'on parle
   private npcAt = 0; // réplique en cours avec lui
   private elderLines: string[] = []; // ce qu'il est en train de dire
-  private elderView: 'talk' | 'boat' | 'scrolls' = 'talk';
+  private elderView: 'talk' | 'boat' | 'scrolls' | 'school' = 'talk';
   told: number[] = []; // parchemins lus par Aubin (géant de chacun), dans l'ordre
   private myScrolls = 0; // parchemins dans mon sac
   private elderMet = true; // déjà parlé au vieil homme dans ce village (retenu sur cet appareil)
@@ -399,6 +419,7 @@ export class Hud {
     $('armor-buy').onclick = () => this.onUpgrade('armor');
     $('torch-buy').onclick = () => this.onUpgrade('torch');
     $('boots-buy').onclick = () => this.onUpgrade('boots');
+    $('saddle-buy').onclick = () => this.onUpgrade('saddle');
     $('alphas').addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button.buy');
       if (btn?.dataset.up) this.onAlphaUp(Number(btn.dataset.up));
@@ -560,7 +581,7 @@ export class Hud {
       // au doigt, pas de touche à rappeler ; sur PC, la touche réglée pour « interagir »
       setText(prompt, b.label.replace(/^E — /, touchOnly ? '' : `${keyLabel('interact')} — `));
       setClass(prompt, `btn prompt ${b.panel ?? (b.deposit ? 'hall' : b.pick || b.sword || b.heart || b.scroll !== undefined ? 'pick' : b.chest !== undefined ? 'chest' : b.cave && this.caves[b.cave.id] === 0 && b.cave.enter ? 'danger' : 'den')}`);
-      const act = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.heart ? this.onHeart() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
+      const act = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.heart ? this.onHeart() : b.plan ? this.onPlan() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
       onTap(prompt, act);
     }
     const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board'].includes(this.panel);
@@ -663,9 +684,8 @@ export class Hud {
     btn.textContent = me.gold < CAMP_COST ? `Il te faut ${CAMP_COST} or` : `Établir le camp · ${CAMP_COST} or`;
   }
 
-  /** École des dompteurs : une ligne par discipline (leçons apprises, livres du sac, de quoi lire la suivante) ; la leçon en cours affiche son compte à rebours. */
+  /** École des dompteurs : une carte par discipline (ce qu'elle apprend, de quoi lire la suivante) ; la leçon en cours affiche son compte à rebours. */
   private updateSchool(me: PlayerState) {
-    $('school-have').textContent = `Meute de ${armyCap(me.learned)} monstres`;
     const key = JSON.stringify([me.learned, me.tomes, !!me.reading, me.readKind]);
     if (key !== this.last.school) this.buildSchool(me, key);
     const reading = me.reading ? $('school-list').querySelector<HTMLButtonElement>(`button[data-kind="${me.readKind}"]`) : null;
@@ -674,30 +694,32 @@ export class Hud {
 
   private buildSchool(me: PlayerState, key: string) {
     this.last.school = key;
+    // où trouver chaque tome : les coffres des géants de deux zones chacun ; le livre à part, ceux du volcan
+    const where = (label: string, place: string) => {
+      const li = document.createElement('li');
+      li.innerHTML = '<b></b> : ';
+      li.querySelector('b')!.textContent = label;
+      li.append(place);
+      return li;
+    };
+    $('school-where').replaceChildren(
+      ...ROMAN.map((t, i) => where(`Tome ${t}`, `géants ${ZONE_NAMES.slice(i * 2, i * 2 + 2).join(', ')}`)),
+      ...LESSON_KINDS.filter((kind) => DISCIPLINES[kind].volcano).map((kind) => where(DISCIPLINES[kind].tomes[0], `géants du volcan, ${ZONE_NAMES[VOLCANO_ZONE - 1]} (${DISCIPLINES[kind].name})`)),
+    );
     $('school-list').replaceChildren(...LESSON_KINDS.map((kind, k) => {
       const d = DISCIPLINES[kind], n = me.learned[k] ?? 0, next = tomeForLesson(n, k), solo = d.tomes.length === 1;
       const row = document.createElement('div');
       row.className = 'stone-row';
-      row.innerHTML = '<div class="col"><b></b><span class="small muted"></span><span class="small"></span></div>';
-      row.querySelector('b')!.textContent = `${d.name} · ${n}/${lessonsOf(k)}`;
-      row.querySelectorAll('span')[0].textContent = d.desc;
-      // un exemplaire de chaque tome : déjà lu, dans le sac, ou encore à trouver
-      row.querySelectorAll('span')[1].textContent = d.tomes.map((_, t) => `${solo ? 'Tome' : ROMAN[t]} ${n >= LESSONS_PER_TOME * (t + 1) ? 'lu' : me.tomes[bookIndex(k, t)] ? 'dans ton sac' : 'à trouver'}`).join(' · ');
+      row.innerHTML = '<div class="col"><b></b><span class="small muted"></span></div>';
+      row.querySelector('b')!.textContent = d.name;
+      row.querySelector('span')!.textContent = d.desc;
       const btn = document.createElement('button');
       btn.className = me.reading && me.readKind === k ? 'cta reading' : 'cta';
       btn.dataset.kind = String(k);
       const have = next >= 0 ? me.tomes[bookIndex(k, next)] ?? 0 : 0;
       btn.disabled = next < 0 || !have || !!me.reading;
-      // bouton court (il tient sur téléphone) ; le nom du livre à trouver et où le chercher, en dessous
-      btn.textContent = next < 0 ? 'Tout appris' : have ? 'Lire' : solo ? 'Tome à trouver' : `Tome ${ROMAN[next]} à trouver`;
-      if (next >= 0 && !have) {
-        const where = document.createElement('span');
-        where.className = 'small muted';
-        where.textContent = d.volcano
-          ? `${d.tomes[next]} : seulement dans les coffres des géants du volcan (${ZONE_NAMES[VOLCANO_ZONE - 1]})`
-          : `${d.tomes[next]} : coffres des géants (${ZONE_NAMES.slice(next * 2, next * 2 + 2).join(', ')})`;
-        row.querySelector('.col')!.append(where);
-      }
+      // bouton court (il tient sur téléphone) ; où trouver chaque tome : l'encadré en tête du panneau
+      btn.textContent = next < 0 ? 'Tout appris' : have ? (solo ? 'Lire' : `Lire le tome ${ROMAN[next]}`) : solo ? 'Livre à trouver' : `Tome ${ROMAN[next]} à trouver`;
       row.append(btn);
       return row;
     }));
@@ -742,7 +764,7 @@ export class Hud {
   /** Panneau du vieil homme : sa réplique, et selon le moment, donner ses parchemins, réécouter ses souvenirs, le bateau. */
   private updateElder(me: PlayerState) {
     const total = this.islandCaves(), [told, boat, left] = this.lore, funds = this.funds(me);
-    const key = JSON.stringify([this.elderView, this.elderAt, this.elderLines.length, me.scrolls, this.lore, this.told, this.elderView === 'boat' ? [funds.gold >= 0 && canPay(funds, BOAT_STAGES[boat] ?? BOAT_STAGES[0])] : 0]);
+    const key = JSON.stringify([this.elderView, this.elderAt, this.elderLines.length, me.scrolls, this.lore, this.told, this.school, this.buildings.includes('school'), this.hall, this.elderView === 'boat' ? [funds.gold >= 0 && canPay(funds, BOAT_STAGES[boat] ?? BOAT_STAGES[0])] : this.elderView === 'school' ? canPay(funds, buildingCost('school')) : 0]);
     if (key === this.last.elder) return;
     this.last.elder = key;
     $('elder-title').textContent = told ? 'Aubin' : 'Un vieil homme';
@@ -773,6 +795,33 @@ export class Hud {
           return row;
         }),
       );
+      actions.push(button('Retour', 'btn', () => {
+        this.elderView = 'talk';
+        this.elderSay(elderGreeting(told, total, boat, BOAT_STAGES.length, this.heart));
+      }));
+    } else if (this.elderView === 'school') {
+      // l'école : son plan rapporté du Camp avancé, il la bâtit au village contre des ressources
+      const built = this.buildings.includes('school'), [, wait] = this.school, need = BUILDINGS.school.hall, c = buildingCost('school');
+      $('elder-line').textContent = `« ${built ? 'L\'école est ouverte ! Les livres des géants n\'attendent plus que toi.' : wait ? 'Les murs montent ! Reviens dans un moment.' : this.hall < need ? `Avec ce plan, je pourrais la bâtir… Mais il faut d'abord un Hôtel de ville de niveau ${need}.` : 'Ce plan… l\'École des dompteurs ! Apporte-moi de quoi la bâtir, et je m\'y mets.'} »`;
+      const row = document.createElement('div');
+      row.className = `boat-stage${built ? ' done' : ' now'}`;
+      row.innerHTML = '<b></b><span class="small"></span>';
+      row.querySelector('b')!.textContent = BUILDINGS.school.name;
+      const info = row.querySelector('span')!;
+      if (built) info.textContent = 'Ouverte';
+      else if (wait) info.textContent = `En chantier · ${clock(wait)}`;
+      else {
+        info.className = 'cost-list';
+        info.id = 'elder-cost';
+      }
+      $('elder-boat').replaceChildren(row);
+      if (!built && !wait) {
+        this.costChips('elder-cost', funds, c);
+        const ok = this.hall >= need && canPay(funds, c);
+        const pay = button(this.hall < need ? `Hôtel de ville niv. ${need} requis` : ok ? 'Donner les ressources' : 'Il manque des ressources', 'cta', () => this.onSchool());
+        pay.disabled = !ok;
+        actions.push(pay);
+      }
       actions.push(button('Retour', 'btn', () => {
         this.elderView = 'talk';
         this.elderSay(elderGreeting(told, total, boat, BOAT_STAGES.length, this.heart));
@@ -814,6 +863,10 @@ export class Hud {
       }));
       else {
         if (me.scrolls) actions.push(button(`Donner ${me.scrolls > 1 ? `les ${me.scrolls} parchemins` : 'le parchemin'}`, 'cta', () => this.onScrollGive()));
+        if (this.school[0] && !this.buildings.includes('school')) actions.push(button('L\'école', me.scrolls ? 'btn' : 'cta', () => {
+          this.elderView = 'school';
+          this.last.elder = '';
+        }));
         if (told >= total) actions.push(button('Le bateau', me.scrolls ? 'btn' : 'cta', () => {
           this.elderView = 'boat';
           this.last.elder = '';
@@ -1236,10 +1289,13 @@ export class Hud {
     }
     this.updateSpecs(me);
     const next = (a: string, b: string, maxed: boolean) => (maxed ? a : `${a} → <span class="up">${b}</span>`);
-    const buy = (id: string, maxed: boolean, cost: number, verb = 'Améliorer') => {
-      const btn = $<HTMLButtonElement>(id);
-      btn.disabled = maxed || me.gold < cost;
-      btn.textContent = maxed ? 'Niveau maximum' : me.gold < cost ? `Il manque ${cost - me.gold} or` : `${verb} · ${cost} or`;
+    // l'or du dompteur, et le bois de son sac puis de l'entrepôt du village
+    const wood = me.wood + this.stock[0];
+    const buy = (id: string, what: Gear, lvl: number, verb = 'Améliorer') => {
+      const btn = $<HTMLButtonElement>(id), maxed = lvl >= gearMax(what), c = gearCost(what, lvl);
+      const miss = [c.gold > me.gold && `${c.gold - me.gold} or`, c.wood > wood && `${c.wood - wood} bois`].filter(Boolean).join(' · ');
+      btn.disabled = maxed || !!miss;
+      btn.textContent = maxed ? 'Niveau maximum' : miss ? `Il manque ${miss}` : `${verb} · ${costText(c)}`;
     };
 
     const w = me.weapon, wMax = w >= WEAPON_MAX, hero = heroOf(me.cls, me.spec);
@@ -1253,7 +1309,7 @@ export class Hud {
     const tier = armorColor(w);
     icon.querySelectorAll('.tier').forEach((el) => el.setAttribute('fill', me.cls === 'mage' && w < 3 ? '#D9C6FF' : tier));
     icon.querySelectorAll('.tier-stroke').forEach((el) => el.setAttribute('stroke', tier));
-    buy('weapon-buy', wMax, weaponCost(w));
+    buy('weapon-buy', 'weapon', w);
     if (locked && !wMax) {
       const btn = $<HTMLButtonElement>('weapon-buy');
       btn.disabled = true;
@@ -1270,7 +1326,7 @@ export class Hud {
     for (const g of $('armor-icon').querySelectorAll<SVGGElement>('g[data-look]')) g.toggleAttribute('hidden', g.dataset.look !== look);
     $('armor-icon').querySelector('.studs')!.toggleAttribute('hidden', a !== 2);
     $('armor-shape').setAttribute('fill', armorColor(a));
-    buy('armor-buy', aMax, armorCost(a));
+    buy('armor-buy', 'armor', a);
 
     // Torche : rien au niveau 0 (on n'éclaire pas la nuit), torche puis lanterne.
     const tl = me.torch, tMax = tl >= TORCH_MAX;
@@ -1281,7 +1337,7 @@ export class Hud {
     tIcon.querySelectorAll('.frame').forEach((el) => el.setAttribute('fill', tl === 4 ? '#B87333' : tl >= 5 ? '#6E7570' : '#4A4E52'));
     tIcon.querySelector('.glow')!.setAttribute('fill', tl >= 5 ? '#BDF2FF' : '#F7D774');
     tIcon.style.opacity = tl ? '1' : '0.45';
-    buy('torch-buy', tMax, torchCost(tl), tl ? 'Améliorer' : 'Acheter');
+    buy('torch-buy', 'torch', tl, tl ? 'Améliorer' : 'Acheter');
 
     // Bottes : +2 % de vitesse à pied par niveau.
     const b = me.boots, bMax = b >= BOOTS_MAX;
@@ -1290,7 +1346,16 @@ export class Hud {
     $('boots-speed').innerHTML = next(sp(b), sp(b + 1), bMax);
     $('boots-shape').setAttribute('fill', b ? armorColor(b) : '#8B5E3C');
     $('boots-icon').style.opacity = b ? '1' : '0.45';
-    buy('boots-buy', bMax, bootsCost(b), b ? 'Améliorer' : 'Acheter');
+    buy('boots-buy', 'boots', b, b ? 'Améliorer' : 'Acheter');
+
+    // Selle : sans elle, on ne monte pas ; ensuite, +4 % de vitesse en selle par niveau.
+    const sd = me.saddle ?? 0, sdMax = sd >= SADDLE_MAX;
+    $('saddle-name').textContent = sd ? `${SADDLE_NAMES[sd]} · niv. ${sd}` : 'Aucune';
+    const ss = (l: number) => (l ? `+${Math.round((saddleSpeed(l) - 1) * 100)} %` : 'on ne monte pas');
+    $('saddle-speed').innerHTML = next(ss(sd), ss(sd + 1), sdMax);
+    $('saddle-shape').setAttribute('fill', sd > 1 ? armorColor(sd) : '#8B5E3C');
+    $('saddle-icon').style.opacity = sd ? '1' : '0.45';
+    buy('saddle-buy', 'saddle', sd, sd ? 'Améliorer' : 'Acheter');
   }
 
   /**
@@ -1447,9 +1512,9 @@ export class Hud {
         if (perk && perkNext) {
           const grow1 = (v: number, w: number, f: (n: number) => string) => (a && !maxed ? `${f(v)} → <span class="up">${f(w)}</span>` : f(v));
           rows.push(perk.kind === 'guard'
-            ? ['guard', 'Protège', grow1(perk.value, perkNext.value, (n) => `−${pctLabel(n)} dégâts`)]
+            ? ['guard', 'Carapace', grow1(perk.value, perkNext.value, (n) => `−${pctLabel(n)} dégâts reçus`)]
             : perk.kind === 'rally'
-              ? ['rally', 'Encourage', grow1(perk.value, perkNext.value, (n) => `+${pctLabel(n)} dégâts`)]
+              ? ['rally', 'Cri', grow1(perk.value, perkNext.value, (n) => `+${pctLabel(n)} dégâts`)]
               : ['heal', 'Soigne', grow1(perk.value, perkNext.value, (n) => `${pctLabel(n)} PV / ${ALPHA_HEAL_S} s`)]);
         }
         el.querySelector('.stat-rows')!.innerHTML = rows
@@ -1538,6 +1603,14 @@ export class Hud {
       }
     }
     ctx.putImageData(img, 0, 0);
+    // le pont de bois jusqu'à l'îlot du village
+    const { a, b } = this.map.bridge, m = (v: number) => (v + WORLD_HALF) / k;
+    ctx.strokeStyle = '#9C7A52';
+    ctx.lineWidth = Math.max(1.5, BRIDGE_W / k);
+    ctx.beginPath();
+    ctx.moveTo(m(a.x), m(a.y));
+    ctx.lineTo(m(b.x), m(b.y));
+    ctx.stroke();
     return c;
   }
 
@@ -1732,8 +1805,8 @@ function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; 
       ? `Se chevauche sur l'eau seulement (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}) : on embarque près de l'eau, on descend au bord d'une rive, et s'il tombe en pleine eau, on se noie.`
       : FLY_MOUNTS.has(sp.key) ? `Se chevauche et vole (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}) : par-dessus l'eau, les rochers et les arbres.`
       : `Se chevauche (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}).`) : '',
-    perk?.kind === 'guard' ? `Protège son dompteur : −${pctLabel(perk.value)} de dégâts reçus (plus en le renforçant).` : '',
-    perk?.kind === 'rally' ? `Encourage son dompteur : +${pctLabel(perk.value)} de dégâts infligés (plus en le renforçant).` : '',
+    perk?.kind === 'guard' ? `Carapace : au combat, il dresse sa coquille ; les alliés autour de lui (dompteurs et meutes) encaissent ${pctLabel(perk.value)} de dégâts en moins pendant ${ALPHA_SHOUT_S} s, toutes les ${ALPHA_SHOUT_CD} s (plus en le renforçant).` : '',
+    perk?.kind === 'rally' ? `Cri de ralliement : au combat, il se dresse et crie ; les alliés autour de lui (dompteurs et meutes) font +${pctLabel(perk.value)} de dégâts pendant ${ALPHA_SHOUT_S} s, toutes les ${ALPHA_SHOUT_CD} s (plus en le renforçant).` : '',
     perk?.kind === 'heal' ? `Soigne son dompteur et sa meute proche : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s (plus en le renforçant).` : '',
     legend && boss >= 0 ? `Âme de ${SPECIES[boss].title ?? SPECIES[boss].name} : il hérite de ses attaques (${(BOSS_MOVES[SPECIES[boss].key] ?? []).map((m) => MOVE_NAMES[m.kind].toLowerCase()).join(', ')}).` : '',
     !legend ? `Éveil : ${alphaCreateCost(s)} essences, puis ${duration(alphaAwakenS(s))}.` : '',

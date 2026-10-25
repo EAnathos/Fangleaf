@@ -2,23 +2,48 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { ALPHA_EQUIP_MAX, alphaEquipMax, ARMY_CAP, armyCap, VOLCANO_ZONE, BOOKS, bookIndex, BUILDING_IDS, DISCIPLINES, HALL_MAX, LESSON_KINDS, LESSON_MS, LESSONS, lessonBonus, SPECIES, tomeOfZone, TOMES } from '../../shared/config.ts';
+import { ALPHA_EQUIP_MAX, alphaEquipMax, ARMY_CAP, armyCap, VOLCANO_ZONE, BOOKS, bookIndex, BUILDING_IDS, DISCIPLINES, HALL_MAX, LESSON_KINDS, LESSON_MS, LESSONS, lessonBonus, SPECIES, tomeOfZone, TOMES, BUILDINGS, buildingCost, costText, SCHOOL_BUILD_MS, type BuildingId } from '../../shared/config.ts';
 import { Room } from '../../server/room.ts';
 
 describe('École des dompteurs', () => {
-  rule('L\'école se bâtit au Camp avancé, une fois le camp établi.', () => {
-    const r = new Room('TEST', undefined, { buildings: BUILDING_IDS.filter((b) => b !== 'school'), hall: HALL_MAX });
+  rule('L\'école est au village : son plan attend dans un coffre du Camp avancé, puis Aubin la bâtit (comme le bateau).', () => {
+    let saved: { plan: boolean; schoolAt: number; buildings: BuildingId[] } = { plan: false, schoolAt: 0, buildings: [] };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = new Room('TEST', undefined, { buildings: BUILDING_IDS.filter((b) => b !== 'school'), hall: HALL_MAX });
+    r.onVillage = (v: typeof saved) => (saved = v);
     const p = r.addPlayer('maçon', noop), m = r.map;
     p.gold = 1e6;
     Object.assign(r.stock, { wood: 1e5, stone: 1e5 });
+    check(m.inVillage(m.school.x, m.school.y), 'l\'école est dans le village');
+    check(Math.hypot(m.planChest.x - m.sites[0].x, m.planChest.y - m.sites[0].y) < 200 && m.pathDist(m.planChest.x, m.planChest.y) > 30, 'son plan : dans un coffre du Camp avancé, près du feu, hors de la piste');
     [p.x, p.y] = [m.school.x, m.school.y + 50];
-    check(Math.hypot(m.school.x - m.sites[0].x, m.school.y - m.sites[0].y) < 200, 'l\'école est dans le camp, près du feu');
-    check(m.pathDist(m.school.x, m.school.y) > 60, 'elle ne barre pas la piste qui traverse le camp');
     r.onBuild(p, 'school');
-    check(!r.buildings.includes('school'), 'camp pas encore établi : pas d\'école');
+    check(!r.buildings.includes('school'), 'on ne la construit pas soi-même');
+    [p.x, p.y] = [m.planChest.x, m.planChest.y + 30];
+    r.onPlan(p);
+    check(!r.plan, 'camp pas encore établi : le coffre reste fermé');
     r.camps.push(0);
-    r.onBuild(p, 'school');
-    check(r.buildings.includes('school'), 'camp établi : l\'école est bâtie, pour tout le village');
+    r.onPlan(p);
+    check(r.plan && saved.plan, 'camp établi : le plan est trouvé, pour tout le village (sauvegardé)');
+    [p.x, p.y] = [m.elder.x + 40, m.elder.y];
+    const gold = p.gold;
+    r.hall = BUILDINGS.school.hall - 1;
+    r.onSchool(p);
+    check(!r.schoolAt, `Hôtel de ville trop bas (niv. ${BUILDINGS.school.hall} requis) : Aubin attend`);
+    r.hall = HALL_MAX;
+    r.onSchool(p);
+    check(r.schoolAt > Date.now() && p.gold === gold - BUILDINGS.school.cost && saved.schoolAt === r.schoolAt && !r.buildings.includes('school'), `Aubin commence le chantier (${costText(buildingCost('school'))}, ${SCHOOL_BUILD_MS / 60000} min)`);
+    r.onSchool(p);
+    check(p.gold === gold - BUILDINGS.school.cost, 'un seul chantier à la fois');
+    const back = new Room('TEST', r.seed, saved);
+    check(back.plan && back.schoolAt === r.schoolAt, 'plan et chantier rechargés avec le village');
+    const now = Date.now;
+    Date.now = () => r.schoolAt + 1;
+    r.updateSchool();
+    Date.now = now;
+    check(r.buildings.includes('school') && !r.schoolAt && saved.buildings.includes('school'), 'le temps écoulé (même sans personne) : l\'école ouvre');
+    const old = new Room('TEST', r.seed, { buildings: [...BUILDING_IDS] });
+    check(old.plan, 'un village qui avait déjà son école : son plan va de soi');
   });
 
   rule('Un coffre de géant cache parfois un livre (une fois l\'école bâtie), du tome de sa zone, d\'une discipline au hasard, jamais inutile.', () => {

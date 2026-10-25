@@ -28,7 +28,7 @@ Pistes d'évolution : Pixi ou Phaser pour le rendu si de vrais sprites arrivent,
 
 ```
 shared/    config.ts      règles et équilibrage (espèces, coûts, zones, bâtiments)
-           worldmap.ts    l'île générée par graine : zones, lacs, grottes, volcan et ses entrailles, obstacles, chemins
+           worldmap.ts    l'île générée par graine : zones, lacs, grottes, volcan et ses entrailles, îlot du village et son pont, obstacles, chemins
            protocol.ts    messages du WebSocket
            snapshot.ts    envoi différentiel des snapshots (même règle des deux côtés)
            weather.ts     jour, nuit, averses et tempêtes, tirés de l'heure et de la graine du village

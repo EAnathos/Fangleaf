@@ -115,6 +115,10 @@ describe('Meute et montures', () => {
     r.onCheat(p);
     r.step();
     const wolf = r.units.get(p.army[1]);
+    p.saddle = 0;
+    r.onMount(p, wolf.id);
+    check(p.mount === 0, 'sans selle (la forge en vend) : on ne monte pas');
+    p.saddle = 1;
     r.onMount(p, wolf.id);
     check(p.mount === wolf.id, 'en selle sur l\'Alpha Loup');
     const hp0 = p.hp, mhp0 = wolf.hp;

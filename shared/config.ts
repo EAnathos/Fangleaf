@@ -8,13 +8,16 @@ export const SWORD_PULLS = 3; // à l'arrivée sur l'île, l'épée est plantée
 export const SWORD_REACH = 80;
 export const MAX_VILLAGES = 3; // villages par compte (on choisit le sien au lobby)
 export const WORLD_HALF = 12000; // carte de -12000 à 12000 : une île au milieu de la mer (voir worldmap.ts)
-export const VILLAGE_R = 360;
+// Le village, sur son îlot (relié à l'île par un pont de bois) : une palissade qui n'est pas ronde (voir villageEdge),
+// plus large d'est en ouest ; VILLAGE_R est son rayon moyen.
+export const VILLAGE_R = 470;
 export const VIEW_R = 1250; // rayon d'intérêt : unités envoyées à chaque joueur
 
-// Bâtiments : positions relatives au centre du village.
-export const FORGE_OFFSET = { x: -150, y: 90 };
-export const DEN_OFFSET = { x: 170, y: -150 };
-export const MARKET_OFFSET = { x: -168, y: -185 };
+// Bâtiments : positions relatives au centre du village (le feu), un quartier chacun entre les quatre routes.
+export const FORGE_OFFSET = { x: -235, y: 150 };
+export const DEN_OFFSET = { x: 250, y: -190 };
+export const MARKET_OFFSET = { x: -235, y: -200 };
+export const SCHOOL_OFFSET = { x: 405, y: 140 }; // École des dompteurs (bâtie par Aubin, d'après le plan du Camp avancé)
 export const BUILDING_REACH = 110;
 // Bâtiments du village : construits par n'importe quel membre contre de l'or, une fois pour tout le village.
 // Il faut aussi du bois et de la pierre (récoltés sur la carte), et parfois un Hôtel de ville assez développé.
@@ -37,8 +40,8 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: n
   stone: { name: 'Pierre de passage', cost: 200, wood: 10, stone: 40, hall: 2, desc: 'Voyage instantané entre le village et les camps établis.' },
   // amélioration de la forge (à la forge, pas d'emplacement à part) : au-delà du niveau 10, l'arme suit une spécialisation
   forge2: { name: 'Grande forge', cost: 2500, wood: 400, stone: 450, hall: 4, desc: 'Au-delà du niveau 10, choisis la spécialisation de ton arme.', needs: 'forge' },
-  // au Camp avancé (pas au village) : il faut d'abord l'avoir établi
-  school: { name: 'École des dompteurs', cost: 1500, wood: 250, stone: 200, hall: 4, desc: 'Au Camp avancé : on y lit les livres d\'apprentissage trouvés dans les coffres des géants, pour mener une plus grande meute.' },
+  // au village, mais bâtie par Aubin : il faut d'abord trouver son plan, dans le coffre du Camp avancé (une fois le camp établi)
+  school: { name: 'École des dompteurs', cost: 1500, wood: 250, stone: 200, hall: 4, desc: 'On y lit les livres d\'apprentissage trouvés dans les coffres des géants. Aubin la bâtit au village, d\'après le plan caché au Camp avancé.' },
 };
 /** « 20 or · 15 bois · 10 pierre » (les montants nuls sont omis). */
 export const costText = (c: Cost) => [c.gold && `${c.gold} or`, c.wood && `${c.wood} bois`, c.stone && `${c.stone} pierre`].filter(Boolean).join(' · ');
@@ -47,11 +50,11 @@ export const buildingCost = (b: BuildingId): Cost => ({ gold: BUILDINGS[b].cost,
 // Hôtel de ville : on l'améliore (or, bois, pierre) pour débloquer le reste du village et du monde.
 // HALL[n] : passage au niveau n + 1. La porte de la zone z + 1 demande aussi d'avoir rapporté à Aubin les parchemins
 // des géants de la zone z (chaque géant vaincu laisse le sien dans sa grotte).
-export const HALL_OFFSET = { x: 185, y: 138 };
+export const HALL_OFFSET = { x: 215, y: 150 };
 // Entrepôt : chacun y dépose le bois et la pierre de son sac ; constructions et Hôtel de ville puisent dans cette réserve commune.
-export const STORE_OFFSET = { x: -270, y: -55 };
+export const STORE_OFFSET = { x: -385, y: -80 };
 // Panneau du village, au bord de la place : le tableau des exploits de chacun.
-export const BOARD_OFFSET = { x: 68, y: -86 };
+export const BOARD_OFFSET = { x: 100, y: -128 };
 export const HALL: (Cost & { unlock: string })[] = [
   { gold: 20, wood: 15, stone: 10, unlock: 'Porte du village : la suite de la Lisière (zone 1) · Marché' },
   { gold: 200, wood: 60, stone: 50, unlock: 'Porte des Bois profonds (zone 2) · Pierre de passage' },
@@ -110,14 +113,18 @@ export const BOAT_STAGE_MS = 30 * 60 * 1000;
 export const ELDER_REACH = 90; // pour lui parler, lui donner un parchemin ou des ressources
 export const SCROLL_REACH = 70; // pour ramasser un parchemin
 export const ELDER_OFFSET = { x: -46, y: 62 }; // le vieil homme, près du feu du village
-export const VILLAGE_STONE_OFFSET = { x: 95, y: 225 }; // Pierre de passage du village
-// École des dompteurs, au Camp avancé : les coffres des géants lâchent parfois un livre d'apprentissage.
+export const VILLAGE_STONE_OFFSET = { x: 110, y: 255 }; // Pierre de passage du village
+// École des dompteurs, au village : son plan est dans un coffre du Camp avancé (on l'ouvre une fois le camp établi) ;
+// Aubin la bâtit ensuite contre des ressources, comme le bateau, en SCHOOL_BUILD_MS.
+export const SCHOOL_BUILD_MS = 20 * 60 * 1000;
+export const PLAN_REACH = 80; // pour ouvrir le coffre du plan
+// Les coffres des géants lâchent parfois un livre d'apprentissage.
 // Il y a plusieurs disciplines (meute, apprivoisement, essences, récolte), chacune en trois tomes : le tome dépend de
 // la zone du géant (I : zones 1-2, II : 3-4, III : 5-6). On n'a qu'un exemplaire de chaque tome, qui enseigne une leçon
 // de sa discipline, dans l'ordre (le tome II demande d'avoir lu le tome I) : trois leçons par discipline en tout.
 // À part, la Maîtrise des Alphas n'a qu'un tome, que seuls les coffres des géants du volcan renferment.
 // Une leçon lue à l'école prend 30 minutes.
-export const SCHOOL_CAMP = 0; // l'école se bâtit au premier camp
+export const SCHOOL_CAMP = 0; // le plan de l'école attend au premier camp
 export type LessonKind = 'pack' | 'tame' | 'essence' | 'gather' | 'alpha';
 export interface Discipline {
   name: string;
@@ -335,7 +342,29 @@ export const BOOTS_NAMES = [
 ];
 export const bootsSpeed = (lvl: number) => 1 + 0.02 * lvl;
 export const bootsCost = (lvl: number) => Math.round(22 * Math.pow(1.6, lvl));
-export type Gear = 'weapon' | 'armor' | 'torch' | 'boots';
+
+// Selle : sans elle, on ne monte pas sur un Alpha. Achetée au niveau 1, chaque niveau suivant rend les montures plus rapides.
+export const SADDLE_MAX = 10;
+export const SADDLE_NAMES = [
+  'Aucune', 'Selle de corde', 'Selle de toile', 'Selle de cuir', 'Selle cloutée', 'Selle de course',
+  'Selle de ranger', 'Selle du vent', 'Selle runique', 'Selle du loup', 'Selle Fangleaf',
+];
+export const saddleSpeed = (lvl: number) => 1 + 0.04 * Math.max(0, lvl - 1); // +4 % de vitesse en selle par niveau après le premier
+export const saddleCost = (lvl: number) => Math.round(35 * Math.pow(1.6, lvl));
+export type Gear = 'weapon' | 'armor' | 'torch' | 'boots' | 'saddle';
+export const GEARS: Gear[] = ['weapon', 'armor', 'torch', 'boots', 'saddle'];
+// Chaque amélioration de la forge demande aussi du bois : celui du sac d'abord, puis celui de l'entrepôt du village.
+const GEAR_WOOD: Record<Gear, number> = { weapon: 4, armor: 4, torch: 3, boots: 3, saddle: 6 };
+/** Bois pour passer un équipement de ce niveau au suivant : ×1,35 par niveau jusqu'au 10, puis ×1,06 (arme spécialisée). */
+export const gearWood = (what: Gear, lvl: number) => Math.round(GEAR_WOOD[what] * Math.pow(1.35, Math.min(lvl, 10)) * Math.pow(1.06, Math.max(0, lvl - 10)));
+/** Niveau maximum d'un équipement de la forge. */
+export const gearMax = (what: Gear) => ({ weapon: WEAPON_MAX, armor: ARMOR_MAX, torch: TORCH_MAX, boots: BOOTS_MAX, saddle: SADDLE_MAX })[what];
+/** Prix (or et bois) de l'amélioration d'un équipement de ce niveau au suivant. */
+export const gearCost = (what: Gear, lvl: number): Cost => ({
+  gold: ({ weapon: weaponCost, armor: armorCost, torch: torchCost, boots: bootsCost, saddle: saddleCost })[what](lvl),
+  wood: gearWood(what, lvl),
+  stone: 0,
+});
 
 // Tanière : il n'y a pas d'Alpha sauvage. On éveille l'Alpha d'une espèce avec ses essences
 // (1 essence par monstre de l'espèce vaincu), puis on le renforce, de plus en plus cher.
@@ -355,18 +384,26 @@ export const swimMount = (species: number) => SWIM_MOUNTS.has(SPECIES_KEYS[speci
 export const MOUNT_SHARE = 0.75; // part des dégâts reçus par la monture
 export const MOUNT_REACH = 240; // distance max pour enfourcher sa monture
 export const mountSpeedOf = (species: number) => MOUNTS[SPECIES_KEYS[species]] ?? 1;
+/** Vitesse (multiplicateur) d'un dompteur sur une monture de cette espèce, avec sa selle. */
+export const rideSpeed = (species: number, saddle: number) => mountSpeedOf(species) * saddleSpeed(saddle);
 
 export const ALPHA_LVL_MAX = 10;
 /**
  * Pouvoirs de certains Alphas, tant qu'ils sont sur le terrain et debout :
- * l'escargot protège son dompteur (dégâts reçus réduits, en plus de l'armure), le suricate l'encourage (dégâts infligés accrus),
- * le lièvre soigne un peu son dompteur et la meute autour de lui, toutes les ALPHA_HEAL_S secondes.
+ * - le suricate (cri de ralliement) et l'escargot (carapace) ont une compétence : au combat, ils la lancent dès qu'elle
+ *   est rechargée, et tous les alliés autour d'eux (dompteurs et meutes, pas seulement le leur) en profitent un moment :
+ *   dégâts infligés accrus (suricate) ou dégâts reçus réduits (escargot) ;
+ * - le lièvre soigne un peu son dompteur et la meute autour de lui, toutes les ALPHA_HEAL_S secondes.
  */
 export const ALPHA_PERKS: Record<string, { kind: 'guard' | 'heal' | 'rally'; base: number; per: number }> = {
-  meerkat: { kind: 'rally', base: 0.08, per: 0.01 }, // +8 % de dégâts infligés par son dompteur, +1 % par niveau
-  snail: { kind: 'guard', base: 0.08, per: 0.01 }, // −8 % de dégâts reçus, +1 % par niveau
+  meerkat: { kind: 'rally', base: 0.15, per: 0.015 }, // +15 % de dégâts infligés, +1,5 % par niveau
+  snail: { kind: 'guard', base: 0.15, per: 0.015 }, // −15 % de dégâts reçus, +1,5 % par niveau
   hare: { kind: 'heal', base: 0.03, per: 0.003 }, // 3 % des PV max, +0,3 % par niveau
 };
+export const ALPHA_SHOUT_S = 6; // durée du cri (suricate) ou de la carapace (escargot)
+export const ALPHA_SHOUT_CD = 9; // recharge, comptée depuis le lancer : un peu plus longue que l'effet
+export const ALPHA_SHOUT_R = 320; // les alliés à cette distance de l'Alpha en profitent
+export const ALPHA_SHOUT_AGGRO = 360; // il la lance quand un ennemi est à cette distance de lui
 export const LASER_TICK = 1; // rayon runique : par quart de seconde dans le faisceau, 100 % des dégâts du lanceur
 export const ALPHA_HEAL_S = 3;
 export const ALPHA_HEAL_R = 260; // le lièvre soigne ce qui est à cette distance de lui

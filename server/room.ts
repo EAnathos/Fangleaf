@@ -3,18 +3,18 @@
 import {
   bossMelee, sleeperBlocks,
   alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, DEATH_GOLD_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, bootsCost, bootsSpeed, torchCost, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  ARC_FLIGHT_S, SHOT_KINDS, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
-  SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, VILLAGE_R, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost,
+  SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost,
   treeHp, treeWood, TREE_RESPAWN_S, TREE_STILL_S, TREANT_CHANCE, TREANT_ZONE,
-  armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, mineDmg, weaponCost, weaponDmg, type SpeciesId,
+  armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, ALPHA_SHOUT_AGGRO, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, mineDmg, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
-import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
+import { HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
-import { HALL_ID, WorldMap } from '../shared/worldmap.ts';
+import { HALL_ID, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky } from '../shared/weather.ts';
 import { Grid } from './grid.ts';
 import type { Profile } from './persist.ts';
@@ -76,6 +76,15 @@ interface Unit {
   diveAt?: number; // vautour : il pique à ce moment
   idle: boolean; // sauvage loin de tout dompteur : ni réflexion ni bousculade ce tick
   hitters: Set<number>; // géant : dompteurs qui l'ont frappé (eux ou leur meute) pendant ce combat, seuls ayants droit au coffre
+  shoutAt?: number; // Alpha suricate ou escargot : sa compétence est rechargée à ce temps-là
+  rally?: Buff; // encouragé par un cri de suricate
+  guard?: Buff; // abrité par la carapace d'un escargot
+}
+
+/** Effet d'une compétence d'Alpha sur un allié : sa valeur, jusqu'à ce temps de simulation. */
+interface Buff {
+  v: number;
+  until: number;
 }
 
 /** Projectile d'un tireur : esquivable (trait, jet) ou annoncé au sol (cloche). */
@@ -135,6 +144,7 @@ export interface Player {
   armor: number;
   torch: number;
   boots: number;
+  saddle: number; // selle (0 : aucune, on ne peut pas monter)
   gold: number;
   wood: number;
   stone: number;
@@ -177,6 +187,8 @@ export interface Player {
   learned: number[]; // leçons apprises à l'École des dompteurs, par discipline (LESSON_KINDS)
   readAt: number; // fin de la leçon en cours (Date.now en ms ; 0 : aucune)
   readKind: number; // discipline de la leçon en cours
+  rally?: Buff; // encouragé par un cri de suricate
+  guard?: Buff; // abrité par la carapace d'un escargot
 }
 
 type Ent = Unit | Player;
@@ -245,6 +257,8 @@ export interface VillageState {
   told: number[]; // parchemins donnés au vieil homme (géant de chacun), dans l'ordre : ses souvenirs
   boat: number; // étapes du bateau achevées
   boatAt: number; // fin de l'étape en cours (horodatage ms ; 0 : aucune)
+  plan: boolean; // plan de l'École des dompteurs trouvé (coffre du Camp avancé)
+  schoolAt: number; // fin du chantier de l'école par Aubin (horodatage ms ; 0 : aucun)
   beaten: number[]; // géants (espèce) déjà vaincus au moins une fois
   heart: number; // cœur volcanique : 0 sous le volcan, HEART_TAKEN pris sur son autel, HEART_IN_BOAT installé dans le bateau
   wood: number; // réserve commune (entrepôt)
@@ -304,6 +318,8 @@ export class Room {
   told: number[] = []; // parchemins donnés au vieil homme, dans l'ordre (un souvenir chacun)
   boat = 0; // étapes du bateau achevées (BOAT_STAGES.length : le bateau est prêt)
   boatAt = 0; // fin de l'étape en cours (Date.now en ms ; 0 : aucune)
+  plan = false; // plan de l'École des dompteurs trouvé, dans son coffre du Camp avancé
+  schoolAt = 0; // fin du chantier de l'école par Aubin (Date.now en ms ; 0 : aucun)
   heart = 0; // cœur volcanique : 0 sur son autel, HEART_TAKEN pris par le village, HEART_IN_BOAT installé dans le bateau
   private renamedAt?: number; // dernier changement de nom (anti-spam)
   readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
@@ -327,6 +343,8 @@ export class Room {
     this.told = (saved.told ?? []).map(Number).filter((s, i, all) => s in SPECIES && SPECIES[s].boss && all.indexOf(s) === i);
     this.boat = clamp(Math.floor(Number(saved.boat) || 0), 0, BOAT_STAGES.length);
     this.boatAt = this.boat < BOAT_STAGES.length ? Math.max(0, Number(saved.boatAt) || 0) : 0;
+    this.plan = !!saved.plan || this.buildings.includes('school'); // (une école déjà bâtie : son plan va de soi)
+    this.schoolAt = this.plan && !this.buildings.includes('school') ? Math.max(0, Number(saved.schoolAt) || 0) : 0;
     this.heart = clamp(Math.floor(Number(saved.heart) || 0), 0, HEART_IN_BOAT);
     // Village d'avant l'île (déjà lancé) : son camp est considéré comme installé (palissade, emplacements défrichés).
     if ((this.hall > 0 || this.buildings.length) && !this.buildings.includes('palisade')) {
@@ -366,7 +384,7 @@ export class Room {
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: { bosses: 0, tamed: 0, given: 0, spent: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, saddle: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: { bosses: 0, tamed: 0, given: 0, spent: 0 }, manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], seen: new Set(), tomes: Array(BOOKS).fill(0), learned: LESSON_KINDS.map(() => 0), readAt: 0, readKind: 0,
     };
@@ -387,6 +405,7 @@ export class Room {
       p.armor = clamp(prof.armor, 0, ARMOR_MAX);
       p.torch = clamp(Math.floor(prof.torch ?? 0), 0, TORCH_MAX);
       p.boots = clamp(Math.floor(prof.boots ?? 0), 0, BOOTS_MAX);
+      p.saddle = clamp(Math.floor(prof.saddle ?? 0), 0, SADDLE_MAX);
       p.cls = CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as ClassId) : null;
       for (const s of [...Object.values(prof.specs ?? {}), prof.spec]) if (SPEC_IDS.includes(s as SpecId)) p.specs[SPECS[s as SpecId].cls] = s as SpecId;
       p.spec = (p.cls && p.specs[p.cls]) || null;
@@ -473,7 +492,7 @@ export class Room {
         d.wt -= DT;
         if (d.wt <= 0) {
           d.wt = 2 + Math.random() * 4;
-          const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * (VILLAGE_R - 80);
+          const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * (VILLAGE_MIN_R - 80);
           const wx = v.x + Math.cos(a) * r, wy = v.y + Math.sin(a) * r;
           if (!this.map.blocked(wx, wy)) [d.wx, d.wy] = [wx, wy];
         }
@@ -559,7 +578,7 @@ export class Room {
     const slow = p.slowUntil > this.time ? WEB_SLOW : 1;
     const swimming = !!mounted && swimMount(mounted.s); // sur le serpent : seulement l'eau
     const flying = !!mounted && flyMount(mounted.s); // à dos de vautour : par-dessus l'eau et les obstacles
-    const allowed = (PLAYER_SPEED * slow * (mounted ? mountSpeedOf(mounted.s) : bootsSpeed(p.boots)) * 1.35 + STORM_PUSH * this.storm) * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12; // (le vent de la tempête pousse en plus)
+    const allowed = (PLAYER_SPEED * slow * (mounted ? rideSpeed(mounted.s, p.saddle) : bootsSpeed(p.boots)) * 1.35 + STORM_PUSH * this.storm) * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12; // (le vent de la tempête pousse en plus)
     p.lastPosMs = now;
     let dx = x - p.x, dy = y - p.y;
     const d = Math.hypot(dx, dy);
@@ -600,7 +619,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats }, tomes: [...p.tomes], learned: [...p.learned], read_at: p.readAt, read_kind: p.readKind, seat: Math.max(0, PLAYER_COLORS.indexOf(p.color)) };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, saddle: p.saddle, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats }, tomes: [...p.tomes], learned: [...p.learned], read_at: p.readAt, read_kind: p.readKind, seat: Math.max(0, PLAYER_COLORS.indexOf(p.color)) };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -640,7 +659,7 @@ export class Room {
   }
 
   private saveVillage() {
-    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, beaten: [...this.beaten], heart: this.heart, ...this.stock, banned: [...this.banned] });
+    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, plan: this.plan, schoolAt: this.schoolAt, beaten: [...this.beaten], heart: this.heart, ...this.stock, banned: [...this.banned] });
   }
 
   /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
@@ -648,7 +667,7 @@ export class Room {
     if (!BUILDING_IDS.includes(b) || this.buildings.includes(b) || !this.near(p, this.posOf(b))) return;
     const needs = BUILDINGS[b].needs;
     if (needs && !this.buildings.includes(needs)) return; // emplacement à défricher d'abord
-    if (b === 'school' && !this.camps.includes(SCHOOL_CAMP)) return; // l'école se bâtit au Camp avancé, une fois établi
+    if (b === 'school') return; // l'école, c'est Aubin qui la bâtit (onSchool)
     if (this.hall < BUILDINGS[b].hall || !this.pay(p, buildingCost(b))) return;
     this.buildings.push(b);
     if (b === 'palisade') {
@@ -705,6 +724,33 @@ export class Room {
     this.boatAt = Date.now() + BOAT_STAGE_MS;
     this.saveVillage();
     this.events.push({ e: 'boat', by: p.id, stage: this.boat, done: false });
+  }
+
+  /** Ouvrir le coffre du Camp avancé, une fois le camp établi : le plan de l'École des dompteurs, pour tout le village. */
+  onPlan(p: Player) {
+    if (p.dead || this.plan || !this.camps.includes(SCHOOL_CAMP) || dist2(p.x, p.y, this.map.planChest.x, this.map.planChest.y) > PLAN_REACH ** 2) return;
+    this.plan = true;
+    this.saveVillage();
+    this.events.push({ e: 'plan', by: p.id });
+  }
+
+  /** L'école : son plan trouvé, Aubin la bâtit au village contre des ressources (comme une étape du bateau). */
+  onSchool(p: Player) {
+    if (p.dead || !this.plan || this.schoolAt || this.buildings.includes('school') || this.hall < BUILDINGS.school.hall) return;
+    if (dist2(p.x, p.y, this.map.elder.x, this.map.elder.y) > ELDER_REACH ** 2) return;
+    if (!this.pay(p, buildingCost('school'))) return;
+    this.schoolAt = Date.now() + SCHOOL_BUILD_MS;
+    this.saveVillage();
+    this.events.push({ e: 'school', by: p.id, done: false });
+  }
+
+  /** Chantier de l'école terminé (le temps court même quand personne n'est là) : elle ouvre. */
+  private updateSchool() {
+    if (!this.schoolAt || Date.now() < this.schoolAt) return;
+    this.schoolAt = 0;
+    this.buildings.push('school');
+    this.saveVillage();
+    this.events.push({ e: 'school', by: 0, done: true });
   }
 
   /** Étape du bateau terminée (le temps court même quand personne n'est là : on regarde l'horloge). */
@@ -819,27 +865,27 @@ export class Room {
     this.events.push({ e: 'trade', to: p.id, s, gold, sold: false });
   }
 
+  /**
+   * Améliorer un équipement à la forge : l'or du dompteur, et du bois (celui de son sac d'abord, puis celui de la réserve
+   * du village).
+   */
   onUpgrade(p: Player, what: Gear) {
-    if (!this.at(p, 'forge')) return;
-    if (what === 'weapon') {
-      const cost = weaponCost(p.weapon);
-      if (p.weapon >= WEAPON_MAX || p.gold < cost) return;
-      if (p.weapon >= SPEC_LVL && !p.spec) return; // au-delà du niveau 10 : une spécialisation d'abord (Grande forge)
-      p.gold -= cost;
-      p.weapon++;
-    } else if (what === 'armor') {
-      const cost = armorCost(p.armor);
-      if (p.armor >= ARMOR_MAX || p.gold < cost) return;
-      p.gold -= cost;
-      const ratio = p.hp / maxHpOf(p);
-      p.armor++;
-      p.hp = Math.round(maxHpOf(p) * ratio);
-    } else if (what === 'torch' || what === 'boots') {
-      const lvl = p[what], cost = what === 'torch' ? torchCost(lvl) : bootsCost(lvl);
-      if (lvl >= (what === 'torch' ? TORCH_MAX : BOOTS_MAX) || p.gold < cost) return;
-      p.gold -= cost;
-      p[what]++;
-    } else return;
+    if (!this.at(p, 'forge') || !GEARS.includes(what)) return;
+    const lvl = p[what];
+    if (lvl >= gearMax(what)) return;
+    if (what === 'weapon' && lvl >= SPEC_LVL && !p.spec) return; // au-delà du niveau 10 : une spécialisation d'abord (Grande forge)
+    const cost = gearCost(what, lvl);
+    if (p.gold < cost.gold || p.wood + this.stock.wood < cost.wood) return;
+    p.gold -= cost.gold;
+    const fromBag = Math.min(p.wood, cost.wood);
+    p.wood -= fromBag;
+    if (cost.wood > fromBag) {
+      this.stock.wood -= cost.wood - fromBag;
+      this.saveVillage();
+    }
+    const ratio = p.hp / maxHpOf(p);
+    p[what]++;
+    if (what === 'armor') p.hp = Math.round(maxHpOf(p) * ratio);
     p.dirty = true;
     this.events.push({ e: 'upgrade', id: p.id, what, lvl: p[what] });
   }
@@ -1023,6 +1069,7 @@ export class Room {
     const u = this.units.get(id);
     if (p.dead || !u || !u.alpha || u.owner !== p.id || u.reviveAt || mountSpeedOf(u.s) === 1) return;
     if (dist2(u.x, u.y, p.x, p.y) > MOUNT_REACH ** 2) return;
+    if (!p.saddle) return p.send({ t: 'error', msg: 'Il te faut une selle pour monter ton Alpha : la forge en vend.' });
     const water = swimMount(u.s) ? this.map.waterNear(p.x, p.y, SHORE_R) : null;
     if (swimMount(u.s) && !water) return p.send({ t: 'error', msg: 'Approche-toi de l\'eau pour monter ton serpent : il ne nage qu\'en eau.' });
     if (p.mount && !this.dismount(p)) return; // sur l'eau, loin de la rive : on garde le serpent
@@ -1101,6 +1148,7 @@ export class Room {
     this.updateSleepers();
     if (this.tick % TICK_HZ === 0) {
       this.updateBoat();
+      this.updateSchool();
       this.updateLessons();
     }
     for (const p of this.players.values()) {
@@ -1137,6 +1185,7 @@ export class Room {
     this.separate();
     this.regen();
     this.alphaHeals();
+    this.alphaShouts();
     this.broadcast();
     this.events = [];
   }
@@ -1232,14 +1281,14 @@ export class Room {
 
   /** Zone où la meute se promène quand son dompteur s'y repose : la place du village, ou un camp établi. */
   private safeArea(x: number, y: number) {
-    if (this.map.inVillage(x, y)) return { ...this.map.village, r: VILLAGE_R - 70 };
+    if (this.map.inVillage(x, y)) return { ...this.map.village, r: VILLAGE_MIN_R - 70 };
     const c = this.campAt(x, y);
     return c >= 0 ? { ...this.map.sites[c], r: CAMP_R - 50 } : null;
   }
 
-  /** Dans le village ou dans un camp établi : soins, et les monstres n'y attaquent pas. */
+  /** Dans le village (son îlot et son pont compris) ou dans un camp établi : les monstres n'y attaquent pas. */
   safe(x: number, y: number) {
-    return this.map.inVillage(x, y) || this.campAt(x, y) >= 0;
+    return this.map.onIsle(x, y) || this.campAt(x, y) >= 0;
   }
 
   private campAt(x: number, y: number) {
@@ -1442,7 +1491,7 @@ export class Room {
       }
       if ((sp.swim ? !map.isWater(cx, cy) : map.blocked(cx, cy)) || map.zoneAt(cx, cy) !== sp.zone) continue;
       if (sp.zone !== VOLCANO_ZONE && fog >= 0 && map.gateArc(fog, cx, cy) > map.gates[fog] - 150) continue; // jamais dans la brume (ni tout contre)
-      if (map.inVillage(cx, cy, 250) || dist2(cx, cy, map.spawn.x, map.spawn.y) < SPAWN_SAFE_R ** 2) continue;
+      if (map.onIsle(cx, cy) || dist2(cx, cy, map.bridge.a.x, map.bridge.a.y) < 350 ** 2 || dist2(cx, cy, map.spawn.x, map.spawn.y) < SPAWN_SAFE_R ** 2) continue; // ni au pied du pont
       if (map.siteAt(cx, cy, CAMP_R + 300) >= 0) continue;
       let tooClose = false;
       for (const p of this.players.values()) if (dist2(cx, cy, p.x, p.y) < 700 ** 2) tooClose = true;
@@ -1542,7 +1591,7 @@ export class Room {
     const t = this.nearest(p.x, p.y, reach + 50, prey) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (reach + t.r) ** 2) return this.mine(p);
     p.atkCd = cls.cd;
-    const dmg = weaponDmg(p.weapon) * cls.dmg * (1 + this.rallyOf(p)); // Alpha suricate : il l'encourage
+    const dmg = weaponDmg(p.weapon) * cls.dmg;
     if (p.cls === 'archer' || p.cls === 'mage') this.events.push({ e: 'shot', by: p.id, x: p.x, y: p.y, tx: t.x, ty: t.y, cls: p.cls });
     if (cls.splash) {
       // Mage : l'orbe explose et touche tous les monstres sauvages autour de la cible.
@@ -1565,7 +1614,7 @@ export class Room {
     const cls = heroOf(p.cls, p.spec);
     const reach = PLAYER_R + cls.range;
     const d = Math.hypot(p.aimX - p.x, p.aimY - p.y) || 1, ux = (p.aimX - p.x) / d, uy = (p.aimY - p.y) / d;
-    const dmg = weaponDmg(p.weapon) * cls.dmg * (1 + this.rallyOf(p)); // Alpha suricate : il l'encourage
+    const dmg = weaponDmg(p.weapon) * cls.dmg;
     const wild = this.preyOf(p), prey = (e: Ent) => wild(e) && this.alive(e); // jamais le gibier passif, même au clic
     if (p.cls === 'mage') {
       p.atkCd = cls.cd;
@@ -2277,6 +2326,7 @@ export class Room {
 
   private blockedFor(u: Unit, x: number, y: number) {
     if (this.swims(u)) return !this.map.isWater(x, y);
+    if (!u.owner && this.map.onIsle(x, y)) return true; // l'îlot du village et son pont : pas pour les sauvages
     return this.map.blocked(x, y) && !(this.amphibious(u) && this.map.isWater(x, y));
   }
 
@@ -2784,7 +2834,7 @@ export class Room {
     const sx = hx + Math.cos(ang) * rad, sy = hy + Math.sin(ang) * rad;
     const far = dist2(u.x, u.y, sx, sy) > 70 ** 2;
     const om = o.mount ? this.units.get(o.mount) : undefined;
-    const ownerSpeed = PLAYER_SPEED * (om ? mountSpeedOf(om.s) : bootsSpeed(o.boots)); // la meute suit aussi un dompteur à cheval
+    const ownerSpeed = PLAYER_SPEED * (om ? rideSpeed(om.s, o.saddle) : bootsSpeed(o.boots)); // la meute suit aussi un dompteur à cheval
     // Place libre dans la formation (pas au milieu d'un arbre), puis on y va en contournant les obstacles.
     const slot = this.blockedFor(u, sx, sy) ? { x: hx, y: hy } : { x: sx, y: sy };
     this.navTo(u, slot.x, slot.y, far ? Math.max(u.speed, ownerSpeed * 1.15) : Math.max(u.speed, 90), 3, !!bank);
@@ -2836,24 +2886,26 @@ export class Room {
     // sous le sable, dans sa tanière ou haut dans le ciel : rien ne l'atteint (sauf, dans le ciel, depuis le dos d'un vautour)
     if (t.kind === 'u' && t.hidden && !(SPECIES[t.s].flies && this.airborne(by))) return;
     const m = melee ? { m: 1 as const } : {};
+    amount *= 1 + this.buffOf(by, 'rally'); // cri du suricate : l'attaquant frappe plus fort
     if (t.kind === 'p') {
       if (t.dead) return;
       const mount = t.mount ? this.units.get(t.mount) : undefined;
       if (mount) {
         // La monture encaisse l'essentiel du coup.
-        const share = Math.round(amount * MOUNT_SHARE);
+        const part = Math.round(amount * MOUNT_SHARE), share = Math.round(part * (1 - this.buffOf(mount, 'guard')));
         mount.hp -= share;
         this.events.push({ e: 'hit', a: by.id, b: mount.id, dmg: share, ...m });
         if (mount.hp <= 0) this.killUnit(mount, by);
-        amount -= share;
+        amount -= part;
         if (amount <= 0) return;
       }
-      const dmg = Math.max(1, Math.round(amount * (1 - armorReduction(t.armor) - this.guardOf(t) - heroOf(t.cls, t.spec).guard)));
+      const dmg = Math.max(1, Math.round(amount * (1 - armorReduction(t.armor) - this.buffOf(t, 'guard') - heroOf(t.cls, t.spec).guard)));
       t.hp -= dmg;
       this.events.push({ e: 'hit', a: by.id, b: t.id, dmg, ...m });
       if (t.hp <= 0) this.killPlayer(t);
       return;
     }
+    if (t.owner) amount *= 1 - this.buffOf(t, 'guard'); // carapace de l'escargot : la meute aussi est abritée
     t.hp -= amount;
     if (isBoss(t.s) && !t.owner) {
       const credit = by.kind === 'p' ? by.id : by.owner; // un coup de sa meute compte pour le dompteur
@@ -2905,14 +2957,43 @@ export class Room {
     return null;
   }
 
-  /** Alpha suricate sur le terrain : part de dégâts en plus pour son dompteur. */
-  private rallyOf(p: Player) {
-    return this.perkAlpha(p, 'rally')?.value ?? 0;
+  /** Effet en cours d'une compétence d'Alpha sur cet allié (0 s'il n'y en a pas, ou plus). */
+  buffOf(e: Ent, kind: 'rally' | 'guard') {
+    const b = e[kind];
+    return b && b.until > this.time ? b.v : 0;
   }
 
-  /** Alpha escargot sur le terrain : part des dégâts reçus par son dompteur qu'il lui évite. */
-  private guardOf(p: Player) {
-    return this.perkAlpha(p, 'guard')?.value ?? 0;
+  /**
+   * Compétences des Alphas suricate (cri de ralliement) et escargot (carapace) : au combat (un ennemi tout près de lui),
+   * dès qu'elle est rechargée, l'Alpha la lance ; tous les alliés autour de lui en profitent ALPHA_SHOUT_S secondes,
+   * dompteurs et meutes, quel que soit leur dompteur (le plus fort des effets en cours l'emporte).
+   */
+  private alphaShouts() {
+    if (this.tick % 5 !== 0) return;
+    for (const p of this.players.values()) {
+      if (p.dead) continue;
+      for (const id of p.army) {
+        const u = this.units.get(id);
+        if (!u?.alpha || u.reviveAt || u.hp <= 0 || (u.shoutAt ?? 0) > this.time) continue;
+        const perk = alphaPerk(u.s, u.level);
+        if (!perk || perk.kind === 'heal' || this.safe(u.x, u.y) || !this.wildNear(u.x, u.y, ALPHA_SHOUT_AGGRO).length) continue;
+        u.shoutAt = this.time + ALPHA_SHOUT_CD;
+        const kind = perk.kind;
+        for (const e of this.alliesNear(u.x, u.y, ALPHA_SHOUT_R)) {
+          if (this.buffOf(e, kind) > perk.value) continue;
+          e[kind] = { v: perk.value, until: this.time + ALPHA_SHOUT_S };
+        }
+        // sa monture, dessinée sous son cavalier, n'est pas dans la grille : elle suit le cri de son dompteur
+        const m = p.mount ? this.units.get(p.mount) : undefined;
+        if (m && dist2(m.x, m.y, u.x, u.y) <= ALPHA_SHOUT_R ** 2 && this.buffOf(m, kind) <= perk.value) m[kind] = { v: perk.value, until: this.time + ALPHA_SHOUT_S };
+        this.events.push({ e: 'shout', id: u.id, kind, r: ALPHA_SHOUT_R });
+      }
+    }
+  }
+
+  /** Compétences d'Alpha en cours sur cet allié, en drapeaux (UNIT_FLAG_RALLY, UNIT_FLAG_GUARD). */
+  private buffFlags(e: Ent) {
+    return (this.buffOf(e, 'rally') ? UNIT_FLAG_RALLY : 0) | (this.buffOf(e, 'guard') ? UNIT_FLAG_GUARD : 0);
   }
 
   /** Alpha lièvre sur le terrain : de temps en temps, il soigne un peu son dompteur et la meute autour de lui. */
@@ -3130,12 +3211,10 @@ export class Room {
     for (const u of this.units.values()) {
       const v = this.map.village;
       if (!u.owner) {
-        // Les sauvages n'entrent pas dans le village.
-        const dx = u.x - v.x, dy = u.y - v.y, d = Math.hypot(dx, dy), min = VILLAGE_R + u.r;
-        if (d < min) {
-          const k = min / Math.max(d, 0.01);
-          u.x = v.x + dx * k;
-          u.y = v.y + dy * k;
+        // Les sauvages ne vont pas sur l'îlot du village (ni sur son pont) : ils en sont repoussés, vers l'île.
+        if (this.map.onIsle(u.x, u.y) && !this.map.caveAt(u.x, u.y)) {
+          const f = this.map.freeNear(this.map.bridge.a.x + (this.map.bridge.a.x - v.x) * 0.08, this.map.bridge.a.y + (this.map.bridge.a.y - v.y) * 0.08);
+          [u.x, u.y] = [f.x, f.y];
         }
         // ni dans un camp établi (sauf les géants, qui ne quittent pas leur grotte)
         const c = isBoss(u.s) ? -1 : this.campAt(u.x, u.y);
@@ -3197,7 +3276,7 @@ export class Room {
     switch (e.e) {
       case 'hit': return ent(e.b) ?? ent(e.a) ?? null;
       case 'die': case 'shot': case 'boom': return e;
-      case 'move': case 'charge': case 'feed': case 'revive': case 'heal': return ent(e.id) ?? null;
+      case 'move': case 'charge': case 'feed': case 'revive': case 'heal': case 'shout': return ent(e.id) ?? null;
       case 'mine': return this.map.ores[e.id] ?? null;
       case 'munch': return this.map.ores[e.ore] ?? null;
       case 'chop': return this.map.decor[e.id] ?? null;
@@ -3214,7 +3293,7 @@ export class Room {
     for (const p of this.players.values()) {
       const st: PlayerState = {
         id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: Math.round(p.fx * 100) / 100, fy: Math.round(p.fy * 100) / 100,
-        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, sword: p.sword, scrolls: p.scrolls.length, cls: p.cls, spec: p.spec, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
+        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, saddle: p.saddle, sword: p.sword, scrolls: p.scrolls.length, cls: p.cls, spec: p.spec, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
         essences: p.essences, saved: !!p.userId, dead: p.dead,
         respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
         revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),
@@ -3222,6 +3301,7 @@ export class Room {
         tomes: p.tomes, learned: p.learned, readKind: p.readKind, reading: p.readAt ? Math.max(0, Math.ceil((p.readAt - Date.now()) / 1000)) : 0,
         mount: this.mountState(p),
         slowed: p.slowUntil > this.time,
+        buffs: this.buffFlags(p),
         resting: p.resting.map((r) => ({ species: r.s, level: r.lvl, legend: r.legend })),
         seen: [...p.seen],
         awakening: [...p.awakening].map(([species, wakeAt]) => ({
@@ -3239,7 +3319,7 @@ export class Room {
       for (const u of this.units.values()) {
         if (u.reviveAt || dist2(u.x, u.y, viewer.x, viewer.y) > vr2) continue;
         units.push([
-          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0) | ((u.phase ?? 1) === 2 ? UNIT_FLAG_PHASE2 : (u.phase ?? 1) >= 3 ? UNIT_FLAG_PHASE3 : 0), Math.round(u.x), Math.round(u.y),
+          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0) | ((u.phase ?? 1) === 2 ? UNIT_FLAG_PHASE2 : (u.phase ?? 1) >= 3 ? UNIT_FLAG_PHASE3 : 0) | (u.owner ? this.buffFlags(u) : 0), Math.round(u.x), Math.round(u.y),
           Math.round((100 * Math.max(0, u.hp)) / u.maxHp), u.owner,
         ]);
       }
@@ -3291,7 +3371,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, ev });
     }
   }
 }

@@ -39,6 +39,8 @@ export type ClientMsg =
   | { t: 'heart' } // cœur volcanique : le prendre sur son autel (géants du volcan vaincus), ou l'installer dans le bateau rebâti
   | { t: 'learn'; kind: number } // École des dompteurs : commencer la leçon suivante de cette discipline (index dans LESSON_KINDS)
   | { t: 'boat' } // donner au vieil homme les ressources de l'étape suivante du bateau
+  | { t: 'plan' } // ouvrir le coffre du Camp avancé : le plan de l'École des dompteurs (pour tout le village)
+  | { t: 'school' } // donner à Aubin les ressources de l'école : il la bâtit au village
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
   | { t: 'rename'; name: string } // renommer le village, devant l'Hôtel de ville (une fois construit)
   | { t: 'hall'; name?: string } // améliorer la Maison commune (pour tout le village) ; name : nom du village, à sa construction
@@ -74,6 +76,7 @@ export interface PlayerState {
   armor: number;
   torch: number; // 0 : pas de torche
   boots: number;
+  saddle: number; // selle (0 : aucune, il ne peut pas monter)
   sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
   scrolls: number; // parchemins dans son sac (à donner au vieil homme)
   cls: ClassId | null; // classe (null : pas encore choisie)
@@ -87,6 +90,7 @@ export interface PlayerState {
   saved: boolean; // progression sauvegardée sur un compte
   mount: { id: number; species: number; hp: number; legend: boolean } | null; // monture chevauchée (pv en %)
   slowed: boolean; // pris dans une toile
+  buffs: number; // compétences d'Alpha en cours sur lui : UNIT_FLAG_RALLY (cri du suricate), UNIT_FLAG_GUARD (carapace de l'escargot)
   awakening: { species: number; left: number; total: number }[]; // Alphas en cours d'éveil (secondes)
   resting: { species: number; level: number; legend: boolean }[]; // Alphas rangés à la Tanière
   seen: number[]; // espèces déjà croisées (bestiaire de la Tanière ; sans les géants)
@@ -145,6 +149,8 @@ export const UNIT_FLAG_ASLEEP = 16; // bête sauvage qui dort la nuit (sanglier)
 export const UNIT_FLAG_HIDDEN = 32; // sous le sable (ver qui file, suricate au terrier) : intouchable, on ne voit qu'une bosse ou un trou
 export const UNIT_FLAG_PHASE2 = 64; // géant à plusieurs phases (le Kraken) : deuxième phase
 export const UNIT_FLAG_PHASE3 = 128; // … troisième phase
+export const UNIT_FLAG_RALLY = 256; // allié encouragé par le cri d'un Alpha suricate (il frappe plus fort)
+export const UNIT_FLAG_GUARD = 512; // allié abrité par la carapace d'un Alpha escargot (il encaisse moins)
 
 export type GameEvent =
   | { e: 'hit'; a: number; b: number; dmg: number; m?: 1 } // m : coup au corps à corps
@@ -176,6 +182,7 @@ export type GameEvent =
   | { e: 'awaken'; id: number; by: number; s: number } // Alpha éveillé à la tanière
   | { e: 'revive'; id: number }
   | { e: 'heal'; id: number; n: number } // un Alpha lièvre soigne son dompteur
+  | { e: 'shout'; id: number; kind: 'rally' | 'guard'; r: number } // un Alpha suricate pousse son cri (rally), un escargot dresse sa carapace (guard) : les alliés à r en profitent
   | { e: 'pdie'; id: number; gold: number } // gold : or perdu dans la chute
   | { e: 'previve'; id: number; by: number } // dompteur relevé sur place par un coéquipier
   | { e: 'upgrade'; id: number; what: Gear; lvl: number }
@@ -193,6 +200,8 @@ export type GameEvent =
   | { e: 'scroll'; to: number; s: number } // parchemin ramassé (s : son géant)
   | { e: 'lore'; by: number; from: number; to: number } // le vieil homme a retrouvé les souvenirs from à to - 1
   | { e: 'boat'; by: number; stage: number; done: boolean } // une étape du bateau commence (by) ou s'achève (done)
+  | { e: 'plan'; by: number } // le plan de l'École des dompteurs a été trouvé, au Camp avancé
+  | { e: 'school'; by: number; done: boolean } // Aubin commence l'école (by) ou l'achève (done)
   | { e: 'res'; to: number; wood: number; stone: number; x: number; y: number } // bois ou pierre récoltés
   | { e: 'unlock'; cave: number; by: number } // une grotte vient d'être débloquée
   | { e: 'trade'; to: number; s: number; gold: number; sold: boolean } // Marché : monstre vendu ou acheté
@@ -222,6 +231,7 @@ export interface Snapshot {
   told: number[]; // parchemins lus par le vieil homme (géant de chacun), dans l'ordre de ses souvenirs
   lore: [number, number, number]; // souvenirs retrouvés par le vieil homme, étapes du bateau achevées, secondes avant la fin de l'étape en cours (0 : aucune)
   stock: [number, number]; // réserve du village : [bois, pierre]
+  school: [number, number]; // École des dompteurs : [plan trouvé (0/1), secondes avant la fin du chantier d'Aubin (0 : aucun)]
   beaten: number[]; // géants (espèce) déjà vaincus par le village : ils ouvrent les portes des zones
   heart: number; // cœur volcanique : 0 sous le volcan, 1 pris, 2 installé dans le bateau
   unlocked: number[]; // grottes débloquées par le village

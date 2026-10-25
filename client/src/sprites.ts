@@ -1,7 +1,7 @@
 // Sprites procéduraux (Canvas 2D) : aucune image à charger.
 
 import { SPECIES, type Resource } from '../../shared/config.ts';
-import { HAZARD_STYLES } from '../../shared/protocol.ts';
+import { HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -52,6 +52,7 @@ export interface UnitLook {
   air?: number; // hauteur au-dessus du sol (bond d'un géant) : le corps monte, l'ombre reste au sol et rétrécit
   squash?: number; // écrasement vertical (> 1 : étiré, < 1 : aplati), pour l'élan et l'atterrissage
   shell?: boolean; // escargot rentré dans sa coquille : seule la coquille, posée au sol
+  shout?: number; // Alpha suricate qui crie, escargot qui dresse sa carapace : avancement de 0 à 1 (0 : rien)
   leap?: Leap; // en plein bond (rempli par drawUnit) : de quoi poser les pattes
 }
 
@@ -2148,7 +2149,9 @@ function snail(ctx: Ctx, r: number, fill: string, u: UnitLook) {
   ctx.strokeStyle = body;
   ctx.lineWidth = 0.08 * r;
   ctx.lineCap = 'round';
-  for (const [ex, ey] of [[0.95, -0.35], [1.2, -0.25]]) {
+  const raise = u.shout ? Math.sin(Math.min(1, u.shout * 1.3) * Math.PI) * 0.3 : 0; // cornes dressées
+  for (const [ex, ey0] of [[0.95, -0.35], [1.2, -0.25]]) {
+    const ey = ey0 - raise;
     ctx.beginPath();
     ctx.moveTo(0.9 * r, 0.1 * r);
     ctx.lineTo((ex + crawl) * r, ey * r);
@@ -2159,6 +2162,19 @@ function snail(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.fill();
   }
   shellOf(ctx, r, fill, u);
+  if (u.shout) {
+    // carapace dressée : la coquille s'illumine d'un éclat bleu qui pulse puis s'éteint
+    const k = u.shout, a = Math.sin(Math.min(1, k * 1.4) * Math.PI) * 0.75;
+    ctx.strokeStyle = `rgba(127,200,232,${a})`;
+    ctx.lineWidth = 0.12 * r;
+    ctx.beginPath();
+    ctx.arc(-0.2 * r, -0.05 * r, (0.7 + k * 0.25) * r, 0, TAU);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(190,232,250,${a * 0.35})`;
+    ctx.beginPath();
+    ctx.arc(-0.2 * r, -0.05 * r, 0.62 * r, 0, TAU);
+    ctx.fill();
+  }
 }
 
 /** Coquille en spirale de l'escargot. */
@@ -2193,7 +2209,9 @@ function shellOf(ctx: Ctx, r: number, fill: string, u: UnitLook) {
 function meerkat(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
   const W = (c: string) => (u.flash ? '#FFFFFF' : c);
   const fur = W('#C49A62'), shade = W('#8E6A3E'), belly = W('#EFD9AC'), mask = W('#2E2016');
-  const look = Math.sin(u.t * 1.7 + u.seed) * 0.12, sway = Math.sin(u.t * 2.3 + u.seed) * 0.03; // il guette, en équilibre
+  // cri : il se hisse sur la pointe des pattes, tête renversée en arrière, gueule grande ouverte
+  const cry = u.shout ? Math.sin(Math.min(1, u.shout * 1.25) * Math.PI) : 0;
+  const look = cry ? -0.55 * cry : Math.sin(u.t * 1.7 + u.seed) * 0.12, sway = cry ? 0 : Math.sin(u.t * 2.3 + u.seed) * 0.03; // il guette, en équilibre
   const ell = (x: number, y: number, rx: number, ry: number, rot: number, col: string) => {
     ctx.fillStyle = col;
     ctx.beginPath();
@@ -2218,6 +2236,12 @@ function meerkat(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
   ell(0.2 * r, 0.7 * r, 0.2 * r, 0.09 * r, 0, shade);
   ctx.save();
   ctx.rotate(sway);
+  if (cry) {
+    // étiré vers le haut depuis les pattes
+    ctx.translate(0, 0.7 * r);
+    ctx.scale(1 - cry * 0.08, 1 + cry * 0.3);
+    ctx.translate(0, -0.7 * r);
+  }
   // corps élancé
   ctx.fillStyle = fur;
   ctx.beginPath();
@@ -2256,6 +2280,7 @@ function meerkat(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
   ink(ctx, r * 0.6);
   ell(0.28 * r, 0.07 * r, 0.17 * r, 0.1 * r, 0.1, belly); // museau pointu
   ell(0.44 * r, 0.05 * r, 0.05 * r, 0.04 * r, 0, mask); // truffe
+  if (cry) ell(0.3 * r, 0.16 * r, 0.12 * r, 0.07 * r * cry + 0.01 * r, 0.15, '#5A1E1A'); // gueule ouverte
   ell(-0.24 * r, -0.13 * r, 0.08 * r, 0.08 * r, 0, mask); // oreille
   for (const ex of [-0.02, 0.17]) {
     ell(ex * r, -0.04 * r, 0.11 * r, 0.1 * r, 0, mask); // grandes lunettes noires
@@ -2263,6 +2288,18 @@ function meerkat(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
     ell(ex * r - 0.005 * r, -0.07 * r, 0.018 * r, 0.018 * r, 0, '#FFFFFF');
   }
   ctx.restore();
+  if (cry) {
+    // le cri : des arcs qui partent de sa gueule
+    ctx.strokeStyle = `rgba(240,182,74,${0.8 * cry})`;
+    ctx.lineWidth = r * 0.08;
+    ctx.lineCap = 'round';
+    for (let k = 0; k < 3; k++) {
+      const rr = (0.35 + k * 0.28 + (u.shout ?? 0) * 0.3) * r;
+      ctx.beginPath();
+      ctx.arc(0.45 * r, -1.25 * r, rr, -1.2, -0.1);
+      ctx.stroke();
+    }
+  }
 }
 
 /**
@@ -4573,6 +4610,68 @@ export function drawLaser(ctx: Ctx, l: Laser, t: number) {
 }
 
 /** Toile accrochée au dompteur ralenti. */
+/**
+ * Compétences d'Alpha en cours sur un allié, au-dessus de sa tête : une épée et deux flèches qui montent (cri du suricate :
+ * il frappe plus fort), un bouclier et sa flèche (carapace de l'escargot : il encaisse moins).
+ */
+export function drawBuffs(ctx: Ctx, x: number, y: number, flags: number, t: number, seed: number) {
+  const icons = [flags & UNIT_FLAG_RALLY ? 'rally' : '', flags & UNIT_FLAG_GUARD ? 'guard' : ''].filter(Boolean);
+  const bob = Math.sin(t * 4 + seed) * 1.5;
+  icons.forEach((kind, i) => {
+    const cx = x + (i - (icons.length - 1) / 2) * 20, cy = y + bob;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = 'rgba(16,24,26,0.65)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 9, 0, TAU);
+    ctx.fill();
+    const col = kind === 'rally' ? '#F0B64A' : '#7FC8E8';
+    ctx.strokeStyle = col;
+    ctx.fillStyle = col;
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (kind === 'rally') {
+      // épée : lame, garde, pommeau
+      ctx.beginPath();
+      ctx.moveTo(-2, 5);
+      ctx.lineTo(-2, -5);
+      ctx.moveTo(-5, 2.5);
+      ctx.lineTo(1, 2.5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-3.3, -4.5);
+      ctx.lineTo(-2, -7);
+      ctx.lineTo(-0.7, -4.5);
+      ctx.fill();
+    } else {
+      // bouclier
+      ctx.beginPath();
+      ctx.moveTo(-6, -5);
+      ctx.lineTo(1, -5);
+      ctx.lineTo(1, 0);
+      ctx.quadraticCurveTo(1, 4, -2.5, 6);
+      ctx.quadraticCurveTo(-6, 4, -6, 0);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    // flèches vers le haut, qui montent en boucle
+    const k = (t * 1.2 + seed * 0.37) % 1;
+    for (const [ax, dy] of kind === 'rally' ? [[4, 0], [6.5, -4]] : [[5, -1]]) {
+      const ay = 3 - k * 3 + dy;
+      ctx.globalAlpha = 1 - k * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay + 3);
+      ctx.lineTo(ax, ay - 3);
+      ctx.moveTo(ax - 2.2, ay - 0.8);
+      ctx.lineTo(ax, ay - 3);
+      ctx.lineTo(ax + 2.2, ay - 0.8);
+      ctx.stroke();
+    }
+    ctx.restore();
+  });
+}
+
 export function drawWebbed(ctx: Ctx, x: number, y: number, t: number) {
   ctx.strokeStyle = 'rgba(238,231,215,0.8)';
   ctx.lineWidth = 1.5;

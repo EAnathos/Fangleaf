@@ -2,8 +2,9 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, unarmedAdd } from '../helpers.ts';
-import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE } from '../../shared/config.ts';
+import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE, gearWood, gearCost, saddleSpeed } from '../../shared/config.ts';
 import { Room } from '../../server/room.ts';
+import { villageEdge } from '../../shared/worldmap.ts';
 import { ELDER_CHAPTERS } from '../../client/src/elder.ts';
 
 describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
@@ -79,16 +80,28 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     check(back.sword === SWORD_PULLS && old.sword === SWORD_PULLS, 'déjà armé (ou ancienne sauvegarde) : l\'épée reste en main');
   });
 
-  rule('Forge : arme et armure séparées.', () => {
+  rule('Forge : arme et armure séparées ; chaque amélioration demande aussi du bois (le sac, puis l\'entrepôt) ; la selle.', () => {
     const r = room();
     const p = r.addPlayer('a', noop);
     p.x = r.map.forge.x;
     p.y = r.map.forge.y;
     p.gold = 1000;
     r.onUpgrade(p, 'weapon');
+    check(p.weapon === 0 && p.gold === 1000, 'sans bois (ni dans le sac, ni à l\'entrepôt) : pas d\'amélioration');
+    p.wood = gearWood('weapon', 0) + 1;
+    r.stock.wood = 100;
     r.onUpgrade(p, 'weapon');
+    check(p.weapon === 1 && p.wood === 1 && r.stock.wood === 100, `le bois du sac d'abord (${gearWood('weapon', 0)} bois)`);
+    r.onUpgrade(p, 'weapon');
+    check(p.weapon === 2 && p.wood === 0 && r.stock.wood === 100 - (gearWood('weapon', 1) - 1), `puis celui de l'entrepôt (${gearWood('weapon', 1)} bois, dont ${gearWood('weapon', 1) - 1} de la réserve)`);
     r.onUpgrade(p, 'armor');
     check(p.weapon === 2 && p.armor === 1, `arme niv. ${p.weapon}, armure niv. ${p.armor}`);
+    check(gearWood('weapon', 10) > gearWood('weapon', 5) && gearWood('saddle', 0) > 0, `bois de plus en plus cher (arme : ${[0, 5, 10, 19].map((l) => gearWood('weapon', l)).join(', ')})`);
+    const q = unarmedAdd.call(r, 'piéton', noop);
+    check(q.saddle === 0, 'un nouveau dompteur n\'a pas de selle');
+    p.saddle = 0;
+    r.onUpgrade(p, 'saddle');
+    check(p.saddle === 1 && r.profileOf(p).saddle === 1 && saddleSpeed(1) === 1 && saddleSpeed(3) > 1, `selle achetée (${costText(gearCost('saddle', 0))}), sauvegardée ; plus rapide en l'améliorant (niv. 3 : ×${saddleSpeed(3)})`);
   });
 
   rule('Arme : les dégâts suivent les monstres, au-delà du niveau 10 une spécialisation (Grande forge) est nécessaire.', () => {
@@ -99,6 +112,7 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     const p = r.addPlayer('a', noop);
     [p.x, p.y] = [r.map.forge.x, r.map.forge.y];
     p.gold = 1e6;
+    r.stock.wood = 1e6;
     r.onClass(p, 'warrior');
     r.onSpec(p, 'berserker');
     check(p.spec === null, 'arme pas encore au niveau 10 : pas de spécialisation');
@@ -237,6 +251,7 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     check(r.buildings.join() === 'plot_forge,forge' && p.gold === 490 && r.stock.wood === 0 && saved.buildings.join() === 'plot_forge,forge', 'forge construite une seule fois, 10 or et 5 bois, sauvegardée pour le village');
     [q.x, q.y] = [p.x, p.y];
     q.gold = 100;
+    q.wood = gearWood('weapon', 0);
     r.onUpgrade(q, 'weapon');
     check(q.weapon === 1, 'un autre membre profite de la forge');
     // Pierre du village : pas de voyage tant qu'elle n'est pas construite.
@@ -335,7 +350,7 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     [p.x, p.y] = [map.village.x + 60, map.village.y + 60];
     r.stock.wood += BUILDINGS.palisade.wood;
     r.onBuild(p, 'palisade');
-    check(r.buildings.includes('palisade') && map.blocked(map.village.x + Math.cos(0.7) * 360, map.village.y + Math.sin(0.7) * 360), `palissade montée (${costText(buildingCost('palisade'))}) : elle bloque`);
+    check(r.buildings.includes('palisade') && map.blocked(map.village.x + Math.cos(0.7) * villageEdge(0.7), map.village.y + Math.sin(0.7) * villageEdge(0.7)), `palissade montée (${costText(buildingCost('palisade'))}) : elle bloque`);
     [p.x, p.y] = [map.hall.x, map.hall.y + 60];
     r.onHall(p, '  Les\n  Trois   Chênes  ');
     check(r.name === 'Les Trois Chênes' && saved.name === 'Les Trois Chênes', `Hôtel de ville construit : le village est nommé (« ${r.name} »), nom nettoyé et sauvegardé`);
