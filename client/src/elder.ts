@@ -1,6 +1,8 @@
-// Le vieil homme du village et ses souvenirs. Chaque géant vaincu pour la première fois laisse un parchemin ;
-// rapporté au vieil homme, il lui rend un souvenir (dans l'ordre des chapitres, quel que soit le géant).
-// Au dernier, il se rappelle comment construire un bateau.
+// Le vieil homme du village et ses souvenirs. Une fois tous les géants d'une zone vaincus, le dernier laisse le
+// parchemin de la zone ; rapporté au vieil homme, il lui rend les souvenirs de cette zone (un par géant, dans l'ordre
+// des chapitres). Au dernier, il se rappelle comment construire un bateau.
+
+import { VOLCANO_ZONE, ZONE_NAMES, zoneBosses } from '../../shared/config.ts';
 
 /** Tant qu'il n'a retrouvé aucun souvenir. */
 export const ELDER_INTRO = [
@@ -11,7 +13,7 @@ export const ELDER_INTRO = [
   'Si un jour tu trouves des écrits… des parchemins, peut-être… rapporte-les-moi. Qui sait ce qui me reviendrait ?',
 ];
 
-/** Un chapitre par parchemin rapporté (autant que de géants). */
+/** Un chapitre par géant de l'île, racontés zone par zone (voir zoneChapters). */
 export const ELDER_CHAPTERS: string[][] = [
   [
     'Ce parchemin… c\'est mon écriture ! Attends… Aubin. Je m\'appelle Aubin !',
@@ -66,8 +68,12 @@ export const ELDER_CHAPTERS: string[][] = [
     'Ils vont éclore, un par un. Ils seront perdus, comme tu l\'étais. Va les voir. Raconte-leur.',
   ],
   [
-    'Et l\'épée plantée dans le sable ! C\'est la dernière cheffe du village qui l\'a laissée là, je m\'en souviens maintenant.',
-    '« Pour celui qui viendra », disait-elle. Elle serait fière de toi.',
+    'Il y avait d\'autres gens sur l\'île, avant nous. Tout au fond de la jungle, un petit peuple qui portait des masques de bois peint.',
+    'Ce sont eux qui ont bâti les temples, là-bas, sous les grands arbres. Ils parlaient aux géants mieux que personne.',
+  ],
+  [
+    'Quand la Brume est venue, ils se sont enfermés dans leurs temples, avec leurs gardiens.',
+    'Les petits masqués que tu croises entre les bambous… ce sont peut-être leurs enfants. Ou leurs esprits. Je n\'ai jamais su.',
   ],
   [
     'Chaque géant que tu calmes fait reculer la Brume. C\'est pour ça que la mémoire me revient, morceau par morceau.',
@@ -75,12 +81,8 @@ export const ELDER_CHAPTERS: string[][] = [
     'Et chaque monstre que tu apprivoises… c\'est un peu un vieil ami qui rentre enfin à la maison.',
   ],
   [
-    'Il y avait d\'autres gens sur l\'île, avant nous. Tout au fond de la jungle, un petit peuple qui portait des masques de bois peint.',
-    'Ce sont eux qui ont bâti les temples, là-bas, sous les grands arbres. Ils parlaient aux géants mieux que personne.',
-  ],
-  [
-    'Quand la Brume est venue, ils se sont enfermés dans leurs temples, avec leurs gardiens.',
-    'Les petits masqués que tu croises entre les bambous… ce sont peut-être leurs enfants. Ou leurs esprits. Je n\'ai jamais su.',
+    'Et l\'épée plantée dans le sable ! C\'est la dernière cheffe du village qui l\'a laissée là, je m\'en souviens maintenant.',
+    '« Pour celui qui viendra », disait-elle. Elle serait fière de toi.',
   ],
   [
     'Le vieux pont de l\'îlot ! C\'est mon père qui l\'avait bâti, planche par planche, avec le bois des Bois profonds.',
@@ -96,12 +98,23 @@ export const ELDER_CHAPTERS: string[][] = [
 /** Titre de chaque souvenir (la liste des anciens parchemins). */
 export const CHAPTER_TITLES = [
   'Un nom', 'Le village', 'Nos compagnons', 'Les gardiens', 'La Brume', 'Les lisières', 'Le grand bateau', 'Le naufrage',
-  'Le départ', 'Les œufs', 'Le gardien', 'Ton œuf', 'L\'épée', 'La Brume recule', 'Le peuple masqué', 'Les temples', 'Le vieux pont',
+  'Le départ', 'Les œufs', 'Le gardien', 'Ton œuf', 'Le peuple masqué', 'Les temples', 'La Brume recule', 'L\'épée', 'Le vieux pont',
   'Le bateau à reconstruire',
 ];
 
 /** Ce qu'il dit quand on lui remontre un parchemin déjà lu. */
 export const REREAD = ['Ah oui, celui-là ! Je m\'en souviens bien, maintenant. Écoute…'];
+
+/** Les souvenirs de chaque zone : indices [from, to) dans ELDER_CHAPTERS (autant que de géants dans la zone). */
+export const zoneChapters = () => {
+  const out: { zone: number; name: string; from: number; to: number }[] = [];
+  for (let z = 1, at = 0; z < VOLCANO_ZONE; z++) {
+    const n = zoneBosses(z).length;
+    if (n) out.push({ zone: z, name: ZONE_NAMES[z - 1], from: at, to: at + n });
+    at += n;
+  }
+  return out;
+};
 
 /** Son nom, une fois le premier souvenir retrouvé. */
 export const elderName = (told: number) => (told > 0 ? 'Aubin' : 'Vieil homme');
@@ -110,10 +123,10 @@ export const elderName = (told: number) => (told > 0 ? 'Aubin' : 'Vieil homme');
 export function elderGreeting(told: number, total: number, boat: number, stages: number, heart = 0): string[] {
   if (told === 0) return ELDER_INTRO;
   if (told < total) {
-    const left = total - told;
+    const left = zoneChapters().filter((z) => z.to > told).length;
     return [
       'Ah, te revoilà ! Ça me fait plaisir.',
-      `Les parchemins des géants me rendent la mémoire. Il en reste ${left === 1 ? 'un' : left} quelque part… je le sens.`,
+      `Les parchemins des géants me rendent la mémoire, une zone après l'autre. Il en reste ${left <= 1 ? 'un' : left} quelque part… je le sens.`,
     ];
   }
   if (boat < stages) return ['Alors, on s\'y remet, à ce bateau ?'];

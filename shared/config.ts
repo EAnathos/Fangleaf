@@ -7,7 +7,7 @@ export const MAX_PLAYERS = 4;
 export const SWORD_PULLS = 3; // à l'arrivée sur l'île, l'épée est plantée dans le sable : trois coups pour la déterrer
 export const SWORD_REACH = 80;
 export const MAX_VILLAGES = 3; // villages par compte (on choisit le sien au lobby)
-export const WORLD_HALF = 12000; // carte de -12000 à 12000 : une île au milieu de la mer (voir worldmap.ts)
+export const WORLD_HALF = 17280; // carte de -17280 à 17280 : une île au milieu de la mer (voir worldmap.ts) ; divisible par 48 (brouillard) et 16 (grille)
 // Le village, sur son îlot (relié à l'île par un pont de bois) : une palissade qui n'est pas ronde (voir villageEdge),
 // plus large d'est en ouest ; VILLAGE_R est son rayon moyen.
 export const VILLAGE_R = 470;
@@ -241,7 +241,7 @@ export const TAMED_MULT = 0.5; // un monstre apprivoisé a 50 % des dégâts de 
 export const TAMED_HP_MULT = 0.575; // … et 57,5 % de ses PV (+15 % par rapport à la moitié)
 export const GOLD_SHARE_R = 700;
 
-export const ALPHA_MULT = { hp: 2.2, dmg: 2.2, size: 1.6 }; // Alpha niv. 0 = 2,2× le monstre de base
+export const ALPHA_MULT = { hp: 1.9, dmg: 2.2, size: 1.6 }; // Alpha niv. 0 = 1,9× les PV et 2,2× les dégâts du monstre de base
 
 // Forge : arme et armure progressent séparément.
 export const ARMOR_MAX = 10;
@@ -466,10 +466,10 @@ export const isBoss = (species: number) => !!SPECIES[species]?.boss;
 export const bossOf = (species: number) => SPECIES.findIndex((b) => b.boss && b.base === SPECIES[species]?.key);
 // Alpha légendaire : une âme du boss de l'espèce fait évoluer son Alpha.
 export const LEGEND_SOULS = 3;
-export const LEGEND_MULT = { hp: 1.5, dmg: 1.5, size: 1.15 };
+export const LEGEND_MULT = { hp: 1.2, dmg: 1.2, size: 1.15 };
 // Il hérite aussi des attaques spéciales de son géant, lancées seul en combat : un peu moins fortes et moins fréquentes.
-export const LEGEND_MOVE_DMG = 0.6;
-export const LEGEND_MOVE_CD = 1.3;
+export const LEGEND_MOVE_DMG = 0.4;
+export const LEGEND_MOVE_CD = 1.5;
 export const LEGEND_STAGGER_S = 1.2; // deux attaques spéciales des légendaires d'un même dompteur sont espacées d'au moins ce temps
 export const LEGEND_AIM_S = 2.5; // un monstre déjà visé par un légendaire depuis moins que ça : les autres en choisissent un autre
 /** Bonus de collection : +5 % de PV et de dégâts à tous les Alphas par Alpha éveillé (3 Alphas = +15 %). */
@@ -499,14 +499,21 @@ export type BossMove = (
   | { kind: 'slam'; cd: number; power?: number; fire?: boolean } // onde de choc tout autour de lui (power : multiplicateur des dégâts, 1,5 par défaut ; fire : une vague de flammes)
   | { kind: 'enrage'; below: number } // s'enrage sous ce seuil de PV
   | { kind: 'rocks'; cd: number } // projette des rochers sur plusieurs cibles
-  | { kind: 'blink'; cd: number } // disparaît et réapparaît près d'une cible
-  | { kind: 'volley'; cd: number; n: number; shot: 'bolt' | 'jet'; pierce?: boolean } // salve de projectiles en éventail (esquivable) ; pierce : ils traversent la meute
+  | { kind: 'blink'; cd: number; fire?: boolean } // disparaît et réapparaît près d'une cible (fire : il laisse un cratère de feu)
+  | { kind: 'volley'; cd: number; n: number; shot: 'bolt' | 'jet' | 'dart'; pierce?: boolean } // salve de projectiles en éventail (esquivable) ; pierce : ils traversent la meute
   | { kind: 'mortar'; cd: number; n: number } // pluie de tirs en cloche, cercles annoncés au sol
   | { kind: 'trail'; cd: number; dur: number } // pendant dur secondes, il laisse derrière lui des flaques de lave qui brûlent
   | { kind: 'spin'; cd: number; arms: number; dur: number } // il s'arrête : des jets de flammes tournent autour de lui (annoncés au sol)
   | { kind: 'lash'; cd: number; n: number } // coups de tentacule : des couloirs annoncés vers ses cibles, qui s'abattent d'un coup
   | { kind: 'ink'; cd: number } // nuages d'encre sous les dompteurs : ils brûlent et ralentissent
   | { kind: 'laser'; cd: number; dur: number; turn: number } // il s'arrête : un rayon annoncé vers sa cible, maintenu dur secondes en tournant (turn rad/s)
+  | { kind: 'pound'; cd: number } // il fracasse le sol devant lui, sur sa cible (le gorille : pas d'onde de choc)
+  | { kind: 'pincer'; cd: number } // grosse pince : il découpe tout ce qui est devant lui, dans un large arc (annoncé au sol)
+  | { kind: 'bubbles'; cd: number; n: number } // bulles d'écume qui gonflent sous et autour des cibles, puis éclatent (et collent)
+  | { kind: 'tongue'; cd: number; n: number } // coups de langue : un couloir vers chaque cible ; ce qu'elle touche est ramené contre lui
+  | { kind: 'geyser'; cd: number; n: number } // geysers qui jaillissent sous les cibles, en chaîne
+  | { kind: 'breath'; cd: number; heads: number; dur: number } // souffle de ses têtes : des jets d'eau qui balaient l'avant
+  | { kind: 'tornado'; cd: number; n: number; dur: number } // tornades qui poursuivent les cibles : elles blessent et aspirent
 ) & { from?: number }; // from : phase de combat à partir de laquelle il s'en sert (géant à plusieurs phases)
 
 export const BOSS_MOVES: Record<string, BossMove[]> = {
@@ -517,13 +524,15 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   old_tusk: [{ kind: 'charge', cd: 4 }, { kind: 'enrage', below: 0.35 }],
   colossus: [{ kind: 'slam', cd: 6, power: 4 }, { kind: 'enrage', below: 0.3 }], // onde de choc de l'ours : plus forte que les autres
   moss_heart: [{ kind: 'rocks', cd: 5 }, { kind: 'slam', cd: 8 }],
-  old_flame: [{ kind: 'blink', cd: 6 }, { kind: 'slam', cd: 7, fire: true }], // son onde de choc est une vague de flammes
+  old_flame: [{ kind: 'blink', cd: 6, fire: true }, { kind: 'slam', cd: 7, fire: true }], // il se téléporte en laissant un cratère de feu ; son onde de choc est une vague de flammes
   rune_eye: [{ kind: 'volley', cd: 4, n: 5, shot: 'bolt', pierce: true }, { kind: 'laser', cd: 10, dur: 3.5, turn: 0.9 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // ses traits traversent la meute ; son rayon balaie
-  toad_king: [{ kind: 'mortar', cd: 5, n: 5 }, { kind: 'leap', cd: 7 }],
-  mist_hydra: [{ kind: 'volley', cd: 3.5, n: 3, shot: 'jet' }, { kind: 'slam', cd: 8 }],
-  titan_crab: [{ kind: 'charge', cd: 5 }, { kind: 'slam', cd: 7, power: 3 }, { kind: 'enrage', below: 0.3 }],
+  // Lacs brumeux : le roi des mares crache sa langue (et ramène sa proie), pilonne de têtards et bondit ; l'hydre
+  // souffle de ses trois têtes et fait jaillir les geysers ; le crabe titan découpe dans le tas et noie tout sous l'écume
+  toad_king: [{ kind: 'tongue', cd: 5, n: 2 }, { kind: 'mortar', cd: 6, n: 5 }, { kind: 'leap', cd: 8 }],
+  mist_hydra: [{ kind: 'breath', cd: 7, heads: 3, dur: 2.6 }, { kind: 'geyser', cd: 6, n: 5 }, { kind: 'volley', cd: 4, n: 3, shot: 'jet' }],
+  titan_crab: [{ kind: 'pincer', cd: 4.5 }, { kind: 'bubbles', cd: 7, n: 5 }, { kind: 'enrage', below: 0.3 }],
   sand_queen: [{ kind: 'blink', cd: 5 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'slam', cd: 8 }], // elle plonge et resurgit sous sa cible
-  vulture_king: [{ kind: 'leap', cd: 5 }, { kind: 'mortar', cd: 7, n: 4 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // piqués, pluie d'ossements, ses vautours
+  vulture_king: [{ kind: 'tornado', cd: 9, n: 2, dur: 6 }, { kind: 'leap', cd: 5 }, { kind: 'mortar', cd: 7, n: 4 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // tornades, piqués, pluie d'ossements, ses vautours
   moon_jackal: [{ kind: 'charge', cd: 4 }, { kind: 'summon', cd: 9, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
   // elle fonce en laissant une traînée de lave, appelle ses petits
   salamander_queen: [{ kind: 'trail', cd: 7, dur: 4 }, { kind: 'charge', cd: 4 }, { kind: 'summon', cd: 10, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
@@ -540,7 +549,7 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   // queue ; le Grand Masque crache ses fléchettes, empoisonne l'air, disparaît et appelle les siens
   gorilla_king: [{ kind: 'slam', cd: 6, power: 3 }, { kind: 'mortar', cd: 7, n: 6 }, { kind: 'leap', cd: 8 }, { kind: 'enrage', below: 0.3 }],
   croc_king: [{ kind: 'charge', cd: 4 }, { kind: 'slam', cd: 7, power: 2 }, { kind: 'enrage', below: 0.35 }],
-  mask_lord: [{ kind: 'volley', cd: 4, n: 5, shot: 'bolt' }, { kind: 'spores', cd: 6 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
+  mask_lord: [{ kind: 'volley', cd: 4, n: 5, shot: 'dart' }, { kind: 'spores', cd: 6 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
   mountain_tortoise: [{ kind: 'mortar', cd: 5, n: 6 }, { kind: 'spin', cd: 10, arms: 4, dur: 4 }, { kind: 'trail', cd: 12, dur: 5 }, { kind: 'slam', cd: 7, power: 3 }, { kind: 'enrage', below: 0.3 }],
 };
 /** Coup ordinaire d'un géant : une seule cible (deux pour la reine des Gluants et l'ours), dégâts multipliés. */
@@ -550,7 +559,19 @@ export const MOVE_NAMES: Record<BossMove['kind'], string> = {
   leap: 'Bond écrasant', split: 'Division', spores: 'Nuages de spores', summon: 'Renforts', charge: 'Charge',
   web: 'Toiles', slam: 'Onde de choc', enrage: 'Rage', rocks: 'Pluie de rochers', blink: 'Clignement',
   volley: 'Salve', mortar: 'Pluie de mortiers', trail: 'Traînée de lave', spin: 'Tourbillon de flammes', lash: 'Coup de tentacule', ink: 'Nuage d\'encre', laser: 'Rayon runique',
+  pound: 'Fracasse le sol', pincer: 'Grande pince', bubbles: 'Écume', tongue: 'Coup de langue', geyser: 'Geysers', breath: 'Souffle des trois têtes', tornado: 'Tornades',
 };
+/** Arc de la grande pince (demi-angle, en radians) et sa portée. */
+export const PINCER_HALF = 0.8;
+export const PINCER_R = 210;
+/** Tornade : rayon, vitesse (elle poursuit), aspiration (px/s vers son cœur, dans TORNADO_PULL_R). */
+export const TORNADO_R = 70;
+export const TORNADO_SPEED = 120;
+export const TORNADO_PULL = 150;
+export const TORNADO_PULL_R = 230;
+/** Fléchettes des Petits Masqués : poison (part des dégâts du tir, chaque seconde, pendant POISON_S). */
+export const POISON_DPS = 0.18;
+export const POISON_S = 4;
 // Les géants poursuivent : quand leur cible s'éloigne, ils accélèrent (impossible de les tuer en reculant).
 export const BOSS_CHASE_R = 0; // dès que sa cible n'est plus au contact
 export const BOSS_CHASE_MULT = 1.45; // 270 à 340 px/s, plus rapide que le dompteur (210)
@@ -594,6 +615,7 @@ export interface Species {
   passive?: boolean; // sauvage, il n'attaque jamais : il broute les buissons à fruits et s'enfuit quand on le frappe
   brawler?: boolean; // tireur qui cogne aussi : une cible collée à lui, il la frappe au corps à corps au lieu de tirer (gorille)
   reach?: number; // portée en plus au corps à corps (le crocodile se jette hors de l'eau sur ce qui passe au bord)
+  ambush?: boolean; // sauvage nageur qui sort de l'eau pour attaquer ce qui passe, puis y retourne (le crocodile)
   moves?: BossMove[]; // attaques spéciales d'un monstre ordinaire (le gorille fracasse le sol), sauvage comme apprivoisé
 }
 
@@ -674,8 +696,8 @@ export const SPECIES: Species[] = [
   // Jungle (zone 6, entre les Lacs brumeux et le désert) : gorilles (bananes à distance, poings au contact, il fracasse le
   // sol), crocodiles tapis dans l'eau (on ne voit que leur tête), petits hommes masqués à la sarbacane. Leurs géants
   // dorment au fond de temples.
-  { key: 'gorilla', name: 'Gorille des cimes', color: '#3E3A38', r: 24, hp: 1500, dmg: 80, speed: 110, atkCd: 1.3, gold: 60, zone: 6, population: 20, pack: [1, 2], ranged: { kind: 'banana', range: 300, windup: 0.5, speed: 0, splash: 46 }, brawler: true, moves: [{ kind: 'slam', cd: 8, power: 1.6 }] },
-  { key: 'croc', name: 'Crocodile des marais', color: '#56703F', r: 24, hp: 1400, dmg: 95, speed: 100, atkCd: 1.5, gold: 58, zone: 6, population: 16, pack: [1, 1], swim: true, reach: 46 },
+  { key: 'gorilla', name: 'Gorille des cimes', color: '#3E3A38', r: 24, hp: 1500, dmg: 80, speed: 110, atkCd: 1.3, gold: 60, zone: 6, population: 20, pack: [1, 2], ranged: { kind: 'banana', range: 300, windup: 0.5, speed: 0, splash: 46 }, brawler: true, moves: [{ kind: 'pound', cd: 8 }] },
+  { key: 'croc', name: 'Crocodile des marais', color: '#56703F', r: 24, hp: 1400, dmg: 95, speed: 100, atkCd: 1.5, gold: 58, zone: 6, population: 16, pack: [1, 1], swim: true, ambush: true, reach: 46 },
   { key: 'masked', name: 'Petit Masqué', color: '#A0603A', r: 17, hp: 800, dmg: 60, speed: 150, atkCd: 1.3, gold: 45, zone: 6, population: 22, pack: [2, 4], ranged: { kind: 'dart', range: 330, windup: 0.4, speed: 620 } },
   { key: 'gorilla_king', name: 'Roi Gorille', color: '#2E2A28', r: 66, hp: 42000, dmg: 160, speed: 195, atkCd: 1.3, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Mbolo, le Roi des Cimes', sprite: 'gorilla', base: 'gorilla' },
   { key: 'croc_king', name: 'Crocodile Ancien', color: '#3F5A30', r: 66, hp: 46000, dmg: 170, speed: 185, atkCd: 1.4, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Croc, Gardien des Eaux Noires', sprite: 'croc', base: 'croc' },
@@ -692,8 +714,15 @@ export const ZONES = 7; // la Mer de sable va jusqu'au bout de l'île
 export const LAKES_ZONE = 5; // Lacs brumeux : une brume légère flotte sur toute la zone
 export const JUNGLE_ZONE = 6; // Jungle, entre les Lacs brumeux et le désert : grands arbres, bambous, lianes, sous la canopée
 export const DESERT_ZONE = 7; // Mer de sable, la dernière (son volcan)
+/**
+ * Taille de chaque zone (à partir des Ruines moussues, deux fois plus grande que les premières) : sa longueur le long de
+ * l'île, et sa population de monstres, multipliées d'autant.
+ */
+export const ZONE_SIZE = [1, 1, 1, 2, 2, 2, 2];
 /** Longueur de chaque zone le long de l'île, en parts (la Mer de sable est plus grande : son volcan y tient). */
-export const ZONE_WEIGHTS = [1, 1, 1, 1, 1, 1.1, 1.6];
+export const ZONE_WEIGHTS = [1, 1, 1, 1, 1, 1.1, 1.6].map((w, i) => w * ZONE_SIZE[i]);
+/** Monstres sauvages d'une espèce sur l'île : sa population, multipliée par la taille de sa zone. */
+export const populationOf = (s: number) => Math.round(SPECIES[s].population * (ZONE_SIZE[SPECIES[s].zone - 1] ?? 1));
 // Sous le volcan de la Mer de sable : une zone de plus, souterraine (une grande salle hors de l'île), ses monstres et
 // trois antres de géants. Les trois vaincus, le cœur volcanique se libère au centre de la salle.
 export const VOLCANO_ZONE = ZONES + 1;

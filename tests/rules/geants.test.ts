@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { alphaCreateCost, SHOT_KINDS, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, SPECIES } from '../../shared/config.ts';
+import { alphaCreateCost, SHOT_KINDS, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, LEGEND_MULT, POISON_S, SPECIES, TORNADO_PULL_R } from '../../shared/config.ts';
 
 describe('Géants et grottes', () => {
   rule('Grottes : entrer avec sa meute, mini-boss, âme, réapparition du boss.', () => {
@@ -54,7 +54,7 @@ describe('Géants et grottes', () => {
     const al = p.army.map((id: number) => r.units.get(id)).find((u: { alpha: boolean; s: number }) => u?.alpha && u.s === base);
     const hp0 = al.maxHp, soulsBefore = p.essences[c.boss];
     r.onLegend(p, al.s);
-    check(al.legend && Math.abs(al.maxHp - hp0 * 1.5) <= 1 && p.essences[c.boss] === soulsBefore - 3,
+    check(al.legend && Math.abs(al.maxHp - hp0 * LEGEND_MULT.hp) <= 1 && p.essences[c.boss] === soulsBefore - 3,
       `3 âmes de ${SPECIES[c.boss].name} : Alpha ${SPECIES[base].name} légendaire (PV ${hp0} → ${al.maxHp})`);
     p.essences[c.boss] = 0;
     [p.x, p.y] = [c.inside.x, c.inside.y + 80];
@@ -259,7 +259,8 @@ describe('Géants et grottes', () => {
       [p.x, p.y] = [spot.x, spot.y];
       const at = r.map.freeNear(p.x - 250, p.y);
       const b = r.createUnit(S(key), false, at.x, at.y);
-      b.moveCd = b.moveCd.map((_: number, i: number) => (i === 0 ? 0 : 99)); // la première attaque spéciale, tout de suite
+      const first = BOSS_MOVES[key].findIndex((mv) => mv.kind === 'volley' || mv.kind === 'mortar');
+      b.moveCd = b.moveCd.map((_: number, i: number) => (i === first ? 0 : 99)); // sa salve (ou ses mortiers), tout de suite
       // comptés au lancement : un tir qui part dans un arbre disparaît dès le premier tick
       const shots: { kind: number }[] = [];
       const launch = r.launch.bind(r);
@@ -428,6 +429,116 @@ describe('Géants et grottes', () => {
     check(near(boss.maxHp, base * 4), 'un membre déconnecté de plus (chargé au démarrage) : quatre membres');
     r.removeSleeper('absent');
     check(near(boss.maxHp, base * 3), 'un membre quitte le village : on revient à trois');
+  });
+
+  rule('Nouvelles attaques : grande pince en arc, langue qui ramène sa proie, tornades qui poursuivent et aspirent, cratère de Lueur.', () => {
+    const S = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
+    // un coin dégagé de la carte, loin de l'eau et des arbres
+    const open = (r: ReturnType<typeof room>) => {
+      let s = 3000, at = r.map.spineAt(s);
+      const ok = (x: number, y: number) => [-240, -120, 0, 120, 240].every((d) => [-240, 0, 240].every((e) => !r.map.blocked(x + d, y + e) && !r.map.isForest(x + d, y + e)));
+      while (!ok(at.x, at.y)) at = r.map.spineAt((s += 41));
+      return at;
+    };
+    const cast = (r: ReturnType<typeof room>, key: string, kind: string, b: { s: number }, t: unknown) => r.castMove(b, BOSS_MOVES[key].find((mv) => mv.kind === kind), t);
+    const run = (r: ReturnType<typeof room>, ents: unknown[], s = 1.6) => {
+      for (let i = 0; i < s / 0.05; i++) {
+        r.grid.clear();
+        for (const e of ents) r.grid.insert(e);
+        r.updateHazards();
+        r.time += 0.05;
+      }
+    };
+    {
+      // grande pince : tout ce qui est devant lui dans l'arc, pas ce qui est derrière
+      const r = room();
+      r.units.clear();
+      const p = r.addPlayer('a', noop), at = open(r);
+      p.hp = 1e6;
+      [p.x, p.y] = [at.x + 150, at.y];
+      const crab = r.createUnit(S('titan_crab'), false, at.x, at.y);
+      const front = r.createUnit(S('wolf'), false, at.x + 120, at.y + 70), back = r.createUnit(S('wolf'), false, at.x - 150, at.y);
+      r.makeTamed(front, p);
+      r.makeTamed(back, p);
+      const [hf, hb] = [front.hp, back.hp];
+      cast(r, 'titan_crab', 'pincer', crab, p);
+      run(r, [p, crab, front, back]);
+      check(front.hp < hf && back.hp === hb && p.hp < 1e6, 'Crabe Titan : sa pince découpe dans le tas devant lui (dompteur et loup), pas derrière');
+    }
+    {
+      // langue du Crapaud-Roi : la proie est ramenée contre lui
+      const r = room();
+      r.units.clear();
+      const p = r.addPlayer('a', noop), at = open(r);
+      p.hp = 1e6;
+      [p.x, p.y] = [at.x + 200, at.y];
+      const toad = r.createUnit(S('toad_king'), false, at.x - 100, at.y);
+      cast(r, 'toad_king', 'tongue', toad, p);
+      run(r, [p, toad]);
+      check(p.hp < 1e6 && Math.hypot(p.x - toad.x, p.y - toad.y) < toad.r + p.r + 40, `Crapaud-Roi : sa langue ramène le dompteur contre lui (${Math.round(Math.hypot(p.x - toad.x, p.y - toad.y))} px)`);
+    }
+    {
+      // tornades : elles filent vers leur cible et aspirent la meute
+      const r = room();
+      r.units.clear();
+      const p = r.addPlayer('a', noop), at = open(r);
+      p.hp = 1e6;
+      [p.x, p.y] = [at.x + 220, at.y];
+      const king = r.createUnit(S('vulture_king'), false, at.x - 200, at.y);
+      const wolf = r.createUnit(S('wolf'), false, at.x + 220, at.y + 120);
+      r.makeTamed(wolf, p);
+      wolf.hp = wolf.maxHp = 1e6;
+      cast(r, 'vulture_king', 'tornado', king, p);
+      const tw = r.hazards.filter((h: { style: string }) => h.style === 'tornado');
+      const d0 = Math.hypot(tw[0].x - p.x, tw[0].y - p.y), w0 = Math.hypot(wolf.x - p.x, wolf.y - p.y);
+      run(r, [p, king, wolf], 2.5);
+      const d1 = Math.hypot(tw[0].x - p.x, tw[0].y - p.y);
+      check(tw.length === 2 && d1 < d0 - 150, `Roi-Vautour : deux tornades, qui poursuivent leur cible (${Math.round(d0)} → ${Math.round(d1)} px)`);
+      check(wolf.hp < wolf.maxHp && TORNADO_PULL_R > 0 && Math.hypot(wolf.x - tw[0].x, wolf.y - tw[0].y) < w0, 'elles blessent et aspirent les monstres de la meute');
+    }
+    {
+      // Lueur se téléporte : il retombe dans un cratère de feu qui brûle encore
+      const r = room();
+      r.units.clear();
+      const p = r.addPlayer('a', noop), at = open(r);
+      p.hp = 1e6;
+      [p.x, p.y] = [at.x + 200, at.y];
+      const flame = r.createUnit(S('old_flame'), false, at.x - 200, at.y);
+      cast(r, 'old_flame', 'blink', flame, p);
+      run(r, [p, flame], 1.2);
+      const crater = r.hazards.find((h: { style: string }) => h.style === 'crater');
+      check(crater && Math.hypot(crater.x - flame.x, crater.y - flame.y) < 1 && crater.until > r.time + 2, 'Lueur : un cratère de feu là où il réapparaît');
+    }
+  });
+
+  rule('Le rayon de l\'Œil vise là où il traverse le plus de monstres ; les fléchettes des Masqués empoisonnent.', () => {
+    const S = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
+    const r = room();
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    let s = 3000, at = r.map.spineAt(s);
+    while ([0, 120, 240].some((d) => r.map.blocked(at.x + d, at.y) || r.map.blocked(at.x, at.y - d))) at = r.map.spineAt((s += 41));
+    [p.x, p.y] = [at.x, at.y - 200]; // seul au nord…
+    const eye = r.createUnit(S('rune_eye'), false, at.x, at.y);
+    const pack = [100, 180, 260].map((d) => r.createUnit(S('wolf'), false, at.x + d, at.y)); // … trois loups à l'est, alignés
+    for (const w of pack) r.makeTamed(w, p);
+    r.grid.clear();
+    for (const e of [p, eye, ...pack]) r.grid.insert(e);
+    const a = r.bestBeam(eye, 480, 18, -Math.PI / 2);
+    check(Math.abs(a) < 0.2, `le rayon choisit les trois loups alignés plutôt que le dompteur seul (angle ${a.toFixed(2)})`);
+    // fléchette de sarbacane
+    const masked = r.createUnit(S('masked'), false, p.x, p.y + 60); // tout près : rien entre eux
+    p.hp = 1e6;
+    r.launch(masked, 'dart', p.x, p.y, 100, 620, 400, 0);
+    for (let i = 0; i < 20; i++) {
+      r.grid.clear();
+      r.grid.insert(p);
+      r.updateShots();
+    }
+    check(p.poison && p.poison.until > r.time, 'touché par une fléchette : empoisonné');
+    const hp = p.hp;
+    for (let i = 0; i < 40; i++) r.tick++, (r.time += 0.05), r.updatePoison();
+    check(p.hp < hp, `le poison ronge ses PV (${Math.round(hp - p.hp)} en 2 s, pendant ${POISON_S} s)`);
   });
 
   rule('grottes des dernières zones bien plus chères', () => {

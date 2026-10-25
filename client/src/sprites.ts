@@ -1,7 +1,7 @@
 // Sprites procéduraux (Canvas 2D) : aucune image à charger.
 
-import { DESERT_ZONE, SPECIES, type Resource } from '../../shared/config.ts';
-import { HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
+import { DESERT_ZONE, PINCER_HALF, SPECIES, type Resource } from '../../shared/config.ts';
+import { HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -5086,6 +5086,14 @@ export function drawHazard(ctx: Ctx, h: number[], t: number, owner?: string) {
   const style = HAZARD_STYLES[h[8]];
   if (style === 'lava') return drawLavaPool(ctx, x, y, r, active, t, ember, !!ally);
   if (style === 'flame') return drawFlameJet(ctx, x, y, x2, y2, r, k, active, t, ember, !!ally);
+  if (style === 'breath') return drawFlameJet(ctx, x, y, x2, y2, r, k, active, t, ally ? ember : '80,170,220', !!ally, WATER_JET);
+  if (style === 'pincer') return drawPincerArc(ctx, x, y, x2, y2, r, k, active, ember);
+  if (style === 'bubble') return drawBubble(ctx, x, y, r, k, active, t, ember, !!ally);
+  if (style === 'tongue') return drawTongue(ctx, x, y, x2, y2, r, k, active, t, ember);
+  if (style === 'geyser') return drawGeyser(ctx, x, y, r, k, active, t, ember, !!ally);
+  if (style === 'crater') return drawFireCrater(ctx, x, y, r, active, t, ally ? ember : '79,139,255', !!ally);
+  if (style === 'tornado' && active) return; // la tornade elle-même passe au-dessus des créatures (drawTornado)
+  if (style === 'pound' && active) return; // le sol fissuré suffit (fx)
   if (style === 'tentacle' && active) {
     // le tentacule s'abat de tout son long sur le pont
     const n = 8, pts: [number, number][] = [];
@@ -5212,7 +5220,25 @@ function drawLavaPool(ctx: Ctx, x: number, y: number, r: number, active: boolean
  * Jet de flammes d'un tourbillon : annoncé, c'est un couloir rouge qui tourne et se remplit ; embrasé, une langue de
  * feu qui part du lanceur, jaune au cœur, qui vacille et s'effiloche au bout, avec des étincelles.
  */
-function drawFlameJet(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, k: number, active: boolean, t: number, ember: string, ally: boolean) {
+/** Couleurs d'un jet : du bord (le plus large) au cœur, puis les étincelles (ou gouttes). */
+interface JetLook {
+  layers: [number, string][];
+  ally: (ember: string) => [number, string][];
+  spark: string; // « r,g,b »
+}
+const FLAME_JET: JetLook = {
+  layers: [[1.7, 'rgba(200,50,20,0.5)'], [1.15, 'rgba(255,140,50,0.85)'], [0.55, 'rgba(255,240,170,0.95)']],
+  ally: (e) => [[1.7, `rgba(${e},0.4)`], [1.15, `rgba(${e},0.7)`], [0.55, 'rgba(255,250,230,0.9)']],
+  spark: '255,220,140',
+};
+/** Souffle de l'hydre : un jet d'eau sous pression, écume blanche au cœur. */
+const WATER_JET: JetLook = {
+  layers: [[1.6, 'rgba(40,110,160,0.45)'], [1.1, 'rgba(90,180,225,0.8)'], [0.5, 'rgba(235,250,255,0.95)']],
+  ally: (e) => [[1.6, `rgba(${e},0.4)`], [1.1, 'rgba(120,200,235,0.7)'], [0.5, 'rgba(240,252,255,0.92)']],
+  spark: '220,245,255',
+};
+
+function drawFlameJet(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, k: number, active: boolean, t: number, ember: string, ally: boolean, look = FLAME_JET) {
   const ang = Math.atan2(y2 - y, x2 - x), len = Math.hypot(x2 - x, y2 - y);
   ctx.save();
   ctx.translate(x, y);
@@ -5230,9 +5256,7 @@ function drawFlameJet(ctx: Ctx, x: number, y: number, x2: number, y2: number, r:
     return;
   }
   // langue de feu : trois couches, de la plus large (rouge) au cœur (blanc-jaune), bords qui ondulent
-  const layers: [number, string][] = ally
-    ? [[1.7, `rgba(${ember},0.4)`], [1.15, `rgba(${ember},0.7)`], [0.55, 'rgba(255,250,230,0.9)']]
-    : [[1.7, 'rgba(200,50,20,0.5)'], [1.15, 'rgba(255,140,50,0.85)'], [0.55, 'rgba(255,240,170,0.95)']];
+  const layers = ally ? look.ally(ember) : look.layers;
   for (const [w, col] of layers) {
     ctx.fillStyle = col;
     ctx.beginPath();
@@ -5258,7 +5282,7 @@ function drawFlameJet(ctx: Ctx, x: number, y: number, x2: number, y2: number, r:
   }
   for (let i = 0; i < 6; i++) {
     const f = (t * 1.6 + i / 6) % 1;
-    ctx.fillStyle = `rgba(255,220,140,${1 - f})`;
+    ctx.fillStyle = `rgba(${look.spark},${1 - f})`;
     ctx.beginPath();
     ctx.arc(len * (0.3 + f * 0.75), Math.sin(i * 2.1 + t * 5) * r * (0.4 + f), 2.5, 0, TAU);
     ctx.fill();
@@ -5431,8 +5455,290 @@ export function drawLaser(ctx: Ctx, l: Laser, t: number) {
  * Compétences d'Alpha en cours sur un allié, au-dessus de sa tête : une épée et deux flèches qui montent (cri du suricate :
  * il frappe plus fort), un bouclier et sa flèche (carapace de l'escargot : il encaisse moins).
  */
+/**
+ * Grande pince du Crabe Titan. Annonce : l'arc devant lui se remplit depuis sa carapace ; coup : une énorme entaille
+ * blanche en croissant, qui balaie l'arc d'un bord à l'autre et s'efface.
+ */
+function drawPincerArc(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, k: number, active: boolean, ember: string) {
+  const ang = Math.atan2(y2 - y, x2 - x), a0 = ang - PINCER_HALF, a1 = ang + PINCER_HALF;
+  const wedge = (rr: number) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.arc(x, y, rr, a0, a1);
+    ctx.closePath();
+  };
+  if (!active) {
+    ctx.fillStyle = `rgba(${ember},0.14)`;
+    wedge(r);
+    ctx.fill();
+    ctx.fillStyle = `rgba(${ember},0.36)`;
+    wedge(r * k);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${ember},0.95)`;
+    ctx.lineWidth = 3;
+    wedge(r);
+    ctx.stroke();
+    // deux dents de pince qui se referment au bout de l'arc, à mesure que le coup approche
+    ctx.strokeStyle = `rgba(${ember},0.8)`;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    for (const sd of [-1, 1]) {
+      const a = ang + sd * PINCER_HALF * (1 - 0.7 * k);
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * r * 0.55, y + Math.sin(a) * r * 0.55);
+      ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      ctx.stroke();
+    }
+    return;
+  }
+  // l'entaille : trois croissants, du plus large (pâle) au plus fin (blanc)
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const [w, col, f] of [[22, 'rgba(255,190,150,0.35)', 0.92], [12, 'rgba(255,235,215,0.8)', 0.8], [4, 'rgba(255,255,255,1)', 0.68]] as const) {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.arc(x, y, r * f, a0, a1);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Bulle d'écume du Crabe Titan : elle gonfle sous sa cible, irisée, et tremble avant d'éclater. */
+function drawBubble(ctx: Ctx, x: number, y: number, r: number, k: number, active: boolean, t: number, ember: string, ally: boolean) {
+  if (active) return; // elle a éclaté : l'éclaboussure (fx) prend le relais
+  ctx.strokeStyle = `rgba(${ember},0.75)`;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 6]);
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r * 0.75, 0, 0, TAU);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const rr = r * (0.25 + 0.75 * k) * (1 + Math.sin(t * 30) * 0.03 * k), cy = y - rr * 0.85;
+  const g = ctx.createRadialGradient(x - rr * 0.35, cy - rr * 0.35, rr * 0.1, x, cy, rr);
+  g.addColorStop(0, 'rgba(255,255,255,0.55)');
+  g.addColorStop(0.6, ally ? `rgba(${ember},0.18)` : 'rgba(170,225,240,0.18)');
+  g.addColorStop(1, ally ? `rgba(${ember},0.5)` : 'rgba(200,170,240,0.45)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, cy, rr, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(240,250,255,0.85)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // reflet, et l'écume au pied de la bulle
+  ctx.fillStyle = 'rgba(255,255,255,0.8)';
+  ctx.beginPath();
+  ctx.ellipse(x - rr * 0.4, cy - rr * 0.45, rr * 0.18, rr * 0.1, -0.6, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(240,248,250,0.75)';
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * TAU + t * 0.8;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * rr * 0.8, y + Math.sin(a) * rr * 0.25, 2 + (i % 3), 0, TAU);
+    ctx.fill();
+  }
+}
+
+/** Langue du Crapaud-Roi. Annonce : un couloir rose ; coup : la langue jaillit, bout gluant, et se rétracte. */
+function drawTongue(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, k: number, active: boolean, t: number, ember: string) {
+  const ang = Math.atan2(y2 - y, x2 - x), len = Math.hypot(x2 - x, y2 - y);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  if (!active) {
+    ctx.fillStyle = `rgba(${ember},0.14)`;
+    ctx.fillRect(0, -r, len, r * 2);
+    ctx.fillStyle = 'rgba(232,110,150,0.32)';
+    ctx.fillRect(0, -r, len * k, r * 2);
+    ctx.strokeStyle = `rgba(${ember},0.9)`;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([12, 8]);
+    ctx.strokeRect(0, -r, len, r * 2);
+    ctx.restore();
+    return;
+  }
+  // la langue, un peu ondulée, plus épaisse au bout
+  const wob = (f: number) => Math.sin(f * 7 + t * 20) * r * 0.12 * f;
+  ctx.lineCap = 'round';
+  for (const [w, col] of [[r * 0.75, '#8E2F4A'], [r * 0.5, '#E0708F']] as const) {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    for (let i = 0; i <= 10; i++) {
+      const f = i / 10;
+      if (i) ctx.lineTo(len * f, wob(f));
+      else ctx.moveTo(0, 0);
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#E0708F';
+  ctx.beginPath();
+  ctx.ellipse(len, wob(1), r * 0.7, r * 0.55, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,220,230,0.7)';
+  ctx.beginPath();
+  ctx.ellipse(len - r * 0.15, wob(1) - r * 0.2, r * 0.25, r * 0.14, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Geyser de l'hydre : le sol se gorge d'eau et bouillonne, puis une colonne d'eau jaillit d'un coup. */
+function drawGeyser(ctx: Ctx, x: number, y: number, r: number, k: number, active: boolean, t: number, ember: string, ally: boolean) {
+  const water = ally ? ember : '90,180,225';
+  if (!active) {
+    ctx.fillStyle = `rgba(${water},${0.12 + 0.25 * k})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * (0.5 + 0.5 * k), r * (0.5 + 0.5 * k) * 0.75, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${ember},0.9)`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.75, 0, 0, TAU);
+    ctx.stroke();
+    // bulles qui remontent, de plus en plus nombreuses
+    ctx.fillStyle = 'rgba(230,248,255,0.85)';
+    const n = 3 + Math.round(9 * k);
+    for (let i = 0; i < n; i++) {
+      const a = i * 2.4 + Math.floor(t * 6 + i) * 0.7, d = r * 0.6 * ((i * 37) % 10) / 10;
+      ctx.beginPath();
+      ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, 2 + ((t * 8 + i) % 3), 0, TAU);
+      ctx.fill();
+    }
+    return;
+  }
+  // la colonne : un fût d'eau haut, écume au sommet, gerbe au pied
+  const h = r * 3.4, w = r * 0.55;
+  const g = ctx.createLinearGradient(x - w, 0, x + w, 0);
+  g.addColorStop(0, `rgba(${water},0.55)`);
+  g.addColorStop(0.5, 'rgba(240,252,255,0.95)');
+  g.addColorStop(1, `rgba(${water},0.55)`);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(x - w, y);
+  ctx.quadraticCurveTo(x - w * 0.7 + Math.sin(t * 25) * 3, y - h * 0.5, x - w * 0.9, y - h);
+  ctx.lineTo(x + w * 0.9, y - h);
+  ctx.quadraticCurveTo(x + w * 0.7 + Math.cos(t * 25) * 3, y - h * 0.5, x + w, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(245,252,255,0.9)';
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * TAU + t * 3;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * w * 1.1, y - h + Math.sin(a) * w * 0.4, w * 0.45, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = `rgba(${water},0.4)`;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r * 0.75, 0, 0, TAU);
+  ctx.fill();
+}
+
+/**
+ * Cratère de feu laissé par Lueur à l'arrivée de sa téléportation : un sol creusé et noirci, au bord rougeoyant,
+ * où dansent des flammes bleues (la couleur du dompteur pour un Alpha légendaire).
+ */
+function drawFireCrater(ctx: Ctx, x: number, y: number, r: number, active: boolean, t: number, flame: string, ally: boolean) {
+  if (!active) return; // il n'existe qu'après l'arrivée
+  const g = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
+  g.addColorStop(0, `rgba(${flame},0.55)`);
+  g.addColorStop(0.35, 'rgba(24,18,22,0.9)');
+  g.addColorStop(0.8, 'rgba(40,28,26,0.85)');
+  g.addColorStop(1, 'rgba(40,28,26,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r * 0.72, 0, 0, TAU);
+  ctx.fill();
+  // bord rougeoyant, fendillé
+  ctx.strokeStyle = `rgba(${flame},${0.6 + 0.2 * Math.sin(t * 5)})`;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  for (let i = 0; i <= 18; i++) {
+    const a = (i / 18) * TAU, d = r * (0.78 + 0.06 * Math.sin(a * 5 + x));
+    const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.72;
+    if (i) ctx.lineTo(px, py);
+    else ctx.moveTo(px, py);
+  }
+  ctx.stroke();
+  // flammes qui lèchent le bord et le fond
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * TAU + x * 0.01, d = r * (i % 3 === 0 ? 0.3 : 0.75), fx = x + Math.cos(a) * d, fy = y + Math.sin(a) * d * 0.72;
+    const h = r * (0.28 + 0.16 * Math.sin(t * 9 + i * 1.7)), w = r * 0.09;
+    ctx.fillStyle = `rgba(${flame},0.75)`;
+    ctx.beginPath();
+    ctx.moveTo(fx - w, fy);
+    ctx.quadraticCurveTo(fx - w * 0.6, fy - h * 0.6, fx + Math.sin(t * 7 + i) * w, fy - h);
+    ctx.quadraticCurveTo(fx + w * 0.6, fy - h * 0.6, fx + w, fy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = ally ? 'rgba(255,250,235,0.7)' : 'rgba(220,240,255,0.8)';
+    ctx.beginPath();
+    ctx.ellipse(fx, fy - h * 0.25, w * 0.4, h * 0.22, 0, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/**
+ * Tornade du Roi-Vautour : un entonnoir de vent et de sable qui tourne, étroit au sol et large en haut, avec un
+ * anneau de poussière à sa base et des débris qui tournoient (dessiné au-dessus des créatures).
+ */
+export function drawTornado(ctx: Ctx, x: number, y: number, r: number, t: number, dust: string, fade = 1) {
+  ctx.save();
+  ctx.globalAlpha = fade;
+  ctx.fillStyle = `rgba(${dust},0.25)`;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r * 1.4, r * 0.55, 0, 0, TAU);
+  ctx.fill();
+  const H = r * 3.6, n = 9;
+  // le corps de l'entonnoir : un voile de sable, plus dense en bas
+  const body = ctx.createLinearGradient(0, y, 0, y - H);
+  body.addColorStop(0, `rgba(${dust},0.5)`);
+  body.addColorStop(1, `rgba(${dust},0.12)`);
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  for (let i = 0; i <= 12; i++) {
+    const f = i / 12, w = r * (0.25 + 1.05 * f * f + 0.15 * f), sway = Math.sin(t * 2.2 + f * 3) * r * 0.25 * f;
+    ctx.lineTo(x + sway - w, y - f * H);
+  }
+  for (let i = 12; i >= 0; i--) {
+    const f = i / 12, w = r * (0.25 + 1.05 * f * f + 0.15 * f), sway = Math.sin(t * 2.2 + f * 3) * r * 0.25 * f;
+    ctx.lineTo(x + sway + w, y - f * H);
+  }
+  ctx.closePath();
+  ctx.fill();
+  for (let i = 0; i < n; i++) {
+    const f = i / (n - 1), cy = y - f * H, w = r * (0.25 + 1.05 * f * f + 0.15 * f), sway = Math.sin(t * 2.2 + f * 3) * r * 0.25 * f;
+    ctx.strokeStyle = `rgba(${dust},${0.75 - 0.4 * f})`;
+    ctx.lineWidth = 3 + 4 * (1 - f);
+    ctx.beginPath();
+    const a0 = t * 7 + i * 0.9;
+    ctx.ellipse(x + sway, cy, w, w * 0.32, 0, a0, a0 + Math.PI * 1.4);
+    ctx.stroke();
+  }
+  // filets de vent clairs qui montent en spirale
+  ctx.strokeStyle = 'rgba(250,245,235,0.55)';
+  ctx.lineWidth = 1.5;
+  for (let s = 0; s < 3; s++) {
+    ctx.beginPath();
+    for (let i = 0; i <= 20; i++) {
+      const f = i / 20, a = t * 6 + f * 9 + s * 2.1, w = r * (0.25 + 1.05 * f * f);
+      const px = x + Math.sin(t * 2.2 + f * 3) * r * 0.25 * f + Math.cos(a) * w, py = y - f * H + Math.sin(a) * w * 0.32;
+      if (i) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    }
+    ctx.stroke();
+  }
+  // débris et plumes qui tournoient
+  ctx.fillStyle = 'rgba(70,56,44,0.85)';
+  for (let i = 0; i < 8; i++) {
+    const f = ((t * 0.35 + i / 8) % 1), a = t * 5 + i * 2.3, w = r * (0.3 + 1.0 * f * f);
+    ctx.fillRect(x + Math.cos(a) * w - 2, y - f * H + Math.sin(a) * w * 0.32 - 2, 4, 3);
+  }
+  ctx.restore();
+}
+
 export function drawBuffs(ctx: Ctx, x: number, y: number, flags: number, t: number, seed: number) {
-  const icons = [flags & UNIT_FLAG_RALLY ? 'rally' : '', flags & UNIT_FLAG_GUARD ? 'guard' : ''].filter(Boolean);
+  const icons = [flags & UNIT_FLAG_RALLY ? 'rally' : '', flags & UNIT_FLAG_GUARD ? 'guard' : '', flags & UNIT_FLAG_POISON ? 'poison' : ''].filter(Boolean);
   const bob = Math.sin(t * 4 + seed) * 1.5;
   icons.forEach((kind, i) => {
     const cx = x + (i - (icons.length - 1) / 2) * 20, cy = y + bob;
@@ -5442,7 +5748,7 @@ export function drawBuffs(ctx: Ctx, x: number, y: number, flags: number, t: numb
     ctx.beginPath();
     ctx.arc(0, 0, 9, 0, TAU);
     ctx.fill();
-    const col = kind === 'rally' ? '#F0B64A' : '#7FC8E8';
+    const col = kind === 'rally' ? '#F0B64A' : kind === 'poison' ? '#8FD14A' : '#7FC8E8';
     ctx.strokeStyle = col;
     ctx.fillStyle = col;
     ctx.lineWidth = 1.6;
@@ -5461,6 +5767,24 @@ export function drawBuffs(ctx: Ctx, x: number, y: number, flags: number, t: numb
       ctx.lineTo(-2, -7);
       ctx.lineTo(-0.7, -4.5);
       ctx.fill();
+    } else if (kind === 'poison') {
+      // goutte de poison, et des bulles qui montent
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.quadraticCurveTo(5, 1, 0, 5);
+      ctx.quadraticCurveTo(-5, 1, 0, -6);
+      ctx.fill();
+      const b = (t * 1.5 + seed * 0.3) % 1;
+      ctx.globalAlpha = 1 - b;
+      ctx.beginPath();
+      ctx.arc(5, 2 - b * 8, 1.6, 0, TAU);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(-5, 4 - ((b + 0.5) % 1) * 8, 1.2, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      return;
     } else {
       // bouclier
       ctx.beginPath();

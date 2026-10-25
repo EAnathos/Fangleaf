@@ -89,6 +89,45 @@ describe('Faune : tireurs, gibier, baies, bestiaire', () => {
       run(r, 4);
       check(foe.hp < 1e6, 'Guetteur apprivoisé : tire sur les sauvages pour sa meute');
     }
+    {
+      // une monture qui tire (le gorille) vise de loin, sous son cavalier
+      const { r, p, w } = setup('gorilla');
+      r.units.delete(w.id);
+      const g = r.createUnit(S('gorilla'), true, p.x, p.y);
+      g.owner = p.id;
+      p.army.push(g.id);
+      p.mount = g.id;
+      const foe = r.createUnit(S('golem'), false, p.x + 230, p.y);
+      foe.hp = foe.maxHp = 1e6;
+      foe.speed = 0;
+      run(r, 4);
+      check(foe.hp < 1e6, 'gorille monté : il bombarde de bananes les sauvages à distance');
+    }
+    {
+      // le crocodile sauvage sort de l'eau pour attaquer ce qui passe sur la berge, puis y retourne
+      const r = room();
+      r.units.clear();
+      const p = r.addPlayer('a', noop);
+      p.hp = 1e6;
+      let bank: { x: number; y: number } | null = null, water: { x: number; y: number } | null = null;
+      for (let z = r.map.zoneFrom(6); z < r.map.zoneTo(6) && !water; z += 60) {
+        const at = r.map.freeNear(r.map.spineAt(z).x, r.map.spineAt(z).y), wt = r.map.waterNear(at.x, at.y, 260);
+        if (wt && Math.hypot(wt.x - at.x, wt.y - at.y) > 120) [bank, water] = [at, wt];
+      }
+      check(bank && water, 'un marigot de la Jungle, près d\'une berge');
+      const c = r.createUnit(S('croc'), false, water!.x, water!.y);
+      [c.homeX, c.homeY] = [c.x, c.y];
+      // sur la berge, à portée de ses yeux
+      const k = 160 / Math.hypot(bank!.x - water!.x, bank!.y - water!.y);
+      [p.x, p.y] = [water!.x + (bank!.x - water!.x) * k, water!.y + (bank!.y - water!.y) * k];
+      check(!r.map.isWater(p.x, p.y), 'le dompteur est bien sur la terre ferme');
+      let landed = false;
+      run(r, 6, () => void (landed ||= !r.map.isWater(c.x, c.y)));
+      check(landed && p.hp < 1e6, `il sort de l'eau pour mordre le dompteur sur la berge (${landed}, ${Math.round(p.hp)}, à ${Math.round(Math.hypot(c.x - p.x, c.y - p.y))} px)`);
+      [p.x, p.y] = [p.x + (p.x - water!.x) * 5, p.y + (p.y - water!.y) * 5]; // le dompteur s'en va (pas trop loin : le crocodile reste éveillé)
+      run(r, 15);
+      check(r.map.isWater(c.x, c.y), `plus de proie : il regagne son eau (à ${Math.round(Math.hypot(c.x - c.homeX, c.y - c.homeY))} px de chez lui, cible ${c.target}, retour ${c.returning}, dompteur à ${Math.round(Math.hypot(c.x - p.x, c.y - p.y))} px)`);
+    }
   });
 
   rule('Gibier passif : il n\'attaque jamais, mange aux buissons à fruits et fuit qui le frappe.', () => {

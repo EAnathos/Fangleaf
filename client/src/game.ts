@@ -1,9 +1,9 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
-import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
+import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
 import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST } from './anim.ts';
 import { type Ambience, sound } from './audio.ts';
@@ -15,7 +15,7 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, drawTornado, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, jungleMix, lakesMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
@@ -95,7 +95,7 @@ export class Game {
     this.ctx = canvas.getContext('2d')!;
     this.map = new WorldMap(seed);
     this.world = new World(this.map);
-    this.fog = new Fog(`fangleaf.fog.v7.${seed}`, (x, y) => !this.map.isForest(x, y)); // v7 : île élargie
+    this.fog = new Fog(`fangleaf.fog.v8.${seed}`, (x, y) => !this.map.isForest(x, y)); // v8 : zones agrandies à partir des Ruines moussues
     this.hud = new Hud(code, this.map, this.fog, founder);
     this.hud.onMount = (id) => net.send({ t: 'mount', id });
     this.hud.onCave = (id, enter) => net.send({ t: 'cave', id, enter });
@@ -299,10 +299,13 @@ export class Game {
       this.hud.toast(owned ? 'Ta monture est trop loin ou en train de ressusciter.' : 'Aucune monture : éveille un Alpha Loup, Sanglier, Ours, Escargot ou Serpent à la Tanière.');
       return;
     }
-    // toujours l'Alpha chevauchable le plus proche ; le serpent seulement si l'eau est à portée (sinon le suivant)
+    // l'Alpha chevauchable le plus proche ; le serpent seulement si l'eau est à portée (sinon le suivant). Au bord de
+    // l'eau, avec une monture nageuse et une terrestre : on regarde vers l'eau, la nageuse ; vers la terre, la terrestre.
     const nearWater = !!this.map.waterNear(this.me.x, this.me.y, SHORE_R);
     const sorted = candidates.sort((a, b) => Math.hypot(a[3] - this.me.x, a[4] - this.me.y) - Math.hypot(b[3] - this.me.x, b[4] - this.me.y));
-    const pick = sorted.find((u) => nearWater || !swimMount(u[1]));
+    const usable = sorted.filter((u) => nearWater || !swimMount(u[1]));
+    const facingWater = nearWater && [30, 60, 90, 120, SHORE_R].some((d) => this.map.isWater(this.me.x + this.me.fx * d, this.me.y + this.me.fy * d));
+    const pick = usable.find((u) => swimMount(u[1]) === facingWater) ?? usable[0];
     if (!pick) return this.hud.toast('Approche-toi de l\'eau pour monter ton serpent : il ne nage qu\'en eau.');
     this.net.send({ t: 'mount', id: pick[0] });
   }
@@ -587,8 +590,8 @@ export class Game {
     if (this.hud.hall < gateHall(k)) need.push(`Hôtel de ville niv. ${gateHall(k)}`);
     const left = k === 0 ? [] : zoneBosses(k).filter((b) => !this.hud.beaten.includes(b));
     if (left.length) need.push(`vaincre ${left.map(bossName).join(', ')}`);
-    const unread = k === 0 ? [] : zoneBosses(k).filter((b) => this.hud.beaten.includes(b) && !this.hud.told.includes(b));
-    if (unread.length) need.push(`rapporter à Aubin ${unread.length > 1 ? 'les parchemins' : 'le parchemin'} de ${unread.map(bossName).join(', ')}`);
+    const unread = k === 0 || left.length ? [] : zoneBosses(k).filter((b) => !this.hud.told.includes(b));
+    if (unread.length) need.push(`rapporter à Aubin le parchemin ${k === 1 ? 'de la' : 'des'} ${ZONE_NAMES[k - 1]}`);
     return need.join(' · ');
   }
 
@@ -906,7 +909,10 @@ export class Game {
         else if (zone === VOLCANO_ZONE) {
           const left = this.map.caves.filter((c) => c.zone === VOLCANO_ZONE && !beaten.includes(c.boss)).length;
           this.hud.toast(left ? `Une flamme de l'autel du volcan s'éteint. Encore ${left} géant${left > 1 ? 's' : ''}.` : 'La dernière flamme s\'éteint : le cœur volcanique est libéré, au centre des entrailles !', left ? '' : 'good');
-        } else this.hud.toast('Il a laissé tomber un parchemin, au fond de sa grotte.');
+        } else {
+          const left = zoneBosses(zone).filter((b) => !beaten.includes(b)).length;
+          this.hud.toast(left ? `Encore ${left} géant${left > 1 ? 's' : ''} dans cette zone : le dernier gardera son parchemin.` : `Il a laissé tomber le parchemin ${zone === 1 ? 'de la' : 'des'} ${ZONE_NAMES[zone - 1]}, au fond de sa grotte.`, left ? '' : 'good');
+        }
         if (zone === VOLCANO_ZONE - 1 && volcanoOpen(beaten) && !volcanoOpen(this.hud.beaten)) this.hud.toast('Un grondement dans la Mer de sable : la bouche du volcan s\'est ouverte !', 'good');
         break;
       }
@@ -922,7 +928,7 @@ export class Game {
       }
       case 'scroll': {
         sound.play('chime', 0.6);
-        this.hud.toast('Un vieux parchemin… Le vieil homme du village saura peut-être le lire.', 'good');
+        this.hud.toast(`Le parchemin ${SPECIES[e.s]?.zone === 1 ? 'de la' : 'des'} ${ZONE_NAMES[(SPECIES[e.s]?.zone ?? 1) - 1]}… Le vieil homme du village saura peut-être le lire.`, 'good');
         break;
       }
       case 'lore':
@@ -962,12 +968,53 @@ export class Game {
         // une attaque d'Alpha légendaire (ou d'un tireur de la meute) éclate à la couleur de son dompteur
         const mine = e.by ? players.find((p) => p.id === e.by)?.color : undefined;
         const col = e.kind === 'cloud' ? '#A0BE5A' : e.kind === 'web' ? '#EEE7D7' : e.kind === 'orb' ? '#B48CFF' : mine ?? (e.kind === 'splash' ? '#B9D86A' : '#E8693F');
-        if (e.kind === 'laser') break; // le rayon s'allume tout seul (drawLasers)
+        if (e.kind === 'laser' || e.kind === 'breath') break; // le rayon et le souffle s'allument tout seuls
         if (e.kind === 'orb') { // orbe du mage : pas de secousse, juste l'éclat violet
           this.fx.ring(e.x, e.y, col, e.r * 0.3, e.r, 0.35);
           break;
         }
         const near = Math.hypot(this.me.x - e.x, this.me.y - e.y) < e.r + 160;
+        if (e.kind === 'pound') {
+          // le gorille fracasse le sol devant lui : fissures, mottes et poussière, sans onde tout autour
+          this.fx.crack(e.x, e.y, e.r * 0.85, 1.8);
+          this.fx.debris(e.x, e.y, ['#7A6248', '#5E4A36', '#4E5A3A'], 14, 220, 8);
+          this.fx.dust(e.x, e.y, e.r * 0.7, 10);
+          if (near) this.shake = Math.max(this.shake, 0.3);
+          break;
+        }
+        if (e.kind === 'pincer') {
+          // la pince claque : éclats et écume au bout de l'arc
+          this.fx.debris(e.x, e.y, ['#FFFFFF', '#FFD9C8', '#D46A43'], 12, 260, 5);
+          this.fx.ring(e.x, e.y, 'rgba(255,240,230,0.9)', 8, 70, 0.3);
+          if (near) this.shake = Math.max(this.shake, 0.32);
+          sound.play('swing');
+          break;
+        }
+        if (e.kind === 'bubble' || e.kind === 'geyser') {
+          // la bulle éclate, le geyser retombe : gouttes et écume
+          this.fx.burst(e.x, e.y - (e.kind === 'geyser' ? 40 : 20), '#DDF4FF', e.kind === 'geyser' ? 26 : 16, e.kind === 'geyser' ? 260 : 170);
+          this.fx.burst(e.x, e.y, mine ?? '#6FB7E0', 12, 140);
+          this.fx.ring(e.x, e.y, 'rgba(220,244,255,0.9)', e.r * 0.2, e.r * 1.05, 0.4);
+          if (near) this.shake = Math.max(this.shake, e.kind === 'geyser' ? 0.25 : 0.15);
+          break;
+        }
+        if (e.kind === 'tongue') {
+          this.fx.burst(e.x, e.y, '#E0708F', 10, 120);
+          break;
+        }
+        if (e.kind === 'tornado') {
+          this.fx.dust(e.x, e.y, e.r * 1.2, 12);
+          break;
+        }
+        if (e.kind === 'crater') {
+          // il retombe dans un cratère : le sol éclate, et le feu prend
+          const glow = mine ? rgbOf(mine) : '79,139,255';
+          this.fx.fireWave(e.x, e.y, e.r, [glow, mine ? glow : '111,183,255', mine ? '255,250,235' : '214,238,255']);
+          this.fx.crack(e.x, e.y, e.r * 0.9, 3);
+          this.fx.debris(e.x, e.y, ['#2A2024', '#3A2E2A', '#6FB7FF'], 14, 230, 7);
+          if (near) this.shake = Math.max(this.shake, 0.3);
+          break;
+        }
         if (e.kind === 'rock') {
           // le rocher éclate : éclats qui rebondissent, poussière, petites fissures
           this.fx.debris(e.x, e.y, ['#8A8F8A', '#6E736E', '#A4A8A2'], 16, 210, 10);
@@ -1242,6 +1289,16 @@ export class Game {
       const nx = this.me.x + STORM_WIND.x * STORM_PUSH * gust * dt, ny = this.me.y + STORM_WIND.y * STORM_PUSH * gust * dt;
       if (this.map.passable(nx, ny, swim, fly) && this.map.gateCrossed(this.me.x, this.me.y, nx, ny) < 0) [this.me.x, this.me.y] = [nx, ny];
     }
+    // Tornades du Roi-Vautour : elles aspirent le dompteur vers leur cœur (le serveur fait de même pour les monstres).
+    if (!dead && !(st?.mount && (swimMount(st.mount.species) || flyMount(st.mount.species)))) {
+      for (const h of this.net.latest?.hazards ?? []) {
+        if (HAZARD_STYLES[h[8]] !== 'tornado' || h[6] < 100 || h[7]) continue;
+        const ddx = h[1] - this.me.x, ddy = h[2] - this.me.y, d = Math.hypot(ddx, ddy);
+        if (d < 8 || d > TORNADO_PULL_R) continue;
+        const step = Math.min(d, TORNADO_PULL * (1 - (0.5 * d) / TORNADO_PULL_R) * dt), nx = this.me.x + (ddx / d) * step, ny = this.me.y + (ddy / d) * step;
+        if (this.map.passable(nx, ny, false, false) && this.map.gateCrossed(this.me.x, this.me.y, nx, ny) < 0) [this.me.x, this.me.y] = [nx, ny];
+      }
+    }
     // Attaque au clic : tant que le bouton gauche est maintenu, on frappe vers le pointeur.
     this.aimTimer -= dt;
     if (aim.down && !dead && !this.hud.panel && this.aimTimer <= 0) {
@@ -1510,6 +1567,38 @@ export class Game {
     air.push({ y: l.gy + 1, draw: () => drawLaser(ctx, { ...l, tx, ty, k, since, fade }, this.time) });
   }
 
+  /** Tornades en cours : position lissée entre deux snapshots (elles filent vers leur cible), au-dessus des créatures. */
+  private twisters = new Map<string, { x: number; y: number; seen: number; r: number; col: string }>();
+  private drawTornados(ctx: CanvasRenderingContext2D, hazards: HazardTuple[], colorOf: Map<number, string>, air: { y: number; draw: () => void }[]) {
+    // clé : lanceur et rang (une tornade se reconnaît d'un snapshot à l'autre par son ordre chez son lanceur)
+    const count = new Map<number, number>();
+    for (const h of hazards) {
+      if (HAZARD_STYLES[h[8]] !== 'tornado' || h[6] < 100) continue;
+      const i = count.get(h[9]) ?? 0;
+      count.set(h[9], i + 1);
+      const k2 = `${h[9]}|${i}`;
+      let tw = this.twisters.get(k2);
+      if (!tw) {
+        tw = { x: h[1], y: h[2], seen: this.time, r: h[3], col: h[7] ? rgbOf(colorOf.get(h[7]) ?? '#F0B64A') : '196,178,146' };
+        this.twisters.set(k2, tw);
+        this.fx.dust(h[1], h[2], h[3], 10);
+      }
+      const f = Math.min(1, this.dt * 10);
+      tw.x += (h[1] - tw.x) * f;
+      tw.y += (h[2] - tw.y) * f;
+      tw.seen = this.time;
+      if (Math.random() < this.dt * 8) this.fx.dust(tw.x, tw.y, tw.r * 0.8, 1);
+    }
+    for (const [key, tw] of this.twisters) {
+      const fade = 1 - (this.time - tw.seen) / 0.4;
+      if (fade <= 0) {
+        this.twisters.delete(key);
+        continue;
+      }
+      air.push({ y: tw.y, draw: () => drawTornado(ctx, tw.x, tw.y, tw.r, this.time, tw.col, fade) });
+    }
+  }
+
   /** La charge vient de passer : sillon au sol, poussière tout le long, et quelques mottes de terre. */
   private chargeTrail(x: number, y: number, x2: number, y2: number, w: number) {
     this.fx.streak(x, y, x2, y2, w * 1.1);
@@ -1585,6 +1674,45 @@ export class Game {
     for (const sh of shots) L.light(sh[2], sh[3], 70, '255,224,170', 0.5);
   }
 
+  /**
+   * Sur ordinateur, le géant qu'on combat (réveillé, le plus proche, assez près) a sa barre de vie en haut de l'écran,
+   * avec son nom (comme le dragon de l'End) : il n'a plus la sienne au-dessus de la tête. Renvoie son id (0 : aucun).
+   */
+  private bossBarFor = 0;
+  private updateBossBar(units: UnitTuple[]) {
+    let best = 0, bd = 1100 ** 2, hp = 0, s = 0, flags = 0;
+    if (!touchOnly) {
+      for (const [id, sp, fl, x, y, h, owner] of units) {
+        if (owner || !SPECIES[sp].boss || fl & UNIT_FLAG_DORMANT || h <= 0) continue;
+        const d = (x - this.me.x) ** 2 + (y - this.me.y) ** 2;
+        if (d < bd) [best, bd, hp, s, flags] = [id, d, h, sp, fl];
+      }
+    }
+    const bar = document.getElementById('boss-bar')!;
+    document.getElementById('hud')!.classList.toggle('boss-on', !!best);
+    bar.hidden = !best;
+    if (!best) {
+      this.bossBarFor = 0;
+      return 0;
+    }
+    const pct = `${Math.max(0, Math.min(100, hp))}%`, lag = document.getElementById('boss-lag')!;
+    if (this.bossBarFor !== best) {
+      // nouveau géant : la traîne repart de sa vie actuelle, sans glisser depuis l'ancien
+      this.bossBarFor = best;
+      lag.style.transition = 'none';
+      lag.style.width = pct;
+      void lag.offsetWidth;
+      lag.style.transition = '';
+    }
+    document.getElementById('boss-name')!.textContent = SPECIES[s].title ?? SPECIES[s].name;
+    document.getElementById('boss-fill')!.style.width = pct;
+    lag.style.width = pct;
+    const phase = document.getElementById('boss-phase')!, phases = SPECIES[s].phases;
+    phase.hidden = !phases;
+    if (phases) phase.textContent = `Phase ${flags & UNIT_FLAG_PHASE3 ? 3 : flags & UNIT_FLAG_PHASE2 ? 2 : 1}/${phases}`;
+    return best;
+  }
+
   private render(units: UnitTuple[], players: PlayerState[]) {
     const { ctx, canvas, scale } = this;
     this.shake = Math.max(0, this.shake - 1 / 60);
@@ -1648,6 +1776,7 @@ export class Game {
     this.fx.drawGround(ctx); // fissures et sillons au sol
     const air: { y: number; draw: () => void }[] = []; // ce qui passe au-dessus de tout : géant en plein bond, rochers lancés
     this.drawLasers(ctx, hazards, units, late, colorOf, air);
+    this.drawTornados(ctx, hazards, colorOf, air);
 
     // Tri par profondeur : unités, joueurs, filons et entrées de grotte ensemble.
     const list = this.drawList; // réutilisée d'une image à l'autre
@@ -1789,6 +1918,7 @@ export class Game {
       list.push({ y: o.y, draw: () => drawOre(ctx, o.x, o.y, o.zone, hp, this.time, o.id, o.res) });
     }
 
+    const topBoss = this.updateBossBar(units);
     for (const u of units) {
       const [id, s, flags, x, y, hp, owner] = u;
       if (flags & UNIT_FLAG_MOUNTED) continue; // dessinée sous son cavalier
@@ -1850,8 +1980,8 @@ export class Game {
           this.drawUnitCached(ctx, id, look(), pose);
           if (boss && flags & UNIT_FLAG_DORMANT) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
           if (flags & UNIT_FLAG_ASLEEP) this.snore(x + r * 0.6, y - r * 1.2, 12, id); // lièvre qui dort la nuit, ours le jour
-          if (boss) {
-            // Mini-boss : nom et grande barre de vie, toujours visibles.
+          if (boss && id !== topBoss) {
+            // Mini-boss : nom et grande barre de vie, toujours visibles (en combat sur ordinateur : en haut de l'écran).
             ctx.font = '700 15px "Pixelify Sans", sans-serif';
             ctx.textAlign = 'center';
             ctx.lineWidth = 4;
@@ -1869,7 +1999,7 @@ export class Game {
               ctx.fillText(`Phase ${ph}/${SPECIES[s].phases}`, x, y - r * 1.6 + 12);
             }
           } else if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
-          if (flags & (UNIT_FLAG_RALLY | UNIT_FLAG_GUARD)) drawBuffs(ctx, x, y - r * (alpha ? 1.7 : 1.3) - (hp < 100 ? 18 : 10), flags, this.time, id);
+          if (flags & (UNIT_FLAG_RALLY | UNIT_FLAG_GUARD | UNIT_FLAG_POISON)) drawBuffs(ctx, x, y - r * (alpha ? 1.7 : 1.3) - (hp < 100 ? 18 : 10), flags, this.time, id);
         },
       });
     }

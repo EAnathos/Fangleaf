@@ -8,7 +8,7 @@ import {
 import type { BoardRow, PlayerState, Stats, UnitTuple } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
 import { armorColor, drawElder, drawHatchling, drawUnit } from './sprites.ts';
-import { CHAPTER_TITLES, ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD } from './elder.ts';
+import { CHAPTER_TITLES, ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD, zoneChapters } from './elder.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { sound } from './audio.ts';
 import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
@@ -62,11 +62,13 @@ export interface VillageView {
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 const ROMAN = ['I', 'II', 'III'];
 const num = (n: number) => Math.round(n).toLocaleString('fr-FR');
+/** Petit nom d'un géant : son titre sans ce qui suit la virgule ni l'épithète (« Lueur », « Grisecroc », « Ursus Mâchefer »). */
+const shortTitle = (boss: number) => (SPECIES[boss]?.title ?? SPECIES[boss]?.name ?? '').split(/,| (?:le|la|les|aux|l') /)[0].trim();
 /** Tableau du village, par catégorie : clé de la statistique, libellé, mise en forme, et « moins, c'est mieux ». */
 const BOARD: { title: string; stats: { k: keyof Stats; label: string; fmt?: (n: number) => string; low?: boolean }[] }[] = [
   { title: '⚔️ Combat', stats: [
     { k: 'bosses', label: 'Géants battus' }, { k: 'firsts', label: 'Premières victoires sur un géant' }, { k: 'kills', label: 'Monstres vaincus' },
-    { k: 'dmg', label: 'Dégâts infligés' }, { k: 'best', label: 'Plus gros coup' }, { k: 'deaths', label: 'Chutes', low: true }, { k: 'revives', label: 'Coéquipiers relevés' },
+    { k: 'dmg', label: 'Dégâts infligés' }, { k: 'best', label: 'Plus gros coup' }, { k: 'deaths', label: 'Morts', low: true }, { k: 'revives', label: 'Coéquipiers relevés' },
   ] },
   { title: '🐾 Dressage', stats: [
     { k: 'tamed', label: 'Monstres apprivoisés' }, { k: 'essences', label: 'Essences recueillies' }, { k: 'awakened', label: 'Alphas éveillés' }, { k: 'legends', label: 'Alphas légendaires' },
@@ -308,6 +310,14 @@ export class Hud {
   /** founder : fondateur du village (peut le supprimer) ; sinon on n'efface que sa propre progression. */
   constructor(code: string, private map: WorldMap, private fog: Fog, founder: boolean) {
     this.miniBg = this.renderMapBackground(180);
+    // grande carte, à la souris : la grotte survolée affiche le nom de son géant
+    const big = $<HTMLCanvasElement>('bigmap-canvas');
+    big.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      const b = big.getBoundingClientRect();
+      this.mapHover = { x: e.clientX - b.left, y: e.clientY - b.top };
+    });
+    big.addEventListener('pointerleave', () => (this.mapHover = null));
     $('hud').hidden = false;
     // pastille de meute : le gluant du jeu, dessiné avec son sprite et qui remplit la pastille
     requestAnimationFrame(() => {
@@ -544,7 +554,7 @@ export class Hud {
   evolve(s: number) {
     const el = $('evolve'), c = $<HTMLCanvasElement>('evolve-canvas'), text = $('evolve-text');
     const sp = SPECIES[s], boss = bossOf(s), giant = SPECIES[boss];
-    $('evolve-title').textContent = 'Quoi ? Ton Alpha évolue !';
+    $('evolve-title').textContent = 'Quoi ? Ton Alpha éveille son vrai potentiel !';
     $('evolve-line').textContent = `Ton Alpha ${sp.name} est devenu légendaire ! Il peut maintenant utiliser les attaques de ${giant?.title ?? giant?.name ?? 'son géant'}.`;
 
     text.classList.remove('on');
@@ -895,15 +905,17 @@ export class Hud {
       // les anciens parchemins : on lui en remontre un, il le raconte à nouveau
       $('elder-line').textContent = '« Lequel veux-tu me montrer ? »';
       $('elder-boat').replaceChildren(
-        ...this.told.slice(0, told).map((boss, i) => {
+        // un parchemin par zone : ses souvenirs racontés d'un trait
+        ...zoneChapters().filter((z) => z.from < told).map((z) => {
+          const to = Math.min(z.to, told);
           const row = document.createElement('button');
           row.className = 'boat-stage scroll-pick';
           row.innerHTML = '<b></b><span class="small"></span>';
-          row.querySelector('b')!.textContent = `${i + 1}. ${CHAPTER_TITLES[i] ?? ''}`;
-          row.querySelector('span')!.textContent = `Parchemin de ${SPECIES[boss]?.title ?? SPECIES[boss]?.name ?? '?'}`;
+          row.querySelector('b')!.textContent = `Parchemin ${z.name === 'Lisière' ? 'de la' : 'des'} ${z.name}`;
+          row.querySelector('span')!.textContent = CHAPTER_TITLES.slice(z.from, to).join(' · ');
           row.onclick = () => {
             this.elderView = 'talk';
-            this.elderSay([...REREAD, ...ELDER_CHAPTERS[i]]);
+            this.elderSay([...REREAD, ...ELDER_CHAPTERS.slice(z.from, to).flat()]);
           };
           return row;
         }),
@@ -1746,6 +1758,8 @@ export class Hud {
     return c;
   }
 
+  private mapHover: { x: number; y: number } | null = null; // souris sur la grande carte (px CSS du canvas)
+
   /** Grande carte (touche M) : terrain, brouillard, camp, village et dompteurs. */
   private drawBigMap(me: PlayerState, players: PlayerState[], myPos: { x: number; y: number }) {
     const canvas = $<HTMLCanvasElement>('bigmap-canvas');
@@ -1784,15 +1798,48 @@ export class Hud {
       ctx.fillStyle = '#EEE7D7';
       ctx.fillText(p.name, m(x), m(y) - 11 * dpr);
     }
+    // grotte survolée : le petit nom de son géant (« Lueur »)
+    const hover = this.mapHover && this.caveUnder(m, this.mapHover.x * dpr, this.mapHover.y * dpr, 14 * dpr);
+    if (hover) {
+      const x = m(hover.entrance.x), y = m(hover.entrance.y) - 16 * dpr, text = shortTitle(hover.boss);
+      ctx.font = `700 ${14 * dpr}px Outfit, sans-serif`;
+      const w = ctx.measureText(text).width + 14 * dpr, h = 22 * dpr;
+      ctx.fillStyle = 'rgba(16,24,26,0.92)';
+      ctx.strokeStyle = '#F0B64A';
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.beginPath();
+      ctx.roundRect(x - w / 2, y - h, w, h, 6 * dpr);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#F0B64A';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x, y - h / 2);
+      ctx.textBaseline = 'alphabetic';
+    }
+    canvas.style.cursor = hover ? 'pointer' : '';
     $('explored').textContent = `${Math.round(this.fog.progress * 100)} % de la carte explorée`;
+  }
+
+  /** Grottes affichées sur la carte : repérées (hors brouillard), dans une zone ouverte, sur l'île. */
+  private shownCaves() {
+    return this.map.caves.filter((c) => c.entrance.x < WORLD_HALF && c.zone !== VOYAGE_ZONE && this.zoneOpen(c.zone) && this.fog.isExplored(c.entrance.x, c.entrance.y));
+  }
+
+  /** Grotte affichée sous ce point de la carte (px du canvas), la plus proche à moins de r, ou null. */
+  private caveUnder(m: (v: number) => number, x: number, y: number, r: number) {
+    let best: (typeof this.map.caves)[number] | null = null, bd = r * r;
+    for (const c of this.shownCaves()) {
+      const d = (m(c.entrance.x) - x) ** 2 + (m(c.entrance.y) - y) ** 2;
+      if (d < bd) [best, bd] = [c, d];
+    }
+    return best;
   }
 
   /** Grottes déjà repérées (hors brouillard, dans une zone ouverte) : arche sombre, avec un sablier tant que son géant n'est pas revenu. */
   private drawCaves(ctx: CanvasRenderingContext2D, m: (v: number) => number, size: number) {
     this.drawVolcanoMark(ctx, m);
-    for (const c of this.map.caves) {
-      if (c.entrance.x >= WORLD_HALF || c.zone === VOYAGE_ZONE) continue; // antre sous le volcan (hors de la carte), ou le bateau
-      if (!this.zoneOpen(c.zone) || !this.fog.isExplored(c.entrance.x, c.entrance.y)) continue;
+    for (const c of this.shownCaves()) {
       const x = m(c.entrance.x), y = m(c.entrance.y);
       ctx.fillStyle = '#2A2E2D';
       ctx.strokeStyle = '#C9CFC2';

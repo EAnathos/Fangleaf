@@ -45,7 +45,7 @@ le village n'est encore qu'un camp de fortune ; tant que le pont n'est pas répa
 
 L'île est générée à partir d'une graine propre à chaque village : forme, côte, lacs, forêts et grottes changent
 d'un village à l'autre. Les zones sont des bandes successives, de plus en plus dangereuses à mesure qu'on
-s'éloigne de la plage :
+s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois plus grandes, et plus peuplées) :
 
 1. **Lisière** : Gluants, Sporelins, Escargots des mousses.
 2. **Bois profonds** : Loups, Araignées sylvestres ; Lucioles la nuit ; un arbre abattu réveille parfois un **Tréant**.
@@ -53,17 +53,19 @@ s'éloigne de la plage :
 4. **Ruines moussues** : Golems de mousse, Feux follets, Guetteurs runiques.
 5. **Lacs brumeux** : Crapauds-mortiers, Serpents des brumes (dans l'eau), Crabes des berges ; une brume légère y flotte.
 6. **Jungle**, sous la canopée (grands arbres à contreforts, bambous, lianes, marigots) : Gorilles des cimes (ils
-   lancent des bananes de loin, cognent de près et fracassent le sol ; ils se montent), Crocodiles des marais (tapis
-   dans l'eau, on ne voit que leurs yeux ; ils se jettent sur ce qui longe la rive ; ils se montent, dans l'eau) et
-   Petits Masqués à la sarbacane. Leurs géants dorment au fond de **temples** à degrés.
+   lancent des bananes de loin, cognent de près et fracassent le sol devant eux ; ils se montent), Crocodiles des marais
+   (tapis dans l'eau, on ne voit que leurs yeux ; ils en sortent pour attaquer ce qui passe près de la rive, puis y
+   retournent ; ils se montent, dans l'eau) et Petits Masqués à la sarbacane (leurs fléchettes **empoisonnent** : on
+   perd des PV quelques secondes, une goutte verte au-dessus de la tête). Leurs géants dorment au fond de **temples** à degrés.
 7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Chacals fantômes la nuit ; tempêtes de sable. Un grand volcan s'y dresse.
 8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles crachent de la lave en cloche) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
 la zone suivante, il faut à la fois l'**Hôtel de ville** au bon niveau et avoir vaincu **tous les géants** de la
-zone (une fois suffit, pour tout le village), et avoir rapporté au vieil homme leurs parchemins. On peut toujours revenir en arrière.
+zone (une fois suffit, pour tout le village), et avoir rapporté au vieil homme le parchemin de la zone. On peut toujours revenir en arrière.
 
-La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, pour tout le village.
+La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, pour tout le village. Sur la grande carte,
+à la souris, une grotte survolée affiche le petit nom de son géant.
 
 ## Combat
 
@@ -77,7 +79,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   **torche** (rayon de lumière la nuit), les **bottes** (vitesse) et la **selle** (vitesse des montures). Chaque
   amélioration coûte de l'or et du **bois** : celui du sac d'abord, puis celui de l'entrepôt du village.
 - **Tireurs** (Guetteur, Crapaud-mortier, Serpent, Gorille, Petit Masqué) : ils s'immobilisent pour charger leur tir. On s'écarte de la
-  trajectoire, ou on sort du cercle annoncé au sol.
+  trajectoire, ou on sort du cercle annoncé au sol. Monté, un tireur (Serpent, Gorille) tire de loin sur les sauvages,
+  sans s'arrêter.
 - **Hors du village** (et des camps établis), on ne régénère pas. Les monstres sauvages, eux, récupèrent si on
   cesse de les frapper.
 - **Mort** : on perd 15 % de son or et 10 % du bois et de la pierre de son sac (affiché en grand, en rouge), la meute
@@ -95,6 +98,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   des coups ; si elle tombe, on est désarçonné.
   - Le **Serpent des brumes** ne va qu'en eau : on embarque près de l'eau, on descend au bord d'une rive, et
     s'il tombe en pleine eau, on se noie.
+  - Au bord de l'eau, avec une monture nageuse et une terrestre : **F** en regardant l'eau monte la nageuse, en
+    regardant la terre, la terrestre.
   - Le **Vautour** vole : il passe au-dessus de l'eau, des rochers et des arbres.
   - L'**Escargot** se monte… mais ralentit.
 
@@ -112,7 +117,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   frappent plus fort), l'Escargot dresse sa carapace (ils encaissent moins). Elle profite à tous les alliés proches,
   dompteurs et meutes, pendant quelques secondes : une épée et ses flèches, ou un bouclier, au-dessus de leur tête.
 - **Alpha légendaire** : l'âme du géant d'une espèce (voir [Grottes et géants](#grottes-et-géants)) permet le
-  **double éveil** de l'Alpha de cette espèce. Légendaire, il lance seul l'attaque spéciale de son géant.
+  **double éveil** de l'Alpha de cette espèce. Légendaire, il est un peu plus fort, et lance seul (un peu moins fort que
+  lui) les attaques spéciales de son géant.
 - **Bestiaire** (onglet de la Tanière) : chaque espèce croisée y entre, avec ses stats et comment la combattre.
   On y choisit la forme montrée : sauvage, Alpha, légendaire, ou géant une fois vaincu.
 
@@ -143,9 +149,10 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Hôtel de ville** : en le construisant, on nomme le village (renommable ensuite). Chaque niveau débloque la
   suite (Marché, Pierre de passage, puis une porte de zone par niveau).
 - **Tableau du village** : une colonne par membre, en quatre catégories : combat (géants battus, premières victoires,
-  monstres vaincus, dégâts, plus gros coup, chutes, coéquipiers relevés), dressage (apprivoisés, essences, Alphas
+  monstres vaincus, dégâts, plus gros coup, morts, coéquipiers relevés), dressage (apprivoisés, essences, Alphas
   éveillés et légendaires), récolte et village (bois, pierre, dons, or pour le village), exploration (coffres, livres,
-  distance, temps de jeu). Une couronne pour le meilleur de chaque ligne (le moins de chutes, pour les chutes).
+  distance, temps de jeu). Une couronne pour le meilleur de chaque ligne (le moins de morts, pour les morts). Sur
+  téléphone, le tableau défile de côté, la colonne des exploits restant en place.
 - Les **Alphas au repos** (rangés à la Tanière) se promènent sur l'îlot : ils font la sieste, se roulent par terre,
   reniflent, se courent après et se chamaillent entre eux, ceux de tous les membres.
 - **École des dompteurs** : elle aussi au village, mais on ne la construit pas soi-même. Son plan dort dans un vieux
@@ -173,10 +180,19 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **E** près du géant pour lui parler, puis on lance le combat. Ses PV dépendent du nombre de membres du village.
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
   (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact.
+- Sur ordinateur, en combat, sa barre de vie et son nom s'affichent en haut de l'écran.
 - L'**Œil des Ruines** tire des salves qui traversent la meute, et maintient un **rayon runique** qui tourne
-  lentement autour de lui : on le contourne dans le sens opposé.
-- Vaincu, il laisse un **coffre** (chacun l'ouvre une fois, pour un montant d'or aléatoire), parfois son **âme**, et
-  la première fois, un **parchemin** pour le vieil homme. Il revient après un délai. Si tout le monde sort, il se
+  lentement autour de lui, vers là où il traverse le plus de monde : on le contourne dans le sens opposé, et on évite
+  de s'aligner avec sa meute.
+- **Lueur**, la Flamme Ancienne, se téléporte en laissant un **cratère de feu** qui brûle un moment.
+- Lacs brumeux : le **Crapaud-Roi** crache sa **langue**, qui ramène contre lui ce qu'elle touche ; l'**Hydre** souffle
+  de ses trois têtes (des jets d'eau qui balaient l'avant) et fait jaillir des **geysers** sous les dompteurs ; le
+  **Crabe Titan** découpe dans le tas avec sa **grande pince** (tout l'arc devant lui) et noie tout sous des bulles
+  d'**écume** qui éclatent et collent.
+- Le **Roi-Vautour** lâche des **tornades** qui poursuivent leur cible : elles blessent et aspirent ce qui les approche.
+- Vaincu, il laisse un **coffre** (chacun l'ouvre une fois, pour un montant d'or aléatoire) et parfois son **âme**.
+  Le dernier géant d'une zone que le village bat (une fois tous vaincus) laisse le **parchemin de la zone** pour le
+  vieil homme. Il revient après un délai. Si tout le monde sort, il se
   rendort, guéri.
 
 ## Le volcan et le cœur volcanique
@@ -194,7 +210,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 ## Le vieil homme et le bateau
 
 - Près du feu du village, un vieil homme qui ne se souvient plus de rien (**E** pour lui parler).
-- Chaque **parchemin** rapporté lui rend un souvenir de l'histoire de l'île, dans l'ordre.
+- Chaque **parchemin de zone** rapporté lui rend les souvenirs de cette zone, d'un trait. On peut les lui faire
+  raconter de nouveau, zone par zone (« Les anciens parchemins »).
 - Tous ses souvenirs retrouvés, il reconstruit le **bateau** échoué au bout de l'île, en plusieurs étapes payées en
   or et avec la réserve du village. Une fois fini, une Pierre de passage y mène.
 - Il lui manque encore son **cœur** : celui du volcan. On le pose dans la coque (**E** devant le bateau), et le

@@ -24,9 +24,9 @@ export const SPECIES_DESC: Record<string, string> = {
   salamander: 'Lézard noir dont le dos rougeoie comme une braise. Vive et nerveuse, elle chasse en bande au ras de la lave : ses morsures brûlent.',
   ash_bat: 'Chauve-souris aux ailes de cendre, qui laisse une traînée d\'étincelles. Elle arrive en nuée et frappe vite : garde ta meute serrée.',
   lava_tortoise: 'Tortue géante qui porte un petit volcan sur sa carapace (tireur). Il gronde, puis crache de la lave en cloche : sors du cercle annoncé au sol.',
-  gorilla: 'Le seigneur de la jungle. De loin, il te bombarde de bananes (sors du cercle) ; de près, il cogne. Et parfois, il fracasse le sol autour de lui. Il se monte.',
-  croc: 'Il guette dans les marigots de la jungle : on ne voit que ses yeux. Ne longe pas l\'eau de trop près, il se jette sur ce qui passe au bord. Il se monte, dans l\'eau.',
-  masked: 'Petit homme de la jungle au grand masque de bois (tireur). Il chasse en bande, à la sarbacane : ses fléchettes filent vite, esquive de côté.',
+  gorilla: 'Le seigneur de la jungle. De loin, il te bombarde de bananes (sors du cercle) ; de près, il cogne. Et parfois, il fracasse le sol devant lui (écarte-toi du cercle). Monté, il bombarde les sauvages de loin.',
+  croc: 'Il guette dans les marigots de la jungle : on ne voit que ses yeux. Ne longe pas l\'eau de trop près : il en sort pour te poursuivre sur la berge, puis y retourne. Il se monte, dans l\'eau.',
+  masked: 'Petit homme de la jungle au grand masque de bois (tireur). Il chasse en bande, à la sarbacane : ses fléchettes filent vite et empoisonnent, esquive de côté.',
 };
 
 /** Ce que dit chaque géant quand on vient lui parler (intro), puis son cri quand le combat commence. */

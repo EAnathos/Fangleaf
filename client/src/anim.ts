@@ -61,6 +61,29 @@ export function castPose(c: Cast, r: number, ox: number, oy: number, t: number):
       const f = (c.k - 0.78) / 0.22;
       return { ...p, air: r * 0.45 * (1 - f * f), squash: 1.16 - 0.36 * f }; // et retombe de tout son poids
     }
+    case 'pound': {
+      // il lève les deux poings, se dresse un peu, puis les abat devant lui
+      if (c.since > 0) return { ...p, squash: 1 - 0.18 * land, dx: (c.x - ox) * 0.08 * land, dy: (c.y - oy) * 0.08 * land };
+      const f = c.k < 0.8 ? ease(c.k / 0.8) : 1 - ease((c.k - 0.8) / 0.2);
+      return { ...p, air: r * 0.2 * f, squash: 1 + 0.12 * f };
+    }
+    case 'pincer': {
+      // il arme sa pince (recule, se ramasse), puis se fend de tout son poids dans l'arc
+      const d = Math.hypot(c.x2 - ox, c.y2 - oy) || 1, ux = (c.x2 - ox) / d, uy = (c.y2 - oy) / d;
+      if (c.since > 0) {
+        const f = Math.max(0, 1 - c.since / 0.35);
+        return { ...p, dx: ux * r * 0.35 * f, dy: uy * r * 0.25 * f, squash: 1 - 0.08 * f };
+      }
+      const back = r * 0.22 * ease(c.k), shiver = Math.sin(t * 60) * r * 0.03 * c.k;
+      return { ...p, dx: -ux * back + shiver, dy: -uy * back * 0.7, squash: 1 - 0.12 * c.k };
+    }
+    case 'tongue':
+    case 'breath': {
+      // il gonfle la gorge (ou ses trois cous), puis crache
+      if (c.since > 0) return { ...p, squash: 0.96 + Math.sin(t * 40) * 0.015 };
+      const e = ease(c.k);
+      return { ...p, squash: 1 + 0.1 * e, air: r * 0.06 * e };
+    }
     case 'blink':
       return c.since > 0 ? { ...p, alpha: Math.min(1, c.since / 0.25) } : { ...p, alpha: Math.max(0, 1 - c.k * 1.15), squash: 1 + c.k * 0.25 };
     case 'charge': {

@@ -95,7 +95,7 @@ export interface PlayerState {
   boots: number;
   saddle: number; // selle (0 : aucune, il ne peut pas monter)
   sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
-  scrolls: number; // parchemins dans son sac (à donner au vieil homme)
+  scrolls: number; // parchemins de zone dans son sac (à donner au vieil homme)
   cls: ClassId | null; // classe (null : pas encore choisie)
   spec: SpecId | null; // spécialisation de l'arme (null : pas encore)
   gold: number;
@@ -107,7 +107,7 @@ export interface PlayerState {
   saved: boolean; // progression sauvegardée sur un compte
   mount: { id: number; species: number; hp: number; legend: boolean } | null; // monture chevauchée (pv en %)
   slowed: boolean; // pris dans une toile
-  buffs: number; // compétences d'Alpha en cours sur lui : UNIT_FLAG_RALLY (cri du suricate), UNIT_FLAG_GUARD (carapace de l'escargot)
+  buffs: number; // compétences d'Alpha en cours sur lui : UNIT_FLAG_RALLY (cri du suricate), UNIT_FLAG_GUARD (carapace de l'escargot) ; UNIT_FLAG_POISON : empoisonné
   awakening: { species: number; left: number; total: number }[]; // Alphas en cours d'éveil (secondes)
   resting: { species: number; level: number; legend: boolean }[]; // Alphas rangés à la Tanière
   seen: number[]; // espèces déjà croisées (bestiaire de la Tanière ; sans les géants)
@@ -138,13 +138,13 @@ export interface ArmySlot {
 export type UnitTuple = [number, number, number, number, number, number, number];
 /**
  * Attaque spéciale au sol : [type, x, y, rayon, x2, y2, avancement %, dompteur, style, lanceur, durée] — type 0 cercle,
- * 1 ligne (x2,y2 = bout, rayon = demi-largeur), 2 nuage, 3 toile. avancement 100 = actif. dompteur : id du dompteur
+ * 1 ligne (x2,y2 = bout, rayon = demi-largeur), 2 nuage, 3 toile, 4 arc devant le lanceur (x2,y2 = direction, rayon = portée, demi-angle PINCER_HALF). avancement 100 = actif. dompteur : id du dompteur
  * dont l'Alpha légendaire l'a lancée (dessinée à sa couleur), 0 pour un sauvage. style : index dans HAZARD_STYLES (-1 : aucun), pour l'animer ; lanceur : id de l'unité ;
  * durée : temps d'annonce avant l'impact, en centièmes de seconde.
  */
 export type HazardTuple = [number, number, number, number, number, number, number, number, number, number, number];
 /** Attaque d'où vient une zone annoncée au sol (le client l'anime : bond, rocher lancé, onde de choc…). */
-export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores', 'lava', 'flame', 'tentacle', 'ink', 'laser', 'fireslam'] as const; // n'ajouter qu'à la fin
+export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores', 'lava', 'flame', 'tentacle', 'ink', 'laser', 'fireslam', 'pound', 'pincer', 'bubble', 'tongue', 'geyser', 'breath', 'tornado', 'crater'] as const; // n'ajouter qu'à la fin
 export type HazardStyle = (typeof HAZARD_STYLES)[number];
 /**
  * Projectile de tireur : [id, type, x, y, a, b, c, dompteur] — type 0 trait (bolt), 1 en cloche (arc), 2 jet.
@@ -177,6 +177,7 @@ export const UNIT_FLAG_PHASE2 = 64; // géant à plusieurs phases (le Kraken) : 
 export const UNIT_FLAG_PHASE3 = 128; // … troisième phase
 export const UNIT_FLAG_RALLY = 256; // allié encouragé par le cri d'un Alpha suricate (il frappe plus fort)
 export const UNIT_FLAG_GUARD = 512; // allié abrité par la carapace d'un Alpha escargot (il encaisse moins)
+export const UNIT_FLAG_POISON = 1024; // empoisonné (fléchette de sarbacane) : il perd des PV un moment
 
 export type GameEvent =
   | { e: 'hit'; a: number; b: number; dmg: number; m?: 1 } // m : coup au corps à corps

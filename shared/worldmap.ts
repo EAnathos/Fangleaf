@@ -25,11 +25,11 @@ import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
 const N = (WORLD_HALF * 2) / MAP_CELL;
 const LAKE_THRESHOLD = 0.64;
-const LAKE_THRESHOLD_LAKES = 0.54; // zone 5 (Lacs brumeux) : bien plus d'eau
+const LAKE_THRESHOLD_LAKES = 0.53; // zone 5 (Lacs brumeux) : bien plus d'eau
 const LAKE_THRESHOLD_JUNGLE = 0.59; // Jungle : des mares et des marigots, où guettent les crocodiles
 const LAKE_THRESHOLD_DESERT = 0.8; // Mer de sable : de rares oasis
 const SPINE_STEP = 100;
-const ISLAND_LEN: [number, number] = [19800, 28000]; // longueur de la colonne : l'île est plus ou moins grande
+const ISLAND_LEN: [number, number] = [34500, 48700]; // longueur de la colonne : l'île est plus ou moins grande
 const HALF_W: [number, number] = [1600, 3000]; // demi-largeur de l'île (avant le bruit de la côte)
 const DESERT_WIDEN = 0.3; // la Mer de sable est plus large (son volcan y tient, à l'écart de la voie centrale)
 const COAST_NOISE = 900; // la côte s'écarte de ± la moitié de ceci
@@ -66,8 +66,15 @@ export const atVillageGate = (a: number) =>
 export const VILLAGE_MIN_R = Math.min(...Array.from({ length: 360 }, (_, i) => villageEdge((i / 180) * Math.PI)));
 const VILLAGE_MAX_R = Math.max(...Array.from({ length: 360 }, (_, i) => villageEdge((i / 180) * Math.PI)));
 const TAU = Math.PI * 2;
+const FAR = 32767; // distance à la côte plafonnée (Int16) : le large, loin de l'île
+const FAR_U = 65535; // distances positives plafonnées (Uint16)
+/** Distance à la côte rangée sur 16 bits, sans changer de signe (un rien en mer reste en mer, à 1 px). */
+const shoreCell = (d: number) => (d > 0 ? Math.min(FAR, Math.max(1, Math.round(d))) : Math.max(-FAR, Math.round(d)));
 /** ZONE_CUM[z] : parts de zone cumulées jusqu'à la fin de la zone z. */
 const ZONE_CUM = ZONE_WEIGHTS.reduce((acc, w) => [...acc, acc[acc.length - 1] + w], [0]);
+/** L'île s'est allongée avec ses zones : filons, rochers, buissons et tanières sont plus nombreux d'autant. */
+const GROW = ZONE_CUM[ZONES] / 7.7;
+const more = (n: number) => Math.round(n * GROW);
 
 export interface Pt {
   x: number;
@@ -219,19 +226,23 @@ export class WorldMap {
   readonly deepWater: number[][] = []; // par zone : x, y à la suite de points en eau profonde
   private segs = new Map<number, number[]>(); // segments de chemin par case de 256 px (ax, ay, bx, by à la suite)
   private water = new Uint8Array(N * N); // 0 libre, 1 eau, 2 solide, 3 forêt, 4 filon ou tas à récolter (voir oreCell)
-  private oreCell = new Int32Array(N * N).fill(-1); // case occupée par un filon ou un tas : son index dans ores
+  private oreCell = new Map<number, number>(); // case occupée par un filon ou un tas → son index dans ores (peu de cases : pas de tableau plein)
   readonly oreDown = new Set<number>(); // filons et tas épuisés : ils ont disparu (on passe à travers) jusqu'à leur retour
-  private treeCell = new Int32Array(N * N).fill(-1); // case occupée par un tronc : son index dans decor
+  private treeCell = new Map<number, number>(); // case occupée par un tronc → son index dans decor
   readonly treeDown = new Set<number>(); // arbres abattus (index dans decor) : on passe à travers jusqu'à ce qu'ils repoussent
-  private cdist = new Float32Array(N * N).fill(1e9); // distance à la colonne
-  private arc = new Float32Array(N * N); // abscisse (le long de la colonne) du point de colonne le plus proche
-  private shore = new Float32Array(N * N).fill(1e9); // distance à la côte : négative dans l'île, positive en mer
-  private mouth = new Float32Array(N * N).fill(1e9); // embouchures (voir buildMouths)
-  private wetDist = new Float32Array(N * N); // distance à l'eau la plus proche, mer ou lac (voir buildWetDist)
+  // Grilles par case, au plus juste (sur téléphone, chaque octet par case pèse 4,7 Mo) : distances en px entiers sur
+  // 16 bits, plafonnées (FAR) ; la distance à la colonne ne sert qu'à la génération, elle est libérée ensuite.
+  private cdist: Float32Array = new Float32Array(N * N).fill(1e9); // distance à la colonne (génération seulement)
+  private arc = new Uint16Array(N * N); // abscisse (le long de la colonne) du point de colonne le plus proche, en px
+  private shore = new Int16Array(N * N).fill(FAR); // distance à la côte (px) : négative dans l'île, positive en mer, FAR au large
+  private mouth: Uint8Array; // embouchures (voir buildMouths), en pas de 2 px, 255 loin de toute embouchure (vide sur le serveur)
+  private wetDist = new Uint16Array(N * N); // distance à l'eau la plus proche (en demi-px), mer ou lac (voir buildWetDist)
   private palisadeCells: number[] = []; // cases de la palissade (solides seulement une fois construite)
   private bridgeCells: number[] = []; // cases du pont (praticables seulement une fois réparé)
 
-  constructor(readonly seed: number) {
+  /** draw : la carte sert aussi à dessiner (le client) ; le serveur se passe de ce qui ne sert qu'au dessin (embouchures). */
+  constructor(readonly seed: number, draw = true) {
+    this.mouth = new Uint8Array(draw ? N * N : 0).fill(255);
     const rand = rng(seed ^ 0x5f3759df);
     this.spine = makeSpine(seed);
     this.length = (this.spine.length - 1) * SPINE_STEP;
@@ -301,7 +312,7 @@ export class WorldMap {
     for (let j = 0; j < N; j++) {
       for (let i = 0; i < N; i++) {
         const k = j * N + i;
-        if (this.water[k] !== 0 || this.shore[k] > 1e8) continue;
+        if (this.water[k] !== 0 || this.shore[k] >= FAR) continue;
         const p = { x: -WORLD_HALF + (i + 0.5) * MAP_CELL, y: -WORLD_HALF + (j + 0.5) * MAP_CELL };
         // part de Lacs brumeux et de désert, en fondu à travers les frontières bruitées des zones (pas de bord au cordeau)
         const m = this.zoneMix(p.x, p.y), w = (z: number) => (m.z0 === z ? 1 - m.t : 0) + (m.z1 === z ? m.t : 0);
@@ -328,7 +339,7 @@ export class WorldMap {
     }
     this.cleanWater(keepDry);
     this.stampBridge();
-    this.buildMouths();
+    if (draw) this.buildMouths();
     this.buildWetDist();
     // l'épave : poupe et proue solides (le reste, des débris sur le sable, se traverse)
     {
@@ -374,7 +385,7 @@ export class WorldMap {
     this.placeVoyage(bosses.filter((b) => SPECIES[b].zone === VOYAGE_ZONE));
 
     // Filons d'or : éparpillés sur l'île, hors de l'eau, du village, des camps et des chemins.
-    for (let tries = 0; tries < 8000 && this.ores.length < 120; tries++) {
+    for (let tries = 0; tries < 12000 && this.ores.length < more(120); tries++) {
       const s = 500 + rand() * (this.length - 500);
       const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
       const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 90);
@@ -402,6 +413,7 @@ export class WorldMap {
         }
       }
     }
+    this.cdist = new Float32Array(0); // ne servait qu'à tracer l'île : 19 Mo de rendus
   }
 
   // ── Couloir ──
@@ -444,7 +456,7 @@ export class WorldMap {
           const ex = px - a.x - t * dx, ey = py - a.y - t * dy, d2 = ex * ex + ey * ey, c = j * N + i;
           if (d2 < this.cdist[c] * this.cdist[c]) {
             this.cdist[c] = Math.sqrt(d2);
-            this.arc[c] = (k - 1 + t) * SPINE_STEP;
+            this.arc[c] = Math.round((k - 1 + t) * SPINE_STEP);
           }
         }
       }
@@ -458,7 +470,8 @@ export class WorldMap {
         }
         const px = -WORLD_HALF + (i + 0.5) * MAP_CELL, py = -WORLD_HALF + (j + 0.5) * MAP_CELL;
         const edge = this.halfWidth(this.arc[c]) + (fbm(px / 700, py / 700, this.seed + 93, 3) - 0.5) * COAST_NOISE + (fbm(px / 160, py / 160, this.seed + 94, 2) - 0.5) * 160;
-        const d = (this.shore[c] = this.cdist[c] - edge);
+        const d = this.cdist[c] - edge;
+        this.shore[c] = shoreCell(d);
         if (d > SEA_SHALLOW) this.water[c] = 3;
         else if (d > 0) this.water[c] = 1;
       }
@@ -499,17 +512,17 @@ export class WorldMap {
     }
     // Composantes (4-connexité) : eau sans accès au large trop petite, terre détachée de l'île trop petite.
     syncWet();
-    const seen = new Uint8Array(N * N), stack = new Int32Array(N * N), cells: number[] = [];
+    // parcours en largeur : la file garde aussi les cases de la composante (queue[0..tail)), sans tableau à part
+    // (la mer d'un seul tenant compte des millions de cases)
+    const seen = new Uint8Array(N * N), queue = new Int32Array(N * N);
     for (let s = 0; s < N * N; s++) {
       if (seen[s]) continue;
       const isWet = wet[s];
-      let top = 0, ocean = false, coast = false;
-      cells.length = 0;
-      stack[top++] = s;
+      let head = 0, tail = 0, ocean = false, coast = false;
+      queue[tail++] = s;
       seen[s] = 1;
-      while (top) {
-        const k = stack[--top], i = k % N;
-        cells.push(k);
+      while (head < tail) {
+        const k = queue[head++], i = k % N;
         if (w[k] === 3) ocean = true;
         for (let e = 0; e < 4; e++) {
           const nk = e === 0 ? (i > 0 ? k - 1 : -1) : e === 1 ? (i < N - 1 ? k + 1 : -1) : e === 2 ? k - N : k + N;
@@ -523,9 +536,10 @@ export class WorldMap {
           }
           if (seen[nk]) continue;
           seen[nk] = 1;
-          stack[top++] = nk;
+          queue[tail++] = nk;
         }
       }
+      const cells = queue.subarray(0, tail);
       if (isWet && !ocean) {
         if (cells.length < MIN_LAKE) {
           for (const k of cells) {
@@ -608,8 +622,8 @@ export class WorldMap {
         if (i === 0 || i === N - 1 || k < N || k >= N * (N - 1)) continue;
         for (let n = 0; n < 8; n++) {
           const nk = k + NB8[n], nd = d + (n === 0 || n === 2 || n === 5 || n === 7 ? 1.414 : 1) * MAP_CELL;
-          if (kind[nk] !== into || nd >= md[nk] || nd > MOUTH_FADE) continue;
-          md[nk] = nd;
+          if (kind[nk] !== into || nd >= md[nk] * 2 || nd > MOUTH_FADE) continue;
+          md[nk] = Math.round(nd / 2);
           push(nd, nk);
         }
       }
@@ -619,15 +633,17 @@ export class WorldMap {
   /** Distance (px) à l'eau la plus proche pour chaque case : transformée de distance en deux passes (pas de 1 et √2 case). */
   private buildWetDist() {
     const d = this.wetDist, w = this.water, D = 1.414 * MAP_CELL;
-    for (let k = 0; k < N * N; k++) d[k] = w[k] === 1 || w[k] === 3 ? 0 : 1e9;
+    for (let k = 0; k < N * N; k++) d[k] = w[k] === 1 || w[k] === 3 ? 0 : FAR_U;
+    // (en demi-px entiers sur 16 bits : le pas en diagonale presque exact, plafonné à FAR_U)
+    const S = 2 * MAP_CELL, Di = Math.round(2 * D), cap = (v: number) => (v > FAR_U ? FAR_U : v);
     for (let j = 1; j < N - 1; j++) {
       for (let i = 1, k = j * N + 1; i < N - 1; i++, k++) {
-        d[k] = Math.min(d[k], d[k - 1] + MAP_CELL, d[k - N] + MAP_CELL, d[k - N - 1] + D, d[k - N + 1] + D);
+        d[k] = cap(Math.min(d[k], d[k - 1] + S, d[k - N] + S, d[k - N - 1] + Di, d[k - N + 1] + Di));
       }
     }
     for (let j = N - 2; j > 0; j--) {
       for (let i = N - 2, k = j * N + N - 2; i > 0; i--, k--) {
-        d[k] = Math.min(d[k], d[k + 1] + MAP_CELL, d[k + N] + MAP_CELL, d[k + N + 1] + D, d[k + N - 1] + D);
+        d[k] = cap(Math.min(d[k], d[k + 1] + S, d[k + N] + S, d[k + N + 1] + Di, d[k + N - 1] + Di));
       }
     }
   }
@@ -637,19 +653,21 @@ export class WorldMap {
     const fx = (x + WORLD_HALF) / MAP_CELL - 0.5, fy = (y + WORLD_HALF) / MAP_CELL - 0.5;
     const i = clamp(Math.floor(fx), 0, N - 2), j = clamp(Math.floor(fy), 0, N - 2), u = clamp(fx - i, 0, 1), v = clamp(fy - j, 0, 1);
     const k = j * N + i, d = this.wetDist;
-    return (d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + N] * (1 - u) + d[k + N + 1] * u) * v;
+    return ((d[k] * (1 - u) + d[k + 1] * u) * (1 - v) + (d[k + N] * (1 - u) + d[k + N + 1] * u) * v) / 2; // (rangée en demi-px)
   }
 
   /** Embouchure : distance (à travers l'eau) d'un lac à la mer, ou de la mer au lac le plus proche ; 1e9 loin de toute embouchure. */
   mouthAt(x: number, y: number) {
     if (x <= -WORLD_HALF || y <= -WORLD_HALF || x >= WORLD_HALF || y >= WORLD_HALF) return 1e9;
-    return this.mouth[this.cellOf(x, y)];
+    const d = this.mouth.length ? this.mouth[this.cellOf(x, y)] : 255;
+    return d === 255 ? 1e9 : d * 2;
   }
 
   /** Distance à la côte (négative dans l'île, positive en mer). */
   shoreAt(x: number, y: number) {
     if (x <= -WORLD_HALF || y <= -WORLD_HALF || x >= WORLD_HALF || y >= WORLD_HALF) return 1e9;
-    return this.shore[this.cellOf(x, y)];
+    const d = this.shore[this.cellOf(x, y)];
+    return d === FAR ? 1e9 : d;
   }
 
   /** En mer (peu profonde ou profonde), pas dans un lac. */
@@ -799,7 +817,7 @@ export class WorldMap {
         if (d >= far) continue;
         if (this.shore[c] >= 0) this.arc[c] = Math.min(this.arc[c], footArc); // pas l'île elle-même
         if (d >= this.shore[c]) continue;
-        this.shore[c] = d;
+        this.shore[c] = shoreCell(d);
         this.water[c] = d > SEA_SHALLOW ? 3 : d > 0 ? 1 : 0;
       }
     }
@@ -943,7 +961,7 @@ export class WorldMap {
    */
   private buildBushes() {
     const rand = rng(this.seed ^ 0xb0551e5);
-    for (let tries = 0; tries < 6000 && this.bushes.length < 110; tries++) {
+    for (let tries = 0; tries < 9000 && this.bushes.length < more(110); tries++) {
       const s = 600 + Math.pow(rand(), 1.25) * (this.length - 600); // un peu plus nombreux près du départ
       const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
       const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 80);
@@ -969,7 +987,7 @@ export class WorldMap {
     };
     for (const res of ['stone'] as const) {
       let early = 0, total = 0;
-      for (let tries = 0; tries < 8000 && total < 70; tries++) {
+      for (let tries = 0; tries < 12000 && total < more(70); tries++) {
         // les 4 premiers entre la plage et le pont, les autres tout le long du couloir
         const first = early < 4 && tries < 2000, bridgeArc = this.gates[0] - GATE0_AFTER;
         const s = first ? 150 + rand() * Math.max(200, bridgeArc - 100) : 650 + rand() * (this.length - 900);
@@ -992,7 +1010,7 @@ export class WorldMap {
   private buildDens() {
     const rand = rng(this.seed ^ 0xde75);
     const lo = this.zoneFrom(DESERT_ZONE) + 400, hi = this.zoneTo(DESERT_ZONE) - 400;
-    for (let tries = 0; tries < 3000 && this.dens.length < DENS && hi > lo; tries++) {
+    for (let tries = 0; tries < 3000 && this.dens.length < more(DENS) && hi > lo; tries++) {
       const s = lo + rand() * (hi - lo);
       const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
       const off = (rand() - 0.5) * 2 * (this.halfWidth(s) - 140);
@@ -1126,7 +1144,7 @@ export class WorldMap {
         const cx = -WORLD_HALF + (i + 0.5) * MAP_CELL, cy = -WORLD_HALF + (j + 0.5) * MAP_CELL, k = j * N + i;
         if ((cx - o.x) ** 2 + (cy - o.y) ** 2 <= r * r && this.water[k] === 0) {
           this.water[k] = 4;
-          this.oreCell[k] = o.id;
+          this.oreCell.set(k, o.id);
         }
       }
     }
@@ -1135,7 +1153,7 @@ export class WorldMap {
   /** Case infranchissable (un filon épuisé ou un arbre abattu ne l'est plus). */
   private solid(k: number) {
     const v = this.water[k];
-    return v !== 0 && !(v === 4 && this.oreDown.has(this.oreCell[k])) && !(v === 5 && this.treeDown.has(this.treeCell[k]));
+    return v !== 0 && !(v === 4 && this.oreDown.has(this.oreCell.get(k)!)) && !(v === 5 && this.treeDown.has(this.treeCell.get(k)!));
   }
 
   /** Tronc d'un arbre, à abattre : solide tant qu'il est debout (voir treeDown). */
@@ -1147,7 +1165,7 @@ export class WorldMap {
         const cx = -WORLD_HALF + (c + 0.5) * MAP_CELL, cy = -WORLD_HALF + (j + 0.5) * MAP_CELL, k = j * N + c;
         if ((cx - x) ** 2 + (cy - y) ** 2 <= r * r && this.water[k] === 0) {
           this.water[k] = 5;
-          this.treeCell[k] = i;
+          this.treeCell.set(k, i);
         }
       }
     }

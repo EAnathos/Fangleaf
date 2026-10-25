@@ -12,6 +12,10 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => { /* navigateur sans service worker : tant pis */ }));
 }
+// Pas de menu du clic droit dans le jeu (on le garde dans les champs de texte, pour copier-coller).
+addEventListener('contextmenu', (e) => {
+  if (!(e.target instanceof HTMLElement && e.target.closest('input, textarea'))) e.preventDefault();
+});
 const nameInput = $<HTMLInputElement>('name');
 const codeInput = $<HTMLInputElement>('code');
 let mode: 'mine' | 'create' | 'join' = 'create';

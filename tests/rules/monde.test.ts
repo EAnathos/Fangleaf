@@ -80,7 +80,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     }
     {
       // Eau propre : ni flaque isolée, ni lac minuscule, ni poche de mer enclavée, ni îlot minuscule.
-      const m = new WorldMap(4242) as unknown as { water: Uint8Array; shore: Float32Array };
+      const m = new WorldMap(4242) as unknown as { water: Uint8Array; shore: Int16Array };
       const n = Math.sqrt(m.water.length), wet = (k: number) => m.water[k] === 1 || m.water[k] === 3;
       const seen = new Uint8Array(n * n), small: number[] = [];
       let lone = 0;

@@ -1,14 +1,14 @@
 // Brouillard de guerre : la carte se dévoile autour des dompteurs du village au fil de l'exploration.
-// Logique : grille de cases de 64 px (exploré ou non). Affichage : un canvas au 1/16 où chaque
+// Logique : grille de cases de 48 px (exploré ou non). Affichage : un canvas au 1/24 où chaque
 // découverte « gomme » un disque à bord fondu, pour des contours ronds et doux.
 
 import { WORLD_HALF } from '../../shared/config.ts';
 
-export const FOG_CELL = 48; // doit diviser la taille du monde (12000 / 48 = 250) : sinon les rangées se décalent
+export const FOG_CELL = 48; // doit diviser la taille du monde (34560 / 48 = 720) : sinon les rangées se décalent
 export const REVEAL_R = 650;
 const N = (WORLD_HALF * 2) / FOG_CELL;
 if (!Number.isInteger(N)) throw new Error(`FOG_CELL (${FOG_CELL}) doit diviser la taille du monde`);
-const PX = 16; // 1 pixel du canvas d'affichage = 16 px du monde
+const PX = 24; // 1 pixel du canvas d'affichage = 24 px du monde (1440² pixels : 8 Mo, au lieu de 19 Mo à 16 px)
 const M = (WORLD_HALF * 2) / PX;
 
 export class Fog {
@@ -56,7 +56,7 @@ export class Fog {
         copy.width = copy.height = M;
         copy.getContext('2d')!.drawImage(this.canvas, 0, 0);
         this.ctx.clearRect(0, 0, M, M);
-        this.ctx.filter = 'blur(3px)';
+        this.ctx.filter = 'blur(2px)';
         this.ctx.drawImage(copy, 0, 0);
         this.ctx.filter = 'none';
       }
