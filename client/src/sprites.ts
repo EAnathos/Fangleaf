@@ -62,9 +62,9 @@ export interface Leap { ext: number; reach: number; crouch: number }
 /** Grande couronne d'un géant : décalage vertical, en rayons, pour ceux dont la tête est bien plus basse (ou plus haute). */
 const BOSS_CROWN_Y: Record<string, number> = { croc: 0.75, masked: -1.05 };
 /** Décalage de la couronne (Alpha, géant) vers la tête, en rayons, pour les espèces dont la tête est loin devant. */
-const CROWN_X: Record<string, number> = { gorilla: 0.7, croc: 0.6, masked: 0.02, bear: 0.8, boar: 0.9, firefly: 0.5, sandworm: 0.5, vulture: 0.55, jackal: 0.85, meerkat: 0.08, salamander: 0.95, lava_tortoise: 1.05 };
+const CROWN_X: Record<string, number> = { scorpion: 0.45, gorilla: 0.7, croc: 0.6, masked: 0.02, bear: 0.8, boar: 0.9, firefly: 0.5, sandworm: 0.5, vulture: 0.55, jackal: 0.85, meerkat: 0.08, salamander: 0.95, lava_tortoise: 1.05 };
 /** … et vers le bas, en rayons, pour celles dont la tête est plus basse que le haut du corps. */
-const CROWN_Y: Record<string, number> = { gorilla: 0.25, croc: 0.82, masked: -0.95, kraken: -0.6, crab: -0.05, boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
+const CROWN_Y: Record<string, number> = { scorpion: 0.05, gorilla: 0.25, croc: 0.82, masked: -0.95, kraken: -0.6, crab: -0.05, boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
 
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
@@ -484,7 +484,7 @@ export function armorColor(lvl: number) {
 
 export function drawPlayer(
   ctx: Ctx, x: number, y: number, color: string, fx: number, fy: number, armor: number, name: string,
-  t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null, tool: Tool | null = null, weapon = 0, armed = true,
+  t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null, tool: Tool | null = null, weapon = 0, armed = true, hat = 0,
 ) {
   const r = 16;
   const bob = moving ? Math.abs(Math.sin(t * (riding ? 16 : 12))) * 2 : 0;
@@ -552,14 +552,209 @@ export function drawPlayer(
   ctx.arc(ex - 4.5, ey, 2.4, 0, TAU);
   ctx.arc(ex + 4.5, ey, 2.4, 0, TAU);
   ctx.fill();
-  // nom
+  drawHat(ctx, x, cy, r, hat, fx, t);
+  // nom (au-dessus du chapeau)
+  if (!name) return;
+  const ny = cy - r - 10 - (HAT_H[hat] ?? 0);
   ctx.font = '600 13px Outfit, sans-serif';
   ctx.textAlign = 'center';
   ctx.lineWidth = 4;
   ctx.strokeStyle = 'rgba(16,24,26,0.85)';
-  ctx.strokeText(name, x, cy - r - 10);
+  ctx.strokeText(name, x, ny);
   ctx.fillStyle = '#EEE7D7';
-  ctx.fillText(name, x, cy - r - 10);
+  ctx.fillText(name, x, ny);
+}
+
+/** Hauteur de chaque chapeau au-dessus du crâne (le nom passe au-dessus). */
+const HAT_H = [0, 4, 5, 3, 7, 22, 17, 4, 11];
+
+/**
+ * Chapeau du profil (HATS), posé sur le haut de la boule : purement décoratif. fx : sens du regard (visière, plume).
+ */
+export function drawHat(ctx: Ctx, x: number, cy: number, r: number, hat: number, fx: number, t: number) {
+  if (!hat) return;
+  const top = cy - r, side = fx < -0.1 ? -1 : 1;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  const outline = (w = 1.5) => {
+    ctx.strokeStyle = 'rgba(16,24,26,0.8)';
+    ctx.lineWidth = w;
+    ctx.stroke();
+  };
+  if (hat === 1) {
+    // chapeau de paille : large bord, calotte ronde, ruban rouge
+    ctx.fillStyle = '#E2C06A';
+    ctx.beginPath();
+    ctx.ellipse(x, top + 6, r * 1.3, 4.5, 0, 0, TAU);
+    ctx.fill();
+    outline();
+    ctx.fillStyle = '#EED089';
+    ctx.beginPath();
+    ctx.ellipse(x, top + 3, r * 0.68, 7, 0, Math.PI, TAU);
+    ctx.fill();
+    outline();
+    ctx.fillStyle = '#C8323C';
+    ctx.fillRect(x - r * 0.66, top + 1.5, r * 1.32, 2.8);
+    ctx.strokeStyle = 'rgba(150,110,40,0.6)'; // la paille tressée
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    for (let k = -3; k <= 3; k++) {
+      ctx.moveTo(x + k * 6, top + 3);
+      ctx.lineTo(x + k * 7.5, top + 9);
+    }
+    ctx.stroke();
+  } else if (hat === 2) {
+    // bonnet de laine : côtes, revers, pompon
+    ctx.fillStyle = '#3F7FC0';
+    ctx.beginPath();
+    ctx.ellipse(x, top + 6, r * 0.92, 11, 0, Math.PI, TAU);
+    ctx.fill();
+    outline();
+    ctx.strokeStyle = 'rgba(16,40,70,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let k = -2; k <= 2; k++) {
+      ctx.moveTo(x + k * 5, top + 5);
+      ctx.quadraticCurveTo(x + k * 3.5, top - 2, x + k * 1.5, top - 4);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#2F649C';
+    ctx.beginPath();
+    ctx.roundRect(x - r * 0.95, top + 2, r * 1.9, 5.5, 2.5);
+    ctx.fill();
+    outline();
+    ctx.fillStyle = '#F2F0E6';
+    ctx.beginPath();
+    ctx.arc(x, top - 6, 4, 0, TAU);
+    ctx.fill();
+    outline(1.2);
+  } else if (hat === 3) {
+    // couronne de fleurs : brindilles et petites fleurs de toutes les couleurs
+    ctx.strokeStyle = '#4E7A34';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.ellipse(x, top + 4, r * 0.9, 4, 0, Math.PI * 1.02, Math.PI * 1.98);
+    ctx.stroke();
+    const petals = ['#F2F0E6', '#E890B0', '#E8D45C', '#B48CFF', '#E8695C'];
+    for (let k = 0; k < 5; k++) {
+      const a = Math.PI * (1.1 + k * 0.2), fx2 = x + Math.cos(a) * r * 0.9, fy2 = top + 4 + Math.sin(a) * 4;
+      ctx.fillStyle = petals[k];
+      for (let j = 0; j < 5; j++) {
+        const b = (j / 5) * TAU + k;
+        ctx.beginPath();
+        ctx.arc(fx2 + Math.cos(b) * 2.2, fy2 + Math.sin(b) * 2.2, 1.9, 0, TAU);
+        ctx.fill();
+      }
+      ctx.fillStyle = '#F0B64A';
+      ctx.beginPath();
+      ctx.arc(fx2, fy2, 1.3, 0, TAU);
+      ctx.fill();
+    }
+  } else if (hat === 4) {
+    // tricorne de pirate : feutre noir, galon doré, plume
+    ctx.fillStyle = '#26221F';
+    ctx.beginPath();
+    ctx.moveTo(x - r * 1.15, top + 3);
+    ctx.quadraticCurveTo(x - r * 0.5, top - 2, x, top - 9);
+    ctx.quadraticCurveTo(x + r * 0.5, top - 2, x + r * 1.15, top + 3);
+    ctx.quadraticCurveTo(x, top + 9, x - r * 1.15, top + 3);
+    ctx.closePath();
+    ctx.fill();
+    outline();
+    ctx.strokeStyle = '#F0B64A';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x - r * 1.05, top + 3);
+    ctx.quadraticCurveTo(x, top + 7.5, x + r * 1.05, top + 3);
+    ctx.stroke();
+    ctx.strokeStyle = '#C8323C';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(x - side * 4, top - 3);
+    ctx.quadraticCurveTo(x - side * 12, top - 14 + Math.sin(t * 3) * 1.2, x - side * 20, top - 9);
+    ctx.stroke();
+  } else if (hat === 5) {
+    // chapeau de sorcier : grand cône violet à la pointe tombante, étoile dorée
+    ctx.fillStyle = '#4E3F7A';
+    ctx.beginPath();
+    ctx.ellipse(x, top + 5, r * 1.15, 4, 0, 0, TAU);
+    ctx.fill();
+    outline();
+    ctx.fillStyle = '#5E4C94';
+    ctx.beginPath();
+    ctx.moveTo(x - r * 0.7, top + 4);
+    ctx.quadraticCurveTo(x - 3, top - 14, x + side * 3, top - 22);
+    ctx.quadraticCurveTo(x + side * 10, top - 22, x + side * 13, top - 15);
+    ctx.quadraticCurveTo(x + side * 6, top - 16, x + side * 4, top - 12);
+    ctx.quadraticCurveTo(x + 5, top - 4, x + r * 0.7, top + 4);
+    ctx.closePath();
+    ctx.fill();
+    outline();
+    ctx.fillStyle = '#F0B64A';
+    ctx.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const a = -Math.PI / 2 + (k / 10) * TAU, rr = k % 2 ? 1.6 : 3.8;
+      ctx.lineTo(x - side * 1 + Math.cos(a) * rr, top - 4 + Math.sin(a) * rr);
+    }
+    ctx.closePath();
+    ctx.fill();
+  } else if (hat === 6) {
+    // haut-de-forme : cylindre noir, ruban
+    ctx.fillStyle = '#1E1C1C';
+    ctx.beginPath();
+    ctx.ellipse(x, top + 5, r * 1.05, 3.5, 0, 0, TAU);
+    ctx.fill();
+    outline();
+    ctx.beginPath();
+    ctx.roundRect(x - r * 0.6, top - 16, r * 1.2, 21, 2);
+    ctx.fill();
+    outline();
+    ctx.fillStyle = '#8A2A30';
+    ctx.fillRect(x - r * 0.6, top - 1, r * 1.2, 3.5);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; // reflet de la soie
+    ctx.fillRect(x - r * 0.4, top - 14, 2.5, 12);
+  } else if (hat === 7) {
+    // casquette : calotte, visière tournée vers le regard, bouton
+    ctx.fillStyle = '#C8323C';
+    ctx.beginPath();
+    ctx.ellipse(x + side * r * 0.75, top + 5, r * 0.62, 3, 0, 0, TAU);
+    ctx.fill();
+    outline();
+    ctx.beginPath();
+    ctx.ellipse(x, top + 5, r * 0.82, 9.5, 0, Math.PI, TAU);
+    ctx.fill();
+    outline();
+    ctx.fillStyle = '#F2F0E6';
+    ctx.beginPath();
+    ctx.arc(x, top - 4, 1.8, 0, TAU);
+    ctx.fill();
+  } else if (hat === 8) {
+    // grande feuille posée sur la tête, sa tige dressée ; elle se balance un peu
+    const sway = Math.sin(t * 2.4) * 0.12;
+    ctx.translate(x, top + 2);
+    ctx.rotate(sway - side * 0.25);
+    ctx.fillStyle = '#5FA845';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(-11, -6, 0, -13);
+    ctx.quadraticCurveTo(11, -6, 0, 0);
+    ctx.fill();
+    outline();
+    ctx.strokeStyle = '#3E7A2C';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, 1);
+    ctx.lineTo(0, -12);
+    for (const k of [-4, -8]) {
+      ctx.moveTo(0, k);
+      ctx.lineTo(-4, k - 3);
+      ctx.moveTo(0, k);
+      ctx.lineTo(4, k - 3);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /**
@@ -2717,12 +2912,14 @@ function vulture(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
  * Vautour en vol (hors d'atteinte), vu de dessus : grandes ailes ouvertes, couvertures brunes, rémiges sombres
  * en doigts écartés, queue en éventail, collerette et tête rose ; haut au-dessus de son ombre.
  */
-export function drawSoaring(ctx: Ctx, x: number, y: number, r: number, t: number, seed: number, height = 4.2) {
-  const flap = Math.sin(t * 2.2 + seed) * 0.12, h = r * height + Math.sin(t * 1.3 + seed) * r * 0.3;
-  const span = r * 2.1, tilt = Math.sin(t * 0.9 + seed) * 0.08; // il penche dans les virages
+export function drawSoaring(ctx: Ctx, x: number, y: number, r: number, t: number, seed: number, height = 4.2, beat = 0, heading?: number) {
+  // il plane, et de temps en temps (ou au décollage et à l'atterrissage : beat) il bat franchement des ailes
+  const cyc = (t * 0.23 + seed * 0.37) % 1, burst = Math.max(beat, cyc < 0.18 ? Math.sin((cyc / 0.18) * Math.PI) : 0);
+  const flap = Math.sin(t * 2.2 + seed) * 0.12 + Math.sin(t * 11 + seed) * 0.5 * burst, h = r * height + Math.sin(t * 1.3 + seed) * r * 0.3;
+  const span = r * 2.1 * (1 - 0.12 * burst * Math.abs(Math.sin(t * 11 + seed))), tilt = Math.sin(t * 0.9 + seed) * 0.08; // il penche dans les virages
   ctx.save();
   ctx.translate(x, y - h);
-  ctx.rotate(tilt);
+  ctx.rotate(tilt + (heading === undefined ? 0 : heading + Math.PI / 2)); // la tête vers où il va
   // queue en éventail
   ctx.fillStyle = '#2A201B';
   ctx.beginPath();
@@ -4444,6 +4641,140 @@ function drawBanana(ctx: Ctx, x: number, y: number, t: number, size = 1) {
   ctx.restore();
 }
 
+/**
+ * Scorpion des dunes (Mer de sable, de jour) : carapace ambrée en plaques, quatre paires de pattes articulées qui
+ * trottinent, deux grosses pinces en avant, et la queue segmentée dressée en arc par-dessus le dos, dard pointé vers
+ * l'avant (il se balance, prêt à piquer).
+ */
+function scorpion(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
+  const W = (c: string) => (u.flash ? '#FFFFFF' : c);
+  const boss = !!SPECIES[u.species]?.boss; // le Scorpion Empereur : carapace rouge sang et noire, dard doré
+  const shell = W(boss ? '#7A2E22' : '#C8913E'), plate = W(boss ? '#4E1C16' : '#A8752E'), dark = W(boss ? '#2A100C' : '#6E4A1E');
+  const light = W(boss ? '#B8584A' : '#E8B866'), sting = W(boss ? '#F0B64A' : '#3A2614');
+  const t = u.t + u.seed;
+  // pattes : 4 par côté, articulées ; celles du fond d'abord, plus sombres
+  const leg = (hx: number, hy: number, kx: number, ky: number, fx: number, fy: number, c: string) => {
+    for (const [col, w] of [['rgba(12,18,16,0.85)', 0.13], [c, 0.07]] as const) {
+      ctx.strokeStyle = col;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = r * w;
+      ctx.beginPath();
+      ctx.moveTo(hx * r, hy * r);
+      ctx.lineTo(kx * r, ky * r);
+      ctx.lineTo(fx * r, fy * r);
+      ctx.stroke();
+    }
+  };
+  const legs = (back: boolean) => {
+    // éventail : les pattes de devant pointent vers l'avant, celles de derrière vers l'arrière, genoux relevés
+    for (let i = 0; i < 4; i++) {
+      const walk = u.moving ? Math.sin(t * 16 + i * 1.6 + (back ? Math.PI : 0)) * 0.08 : 0;
+      const hx = 0.22 - i * 0.17, dir = (1.5 - i) * 0.22 + walk, lift = u.moving ? Math.max(0, Math.sin(t * 16 + i * 1.6 + (back ? Math.PI : 0))) * 0.06 : 0;
+      if (back) leg(hx, -0.05, hx + dir * 0.9 - 0.04, -0.34, hx + dir * 1.9, 0.34 - lift, dark);
+      else leg(hx, 0.15, hx + dir * 0.9 + 0.04, -0.12, hx + dir * 2.0, 0.5 - lift, plate);
+    }
+  };
+  legs(true);
+  // queue : un arc de cinq anneaux qui monte au-dessus du dos (d'abord le trait, puis les anneaux), qui se balance
+  const sway = Math.sin(t * 2.4) * 0.06, poised = u.moving ? 0 : Math.sin(t * 5) * 0.03;
+  const seg: [number, number][] = [[-0.55, -0.08], [-0.82, -0.32], [-0.92, -0.62], [-0.8, -0.92], [-0.52 + sway, -1.1 + poised]];
+  ctx.strokeStyle = 'rgba(12,18,16,0.8)';
+  ctx.lineWidth = r * 0.3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  seg.forEach(([x, y], k) => (k ? ctx.lineTo(x * r, y * r) : ctx.moveTo(x * r, y * r)));
+  ctx.stroke();
+  ctx.strokeStyle = plate;
+  ctx.lineWidth = r * 0.2;
+  ctx.stroke();
+  seg.forEach(([x, y], k) => {
+    ctx.fillStyle = k % 2 ? plate : shell;
+    ctx.beginPath();
+    ctx.ellipse(x * r, y * r, (0.15 - k * 0.01) * r, (0.13 - k * 0.008) * r, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(12,18,16,0.55)';
+    ctx.lineWidth = Math.max(1, r * 0.03);
+    ctx.stroke();
+  });
+  // dard : bulbe à venin et crochet noir, pointé vers l'avant et le bas
+  const [bx, by] = seg[4];
+  ctx.fillStyle = W(boss ? '#A8402E' : '#D9A04A');
+  ctx.beginPath();
+  ctx.ellipse((bx + 0.2) * r, (by + 0.02) * r, 0.14 * r, 0.11 * r, 0.3, 0, TAU);
+  ctx.fill();
+  ink(ctx, r * 0.35);
+  ctx.fillStyle = sting;
+  ctx.beginPath();
+  ctx.moveTo((bx + 0.3) * r, (by - 0.04) * r);
+  ctx.quadraticCurveTo((bx + 0.5) * r, (by + 0.02) * r, (bx + 0.44) * r, (by + 0.24) * r);
+  ctx.lineTo((bx + 0.3) * r, (by + 0.08) * r);
+  ctx.closePath();
+  ctx.fill();
+  // corps : carapace allongée, basse, en plaques
+  ctx.fillStyle = shell;
+  ctx.beginPath();
+  ctx.ellipse(-0.1 * r, 0.05 * r, 0.62 * r, 0.32 * r, 0, 0, TAU);
+  ctx.fill();
+  ink(ctx, r * 0.7);
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = r * 0.035;
+  ctx.beginPath();
+  for (let k = 0; k < 5; k++) {
+    const x = (-0.5 + k * 0.18) * r;
+    ctx.moveTo(x, -0.2 * r);
+    ctx.quadraticCurveTo(x + 0.05 * r, 0.05 * r, x, 0.3 * r);
+  }
+  ctx.stroke();
+  ctx.fillStyle = light; // reflet du soleil sur la carapace
+  ctx.beginPath();
+  ctx.ellipse(-0.15 * r, -0.12 * r, 0.32 * r, 0.06 * r, -0.05, 0, TAU);
+  ctx.fill();
+  legs(false);
+  // pinces : bras courbé puis grosse pince ouverte, qui claque de temps en temps
+  const snap = Math.max(0, Math.sin(t * 3.1)) ** 8;
+  for (const [side, c] of [[-1, plate], [1, shell]] as const) {
+    const ax = 0.45, ay = 0.05 + side * 0.08, ex = 0.75, ey = 0.1 + side * 0.18, px = 1.0, py = 0.02 + side * 0.16;
+    ctx.strokeStyle = 'rgba(12,18,16,0.85)';
+    ctx.lineWidth = r * 0.15;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(ax * r, ay * r);
+    ctx.lineTo(ex * r, ey * r);
+    ctx.lineTo(px * r, py * r);
+    ctx.stroke();
+    ctx.strokeStyle = c;
+    ctx.lineWidth = r * 0.09;
+    ctx.stroke();
+    ctx.fillStyle = c;
+    ctx.beginPath();
+    ctx.ellipse((px + 0.05) * r, py * r, 0.17 * r, 0.12 * r, 0, 0, TAU);
+    ctx.fill();
+    ink(ctx, r * 0.4);
+    // les deux mâchoires de la pince
+    const open = 0.35 * (1 - snap);
+    for (const j of [-1, 1]) {
+      ctx.fillStyle = j < 0 ? c : dark;
+      ctx.beginPath();
+      ctx.moveTo((px + 0.15) * r, (py + j * 0.03) * r);
+      ctx.quadraticCurveTo((px + 0.32) * r, (py + j * (0.06 + open * 0.3)) * r, (px + 0.42) * r, (py + j * open * 0.25) * r);
+      ctx.lineTo((px + 0.2) * r, (py + j * 0.01) * r);
+      ctx.closePath();
+      ctx.fill();
+      ink(ctx, r * 0.25);
+    }
+  }
+  // tête basse, petits yeux noirs groupés sur le dessus
+  ctx.fillStyle = plate;
+  ctx.beginPath();
+  ctx.ellipse(0.45 * r, 0.02 * r, 0.18 * r, 0.16 * r, 0, 0, TAU);
+  ctx.fill();
+  ink(ctx, r * 0.4);
+  glowEye(ctx, 0.5 * r, -0.07 * r, 0.045 * r, u.alpha ? '#B48CFF' : '#1A1008', u.wild, !!u.alpha);
+  glowEye(ctx, 0.41 * r, -0.09 * r, 0.035 * r, u.alpha ? '#B48CFF' : '#1A1008', u.wild, !!u.alpha);
+}
+
 const DRAWERS: Record<string, (ctx: Ctx, r: number, fill: string, u: UnitLook) => void> = {
   slime, wolf, boar, golem, treant,
   sporelin, spider, bear, wisp,
@@ -4453,6 +4784,7 @@ const DRAWERS: Record<string, (ctx: Ctx, r: number, fill: string, u: UnitLook) =
   salamander, ash_bat: ashBat, lava_tortoise: lavaTortoise,
   kraken, kraken_tentacle: krakenTentacle,
   gorilla, croc, masked,
+  scorpion,
 };
 
 // ───────────────────────── Buissons à fruits ─────────────────────────

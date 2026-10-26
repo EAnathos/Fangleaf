@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -64,6 +64,7 @@ export class Game {
   me = { x: 0, y: 0, fx: 1, fy: 0, moving: false };
   private flashes = new Map<number, number>();
   private charges = new Map<number, number>(); // tireur → début de la charge de son tir
+  private wings = new Map<number, { k: number; at: number; x: number; y: number; ang: number }>(); // vautours de la meute : 0 posé, 1 en vol
   private chestOpen = new Map<number, number>(); // coffre → moment où on l'a ouvert (animation du couvercle)
   private chestSeen = new Map<number, number>(); // coffre → première apparition (il tombe en rebondissant)
   private fades = new Map<object, number>();
@@ -116,6 +117,7 @@ export class Game {
     this.hud.onDeposit = () => net.send({ t: 'deposit' });
     this.hud.onChat = (text) => net.send({ t: 'chat', text });
     this.hud.onBoard = () => net.send({ t: 'board' });
+    this.hud.onProfile = (color, hat) => net.send({ t: 'profile', color, hat });
     this.hud.onPick = () => net.send({ t: 'pick' });
     this.hud.onHold = () => this.toggleHold();
     this.hud.onRide = () => this.toggleMount();
@@ -1190,7 +1192,7 @@ export class Game {
       case 'mount':
         if (e.by === this.myId && e.on) {
           const swim = swimMount(this.net.latest?.units.find((u) => u[0] === e.id)?.[1] ?? this.self()?.mount?.species ?? -1);
-          this.hud.toast(swim ? 'À l\'eau sur ton serpent ! Il ne va qu\'en eau : F au bord d\'une rive pour descendre.' : 'En selle ! F pour descendre.', 'good');
+          if (swim) this.hud.toast('À l\'eau sur ton serpent ! Il ne va qu\'en eau : on en descend au bord d\'une rive.', 'good');
         } else if (e.by === this.myId) this.hud.toast('Tu as mis pied à terre.');
         break;
       case 'full':
@@ -1806,9 +1808,9 @@ export class Game {
     // le cœur volcanique, une fois installé dans le bateau
     const sw = this.map.shipwreck;
     if (this.hud.heart >= HEART_IN_BOAT && inView(sw.x, sw.y, 200)) list.push({ y: sw.y + 30, draw: () => drawBoatHeart(ctx, sw.x, sw.y, this.time) });
-    // Pierre de passage du bateau : elle apparaît une fois le bateau reconstruit
-    const bs = this.map.boatStone;
-    if (this.hud.lore[1] >= BOAT_STAGES.length && inView(bs.x, bs.y, 100)) list.push({ y: bs.y, draw: () => this.world.drawStone(ctx, bs.x, bs.y, true, this.time) });
+    // Pierre de passage du bateau : à construire dès la Mer de sable ouverte (éteinte et nommée jusque-là)
+    const bs = this.map.boatStone, dock = dockStoneOn(this.hud.buildings, this.hud.lore[1]);
+    if ((dock || this.gateOpen(DESERT_ZONE - 1)) && inView(bs.x, bs.y, 100)) list.push({ y: bs.y, draw: () => this.world.drawStone(ctx, bs.x, bs.y, dock, this.time, dock ? undefined : BUILDINGS.stone.name) });
     // parchemins laissés par les géants, au fond de leur grotte (chacun voit ceux qui l'attendent)
     for (const id of this.hud.scrollCaves) {
       const at = this.map.scrollPos(this.map.caves[id]);
@@ -1967,6 +1969,25 @@ export class Game {
           charge, inWater: !!(SPECIES[s].swim || SPECIES[s].amphibious) && this.map.isWater(x, y), moving: this.time - f.movedAt < 0.2, shout: this.shoutOf(id),
         };
       };
+      // Vautour de la meute : il décolle dès qu'il bouge et se pose quand il s'arrête (pas sur l'eau ni dans un arbre).
+      if (owner && SPECIES[s].flies && !(flags & UNIT_FLAG_HIDDEN)) {
+        const w = this.wings.get(id) ?? { k: 0, at: this.time, x, y, ang: -Math.PI / 2 };
+        const perch = !this.map.blocked(x, y) && !this.map.isWater(x, y);
+        const want = this.time - f.movedAt < 0.5 || !perch ? 1 : 0, dt = Math.min(0.1, this.time - w.at);
+        w.k += Math.sign(want - w.k) * Math.min(Math.abs(want - w.k), dt * (want ? 2.5 : 1.4));
+        if (Math.hypot(x - w.x, y - w.y) > 0.5) w.ang = Math.atan2(y - w.y, x - w.x);
+        [w.at, w.x, w.y] = [this.time, x, y];
+        this.wings.set(id, w);
+        if (w.k > 0.25) {
+          const k = w.k, beat = k < 1 ? 1 : 0; // il bat des ailes pour monter ou se poser
+          list.push({ y, draw: () => drawSoaringShadow(ctx, x, y, r * (0.6 + 0.4 * k)) });
+          air.push({ y, draw: () => {
+            drawSoaring(ctx, x, y, r, this.time, id, 0.4 + k * 1.6, beat, w.ang);
+            if (hp < 100) hpBar(ctx, x, y - r * (2.6 + k * 1.6), alpha ? 46 : 28, hp, '#7FCB5B');
+          } });
+          continue;
+        }
+      }
       // clignement : sa silhouette se forme déjà au point d'arrivée
       if (ghost && cast) list.push({ y: cast.y, draw: () => this.drawUnitCached(ctx, id, { ...look(), x: cast.x, y: cast.y }, { ...REST, alpha: ghost }) });
       if (pose.air > r * 0.6) {
@@ -2005,10 +2026,10 @@ export class Game {
     }
     // Dompteurs déconnectés : endormis près du feu, leurs monstres flânent (ou dorment) dans le village.
     const sleepers = this.net.latest?.sleepers ?? [];
-    for (const [name, color, armor, cls, x, y] of sleepers) {
+    for (const [name, color, armor, cls, x, y, hat] of sleepers) {
       if (!inView(x, y, 80)) continue;
       list.push({ y, draw: () => {
-        drawPlayer(ctx, x, y, color, 0, 1, armor, name, this.time, false, false, false, false, cls || null);
+        drawPlayer(ctx, x, y, color, 0, 1, armor, name, this.time, false, false, false, false, cls || null, null, 0, true, hat ?? 0);
         this.snore(x + 14, y - 36, 15, x);
       } });
     }
@@ -2036,7 +2057,7 @@ export class Game {
           draw: () => {
             ctx.save();
             ctx.globalAlpha = 0.4;
-            drawPlayer(ctx, x, y, p.color, 1, 0, p.armor, p.name, this.time, false, false, isMe, false, p.cls);
+            drawPlayer(ctx, x, y, p.color, 1, 0, p.armor, p.name, this.time, false, false, isMe, false, p.cls, null, 0, true, p.hat ?? 0);
             ctx.restore();
             if (players.length < 2) return;
             ctx.lineWidth = 4;
@@ -2085,7 +2106,7 @@ export class Game {
             : used && this.time - used.at < 0.9 ? { kind: used.kind, ang: Math.atan2(used.ty - y, used.tx - x), k: Math.min(1, k) } : null;
           drawPlayer(
             ctx, x + back, y - lift, p.color, fx, fy, p.armor, p.name, this.time,
-            isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool, p.weapon, (p.sword ?? SWORD_PULLS) >= SWORD_PULLS,
+            isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool, p.weapon, (p.sword ?? SWORD_PULLS) >= SWORD_PULLS, p.hat ?? 0,
           );
           if (p.torch && sky.light < 0.85) drawTorch(ctx, x + back - (fx < -0.1 ? -15 : 15), y - lift - 2, p.torch, this.time); // de l'autre main
           if (p.slowed) drawWebbed(ctx, x, y - lift, this.time);

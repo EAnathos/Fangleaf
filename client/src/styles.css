@@ -128,6 +128,20 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .mount-row { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid var(--line); }
 .fill.mount { background: var(--alpha); }
 .modal.quit { width: min(440px, calc(100vw - 32px)); }
+/* Profil : couleur et chapeau */
+.modal.profile { width: min(480px, calc(100vw - 32px)); gap: 12px; }
+.profile-preview { align-self: center; width: 160px; height: 150px; }
+.profile-colors { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.swatch { aspect-ratio: 1; min-height: 40px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; box-shadow: inset 0 -4px 0 rgba(16,24,26,0.22); }
+.swatch[aria-checked="true"] { border-color: var(--text); outline: 2px solid var(--amber); outline-offset: 2px; }
+.swatch:disabled { opacity: 0.25; cursor: not-allowed; }
+.profile-hats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.hat-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 12px; border: 2px solid var(--line); background: var(--panel-2); color: var(--text-2); font: 600 13px var(--body); cursor: pointer; min-height: 44px; }
+.hat-btn canvas { width: 64px; height: 56px; }
+.hat-btn[aria-checked="true"] { border-color: var(--amber); color: var(--text); }
+.hat-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.hat-price { color: var(--amber); font-weight: 700; }
+.hat-price.short { color: var(--enemy); }
 .quit-actions { justify-content: flex-end; flex-wrap: wrap; }
 .quit-actions .cta { height: 48px; padding: 0 20px; font-size: 18px; }
 .quit-main { gap: 12px; }

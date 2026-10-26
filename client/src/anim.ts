@@ -190,7 +190,7 @@ export function drawWebGlob(ctx: Ctx, x: number, y: number, z: number, size: num
 const IMPACT: Record<string, ImpactKind> = {
   wolf: 'bite', spider: 'bite', serpent: 'bite', bear: 'claw', boar: 'tusk', golem: 'smash', watcher: 'smash',
   slime: 'splat', sporelin: 'splat', toad: 'splat', wisp: 'burn', crab: 'pinch', hare: 'bump', snail: 'bump', firefly: 'bump', meerkat: 'bump', sandworm: 'bite', vulture: 'bite', jackal: 'bite',
-  salamander: 'burn', ash_bat: 'bite', lava_tortoise: 'smash', gorilla: 'smash', croc: 'bite', masked: 'claw',
+  salamander: 'burn', ash_bat: 'bite', lava_tortoise: 'smash', gorilla: 'smash', croc: 'bite', masked: 'claw', scorpion: 'pinch',
 };
 export const impactOf = (spriteKey: string): ImpactKind => IMPACT[spriteKey] ?? 'bump';
 

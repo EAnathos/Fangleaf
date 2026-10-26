@@ -3,16 +3,16 @@
 import {
   bossMelee, sleeperBlocks,
   alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
-  FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS,
+  ARC_FLIGHT_S, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
-  SPAWN_SAFE_R, BOAT_STAGES, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost,
+  SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost,
   treeHp, treeWood, TREE_RESPAWN_S, TREE_STILL_S, TREANT_CHANCE, TREANT_ZONE,
   populationOf, PINCER_HALF, PINCER_R, TORNADO_PULL, TORNADO_PULL_R, TORNADO_R, TORNADO_SPEED, POISON_DPS, POISON_S,
   armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, ALPHA_SHOUT_AGGRO, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, mineDmg, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
-import type { ArmySlot, BoardRow, DozerTuple, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
+import type { ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
 import { STAT_KEYS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { HALL_ID, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
@@ -156,6 +156,8 @@ export interface Player {
   torch: number;
   boots: number;
   saddle: number; // selle (0 : aucune, on ne peut pas monter)
+  hat: number; // chapeau du profil (HATS), purement décoratif
+  hats: number[]; // chapeaux achetés
   gold: number;
   wood: number;
   stone: number;
@@ -243,6 +245,7 @@ interface Pet {
 interface Sleeper {
   name: string;
   color: string;
+  hat: number;
   armor: number;
   cls: string;
   x: number;
@@ -250,6 +253,7 @@ interface Sleeper {
   pack: Dozer[];
   rest: { s: number; legend: boolean }[]; // ses Alphas au repos (ils jouent sur l'îlot)
   stats: Stats; // pour le tableau du village
+  holdings: Holdings; // ses Alphas et ses livres, pour le tableau du village
 }
 
 /** Coffre laissé par un géant vaincu : chaque dompteur l'ouvre une fois ; il disparaît au retour du géant. */
@@ -266,6 +270,17 @@ interface Chest {
 const ACTIVE_R = VIEW_R + 500; // au-delà, les monstres sauvages restent immobiles (personne ne les voit)
 
 /** Statistiques lues d'un profil (champs manquants ou invalides : 0). */
+/** Tableau du village : ses Alphas éveillés (et légendaires) et ses livres, lus dans sa progression. */
+const holdingsOf = (prof: Pick<Profile, 'alphas' | 'learned' | 'tomes'>): Holdings => {
+  const alphas = (prof.alphas ?? []).filter((a) => !a.wakeAt && a.s in SPECIES);
+  let books = 0;
+  LESSON_KINDS.forEach((kind, k) =>
+    DISCIPLINES[kind].tomes.forEach((_, t) => {
+      // dans le sac, ou déjà lu en entier à l'École
+      if (Number(prof.tomes?.[bookIndex(k, t)]) > 0 || (Number(prof.learned?.[k]) || 0) >= LESSONS_PER_TOME * (t + 1)) books++;
+    }));
+  return { awakened: alphas.length, legends: alphas.filter((a) => a.legend).length, books };
+};
 const statsOf = (s?: Partial<Stats>): Stats => Object.fromEntries(STAT_KEYS.map((k) => [k, Math.max(0, Math.floor(Number(s?.[k]) || 0))])) as unknown as Stats;
 
 /** Nom de village propre : sans caractères de contrôle, espaces réduits, 24 caractères au plus. */
@@ -417,7 +432,7 @@ export class Room {
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, saddle: 0, gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: statsOf(), manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, saddle: 0, hat: 0, hats: [], gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: statsOf(), manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], seen: new Set(), tomes: Array(BOOKS).fill(0), learned: LESSON_KINDS.map(() => 0), readAt: 0, readKind: 0,
     };
@@ -426,6 +441,9 @@ export class Room {
       p.gold = prof.gold;
       p.wood = Math.max(0, Math.floor(prof.wood ?? 0));
       p.stone = Math.max(0, Math.floor(prof.stone ?? 0));
+      p.hats = [...new Set((prof.hats ?? []).map(Number).filter((h) => Number.isInteger(h) && h > 0 && h < HATS.length))];
+      p.hat = clamp(Math.floor(Number(prof.hat) || 0), 0, HATS.length - 1);
+      if (p.hat && !p.hats.includes(p.hat)) p.hat = 0;
       p.fruits = Math.min(MAX_BERRIES, Math.max(0, Math.floor(prof.fruits ?? 0)));
       p.scrolls = (prof.scrolls ?? []).map(Number).filter((s, i, all) => s in SPECIES && SPECIES[s].boss && all.indexOf(s) === i);
       p.stats = statsOf(prof.stats);
@@ -496,7 +514,7 @@ export class Room {
     return free >= 0 ? free : Math.max(0, PLAYER_COLORS.findIndex((_, i) => !online.has(i))); // plus de membres que de couleurs
   }
 
-  addSleeper(key: string, prof: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats' | 'learned' | 'seat'>) {
+  addSleeper(key: string, prof: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats' | 'learned' | 'tomes' | 'seat' | 'hat'>) {
     if (this.sleepers.has(key) || [...this.players.values()].some((p) => p.userId === key)) return;
     const v = this.map.village, k = this.sleepers.size;
     const a = 0.9 + k * 2.1, at = this.map.freeNear(v.x + Math.cos(a) * 95, v.y + Math.sin(a) * 70 + 10);
@@ -510,8 +528,8 @@ export class Room {
       return { id: this.nextId++, ...m, asleep: i % 3 === 0, x: pos.x, y: pos.y, wx: pos.x, wy: pos.y, wt: Math.random() * 3 };
     });
     this.sleepers.set(key, {
-      name: prof.name, color: PLAYER_COLORS[this.seatFor(key, prof.seat)], armor: clamp(Number(prof.armor) || 0, 0, ARMOR_MAX),
-      cls: CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as string) : '', x: at.x, y: at.y, pack, stats: statsOf(prof.stats),
+      name: prof.name, color: PLAYER_COLORS[this.seatFor(key, prof.seat)], hat: clamp(Math.floor(Number(prof.hat) || 0), 0, HATS.length - 1), armor: clamp(Number(prof.armor) || 0, 0, ARMOR_MAX),
+      cls: CLASS_IDS.includes(prof.class as ClassId) ? (prof.class as string) : '', x: at.x, y: at.y, pack, stats: statsOf(prof.stats), holdings: holdingsOf(prof),
       rest: (prof.alphas ?? []).filter((x) => x.rest && x.s in SPECIES).map((x) => ({ s: x.s, legend: !!x.legend })),
     });
     this.scaleBosses();
@@ -636,6 +654,28 @@ export class Room {
     }
   }
 
+  /** Profil : sa couleur (si aucun autre membre du village ne l'a déjà) et son chapeau (acheté en or la première fois). */
+  onProfile(p: Player, color: number, hat: number) {
+    if (Number.isInteger(hat) && hat >= 0 && hat < HATS.length && hat !== p.hat) {
+      if (hat && !p.hats.includes(hat)) {
+        if (p.gold < HAT_PRICES[hat]) p.send({ t: 'error', msg: `Il te faut ${HAT_PRICES[hat]} or pour ce chapeau.` });
+        else {
+          p.gold -= HAT_PRICES[hat];
+          p.hats.push(hat);
+          p.hat = hat;
+        }
+      } else p.hat = hat;
+    }
+    const key = p.userId ?? `invité:${p.id}`;
+    if (Number.isInteger(color) && color >= 0 && color < PLAYER_COLORS.length && PLAYER_COLORS[color] !== p.color) {
+      const taken = [...this.players.values()].some((q) => q !== p && q.color === PLAYER_COLORS[color])
+        || [...this.sleepers].some(([k, z]) => k !== key && z.color === PLAYER_COLORS[color]);
+      if (taken) p.send({ t: 'error', msg: 'Cette couleur est déjà prise par un membre du village.' });
+      else p.color = PLAYER_COLORS[color];
+    }
+    p.dirty = true;
+  }
+
   /** Chat : un message pour tout le village (une ligne, 200 caractères au plus, pas plus de 2 par seconde). */
   onChat(p: Player, raw: string) {
     const text = raw.replace(/\s+/g, ' ').trim().slice(0, 200);
@@ -647,8 +687,8 @@ export class Room {
   /** Tableau du village : chaque membre (en ligne ou endormi au village), géants battus, apprivoisements, dons. */
   onBoard(p: Player) {
     const rows: BoardRow[] = [
-      ...[...this.players.values()].map((q) => ({ name: q.name, color: q.color, online: true, ...q.stats })),
-      ...[...this.sleepers.values()].map((z) => ({ name: z.name, color: z.color, online: false, ...z.stats })),
+      ...[...this.players.values()].map((q) => ({ name: q.name, color: q.color, online: true, ...q.stats, ...holdingsOf(this.profileOf(q)) })),
+      ...[...this.sleepers.values()].map((z) => ({ name: z.name, color: z.color, online: false, ...z.stats, ...z.holdings })),
     ];
     p.send({ t: 'board', rows });
   }
@@ -751,7 +791,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, saddle: p.saddle, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats }, tomes: [...p.tomes], learned: [...p.learned], read_at: p.readAt, read_kind: p.readKind, seat: Math.max(0, PLAYER_COLORS.indexOf(p.color)) };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, saddle: p.saddle, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats }, tomes: [...p.tomes], learned: [...p.learned], read_at: p.readAt, read_kind: p.readKind, seat: Math.max(0, PLAYER_COLORS.indexOf(p.color)), hat: p.hat, hats: [...p.hats] };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -813,6 +853,8 @@ export class Room {
     if (!BUILDING_IDS.includes(b) || this.buildings.includes(b) || !this.near(p, this.posOf(b))) return;
     const needs = BUILDINGS[b].needs;
     if (needs && !this.buildings.includes(needs)) return; // emplacement à défricher d'abord
+    const zone = BUILDINGS[b].zone;
+    if (zone !== undefined && !this.zoneOpen(zone)) return; // pas avant que sa zone soit ouverte
     if (b === 'school') return; // l'école, c'est Aubin qui la bâtit (onSchool)
     if (this.hall < BUILDINGS[b].hall || !(b === 'bridge' ? this.payBag(p, buildingCost(b)) : this.pay(p, buildingCost(b)))) return;
     this.buildings.push(b);
@@ -923,7 +965,7 @@ export class Room {
 
   /** Géants dont le vieil homme attend le parchemin : ceux de l'île (pas ceux du volcan). */
   private bossCount() {
-    return this.map.caves.filter((c) => c.zone < VOLCANO_ZONE).length;
+    return this.map.caves.filter((c) => c.zone < VOLCANO_ZONE && !SPECIES[c.boss].optional).length;
   }
 
   /** Grotte par son id, ou la salle sous le volcan (HALL_ID). */
@@ -1353,7 +1395,7 @@ export class Room {
   }
 
   /**
-   * Tableau du village : ce qui se compte d'après les événements du tick (dégâts, récolte, essences, éveils, coffres,
+   * Tableau du village : ce qui se compte d'après les événements du tick (dégâts, récolte, essences, coffres,
    * chutes, relevés), plus le temps de jeu ; les monstres vaincus et les géants se comptent là où ils tombent.
    */
   private tallyStats() {
@@ -1373,12 +1415,8 @@ export class Room {
         add(e.to, 'wood', e.wood);
         add(e.to, 'stone', e.stone);
       } else if (e.e === 'essence') add(e.to, 'essences');
-      else if (e.e === 'awaken') add(e.by, 'awakened');
-      else if (e.e === 'legend') add(e.by, 'legends');
-      else if (e.e === 'chest') {
-        add(e.to, 'chests');
-        if (e.book !== undefined) add(e.to, 'books');
-      } else if (e.e === 'pdie') add(e.id, 'deaths');
+      else if (e.e === 'chest') add(e.to, 'chests');
+      else if (e.e === 'pdie') add(e.id, 'deaths');
       else if (e.e === 'previve') add(e.by, 'revives');
     }
     if (this.tick % TICK_HZ === 0) for (const p of this.players.values()) p.stats.time++;
@@ -1510,7 +1548,7 @@ export class Room {
   private stoneNear(p: Player): number | null {
     const near = (st: { x: number; y: number }) => dist2(p.x, p.y, st.x, st.y) <= (BUILDING_REACH + 40) ** 2;
     if (this.buildings.includes('stone') && near(this.map.stones[0])) return -1;
-    if (this.boat >= BOAT_STAGES.length && near(this.map.boatStone)) return -2;
+    if (dockStoneOn(this.buildings, this.boat) && near(this.map.boatStone)) return -2;
     for (const c of this.camps) if (near(this.map.stones[c + 1])) return c;
     return null;
   }
@@ -1519,7 +1557,7 @@ export class Room {
   onTravel(p: Player, to: number) {
     if (p.dead || this.swimming(p)) return; // descendre du serpent d'abord
     const from = this.stoneNear(p);
-    const open = to === -1 ? this.buildings.includes('stone') : to === -2 ? this.boat >= BOAT_STAGES.length : this.camps.includes(to);
+    const open = to === -1 ? this.buildings.includes('stone') : to === -2 ? dockStoneOn(this.buildings, this.boat) : this.camps.includes(to);
     if (from === null || from === to || !open) return;
     const st = to === -2 ? this.map.boatStone : this.map.stones[to + 1];
     const at = this.map.freeNear(st.x - 10, st.y + 60);
@@ -1601,6 +1639,12 @@ export class Room {
         if (u.owner || u.alpha || !SPECIES[u.s].night) continue;
         if (![...this.players.values()].some((p) => dist2(p.x, p.y, u.x, u.y) < VIEW_R ** 2)) this.units.delete(u.id);
       }
+    } else {
+      // au coucher du soleil, les bêtes de jour s'enfouissent, elles aussi hors de vue
+      for (const u of [...this.units.values()]) {
+        if (u.owner || u.alpha || !SPECIES[u.s].day) continue;
+        if (![...this.players.values()].some((p) => dist2(p.x, p.y, u.x, u.y) < VIEW_R ** 2)) this.units.delete(u.id);
+      }
     }
   }
 
@@ -1636,9 +1680,10 @@ export class Room {
     }
   }
 
-  /** Population visée d'une espèce sauvage : nulle le jour pour les bêtes de nuit. */
+  /** Population visée d'une espèce sauvage : nulle le jour pour les bêtes de nuit, la nuit pour les bêtes de jour. */
   private population(s: number) {
-    return SPECIES[s].night && !this.isNight() ? 0 : populationOf(s);
+    const night = this.isNight();
+    return (SPECIES[s].night && !night) || (SPECIES[s].day && night) ? 0 : populationOf(s);
   }
 
   /** Première porte fermée (-1 : aucune) : au-delà, tout est sous la brume (rien n'y apparaît). */
@@ -2658,6 +2703,7 @@ export class Room {
    */
   /** wait : sans chemin jusqu'au but (berge sur une île, de l'autre côté du lac), il attend sur place au lieu de buter contre l'eau. */
   private navTo(u: Unit, tx: number, ty: number, speed: number, stop: number, wait = false) {
+    if (u.owner && SPECIES[u.s].flies) return this.glide(u, tx, ty, speed, stop); // vautour de la meute : il suit en volant
     if (this.swims(u)) return this.move(u, tx, ty, speed, stop); // dans l'eau : il longe la rive, sans détour par la terre
     // serpent, crabe ou crapaud de la meute : à la nage tout droit dès que l'eau est en jeu, sinon par les chemins comme les autres
     if ((this.amphibious(u) || this.lurks(u)) && (this.map.isWater(u.x, u.y) || this.map.isWater(tx, ty))) return this.move(u, tx, ty, speed, stop);
@@ -2769,12 +2815,12 @@ export class Room {
     this.shots.push(shot);
   }
 
-  /** Fléchette de sarbacane : la cible est empoisonnée (le poison le plus fort l'emporte, et repart pour POISON_S). */
-  private poisonOf(e: Ent, s: Shot) {
+  /** Fléchette de sarbacane, dard du scorpion : la cible est empoisonnée (le poison le plus fort l'emporte, et repart pour POISON_S). */
+  private poisonOf(e: Ent, dmg: number, by: Unit) {
     if (!this.alive(e) || (e.kind === 'u' && isBoss(e.s))) return; // un géant n'en sent rien
-    const dps = s.dmg * POISON_DPS;
+    const dps = dmg * POISON_DPS;
     if (e.poison && e.poison.until > this.time && e.poison.dps > dps) return void (e.poison.until = this.time + POISON_S);
-    e.poison = { dps, until: this.time + POISON_S, by: s.by };
+    e.poison = { dps, until: this.time + POISON_S, by };
   }
 
   /** Le poison ronge : deux fois par seconde, sa part des PV. */
@@ -2820,14 +2866,14 @@ export class Room {
             if (s.pierced.has(e.id)) continue;
             s.pierced.add(e.id);
             this.damage(e, s.dmg, s.by);
-            if (s.poison) this.poisonOf(e, s);
+            if (s.poison) this.poisonOf(e, s.dmg, s.by);
             if (e.kind === 'p') return false;
           }
         } else {
           const hit = this.shotTargets(s, s.x, s.y, 6)[0];
           if (hit) {
             this.damage(hit, s.dmg, s.by);
-            if (s.poison) this.poisonOf(hit, s);
+            if (s.poison) this.poisonOf(hit, s.dmg, s.by);
             return false;
           }
         }
@@ -2863,6 +2909,7 @@ export class Room {
     if (u.atkCd <= 0 && dist2(u.x, u.y, t.x, t.y) <= (arrived ? range + 4 : range) ** 2) {
       u.atkCd = u.atkCdBase;
       this.damage(t, u.dmg, u, true);
+      if (sp.venom) this.poisonOf(t, u.dmg, u); // le dard du scorpion
     }
   }
 
@@ -2876,7 +2923,10 @@ export class Room {
     // sa cible d'abord, puis les plus proches : les attaques de zone restent pour ses compétences
     const melee = bossMelee(SPECIES[u.s].key);
     near.sort((a, b) => Number(b.id === u.target) - Number(a.id === u.target) || dist2(u.x, u.y, a.x, a.y) - dist2(u.x, u.y, b.x, b.y));
-    for (const e of near.slice(0, melee.targets)) this.damage(e, u.dmg * melee.mult, u, true);
+    for (const e of near.slice(0, melee.targets)) {
+      this.damage(e, u.dmg * melee.mult, u, true);
+      if (SPECIES[u.s].venom) this.poisonOf(e, u.dmg, u); // le dard du Scorpion Empereur
+    }
   }
 
   private wildAI(u: Unit) {
@@ -3099,6 +3149,18 @@ export class Room {
     } });
   }
 
+  /** Vautour de la meute : tout droit vers le but, par-dessus l'eau, les arbres et la palissade (vrai s'il est arrivé). */
+  private glide(u: Unit, tx: number, ty: number, speed: number, stop: number) {
+    const dx = tx - u.x, dy = ty - u.y, d = Math.hypot(dx, dy);
+    if (d <= stop) return true;
+    const step = Math.min(speed * DT, d - stop);
+    u.x += (dx / d) * step;
+    u.y += (dy / d) * step;
+    u.path = null;
+    u.stuck = 0;
+    return d - step <= stop + 0.5;
+  }
+
   /** Vol : droit vers le but, par-dessus l'eau et les obstacles, sans quitter le couloir. */
   private fly(u: Unit, gx: number, gy: number, speed: number) {
     const dx = gx - u.x, dy = gy - u.y, d = Math.hypot(dx, dy);
@@ -3167,7 +3229,7 @@ export class Room {
     const o = this.players.get(u.owner);
     if (!o) return;
     // Dompteur sur l'eau (serpent) : un monstre terrestre ne l'y suit pas, il l'attend sur la berge la plus proche de lui.
-    const bank = this.amphibious(u) ? null : this.bankOf(o);
+    const bank = this.amphibious(u) || SPECIES[u.s].flies ? null : this.bankOf(o); // le vautour le suit au-dessus de l'eau
     const hx = bank?.x ?? o.x, hy = bank?.y ?? o.y;
     // Trop loin, ou coincé derrière un arbre ou la palissade depuis un moment : il rejoint son dompteur (ou la berge).
     if (dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead && !bank)) {
@@ -3701,7 +3763,7 @@ export class Room {
     for (const p of this.players.values()) {
       const st: PlayerState = {
         id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: Math.round(p.fx * 100) / 100, fy: Math.round(p.fy * 100) / 100,
-        hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, saddle: p.saddle, sword: p.sword, scrolls: new Set(p.scrolls.map((b) => SPECIES[b].zone)).size, cls: p.cls, spec: p.spec, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
+        hat: p.hat, hats: p.hats, hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, saddle: p.saddle, sword: p.sword, scrolls: new Set(p.scrolls.map((b) => SPECIES[b].zone)).size, cls: p.cls, spec: p.spec, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
         essences: p.essences, saved: !!p.userId, dead: p.dead,
         respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
         revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),
@@ -3739,7 +3801,7 @@ export class Room {
       const sleepers: SleeperTuple[] = [], dozers: DozerTuple[] = [];
       for (const z of this.sleepers.values()) {
         if (dist2(z.x, z.y, viewer.x, viewer.y) > vr2) continue;
-        const k = sleepers.push([z.name, z.color, z.armor, z.cls, Math.round(z.x), Math.round(z.y)]) - 1;
+        const k = sleepers.push([z.name, z.color, z.armor, z.cls, Math.round(z.x), Math.round(z.y), z.hat]) - 1;
         for (const d of z.pack) {
           dozers.push([d.id, d.s, (d.alpha ? UNIT_FLAG_ALPHA : 0) | (d.legend ? UNIT_FLAG_LEGEND : 0) | (d.asleep ? UNIT_FLAG_DORMANT : 0), Math.round(d.x), Math.round(d.y), k]);
         }

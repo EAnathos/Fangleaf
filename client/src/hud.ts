@@ -1,13 +1,13 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  alphaEquipMax, CAVE_CD, BOAT_STAGES, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
-  BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
+  alphaEquipMax, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
+  BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
-import type { BoardRow, PlayerState, Stats, UnitTuple } from '../../shared/protocol.ts';
+import type { BoardRow, Holdings, PlayerState, Stats, UnitTuple } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
-import { armorColor, drawElder, drawHatchling, drawUnit } from './sprites.ts';
+import { armorColor, drawElder, drawHatchling, drawPlayer, drawUnit } from './sprites.ts';
 import { CHAPTER_TITLES, ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD, zoneChapters } from './elder.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { sound } from './audio.ts';
@@ -15,7 +15,7 @@ import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, setti
 import { landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
@@ -51,6 +51,7 @@ export interface VillageView {
   sleepers: Sleeper[]; // géants endormis à portée de vue
   chests: [number, number, number, number][]; // coffres des géants : [id, x, y, déjà ouvert]
   hall: number; // niveau de l'Hôtel de ville
+  told: number[]; // parchemins lus par Aubin (les portes des zones en dépendent)
   bare: number[]; // buissons dont les baies ont été mangées ou cueillies
   sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
   scrollCaves: number[]; // grottes dont le parchemin m'attend
@@ -68,7 +69,7 @@ const short = (n: number) =>
 /** Petit nom d'un géant : son titre sans ce qui suit la virgule ni l'épithète (« Lueur », « Grisecroc », « Ursus Mâchefer »). */
 const shortTitle = (boss: number) => (SPECIES[boss]?.title ?? SPECIES[boss]?.name ?? '').split(/,| (?:le|la|les|aux|l') /)[0].trim();
 /** Tableau du village, par catégorie : clé de la statistique, libellé, mise en forme, et « moins, c'est mieux ». */
-const BOARD: { title: string; stats: { k: keyof Stats; label: string; fmt?: (n: number) => string; low?: boolean }[] }[] = [
+const BOARD: { title: string; stats: { k: keyof Stats | keyof Holdings; label: string; fmt?: (n: number) => string; low?: boolean }[] }[] = [
   { title: '⚔️ Combat', stats: [
     { k: 'bosses', label: 'Géants battus' }, { k: 'firsts', label: 'Premières victoires sur un géant' }, { k: 'kills', label: 'Monstres vaincus' },
     { k: 'dmg', label: 'Dégâts infligés' }, { k: 'best', label: 'Plus gros coup' }, { k: 'deaths', label: 'Morts', low: true }, { k: 'revives', label: 'Coéquipiers relevés' },
@@ -108,7 +109,9 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     // les nouveau-nés des œufs du village (at : lequel)
     ...HATCHLINGS.slice(0, eggsOf(v.lore[0]).hatched).map((h, i): Spot => ({ panel: 'npc', at: i, pos: { x: map.village.x + h.x, y: map.village.y + h.y }, reach: 60, label: `E — Parler à ${h.name}` })),
     ...v.scrollCaves.map((id): Spot => ({ scroll: id, pos: map.scrollPos(map.caves[id]), reach: SCROLL_REACH, label: 'E — Ramasser le parchemin' })),
-    ...(v.lore[1] >= BOAT_STAGES.length ? [{ panel: 'travel' as const, pos: map.boatStone, label: 'E — Pierre de passage', at: -2 }] : []),
+    // Pierre de passage du bateau : à construire dès que la Mer de sable est ouverte (ou déjà là, le bateau reconstruit)
+    ...(dockStoneOn(v.buildings, v.lore[1]) ? [{ panel: 'travel' as const, pos: map.boatStone, label: 'E — Pierre de passage', at: -2 }]
+      : gateOpen(DESERT_ZONE - 1, v.hall, v.told) ? [offer('dock', map.boatStone, 'Construire', BUILDINGS.stone.name)] : []),
     ...(v.sword < SWORD_PULLS ? [{ sword: true, pos: map.sword, reach: SWORD_REACH, label: v.sword ? `E — Tirer encore (${v.sword}/${SWORD_PULLS})` : 'E — Déterrer l\'épée' }] : []),
     ...(v.buildings.includes('palisade') ? [] : [{ ...offer('palisade', map.village, 'Monter'), reach: 110 }]),
     ...(v.buildings.includes('bridge') ? [] : [{ ...offer('bridge', map.bridge.a, 'Réparer'), reach: 150 }]),
@@ -220,7 +223,7 @@ const duration = (sec: number) => (sec < 60 ? `${sec} s` : `${Math.floor(sec / 6
 export class Hud {
   private mini = $<HTMLCanvasElement>('minimap').getContext('2d')!;
   private miniBg: HTMLCanvasElement;
-  private last = { party: '', den: '', cls: '', spec: '', travel: '', bestiary: '', market: '', hall: '', members: '', elder: '', school: '' };
+  private last = { party: '', den: '', cls: '', spec: '', travel: '', bestiary: '', market: '', hall: '', members: '', elder: '', school: '', profile: '' };
   private denTab: 'alphas' | 'bestiary' = 'alphas';
   private form: BestiaryForm = 'wild'; // forme montrée par le bestiaire
   private beasts: Portrait[] = [];
@@ -268,7 +271,7 @@ export class Hud {
   school: [number, number] = [0, 0]; // École des dompteurs : plan trouvé (0/1), secondes avant la fin du chantier d'Aubin
   /** Géants dont le vieil homme attend le parchemin : ceux de l'île (ceux du volcan n'en laissent pas). */
   private islandCaves() {
-    return this.map.caves.filter((c) => c.zone < VOLCANO_ZONE).length;
+    return this.map.caves.filter((c) => c.zone < VOLCANO_ZONE && !SPECIES[c.boss].optional).length;
   }
   onScrollGive = () => {};
   onBoat = () => {};
@@ -402,7 +405,7 @@ export class Hud {
       this.npcAt++;
       this.showNpc();
     };
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school'] as const) {
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -528,6 +531,11 @@ export class Hud {
     }
     $('hall').hidden = panel !== 'hall';
     $('settings').hidden = panel !== 'settings';
+    $('profile').hidden = panel !== 'profile';
+    if (panel === 'profile') {
+      this.last.profile = '';
+      this.onBoard(); // les couleurs des membres endormis au village (déjà prises)
+    }
     $('chat').hidden = panel !== 'chat';
     $('board').hidden = panel !== 'board';
     if (panel === 'board') this.onBoard(); // le serveur répond avec le tableau à jour
@@ -710,7 +718,7 @@ export class Hud {
       const act = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.heart ? this.onHeart() : b.plan ? this.onPlan() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
       onTap(prompt, act);
     }
-    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board'].includes(this.panel);
+    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board', 'profile'].includes(this.panel);
     if (building && b?.panel !== this.panel) this.setPanel(null);
     if (b?.buy) this.buying = b.buy;
     if (b?.at !== undefined && b.at !== this.spotAt) {
@@ -726,6 +734,7 @@ export class Hud {
     this.myScrolls = me.scrolls ?? 0;
     if (this.panel === 'elder') this.updateElder(me);
     if (this.panel === 'settings') this.updateMembers(me, players);
+    if (this.panel === 'profile') this.updateProfile(me, players);
     if (this.panel === 'market') this.updateMarket(me);
     if (this.panel === 'forge') this.updateForge(me);
     if (this.panel === 'den' && this.denTab === 'alphas') this.updateDen(me);
@@ -785,7 +794,7 @@ export class Hud {
     // juste le nom de chaque lieu (le village, les camps)
     const rows = [{ to: -1, name: 'Village', open: village }].concat(
       this.map.sites.map((_, i) => ({ to: i, name: campName(i), open: this.camps.includes(i) })),
-      this.lore[1] >= BOAT_STAGES.length ? [{ to: -2, name: 'Bateau', open: true }] : [],
+      dockStoneOn(this.buildings, this.lore[1]) ? [{ to: -2, name: 'Bateau', open: true }] : [],
     );
     $('stones').replaceChildren(
       ...rows.map((r) => {
@@ -1052,6 +1061,7 @@ export class Hud {
   private initSettings(founder: boolean) {
     this.founder = founder;
     $('settings-open').onclick = () => this.setPanel('settings');
+    $('profile-open').onclick = () => this.setPanel('profile');
     onTap($('menu-open'), () => this.setPanel(this.panel === 'quit' ? null : 'quit'));
     onTap($('chat-open'), () => this.setPanel(this.panel === 'chat' ? null : 'chat'));
     $('chat-form').addEventListener('submit', (e) => {
@@ -1173,6 +1183,58 @@ export class Hud {
   onQuality = () => {};
 
   /** Membres en ligne (le fondateur peut les expulser), puis déconnectés ; comptes bannis (il peut les réintégrer). */
+  onProfile = (_color: number, _hat: number) => {};
+
+  /** Profil : aperçu du dompteur, couleurs (celles des autres membres sont prises) et chapeaux. */
+  private updateProfile(me: PlayerState, players: PlayerState[]) {
+    const taken = new Set([...players.filter((p) => p.id !== me.id).map((p) => p.color), ...this.offline.filter((o) => o.name !== me.name).map((o) => o.color)]);
+    const owned = (h: number) => h === 0 || (me.hats ?? []).includes(h);
+    const key = JSON.stringify([me.color, me.hat, me.hats, me.armor, me.cls, [...taken], HAT_PRICES.map((c) => me.gold >= c)]);
+    if (key === this.last.profile) return;
+    this.last.profile = key;
+    const color = PLAYER_COLORS.indexOf(me.color), armed = (me.sword ?? SWORD_PULLS) >= SWORD_PULLS;
+    const paint = (canvas: HTMLCanvasElement, hat: number, scale: number, name: string) => {
+      const ctx = canvas.getContext('2d')!, w = canvas.width, h = canvas.height;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      ctx.setTransform(scale, 0, 0, scale, w / 2, h * 0.72);
+      drawPlayer(ctx, 0, 0, me.color, 0.4, 0.9, me.armor, name, 0, false, false, false, false, me.cls, null, me.weapon, armed, hat);
+    };
+    paint($<HTMLCanvasElement>('profile-preview'), me.hat, 2.4, '');
+    $('profile-colors').replaceChildren(...PLAYER_COLORS.map((c, i) => {
+      const b = document.createElement('button');
+      b.className = 'swatch';
+      b.style.background = c;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(i === color));
+      b.setAttribute('aria-label', taken.has(c) ? 'Couleur prise par un autre membre' : `Couleur ${i + 1}`);
+      b.disabled = taken.has(c) && i !== color;
+      b.onclick = () => this.onProfile(i, me.hat);
+      return b;
+    }));
+    $('profile-hats').replaceChildren(...HATS.map((name, i) => {
+      const b = document.createElement('button');
+      b.className = 'hat-btn';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(i === me.hat));
+      const cv = document.createElement('canvas');
+      cv.width = 128;
+      cv.height = 112;
+      cv.setAttribute('aria-hidden', 'true');
+      paint(cv, i, 2, '');
+      const label = document.createElement('span'), price = document.createElement('span');
+      label.textContent = name;
+      // à acheter : son prix (en rouge s'il manque de l'or) ; déjà à lui : il le porte d'un clic
+      price.className = `small ${owned(i) ? 'muted' : me.gold >= HAT_PRICES[i] ? 'hat-price' : 'hat-price short'}`;
+      price.textContent = i === me.hat ? 'Porté' : owned(i) ? (i ? 'Acheté' : 'Gratuit') : `${HAT_PRICES[i]} or`;
+      b.append(cv, label, price);
+      b.setAttribute('aria-label', `${name} — ${price.textContent}`);
+      b.disabled = !owned(i) && me.gold < HAT_PRICES[i];
+      b.onclick = () => this.onProfile(color, i);
+      return b;
+    }));
+  }
+
   private updateMembers(me: PlayerState, players: PlayerState[]) {
     const key = JSON.stringify([players.map((p) => [p.id, p.name]), this.offline, this.banned]);
     if (key === this.last.members) return;

@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, unarmedAdd } from '../helpers.ts';
-import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE, ZONES, gearWood, gearCost, saddleSpeed } from '../../shared/config.ts';
+import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE, ZONES, gearWood, gearCost, saddleSpeed, HAT_PRICES } from '../../shared/config.ts';
 import { Room } from '../../server/room.ts';
 import { villageEdge } from '../../shared/worldmap.ts';
 import { ELDER_CHAPTERS } from '../../client/src/elder.ts';
@@ -56,8 +56,8 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
       if (k < BOAT_STAGES.length - 1) r.onBoat(p);
     }
     check(r.boat === BOAT_STAGES.length && saved.boat === BOAT_STAGES.length, `bateau terminé en ${BOAT_STAGES.length} étapes`);
-    const island = m.caves.filter((c: { zone: number }) => c.zone <= ZONES).length;
-    check(ELDER_CHAPTERS.length === island, `un souvenir par géant de l'île (${ELDER_CHAPTERS.length} chapitres, ${island} géants ; ceux du volcan n'ont pas de parchemin)`);
+    const island = m.caves.filter((c: { zone: number; boss: number }) => c.zone <= ZONES && !SPECIES[c.boss].optional).length;
+    check(ELDER_CHAPTERS.length === island, `un souvenir par géant de l'île (${ELDER_CHAPTERS.length} chapitres, ${island} géants ; ceux du volcan et le Scorpion Empereur, facultatif, n'ont pas de parchemin)`);
     [p.x, p.y] = [m.stones[0].x, m.stones[0].y + 40];
     r.onTravel(p, -2);
     check(Math.hypot(p.x - m.boatStone.x, p.y - m.boatStone.y) < 120, 'Pierre de passage du bateau : on y voyage depuis le village');
@@ -574,6 +574,28 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     r2.addSleeper('lou', profA);
     const a2 = r2.addPlayer('Lou', noop, { userId: 'lou', profile: profA });
     check(a2.color === PLAYER_COLORS[0], 'Lou revient : la sienne aussi');
+  });
+
+  rule('Profil : une couleur libre au choix, des chapeaux achetés une fois en or, gardés à la reconnexion.', () => {
+    const r = room();
+    const a = r.addPlayer('Lou', noop, { userId: 'lou', profile: null });
+    const b = r.addPlayer('Max', noop, { userId: 'max', profile: null });
+    r.onProfile(a, 1, 0);
+    check(a.color === PLAYER_COLORS[0], 'la couleur de Max est prise : Lou garde la sienne');
+    r.onProfile(a, 7, 0);
+    check(a.color === PLAYER_COLORS[7] && r.profileOf(a).seat === 7, 'une couleur libre : choisie et enregistrée');
+    a.gold = HAT_PRICES[4] - 1;
+    r.onProfile(a, 7, 4);
+    check(a.hat === 0 && a.gold === HAT_PRICES[4] - 1, 'pas assez d\'or : pas de tricorne');
+    a.gold = HAT_PRICES[4] + 50;
+    r.onProfile(a, 7, 4);
+    check(a.hat === 4 && a.gold === 50 && a.hats.includes(4), `tricorne acheté ${HAT_PRICES[4]} or et porté`);
+    r.onProfile(a, 7, 0);
+    r.onProfile(a, 7, 4);
+    check(a.hat === 4 && a.gold === 50, 'déjà acheté : on le remet sans payer');
+    const back = r.addPlayer('Lou', noop, { userId: 'lou2', profile: r.profileOf(a) });
+    check(back.hat === 4 && back.hats.includes(4), 'chapeau et achats gardés avec la progression');
+    void b;
   });
 
   rule('Tableau du village : géants battus, apprivoisements, dons, or dépensé pour le village ; enregistrés et visibles pour les déconnectés.', () => {

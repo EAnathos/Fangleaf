@@ -1084,6 +1084,7 @@ export class WorldMap {
     if (b === 'palisade') return this.village;
     if (b === 'forge2') return this.forge; // la Grande forge : la forge améliorée, sur place
     if (b === 'school') return this.school;
+    if (b === 'dock') return this.boatStone;
     return this[(b.startsWith('plot_') ? b.slice(5) : b) as 'forge' | 'den' | 'market'];
   }
 

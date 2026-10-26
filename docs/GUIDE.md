@@ -57,7 +57,7 @@ s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois 
    (tapis dans l'eau, on ne voit que leurs yeux ; ils en sortent pour attaquer ce qui passe près de la rive, puis y
    retournent ; ils se montent, dans l'eau) et Petits Masqués à la sarbacane (leurs fléchettes **empoisonnent** : on
    perd des PV quelques secondes, une goutte verte au-dessus de la tête). Leurs géants dorment au fond de **temples** à degrés.
-7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Chacals fantômes la nuit ; tempêtes de sable. Un grand volcan s'y dresse.
+7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable. Un grand volcan s'y dresse.
 8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles crachent de la lave en cloche) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
@@ -100,7 +100,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
     s'il tombe en pleine eau, on se noie.
   - Au bord de l'eau, avec une monture nageuse et une terrestre : **F** en regardant l'eau monte la nageuse, en
     regardant la terre, la terrestre.
-  - Le **Vautour** vole : il passe au-dessus de l'eau, des rochers et des arbres.
+  - Le **Vautour** vole : il passe au-dessus de l'eau, des rochers et des arbres. Dans la meute aussi, il suit son
+    dompteur en volant et se pose quand il s'arrête.
   - L'**Escargot** se monte… mais ralentit.
 
 ## Alphas et Tanière
@@ -190,6 +191,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   **Crabe Titan** découpe dans le tas avec sa **grande pince** (tout l'arc devant lui) et noie tout sous des bulles
   d'**écume** qui éclatent et collent.
 - Le **Roi-Vautour** lâche des **tornades** qui poursuivent leur cible : elles blessent et aspirent ce qui les approche.
+- Le **Scorpion Empereur**, 4e géant de la Mer de sable, est **facultatif** : ni porte, ni parchemin, ni volcan n'en
+  dépendent. Ses pinces et son dard empoisonnent, il crache son venin en éventail et appelle ses scorpions.
 - Vaincu, il laisse un **coffre** (chacun l'ouvre une fois, pour un montant d'or aléatoire) et parfois son **âme**.
   Le dernier géant d'une zone que le village bat (une fois tous vaincus) laisse le **parchemin de la zone** pour le
   vieil homme. Il revient après un délai. Si tout le monde sort, il se
@@ -213,7 +216,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Chaque **parchemin de zone** rapporté lui rend les souvenirs de cette zone, d'un trait. On peut les lui faire
   raconter de nouveau, zone par zone (« Les anciens parchemins »).
 - Tous ses souvenirs retrouvés, il reconstruit le **bateau** échoué au bout de l'île, en plusieurs étapes payées en
-  or et avec la réserve du village. Une fois fini, une Pierre de passage y mène.
+  or et avec la réserve du village. Sa **Pierre de passage** se construit dès que la Mer de sable est ouverte.
 - Il lui manque encore son **cœur** : celui du volcan. On le pose dans la coque (**E** devant le bateau), et le
   bateau est prêt à prendre la mer, cap sur le Colisée.
 
@@ -249,4 +252,6 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - L'or et les essences des monstres vaincus se partagent entre dompteurs proches.
 - Un membre **déconnecté** dort près du feu du village, sa meute autour de lui.
 - **Chat** : **C** ou le bouton 💬 ; chaque message s'affiche aussi dans une bulle au-dessus de son auteur.
+- **Menu › Profil** : choisir sa couleur (une par membre du village) et un chapeau, acheté une fois en or, sans effet en jeu.
+- Se connecter sur un autre appareil déconnecte la session en cours (sa progression est sauvegardée d'abord).
 - Le **fondateur** peut expulser (et réintégrer) un membre, et supprimer le village.

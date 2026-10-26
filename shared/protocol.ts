@@ -15,19 +15,22 @@ export interface Stats {
   deaths: number; // chutes
   revives: number; // coéquipiers relevés
   essences: number; // essences recueillies
-  awakened: number; // Alphas éveillés
-  legends: number; // Alphas rendus légendaires
   wood: number; // bois récolté
   stone: number; // pierre récoltée
   chests: number; // coffres de géants ouverts
-  books: number; // livres d'apprentissage trouvés
   dist: number; // distance parcourue (px)
   time: number; // temps de jeu dans ce village (s)
 }
 /** Clés des statistiques, dans l'ordre du tableau (STAT_KEYS). */
-export const STAT_KEYS = ['bosses', 'firsts', 'kills', 'dmg', 'best', 'deaths', 'revives', 'tamed', 'essences', 'awakened', 'legends', 'wood', 'stone', 'given', 'spent', 'chests', 'books', 'dist', 'time'] as const satisfies readonly (keyof Stats)[];
+export const STAT_KEYS = ['bosses', 'firsts', 'kills', 'dmg', 'best', 'deaths', 'revives', 'tamed', 'essences', 'wood', 'stone', 'given', 'spent', 'chests', 'dist', 'time'] as const satisfies readonly (keyof Stats)[];
+/** Ce qui se lit directement dans la progression du dompteur (pas un compteur) : ses Alphas, ses livres. */
+export interface Holdings {
+  awakened: number; // Alphas éveillés qu'il possède
+  legends: number; // dont légendaires
+  books: number; // livres d'apprentissage trouvés (dans le sac ou déjà lus)
+}
 /** Ligne du tableau du village. */
-export interface BoardRow extends Stats {
+export interface BoardRow extends Stats, Holdings {
   name: string;
   color: string;
   online: boolean;
@@ -38,6 +41,7 @@ export type ClientMsg =
   | { t: 'join'; code: string; name: string; token?: string }
   | { t: 'leave'; code: string; token: string } // depuis le lobby : quitter un de ses villages (sa progression y est effacée)
   | { t: 'pos'; x: number; y: number; fx: number; fy: number }
+  | { t: 'profile'; color: number; hat: number } // profil : couleur (PLAYER_COLORS) et chapeau (HATS)
   | { t: 'upgrade'; what: Gear }
   | { t: 'alphaUp'; s: number } // renforcer l'Alpha de cette espèce (équipé ou au repos)
   | { t: 'alphaEquip'; s: number; equip: boolean } // l'emmener sur le terrain, ou le ranger à la Tanière
@@ -83,6 +87,8 @@ export interface PlayerState {
   id: number;
   name: string;
   color: string;
+  hat: number; // chapeau choisi dans son profil (HATS ; 0 : tête nue)
+  hats: number[]; // chapeaux achetés (HAT_PRICES)
   x: number;
   y: number;
   fx: number; // direction du regard
@@ -154,7 +160,7 @@ export type HazardStyle = (typeof HAZARD_STYLES)[number];
 export type ShotTuple = [number, number, number, number, number, number, number, number];
 
 /** Dompteur déconnecté, endormi au village : [nom, couleur, armure, classe ('' sans), x, y]. */
-export type SleeperTuple = [string, string, number, string, number, number];
+export type SleeperTuple = [string, string, number, string, number, number, number]; // nom, couleur, armure, classe, x, y, chapeau
 /** Monstre d'un dompteur endormi : [id, espèce, flags (UNIT_FLAG_ALPHA, _LEGEND, _DORMANT = endormi), x, y, index du dompteur dans sleepers]. */
 export type DozerTuple = [number, number, number, number, number, number];
 

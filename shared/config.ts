@@ -21,7 +21,7 @@ export const SCHOOL_OFFSET = { x: 405, y: 140 }; // École des dompteurs (bâtie
 export const BUILDING_REACH = 110;
 // Bâtiments du village : construits par n'importe quel membre contre de l'or, une fois pour tout le village.
 // Il faut aussi du bois et de la pierre (récoltés sur la carte), et parfois un Hôtel de ville assez développé.
-export type BuildingId = 'forge' | 'den' | 'market' | 'stone' | 'palisade' | 'plot_forge' | 'plot_den' | 'plot_market' | 'forge2' | 'school' | 'bridge';
+export type BuildingId = 'forge' | 'den' | 'market' | 'stone' | 'palisade' | 'plot_forge' | 'plot_den' | 'plot_market' | 'forge2' | 'school' | 'bridge' | 'dock';
 export interface Cost {
   gold: number;
   wood: number;
@@ -29,7 +29,7 @@ export interface Cost {
 }
 // Mise en place du camp : au départ, il n'y a que le feu. On monte la palissade, puis on défriche l'emplacement
 // de chaque bâtiment avant de pouvoir le bâtir (needs : ce qu'il faut avoir fait avant).
-export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: number; stone: number; hall: number; desc: string; needs?: BuildingId }> = {
+export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: number; stone: number; hall: number; desc: string; needs?: BuildingId; zone?: number }> = {
   // le vieux pont qui mène à l'îlot du village est cassé : on le répare avec le bois et la pierre de son sac (l'entrepôt
   // est de l'autre côté), avant tout le reste
   bridge: { name: 'Pont de bois', cost: 0, wood: 12, stone: 6, hall: 0, desc: 'Le vieux pont qui mène à l\'îlot du village est cassé. Répare-le avec le bois et la pierre de ton sac.' },
@@ -44,6 +44,8 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: n
   // amélioration de la forge (à la forge, pas d'emplacement à part) : au-delà du niveau 10, l'arme suit une spécialisation
   forge2: { name: 'Grande forge', cost: 2500, wood: 400, stone: 450, hall: 4, desc: 'Au-delà du niveau 10, choisis la spécialisation de ton arme.', needs: 'forge' },
   // au village, mais bâtie par Aubin : il faut d'abord trouver son plan, dans le coffre du Camp avancé (une fois le camp établi)
+  // près de l'épave, au bout de l'île : elle se construit dès que la porte de la Mer de sable (zone 7) est ouverte
+  dock: { name: 'Pierre de passage du bateau', cost: 1000, wood: 60, stone: 150, hall: 0, zone: 7, desc: 'Voyage instantané jusqu\'à l\'épave du bateau, au bout de l\'île. Se construit dès que la Mer de sable est ouverte.' },
   school: { name: 'École des dompteurs', cost: 1500, wood: 250, stone: 200, hall: 4, desc: 'On y lit les livres d\'apprentissage trouvés dans les coffres des géants. Aubin la bâtit au village, d\'après le plan caché au Camp avancé.' },
 };
 /** « 20 or · 15 bois · 10 pierre » (les montants nuls sont omis). */
@@ -69,7 +71,8 @@ export const HALL: (Cost & { unlock: string })[] = [
 ];
 export const HALL_MAX = HALL.length;
 /** Géants d'une zone (index d'espèce) : il faut rapporter tous leurs parchemins pour ouvrir la porte de la zone suivante. */
-export const zoneBosses = (z: number) => SPECIES.map((sp, i) => (sp.boss && sp.zone === z ? i : -1)).filter((i) => i >= 0);
+/** Géants de la zone dont dépendent sa porte, son parchemin, le volcan et le bateau (pas les géants facultatifs). */
+export const zoneBosses = (z: number) => SPECIES.map((sp, i) => (sp.boss && sp.zone === z && !sp.optional ? i : -1)).filter((i) => i >= 0);
 /** Niveau d'Hôtel de ville pour ouvrir la porte k (0 : sortie du village vers la zone 1 ; k ≥ 1 : vers la zone k + 1). */
 export const gateHall = (k: number) => (k === 0 ? 1 : k + 1);
 /** Porte k ouverte : Hôtel de ville au niveau requis et, après la première, parchemins des géants de la zone k tous lus par Aubin. */
@@ -114,6 +117,8 @@ export const BOAT_STAGES: (Cost & { name: string })[] = [
   { name: 'Les voiles', gold: 12000, wood: 900, stone: 600 },
 ];
 export const BOAT_STAGE_MS = 30 * 60 * 1000;
+/** Pierre de passage du bateau active : construite (dès la Mer de sable ouverte), ou bateau déjà reconstruit. */
+export const dockStoneOn = (buildings: readonly BuildingId[], boat: number) => buildings.includes('dock') || boat >= BOAT_STAGES.length;
 export const ELDER_REACH = 90; // pour lui parler, lui donner un parchemin ou des ressources
 export const SCROLL_REACH = 70; // pour ramasser un parchemin
 export const ELDER_OFFSET = { x: -46, y: 62 }; // le vieil homme, près du feu du village
@@ -231,7 +236,13 @@ export const REVIVE_WINDOW_S = 10;
 export const REVIVE_HOLD_S = 5; // R maintenu près du corps
 export const REVIVE_R = 80;
 export const REVIVE_HP = 0.5; // relevé avec la moitié de ses PV
-export const PLAYER_COLORS = ['#5CC8B8', '#E6A15C', '#D886C9', '#8FD16A']; // une par place du village (MAX_PLAYERS)
+// Couleur de chaque dompteur : les 4 premières sont données d'office (une par place du village, MAX_PLAYERS) ; les
+// autres se choisissent dans son profil. Deux membres du village n'ont jamais la même. (N'ajouter qu'à la fin : sauvegardé.)
+export const PLAYER_COLORS = ['#5CC8B8', '#E6A15C', '#D886C9', '#8FD16A', '#E8D45C', '#E8695C', '#6F9BE8', '#B48CFF', '#F2F0E6', '#4FB06A', '#E890B0', '#9A7A5A'];
+/** Chapeaux du profil, purement décoratifs (0 : tête nue). N'ajouter qu'à la fin : sauvegardé. */
+export const HATS = ['Tête nue', 'Chapeau de paille', 'Bonnet', 'Couronne de fleurs', 'Tricorne', 'Chapeau de sorcier', 'Haut-de-forme', 'Casquette', 'Feuille'];
+/** Prix en or de chaque chapeau (payé une fois : on le garde ensuite). */
+export const HAT_PRICES = [0, 200, 300, 500, 1000, 1500, 2500, 400, 100];
 
 export const ARMY_CAP = 12; // meute ordinaire (les Alphas ne comptent pas), avant les leçons de l'école (armyCap)
 export const RECALL_R = 420; // trop loin du dompteur : la meute lâche tout et revient
@@ -533,6 +544,7 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   titan_crab: [{ kind: 'pincer', cd: 4.5 }, { kind: 'bubbles', cd: 7, n: 5 }, { kind: 'enrage', below: 0.3 }],
   sand_queen: [{ kind: 'blink', cd: 5 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'slam', cd: 8 }], // elle plonge et resurgit sous sa cible
   vulture_king: [{ kind: 'tornado', cd: 9, n: 2, dur: 6 }, { kind: 'leap', cd: 5 }, { kind: 'mortar', cd: 7, n: 4 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // tornades, piqués, pluie d'ossements, ses vautours
+  scorpion_king: [{ kind: 'pincer', cd: 6 }, { kind: 'volley', cd: 5, n: 5, shot: 'dart' }, { kind: 'charge', cd: 8 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'enrage', below: 0.3 }], // pinces, crachats de venin, ses scorpions
   moon_jackal: [{ kind: 'charge', cd: 4 }, { kind: 'summon', cd: 9, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
   // elle fonce en laissant une traînée de lave, appelle ses petits
   salamander_queen: [{ kind: 'trail', cd: 7, dur: 4 }, { kind: 'charge', cd: 4 }, { kind: 'summon', cd: 10, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
@@ -569,7 +581,7 @@ export const TORNADO_R = 70;
 export const TORNADO_SPEED = 120;
 export const TORNADO_PULL = 150;
 export const TORNADO_PULL_R = 230;
-/** Fléchettes des Petits Masqués : poison (part des dégâts du tir, chaque seconde, pendant POISON_S). */
+/** Fléchettes des Petits Masqués, dard du scorpion : poison (part des dégâts du coup, chaque seconde, pendant POISON_S). */
 export const POISON_DPS = 0.18;
 export const POISON_S = 4;
 // Les géants poursuivent : quand leur cible s'éloigne, ils accélèrent (impossible de les tuer en reculant).
@@ -604,6 +616,9 @@ export interface Species {
   swim?: boolean; // sauvage, il ne quitte jamais l'eau (apprivoisé, il suit son dompteur sur terre et dans l'eau)
   amphibious?: boolean; // apprivoisé, il suit son dompteur dans l'eau (sauvage, il reste à terre)
   night?: boolean; // n'apparaît que la nuit (il s'envole au lever du jour)
+  day?: boolean; // n'apparaît que le jour (il s'enfouit au coucher du soleil)
+  venom?: boolean; // ses coups au corps à corps empoisonnent (le scorpion)
+  optional?: boolean; // géant ajouté après coup : ni porte, ni parchemin, ni volcan, ni bateau n'en dépendent
   sleeps?: 'night' | 'day'; // sauvage, il dort la nuit (lièvre) ou le jour (ours) : ni aggro ni errance, jusqu'à ce qu'on le frappe
   shell?: boolean; // sauvage, il rentre dans sa coquille (intouchable) quand un dompteur sans fruit en main approche
   rainSpeed?: number; // sauvage, sa vitesse sous une grosse averse (multiplicateur ; l'escargot aime la pluie)
@@ -702,6 +717,9 @@ export const SPECIES: Species[] = [
   { key: 'gorilla_king', name: 'Roi Gorille', color: '#2E2A28', r: 66, hp: 58000, dmg: 205, speed: 195, atkCd: 1.2, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Mbolo, le Roi des Cimes', sprite: 'gorilla', base: 'gorilla' },
   { key: 'croc_king', name: 'Crocodile Ancien', color: '#3F5A30', r: 66, hp: 62000, dmg: 215, speed: 185, atkCd: 1.3, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Croc, Gardien des Eaux Noires', sprite: 'croc', base: 'croc' },
   { key: 'mask_lord', name: 'Grand Masque', color: '#8A4A2A', r: 57, hp: 52000, dmg: 195, speed: 205, atkCd: 1.0, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Tlaloq, l\'Esprit Masqué', sprite: 'masked', base: 'masked' },
+  // Mer de sable, de jour seulement (il s'enfouit au coucher du soleil, quand sortent les chacals) : son dard empoisonne.
+  { key: 'scorpion', name: 'Scorpion des dunes', color: '#C8913E', r: 20, hp: 1900, dmg: 100, speed: 135, atkCd: 1.2, gold: 85, zone: 7, population: 18, pack: [1, 3], day: true, venom: true },
+  { key: 'scorpion_king', name: 'Scorpion Empereur', color: '#7A2E22', r: 63, hp: 80000, dmg: 290, speed: 200, atkCd: 1.1, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, optional: true, venom: true, title: 'Seth-Akrab, l\'Empereur des Dunes', sprite: 'scorpion', base: 'scorpion' },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);

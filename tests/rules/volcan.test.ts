@@ -97,7 +97,7 @@ describe('Le volcan et ses entrailles', () => {
     check(r.heart === HEART_IN_BOAT && boatReady(r.boat, r.heart) && saved.heart === HEART_IN_BOAT, 'devant le bateau rebâti : le cœur est installé, le bateau peut prendre la mer');
     const back = new Room('TEST', r.seed, { ...saved });
     check(back.heart === HEART_IN_BOAT, 'il reste dans le bateau au redémarrage');
-    check(r.bossCount() === r.map.caves.filter((c: { zone: number }) => c.zone <= ZONES).length, 'les géants du volcan ne comptent pas dans les souvenirs du vieil homme');
+    check(r.bossCount() === r.map.caves.filter((c: { zone: number; boss: number }) => c.zone <= ZONES && !SPECIES[c.boss].optional).length, 'les géants du volcan (et le Scorpion Empereur, facultatif) ne comptent pas dans les souvenirs du vieil homme');
     check(!r.scrollCaves(p).some((id: number) => r.map.caves[id].zone === VOLCANO_ZONE), 'ils ne laissent pas de parchemin');
   });
 

@@ -227,6 +227,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'rename') room.onRename(player, msg.name);
     else if (msg.t === 'deposit') room.onDeposit(player);
     else if (msg.t === 'chat') room.onChat(player, String(msg.text ?? ''));
+    else if (msg.t === 'profile') room.onProfile(player, +msg.color, +msg.hat);
     else if (msg.t === 'board') room.onBoard(player);
     else if (msg.t === 'kick') room.onKick(player, +msg.id);
     else if (msg.t === 'unban') room.onUnban(player, String(msg.user));

@@ -35,6 +35,8 @@ export interface Profile {
   read_at?: number; // fin de la leçon en cours (horodatage ms ; 0 : aucune)
   read_kind?: number; // discipline de la leçon en cours
   seat?: number | null; // place dans le village (sa couleur, PLAYER_COLORS) ; absente avant la migration 024
+  hat?: number; // chapeau porté (HATS) ; absent avant la migration 026
+  hats?: number[]; // chapeaux achetés
 }
 
 let db: SupabaseClient | null = null;
@@ -150,7 +152,7 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   if (!db) return null;
   const { data, error } = await db
     .from('progress')
-    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, saddle, armed, scrolls, essences, alphas, village_found, class, spec, specs, pack, seen, stats, tomes, learned, read_at, read_kind, seat')
+    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, saddle, armed, scrolls, essences, alphas, village_found, class, spec, specs, pack, seen, stats, tomes, learned, read_at, read_kind, seat, hat, hats')
     .eq('user_id', userId)
     .eq('village_code', code)
     .maybeSingle();
@@ -167,11 +169,11 @@ export async function countVillages(userId: string): Promise<number> {
 }
 
 /** Membres enregistrés d'un village (pour les montrer endormis au village tant qu'ils sont déconnectés). */
-export async function loadMembers(code: string): Promise<{ userId: string; profile: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats' | 'learned' | 'seat'> }[]> {
+export async function loadMembers(code: string): Promise<{ userId: string; profile: Pick<Profile, 'name' | 'armor' | 'class' | 'alphas' | 'pack' | 'stats' | 'learned' | 'tomes' | 'seat' | 'hat'> }[]> {
   if (!db) return [];
-  const { data, error } = await db.from('progress').select('user_id, name, armor, class, alphas, pack, stats, learned, seat').eq('village_code', code).order('user_id');
+  const { data, error } = await db.from('progress').select('user_id, name, armor, class, alphas, pack, stats, learned, tomes, seat, hat').eq('village_code', code).order('user_id');
   if (error) throw new Error(`Lecture des membres impossible : ${error.message}`);
-  return (data ?? []).map((d) => ({ userId: String(d.user_id), profile: { name: d.name, armor: d.armor, class: d.class, alphas: d.alphas ?? [], pack: d.pack ?? [], stats: d.stats ?? {}, learned: d.learned ?? [], seat: d.seat } }));
+  return (data ?? []).map((d) => ({ userId: String(d.user_id), profile: { name: d.name, armor: d.armor, class: d.class, alphas: d.alphas ?? [], pack: d.pack ?? [], stats: d.stats ?? {}, learned: d.learned ?? [], tomes: d.tomes ?? [], seat: d.seat, hat: d.hat } }));
 }
 
 export async function saveProgress(userId: string, code: string, p: Profile) {
