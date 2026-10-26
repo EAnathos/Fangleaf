@@ -419,7 +419,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .hold-btn.on svg { transform: translateY(-3px) scale(1.12); } /* baie tendue */
 .res { display: inline-flex; align-items: center; gap: 3px; }
 .stats.small:has(.res) { gap: 10px; } /* sac : icône + nombre */
-@media (max-width: 480px) { .stats.small:has(.res) > .muted { display: none; } } /* téléphone : les icônes suffisent, sans le mot « Sac » */
+@media (max-width: 860px) { /* téléphone : les icônes suffisent, sans le mot « Sac » ; la ligne passe à la suivante plutôt que de déborder */
+  .stats.small:has(.res) { gap: 4px 8px; flex-wrap: wrap; }
+  .stats.small:has(.res) > .muted { display: none; }
+}
 .res svg { flex: none; }
 /* sous le bouton baie, même forme : il n'apparaît qu'avec une monture */
 .mount-btn { position: absolute; right: 16px; bottom: 28px; width: 56px; height: 56px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border-color: #B8743A; background: rgba(27, 38, 36, 0.92); }

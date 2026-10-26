@@ -1110,7 +1110,7 @@ export class Game {
       case 'boss': {
         const c = this.map.caves[e.cave];
         const near = c && (this.map.caveAt(this.me.x, this.me.y)?.id === c.id || Math.hypot(this.me.x - c.entrance.x, this.me.y - c.entrance.y) < 1500);
-        if (e.down) this.hud.toast(`${bossName(e.s)} est vaincu ! Ouvre son coffre (E) · retour du géant dans 5 min.`, 'good');
+        if (e.down) this.hud.toast(`${bossName(e.s)} est vaincu !`, 'good');
         else if (near) this.hud.toast(`${bossName(e.s)} est de retour dans sa grotte…`);
         if (!e.down && c && this.map.caveAt(this.me.x, this.me.y)?.id === c.id) {
           // il réapparaît sous nos yeux : le cercle d'invocation éclate

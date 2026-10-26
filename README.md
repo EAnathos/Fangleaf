@@ -22,7 +22,7 @@ npm install
 npm run dev
 ```
 
-Ouvre http://localhost:5173, fonde un village, puis **Menu › Inviter des amis** pour copier le lien
+Ouvre http://localhost:5173, fonde un village, puis **Menu › Paramètres › Village › Inviter des amis** pour copier le lien
 (`?v=CODE`) à envoyer à tes amis. Pour tester seul la coop, ouvre le lien dans un 2e onglet.
 En `npm run dev`, **F9** donne de l'or, du bois, de la pierre et des essences pour tester vite.
 

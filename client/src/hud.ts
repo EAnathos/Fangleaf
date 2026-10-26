@@ -62,6 +62,9 @@ export interface VillageView {
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 const ROMAN = ['I', 'II', 'III'];
 const num = (n: number) => Math.round(n).toLocaleString('fr-FR');
+/** Sac : nombre court à partir de 10 000 (11k, 250k, 1,2M), pour que la ligne tienne sur téléphone. */
+const short = (n: number) =>
+  n < 10_000 ? String(n) : n < 1_000_000 ? `${Math.floor(n / 1000)}k` : `${(Math.floor(n / 100_000) / 10).toLocaleString('fr-FR')}M`;
 /** Petit nom d'un géant : son titre sans ce qui suit la virgule ni l'épithète (« Lueur », « Grisecroc », « Ursus Mâchefer »). */
 const shortTitle = (boss: number) => (SPECIES[boss]?.title ?? SPECIES[boss]?.name ?? '').split(/,| (?:le|la|les|aux|l') /)[0].trim();
 /** Tableau du village, par catégorie : clé de la statistique, libellé, mise en forme, et « moins, c'est mieux ». */
@@ -358,9 +361,9 @@ export class Hud {
       ? `Supprimer définitivement le village <b>${code}</b> ? La carte, les camps et la progression de <b>tous ses membres</b> (or, équipement, essences, Alphas) seront effacés. C'est irréversible.`
       : `Effacer définitivement <b>ta</b> progression dans le village <b>${code}</b> (or, équipement, essences, Alphas) ? Seul son fondateur peut supprimer le village. C'est irréversible.`;
     const confirmStep = (on: boolean) => {
-      $('quit-main').hidden = on;
+      $('reset-main').hidden = on;
       $('reset-confirm').hidden = !on;
-      $<HTMLButtonElement>(on ? 'reset-cancel' : 'quit-confirm').focus();
+      $<HTMLButtonElement>(on ? 'reset-cancel' : 'reset-ask').focus();
     };
     $('reset-ask').onclick = () => confirmStep(true);
     $('reset-cancel').onclick = () => confirmStep(false);
@@ -501,7 +504,7 @@ export class Hud {
     $('buy').hidden = panel !== 'buy';
     $('bigmap').hidden = panel !== 'map';
     $('quit').hidden = panel !== 'quit';
-    $('quit-main').hidden = false; // le menu rouvre toujours sur ses choix, jamais sur la confirmation
+    $('reset-main').hidden = false; // les paramètres rouvrent toujours sur leurs choix, jamais sur la confirmation
     $('reset-confirm').hidden = true;
     $('travel').hidden = panel !== 'travel';
     $('camp').hidden = panel !== 'camp';
@@ -653,10 +656,10 @@ export class Hud {
     setStyle(fill, 'width', `${Math.round(Math.max(0, hpRatio) * 1000) / 10}%`); // arrondi : comparable à ce que le navigateur garde
     fill.classList.toggle('low', hpRatio < 0.3);
     setText($('self-hptext'), `${me.hp} / ${me.maxHp}`); // dans la barre de vie
-    setText($('self-gold'), String(me.gold)); // l'icône (pièce) dit ce que c'est
-    setText($('self-wood'), String(me.wood)); // l'icône dit ce que c'est
-    setText($('self-stone'), String(me.stone));
-    setText($('self-fruits'), String(me.fruits));
+    setText($('self-gold'), short(me.gold)); // l'icône (pièce) dit ce que c'est
+    setText($('self-wood'), short(me.wood)); // l'icône dit ce que c'est
+    setText($('self-stone'), short(me.stone));
+    setText($('self-fruits'), short(me.fruits));
     // au doigt seulement (sur PC : touche T) : tendre ou ranger un fruit
     const hold = $('hold-btn');
     hold.classList.toggle('on', me.holding);
@@ -751,7 +754,7 @@ export class Hud {
     this.mountId = me.mount?.id ?? 0;
     setHidden($('mount-row'), !me.mount);
     if (me.mount) {
-      setText($('mount-name'), `Sur l'Alpha ${SPECIES[me.mount.species].name}`);
+      setText($('mount-name'), 'Monture');
       setStyle($('mount-hp'), 'width', `${me.mount.hp}%`);
     }
 

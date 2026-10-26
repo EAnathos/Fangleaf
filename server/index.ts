@@ -43,7 +43,14 @@ const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 4096, p
 const cleanName = (n: unknown) =>
   (typeof n === 'string' ? n : '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 16) || 'Dompteur';
 
-const activeUsers = new Set<string>(); // un compte ne peut être connecté qu'une fois
+// Un compte ne peut être connecté qu'une fois : une nouvelle connexion déloge l'ancienne (sauvegardée d'abord).
+const activeUsers = new Map<string, () => Promise<void>>();
+
+/** Déconnecte la session en cours de ce compte et attend qu'elle soit sauvegardée et partie. */
+async function evict(userId: string) {
+  const kick = activeUsers.get(userId);
+  if (kick) await kick();
+}
 
 /**
  * Repartir de zéro : le fondateur supprime le village (et la progression de tous ses membres),
@@ -81,13 +88,21 @@ wss.on('connection', (ws: WebSocket) => {
   const send = (m: ServerMsg) => {
     if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(m));
   };
+  let gone!: () => void;
+  const released = new Promise<void>((resolve) => (gone = resolve)); // session sauvegardée et retirée
+  const kick = () => {
+    send({ t: 'closed', msg: 'Ce compte s\'est connecté sur un autre appareil.' });
+    ws.close();
+    setTimeout(() => ws.terminate(), 1500); // appareil qui ne répond plus : on coupe net
+    return released;
+  };
 
   /** Depuis le lobby : quitter un de ses villages (pas celui où ce compte est en train de jouer). */
   async function leave(msg: Extract<ClientMsg, { t: 'leave' }>) {
     const user = persistenceEnabled() ? await verifyToken(String(msg.token ?? '')) : null;
     if (!user) return send({ t: 'error', msg: 'Session expirée : reconnecte-toi.' });
     const code = String(msg.code ?? '').toUpperCase().trim();
-    if (activeUsers.has(user.userId)) return send({ t: 'error', msg: 'Ce compte est en jeu : quitte la partie d\'abord.' });
+    await evict(user.userId);
     const { deleted, founder } = await leaveVillage(user.userId, code);
     const live = rooms.get(code);
     if (live) {
@@ -105,7 +120,7 @@ wss.on('connection', (ws: WebSocket) => {
     if (msg.token && persistenceEnabled()) {
       user = await verifyToken(msg.token);
       if (!user) return send({ t: 'error', msg: 'Session expirée : reconnecte-toi.' });
-      if (activeUsers.has(user.userId)) return send({ t: 'error', msg: 'Ce compte est déjà en jeu.' });
+      await evict(user.userId);
       if (!msg.name && user.name) name = cleanName(user.name);
     } else if (process.env.ALLOW_GUESTS !== '1') {
       return send({ t: 'error', msg: persistenceEnabled() ? 'Connecte-toi avec Google pour jouer.' : 'Serveur sans Supabase : connexion impossible.' });
@@ -143,15 +158,19 @@ wss.on('connection', (ws: WebSocket) => {
     }
 
     // Progression propre à ce compte DANS ce village : ailleurs, on repart de zéro.
-    const profile = user ? await loadProgress(user.userId, r.code) : null;
+    let profile = user ? await loadProgress(user.userId, r.code) : null;
     if (user && !profile && msg.t === 'join' && (await countVillages(user.userId)) >= MAX_VILLAGES) return send({ t: 'error', msg: tooMany });
-    if (ws.readyState !== ws.OPEN) return;
-    if (user && activeUsers.has(user.userId)) return send({ t: 'error', msg: 'Ce compte est déjà en jeu.' });
+    if (user && activeUsers.has(user.userId)) {
+      // connecté ailleurs pendant le chargement : on le déloge, puis on relit sa progression tout juste sauvegardée
+      await evict(user.userId);
+      profile = await loadProgress(user.userId, r.code);
+    }
+    if (ws.readyState !== ws.OPEN || (user && activeUsers.has(user.userId))) return;
     rooms.set(r.code, r);
     r.onVillage ??= (v) => void saveVillage(r.code, v);
     room = r;
     if (user) {
-      activeUsers.add(user.userId);
+      activeUsers.set(user.userId, kick);
       userId = user.userId;
     }
     player = r.addPlayer(name, send, user ? { userId: user.userId, profile } : undefined);
@@ -243,14 +262,15 @@ wss.on('connection', (ws: WebSocket) => {
     if (room && player) {
       const r = room, p = player;
       save(r, p).finally(() => {
-        if (userId) activeUsers.delete(userId);
+        if (userId && activeUsers.get(userId) === kick) activeUsers.delete(userId);
+        gone();
       });
       r.removePlayer(p.id);
       if (r.players.size === 0) {
         rooms.delete(r.code);
         console.log(`[${r.code}] fermé (vide)`);
       }
-    } else if (userId) activeUsers.delete(userId);
+    } else gone();
   });
 });
 

@@ -677,9 +677,9 @@ export const SPECIES: Species[] = [
   { key: 'vulture', name: 'Vautour', color: '#4A3A30', r: 21, hp: 1700, dmg: 110, speed: 150, atkCd: 1.1, gold: 90, zone: 7, population: 18, pack: [1, 2], flies: true },
   { key: 'jackal', name: 'Chacal fantôme', color: '#CDBB98', r: 18, hp: 1400, dmg: 90, speed: 175, atkCd: 0.9, gold: 80, zone: 7, population: 24, pack: [4, 6], night: true },
   // Géants de la Mer de sable : une grotte chacun.
-  { key: 'sand_queen', name: 'Reine des sables', color: '#A87A4A', r: 66, hp: 62000, dmg: 230, speed: 190, atkCd: 1.4, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Dunebouche, la Reine des Sables', sprite: 'sandworm', base: 'sandworm' },
-  { key: 'vulture_king', name: 'Roi-Vautour', color: '#3A2C24', r: 60, hp: 54000, dmg: 215, speed: 200, atkCd: 1.2, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Charognard, le Roi des Cieux', sprite: 'vulture', base: 'vulture' },
-  { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 50000, dmg: 205, speed: 220, atkCd: 0.9, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Anubeth, le Chacal de la Lune', sprite: 'jackal', base: 'jackal' },
+  { key: 'sand_queen', name: 'Reine des sables', color: '#A87A4A', r: 66, hp: 86000, dmg: 300, speed: 190, atkCd: 1.3, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Dunebouche, la Reine des Sables', sprite: 'sandworm', base: 'sandworm' },
+  { key: 'vulture_king', name: 'Roi-Vautour', color: '#3A2C24', r: 60, hp: 76000, dmg: 280, speed: 200, atkCd: 1.1, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Charognard, le Roi des Cieux', sprite: 'vulture', base: 'vulture' },
+  { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 70000, dmg: 265, speed: 220, atkCd: 0.85, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Anubeth, le Chacal de la Lune', sprite: 'jackal', base: 'jackal' },
   // Bois profonds : le Tréant dort dans un arbre ; il en sort parfois quand on l'abat (jamais d'apparition ailleurs).
   { key: 'treant', name: 'Tréant', color: '#6B4E30', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1], awaken: 20 }, // rare : éveil moins cher
   // Entrailles du volcan (zone 7, sous la Mer de sable) : trois espèces qu'on ne voit nulle part ailleurs, et leurs géants
@@ -699,9 +699,9 @@ export const SPECIES: Species[] = [
   { key: 'gorilla', name: 'Gorille des cimes', color: '#3E3A38', r: 24, hp: 1500, dmg: 80, speed: 110, atkCd: 1.3, gold: 60, zone: 6, population: 20, pack: [1, 2], ranged: { kind: 'banana', range: 300, windup: 0.5, speed: 0, splash: 46 }, brawler: true, moves: [{ kind: 'pound', cd: 8 }] },
   { key: 'croc', name: 'Crocodile des marais', color: '#56703F', r: 24, hp: 1400, dmg: 95, speed: 100, atkCd: 1.5, gold: 58, zone: 6, population: 16, pack: [1, 1], swim: true, ambush: true, reach: 46 },
   { key: 'masked', name: 'Petit Masqué', color: '#A0603A', r: 17, hp: 800, dmg: 60, speed: 150, atkCd: 1.3, gold: 45, zone: 6, population: 22, pack: [2, 4], ranged: { kind: 'dart', range: 330, windup: 0.4, speed: 620 } },
-  { key: 'gorilla_king', name: 'Roi Gorille', color: '#2E2A28', r: 66, hp: 42000, dmg: 160, speed: 195, atkCd: 1.3, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Mbolo, le Roi des Cimes', sprite: 'gorilla', base: 'gorilla' },
-  { key: 'croc_king', name: 'Crocodile Ancien', color: '#3F5A30', r: 66, hp: 46000, dmg: 170, speed: 185, atkCd: 1.4, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Croc, Gardien des Eaux Noires', sprite: 'croc', base: 'croc' },
-  { key: 'mask_lord', name: 'Grand Masque', color: '#8A4A2A', r: 57, hp: 38000, dmg: 150, speed: 205, atkCd: 1.1, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Tlaloq, l\'Esprit Masqué', sprite: 'masked', base: 'masked' },
+  { key: 'gorilla_king', name: 'Roi Gorille', color: '#2E2A28', r: 66, hp: 58000, dmg: 205, speed: 195, atkCd: 1.2, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Mbolo, le Roi des Cimes', sprite: 'gorilla', base: 'gorilla' },
+  { key: 'croc_king', name: 'Crocodile Ancien', color: '#3F5A30', r: 66, hp: 62000, dmg: 215, speed: 185, atkCd: 1.3, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Croc, Gardien des Eaux Noires', sprite: 'croc', base: 'croc' },
+  { key: 'mask_lord', name: 'Grand Masque', color: '#8A4A2A', r: 57, hp: 52000, dmg: 195, speed: 205, atkCd: 1.0, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Tlaloq, l\'Esprit Masqué', sprite: 'masked', base: 'masked' },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);
@@ -757,6 +757,7 @@ export const FLEE_S = 4; // le gibier frappé s'enfuit pendant ce temps
 // Apprivoiser aux baies : on cueille aux buissons, on tend un fruit (touche T) ; le gibier passif s'approche peu à peu,
 // et chaque fruit donné a une chance de l'apprivoiser (bien plus faible pour un monstre hostile).
 export const BERRIES_PICKED = 3; // baies cueillies sur un buisson garni
+export const MAX_BERRIES = 200; // baies qu'un dompteur peut porter
 export const BUSH_PICK_R = 80; // distance pour cueillir
 export const FEED_CD = 1; // s entre deux fruits donnés
 export const LURE_R = 340; // le gibier passif voit un fruit tendu de cette distance

@@ -243,7 +243,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 
 ## Jouer à plusieurs
 
-- Jusqu'à **4 dompteurs** par village. **Menu › Inviter des amis** copie le lien d'invitation (`?v=CODE`).
+- Jusqu'à **4 dompteurs** par village. **Menu › Paramètres › Village › Inviter des amis** copie le lien d'invitation (`?v=CODE`).
 - La progression est rattachée au **compte dans un village** : un autre village, c'est repartir de zéro. Un compte
   a au plus 3 villages, listés dans le lobby.
 - L'or et les essences des monstres vaincus se partagent entre dompteurs proches.

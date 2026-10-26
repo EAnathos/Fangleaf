@@ -70,7 +70,7 @@
       <label class="field" id="code-field" hidden>Code du village
         <input id="code" class="code-input" maxlength="6" autocomplete="off" spellcheck="false" placeholder="MOSS42">
       </label>
-      <p id="create-hint" class="hint">Tu fondes un village à 4 places. Invite tes amis avec le bouton « Inviter » une fois en jeu.</p>
+      <p id="create-hint" class="hint">Tu fondes un village à 4 places. Invite tes amis une fois en jeu (Paramètres › Village › Inviter des amis).</p>
       <p id="mine-hint" class="hint" hidden></p>
       <button id="go" class="cta" type="submit">Fonder le village</button>
       <div id="mine-leave" class="mine-leave" hidden>
@@ -250,16 +250,7 @@
         </div>
         <div id="quit-main" class="col quit-main">
           <button id="quit-confirm" class="cta">Retour au lobby</button>
-          <button id="invite" class="btn">Inviter des amis · <span id="code-label"></span></button>
           <button id="settings-open" class="btn">Paramètres</button>
-          <button id="reset-ask" class="danger-btn"></button>
-        </div>
-        <div id="reset-confirm" class="col quit-main" hidden>
-          <p id="reset-text" class="reset-text"></p>
-          <div class="row quit-actions">
-            <button id="reset-cancel" class="btn">Annuler</button>
-            <button id="reset-go" class="danger-btn solid"></button>
-          </div>
         </div>
       </div>
     </div>
@@ -326,11 +317,22 @@
           <button id="keys-reset" class="btn">Touches par défaut</button>
         </section>
         <section id="set-village" class="col set-page" role="tabpanel" hidden>
+          <button id="invite" class="btn">Inviter des amis · <span id="code-label"></span></button>
           <h3 class="market-head">Membres du village</h3>
           <div id="members" class="stones"></div>
           <div id="banned-box" class="col" hidden>
             <h3 class="market-head">Bannis</h3>
             <div id="banned" class="stones"></div>
+          </div>
+          <div id="reset-main" class="col quit-main">
+            <button id="reset-ask" class="danger-btn"></button>
+          </div>
+          <div id="reset-confirm" class="col quit-main" hidden>
+            <p id="reset-text" class="reset-text"></p>
+            <div class="row quit-actions">
+              <button id="reset-cancel" class="btn">Annuler</button>
+              <button id="reset-go" class="danger-btn solid"></button>
+            </div>
           </div>
         </section>
       </div>
