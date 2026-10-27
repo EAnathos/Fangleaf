@@ -45,7 +45,7 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: n
   forge2: { name: 'Grande forge', cost: 2500, wood: 400, stone: 450, hall: 4, desc: 'Au-delà du niveau 10, choisis la spécialisation de ton arme.', needs: 'forge' },
   // au village, mais bâtie par Aubin : il faut d'abord trouver son plan, dans le coffre du Camp avancé (une fois le camp établi)
   // près de l'épave, au bout de l'île : elle se construit dès que la porte de la Mer de sable (zone 7) est ouverte
-  dock: { name: 'Pierre de passage du bateau', cost: 1000, wood: 60, stone: 150, hall: 0, zone: 7, desc: 'Voyage instantané jusqu\'à l\'épave du bateau, au bout de l\'île. Se construit dès que la Mer de sable est ouverte.' },
+  dock: { name: 'Pierre de passage du bateau', cost: 50000, wood: 60, stone: 150, hall: 0, zone: 7, desc: 'Voyage instantané jusqu\'à l\'épave du bateau, au bout de l\'île. Se construit dès que la Mer de sable est ouverte.' },
   school: { name: 'École des dompteurs', cost: 1500, wood: 250, stone: 200, hall: 4, desc: 'On y lit les livres d\'apprentissage trouvés dans les coffres des géants. Aubin la bâtit au village, d\'après le plan caché au Camp avancé.' },
 };
 /** « 20 or · 15 bois · 10 pierre » (les montants nuls sont omis). */
@@ -242,7 +242,7 @@ export const PLAYER_COLORS = ['#5CC8B8', '#E6A15C', '#D886C9', '#8FD16A', '#E8D4
 /** Chapeaux du profil, purement décoratifs (0 : tête nue). N'ajouter qu'à la fin : sauvegardé. */
 export const HATS = ['Tête nue', 'Chapeau de paille', 'Bonnet', 'Couronne de fleurs', 'Tricorne', 'Chapeau de sorcier', 'Haut-de-forme', 'Casquette', 'Feuille'];
 /** Prix en or de chaque chapeau (payé une fois : on le garde ensuite). */
-export const HAT_PRICES = [0, 200, 300, 500, 1000, 1500, 2500, 400, 100];
+export const HAT_PRICES = [0, 20000, 30000, 50000, 100000, 150000, 250000, 40000, 10000];
 
 export const ARMY_CAP = 12; // meute ordinaire (les Alphas ne comptent pas), avant les leçons de l'école (armyCap)
 export const RECALL_R = 420; // trop loin du dompteur : la meute lâche tout et revient

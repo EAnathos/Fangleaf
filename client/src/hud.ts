@@ -237,7 +237,6 @@ export class Hud {
   onAlphaCreate = (_species: number) => {};
   onHelp = (_on: boolean) => {};
   private helpHeld = false; // bouton « relever » maintenu au doigt
-  onMount = (_id: number) => {};
   onCave = (_id: number, _enter: boolean) => {};
   onLegend = (_id: number) => {};
   onQuit = () => {};
@@ -311,7 +310,6 @@ export class Hud {
   private bigBg?: HTMLCanvasElement;
   private miniAt = 0; // dernier dessin de la minicarte
   private bigAt = 0; // et de la grande carte
-  private mountId = 0;
 
   /** founder : fondateur du village (peut le supprimer) ; sinon on n'efface que sa propre progression. */
   constructor(code: string, private map: WorldMap, private fog: Fog, founder: boolean) {
@@ -466,8 +464,6 @@ export class Hud {
       else if (btn?.dataset.create) this.onAlphaCreate(Number(btn.dataset.create));
       const eq = (e.target as HTMLElement).closest<HTMLButtonElement>('button.equip');
       if (eq?.dataset.s) this.onAlphaEquip(Number(eq.dataset.s), eq.dataset.equip === '1');
-      const ride = (e.target as HTMLElement).closest<HTMLButtonElement>('button.ride');
-      if (ride?.dataset.id) this.onMount(Number(ride.dataset.id));
       const leg = (e.target as HTMLElement).closest<HTMLButtonElement>('button.legend-btn');
       if (leg?.dataset.legend) this.onLegend(Number(leg.dataset.legend));
     });
@@ -760,7 +756,6 @@ export class Hud {
     else if (this.helpHeld) this.releaseHelp();
 
     // Monture.
-    this.mountId = me.mount?.id ?? 0;
     setHidden($('mount-row'), !me.mount);
     if (me.mount) {
       setText($('mount-name'), 'Monture');
@@ -1187,7 +1182,9 @@ export class Hud {
 
   /** Profil : aperçu du dompteur, couleurs (celles des autres membres sont prises) et chapeaux. */
   private updateProfile(me: PlayerState, players: PlayerState[]) {
-    const taken = new Set([...players.filter((p) => p.id !== me.id).map((p) => p.color), ...this.offline.filter((o) => o.name !== me.name).map((o) => o.color)]);
+    // couleurs déjà prises par un autre membre (en ligne ou endormi au village) : on ne peut pas les choisir
+    const takenBy = new Map<string, string>([...this.offline.filter((o) => o.name !== me.name), ...players.filter((p) => p.id !== me.id)].map((o) => [o.color, o.name]));
+    const taken = new Set(takenBy.keys());
     const owned = (h: number) => h === 0 || (me.hats ?? []).includes(h);
     const key = JSON.stringify([me.color, me.hat, me.hats, me.armor, me.cls, [...taken], HAT_PRICES.map((c) => me.gold >= c)]);
     if (key === this.last.profile) return;
@@ -1203,16 +1200,21 @@ export class Hud {
     paint($<HTMLCanvasElement>('profile-preview'), me.hat, 2.4, '');
     $('profile-colors').replaceChildren(...PLAYER_COLORS.map((c, i) => {
       const b = document.createElement('button');
-      b.className = 'swatch';
+      const off = taken.has(c) && i !== color;
+      b.className = `swatch${off ? ' taken' : ''}`;
       b.style.background = c;
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(i === color));
-      b.setAttribute('aria-label', taken.has(c) ? 'Couleur prise par un autre membre' : `Couleur ${i + 1}`);
-      b.disabled = taken.has(c) && i !== color;
-      b.onclick = () => this.onProfile(i, me.hat);
+      b.setAttribute('aria-label', off ? `Couleur prise par ${takenBy.get(c)}` : `Couleur ${i + 1}`);
+      b.title = off ? `Prise par ${takenBy.get(c)}` : '';
+      b.disabled = off;
+      if (!off) b.onclick = () => this.onProfile(i, me.hat);
       return b;
     }));
-    $('profile-hats').replaceChildren(...HATS.map((name, i) => {
+    // du moins cher au plus cher (tête nue d'abord)
+    const byPrice = HATS.map((_, i) => i).sort((a, b) => HAT_PRICES[a] - HAT_PRICES[b]);
+    $('profile-hats').replaceChildren(...byPrice.map((i) => {
+      const name = HATS[i];
       const b = document.createElement('button');
       b.className = 'hat-btn';
       b.setAttribute('role', 'radio');
@@ -1770,23 +1772,12 @@ export class Hud {
         // Équiper (5 au maximum sur le terrain, 6 avec le tome du volcan) ou ranger à la Tanière.
         if (a) {
           const eq = document.createElement('button');
-          eq.className = 'equip';
+          eq.className = `equip${rest && equipped >= equipMax ? ' full' : ''}`; // plus de place : grisé
           eq.dataset.s = String(s);
           eq.dataset.equip = rest ? '1' : '0';
           eq.disabled = !!rest && equipped >= equipMax;
           eq.textContent = rest ? (equipped >= equipMax ? `${equipMax}/${equipMax} équipés` : 'Équiper') : 'Déséquiper';
           el.querySelector('.actions')!.append(eq);
-        }
-        // Monture : seuls certains Alphas équipés se chevauchent.
-        if (field && MOUNTS[sp.key]) {
-          const ride = document.createElement('button');
-          const on = this.mountId === field.id;
-          ride.className = `ride${on ? ' on' : ''}`;
-          ride.dataset.id = String(field.id);
-          ride.disabled = !!field.reviveIn;
-          ride.textContent = on ? 'Descendre' : 'Monter';
-          ride.title = `Monture : vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}`;
-          el.querySelector('.actions')!.append(ride);
         }
         return el;
       }),

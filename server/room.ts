@@ -1792,8 +1792,9 @@ export class Room {
 
   /** Monstre sauvage qu'on combat : ni géant endormi, ni gibier passif (lui ne s'apprivoise qu'aux fruits). */
   private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !e.hidden && !SPECIES[e.s].passive;
-  /** En l'air : un dompteur à dos de vautour, ou sa monture volante elle-même. */
+  /** En l'air : un dompteur à dos de vautour, sa monture volante elle-même, ou un vautour de la meute (il suit en volant). */
   private airborne(e: Ent) {
+    if (e.kind === 'u' && e.owner && SPECIES[e.s].flies) return true;
     const mount = e.kind === 'p' ? (e.mount ? this.units.get(e.mount) : undefined) : this.isMount(e) ? e : undefined;
     return !!mount && flyMount(mount.s);
   }
@@ -2901,7 +2902,8 @@ export class Room {
       return;
     }
     // Un géant accélère quand sa cible s'éloigne : on ne le tue pas en reculant (arc, mage).
-    const chase = isBoss(u.s) && dist2(u.x, u.y, t.x, t.y) > (range + BOSS_CHASE_R) ** 2 ? BOSS_CHASE_MULT : 1;
+    // (un vautour de la meute fond sur un vautour sauvage en plein vol : il va plus vite que lui)
+    const chase = isBoss(u.s) && dist2(u.x, u.y, t.x, t.y) > (range + BOSS_CHASE_R) ** 2 ? BOSS_CHASE_MULT : u.owner && t.kind === 'u' && t.hidden && SPECIES[u.s].flies ? 1.6 : 1;
     const arrived = this.navTo(u, t.x, t.y, u.speed * chase, range - 2);
     if (isBoss(u.s)) return this.bossMelee(u);
     u.atkCd -= DT;
@@ -3254,19 +3256,20 @@ export class Room {
       }
     }
 
+    const prey = this.preyOf(u); // un vautour de la meute attaque aussi les vautours sauvages en plein vol
     let t = this.getEnt(u.target);
     const anchorX = o.dead ? u.x : o.x, anchorY = o.dead ? u.y : o.y;
     const leash = o.dead ? 140 : FOLLOW_MAX_R;
-    if (!this.alive(t) || !this.isWild(t) || dist2(anchorX, anchorY, t.x, t.y) > leash ** 2) {
+    if (!this.alive(t) || !prey(t) || dist2(anchorX, anchorY, t.x, t.y) > leash ** 2) {
       t = undefined;
       u.target = 0;
     }
     if (!t && u.lastAttacker) {
       const a = this.getEnt(u.lastAttacker);
-      if (this.alive(a) && this.isWild(a) && dist2(anchorX, anchorY, a.x, a.y) < leash ** 2) t = a;
+      if (this.alive(a) && prey(a) && dist2(anchorX, anchorY, a.x, a.y) < leash ** 2) t = a;
       u.lastAttacker = 0;
     }
-    if (!t) t = this.nearest(anchorX, anchorY, o.dead ? 120 : FOLLOW_ENGAGE_R, this.isWild, u.x, u.y);
+    if (!t) t = this.nearest(anchorX, anchorY, o.dead ? 120 : FOLLOW_ENGAGE_R, prey, u.x, u.y);
     if (t) {
       u.target = t.id;
       if ((u.legend || SPECIES[u.s].moves) && this.legendMove(u, t)) return; // en pleine attaque spéciale

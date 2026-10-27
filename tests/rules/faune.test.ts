@@ -358,4 +358,23 @@ describe('Faune : tireurs, gibier, baies, bestiaire', () => {
     const back = r.addPlayer('b', noop, { userId: 'v', profile: { ...prof, seen: [], essences: SPECIES.map((_, i) => (i === 3 ? 2 : 0)) } });
     check(back.seen.has(3), 'bestiaire : les espèces déjà chassées (essences) y figurent pour une ancienne sauvegarde');
   });
+
+  rule('Vautour de la meute : il suit en volant et attaque les vautours sauvages en plein vol.', () => {
+    const r = room();
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    p.hp = 1e6;
+    const vulture = SPECIES.findIndex((sp) => sp.key === 'vulture');
+    const mine = r.createUnit(vulture, false, p.x + 40, p.y);
+    r.makeTamed(mine, p);
+    mine.hp = mine.maxHp = 1e6;
+    const wild = r.createUnit(vulture, false, p.x + 160, p.y);
+    wild.hidden = true; // en vol, hors d'atteinte du sol
+    const hp0 = wild.hp;
+    for (let i = 0; i < 20 * 6; i++) {
+      [wild.hidden, wild.emerging, wild.diveAt] = [true, false, r.time + 99]; // il reste en l'air, sans piquer
+      r.step();
+    }
+    check(wild.hp < hp0 || !r.units.has(wild.id), `le vautour sauvage, en plein vol, est touché par le nôtre (${Math.round(wild.hp)}/${Math.round(hp0)} PV)`);
+  });
 });

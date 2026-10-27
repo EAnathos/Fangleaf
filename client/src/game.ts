@@ -98,7 +98,6 @@ export class Game {
     this.world = new World(this.map);
     this.fog = new Fog(`fangleaf.fog.v8.${seed}`, (x, y) => !this.map.isForest(x, y)); // v8 : zones agrandies à partir des Ruines moussues
     this.hud = new Hud(code, this.map, this.fog, founder);
-    this.hud.onMount = (id) => net.send({ t: 'mount', id });
     this.hud.onCave = (id, enter) => net.send({ t: 'cave', id, enter });
     this.hud.onLegend = (s) => net.send({ t: 'legend', s });
     this.hud.onClass = (cls) => net.send({ t: 'class', cls });

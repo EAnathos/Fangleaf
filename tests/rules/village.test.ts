@@ -584,6 +584,9 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     check(a.color === PLAYER_COLORS[0], 'la couleur de Max est prise : Lou garde la sienne');
     r.onProfile(a, 7, 0);
     check(a.color === PLAYER_COLORS[7] && r.profileOf(a).seat === 7, 'une couleur libre : choisie et enregistrée');
+    r.removePlayer(b.id);
+    r.onProfile(a, 1, 0);
+    check(a.color === PLAYER_COLORS[7], 'Max, endormi au village, garde sa couleur : personne ne la prend');
     a.gold = HAT_PRICES[4] - 1;
     r.onProfile(a, 7, 4);
     check(a.hat === 0 && a.gold === HAT_PRICES[4] - 1, 'pas assez d\'or : pas de tricorne');
@@ -595,7 +598,6 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     check(a.hat === 4 && a.gold === 50, 'déjà acheté : on le remet sans payer');
     const back = r.addPlayer('Lou', noop, { userId: 'lou2', profile: r.profileOf(a) });
     check(back.hat === 4 && back.hats.includes(4), 'chapeau et achats gardés avec la progression');
-    void b;
   });
 
   rule('Tableau du village : géants battus, apprivoisements, dons, or dépensé pour le village ; enregistrés et visibles pour les déconnectés.', () => {

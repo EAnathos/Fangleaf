@@ -134,7 +134,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .profile-colors { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
 .swatch { aspect-ratio: 1; min-height: 40px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; box-shadow: inset 0 -4px 0 rgba(16,24,26,0.22); }
 .swatch[aria-checked="true"] { border-color: var(--text); outline: 2px solid var(--amber); outline-offset: 2px; }
-.swatch:disabled { opacity: 0.25; cursor: not-allowed; }
+.swatch { position: relative; }
+.swatch.taken { opacity: 0.35; cursor: not-allowed; }
+.swatch.taken::after { content: ''; position: absolute; inset: 18%; background: linear-gradient(45deg, transparent 44%, var(--night) 44%, var(--night) 56%, transparent 56%), linear-gradient(-45deg, transparent 44%, var(--night) 44%, var(--night) 56%, transparent 56%); }
 .profile-hats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .hat-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 12px; border: 2px solid var(--line); background: var(--panel-2); color: var(--text-2); font: 600 13px var(--body); cursor: pointer; min-height: 44px; }
 .hat-btn canvas { width: 64px; height: 56px; }
@@ -165,9 +167,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .alpha-card .actions { width: 140px; flex: none; display: flex; flex-direction: column; gap: 6px; } /* boutons étroits, empilés */
 .alpha-card .actions > button { width: 100%; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; }
 .alpha-card .actions > .buy { white-space: normal; line-height: 1.1; font-size: 15px; } /* « Éveiller · 4 min » sur deux lignes */
-.alpha-card .ride { height: 36px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--alpha); background: transparent; color: var(--alpha); font: 700 14px var(--display); white-space: nowrap; }
-.alpha-card .ride:disabled { border-color: var(--line); color: var(--muted); cursor: not-allowed; }
-.alpha-card .ride.on { background: rgba(180, 140, 255, 0.18); }
 #minimap { width: 180px; height: 180px; border-radius: 12px; border: 2px solid var(--line); background: var(--panel); }
 
 .prompt { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); border-color: var(--amber); color: var(--amber); font: 700 16px var(--display); height: auto; min-height: 44px; max-width: calc(100vw - 32px); padding: 8px 16px; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
@@ -284,6 +283,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .alpha-card .equip { height: 34px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--line); background: transparent; color: var(--text-2); font: 600 13px var(--body); white-space: nowrap; }
 .alpha-card .equip:hover:not(:disabled) { border-color: var(--ally); color: var(--ally); }
 .alpha-card .equip:disabled { color: var(--muted); cursor: not-allowed; }
+.alpha-card .equip.full { background: rgba(169, 179, 166, 0.12); border-color: rgba(169, 179, 166, 0.25); color: rgba(169, 179, 166, 0.6); }
 .alpha-card .legend-btn { height: 36px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--amber); background: rgba(240, 182, 74, 0.15); color: var(--amber); font: 700 13px var(--display); white-space: nowrap; }
 .alpha-card .legend-btn:disabled { border-color: var(--line); background: transparent; color: var(--muted); cursor: not-allowed; }
 .alphas .empty { color: var(--muted); padding: 16px; text-align: center; background: var(--night); border-radius: 12px; }
