@@ -481,7 +481,7 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
       }
       const got = { wood: p.wood - w0, stone: p.stone - s0, gold: p.gold - g0 };
       // quantité au hasard autour de la moyenne : entre le tirage le plus bas et le plus haut
-      const base = res === 'gold' ? oreStone(o.zone) : resYield(o.zone), lo = resRoll(base, 0), hi = resRoll(base, 1);
+      const base = (res === 'gold' ? oreStone(o.zone) : resYield(o.zone)) * o.size, lo = resRoll(base, 0), hi = resRoll(base, 1); // un gros rocher rapporte plus
       const n = got.stone, other = got.wood;
       check(n >= lo && n <= hi && other === 0 && (res !== 'gold' ? got.gold === 0 : got.gold > 0), `${res} (zone ${o.zone}) : +${got.wood} bois, +${got.stone} pierre, +${got.gold} or (entre ${lo} et ${hi})`);
     }

@@ -3,7 +3,7 @@
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
 import { DESERT_ZONE, JUNGLE_ZONE, ZONES, CACTUS_CD, CACTUS_PRICK, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
-import { BEACH, villageEdge, WorldMap } from '../../shared/worldmap.ts';
+import { BEACH, SEA_SHALLOW, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { sky } from '../../shared/weather.ts';
 import { Room } from '../../server/room.ts';
 
@@ -11,7 +11,8 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
   rule('Les 8 espèces apparaissent sur la carte, deux par zone.', () => {
     const r = room();
     const seen = new Set([...r.units.values()].map((u: { s: number }) => u.s));
-    check(SPECIES.every((sp, i) => seen.has(i) || sp.night || (!sp.boss && !sp.population)), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement (de jour, sauf les bêtes de nuit et le Tréant, caché dans les arbres)`);
+    const night = r.isNight(); // le ciel dépend de la graine du village : de jour, les bêtes de nuit sont absentes ; de nuit, celles de jour
+    check(SPECIES.every((sp, i) => seen.has(i) || (sp.night && !night) || (sp.day && night) || (!sp.boss && !sp.population)), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement (sauf, selon l'heure, les bêtes de nuit ou de jour, et le Tréant, caché dans les arbres)`);
     const zones = new Map<number, number>();
     for (const sp of SPECIES) if (!sp.boss && !sp.passive && sp.population && !sp.isle) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
     check([1, 2, 3].every((z) => zones.get(z) === 2) && zones.get(4) === 3 && zones.get(5) === 3, 'deux espèces hostiles par zone, trois en zones 4 et 5');
@@ -75,7 +76,15 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
       const mid = m.length / 2, c = m.spineAt(mid), nv = m.normalAt(mid), far = m.halfWidth(mid) + 1700;
       let shallow = false;
       for (let x = -WORLD_HALF + 50; x < WORLD_HALF && !shallow; x += 120) for (let y = -WORLD_HALF + 50; y < WORLD_HALF && !shallow; y += 120) shallow = m.isSea(x, y) && m.isWater(x, y);
-      check([-1, 1].every((k) => m.isForest(c.x + nv.x * far * k, c.y + nv.y * far * k) && m.blocked(c.x + nv.x * far * k, c.y + nv.y * far * k)) && shallow,
+      // au large (plus loin encore s'il y a un îlot du large à cet endroit : lui a sa mer peu profonde tout autour)
+      const deep = (k: number) => {
+        for (const d of [far, far + 2400]) {
+          const x = c.x + nv.x * d * k, y = c.y + nv.y * d * k;
+          if (!m.isletAt(x, y, SEA_SHALLOW + 100)) return m.isForest(x, y) && m.blocked(x, y);
+        }
+        return false;
+      };
+      check([-1, 1].every(deep) && shallow,
         `graine ${seed} : mer profonde infranchissable de part et d'autre, mer peu profonde le long de la côte (le serpent y nage)`);
     }
     {

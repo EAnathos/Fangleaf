@@ -876,7 +876,7 @@ export class WorldMap {
         // de la colonne vers le large jusqu'à la côte
         let d = 0;
         while (d < this.halfWidth(s) + 2500 && this.shoreAt(c.x + n.x * side * d, c.y + n.y * side * d) < 0) d += 16;
-        const gap = 220 + rand() * 80, x = c.x + n.x * side * (d + gap + r), y = c.y + n.y * side * (d + gap + r);
+        const gap = 440 + rand() * 160, x = c.x + n.x * side * (d + gap + r), y = c.y + n.y * side * (d + gap + r);
         if (Math.abs(x) > lim || Math.abs(y) > lim || this.zoneAt(x, y) !== plan.zone) continue;
         // tout autour : la mer (pas une autre côte trop près), et loin du village, de la plage, de l'épave et des autres îlots
         let ok = true;
