@@ -1794,7 +1794,7 @@ export class Hud {
     for (let j = 0; j < S; j++) {
       for (let i = 0; i < S; i++) {
         const x = -WORLD_HALF + (i + 0.5) * k, y = -WORLD_HALF + (j + 0.5) * k;
-        const col = this.map.isSea(x, y) ? seaColor(this.map, x, y) : this.map.isWater(x, y) ? [46, 101, 116] : landColor(this.map, x, y);
+        const col = this.map.isSea(x, y) ? seaColor(this.map, x, y) : this.map.isWater(x, y) ? [46, 101, 116] : landColor(this.map, x, y, false);
         const o = (j * S + i) * 4;
         img.data[o] = col[0] * 0.8;
         img.data[o + 1] = col[1] * 0.8;
