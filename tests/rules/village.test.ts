@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, unarmedAdd } from '../helpers.ts';
-import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE, ZONES, gearWood, gearCost, saddleSpeed, HAT_PRICES } from '../../shared/config.ts';
+import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE, ZONES, gearWood, gearCost, saddleSpeed, HAT_PRICES, oreHp } from '../../shared/config.ts';
 import { Room } from '../../server/room.ts';
 import { villageEdge } from '../../shared/worldmap.ts';
 import { ELDER_CHAPTERS } from '../../client/src/elder.ts';
@@ -447,8 +447,8 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
       check(r.map.blocked(t.x, t.y), 'un arbre debout bloque le passage');
     }
     const felled = chopDown(1);
-    const lo = resRoll(treeWood(1), 0), hi = resRoll(treeWood(1), 1);
-    check(r.map.treeDown.has(felled.d.id) && felled.got >= lo && felled.got <= hi, `arbre abattu (zone 1) : +${felled.got} bois (entre ${lo} et ${hi})`);
+    const k = r.map.treeScale(felled.d), lo = resRoll(treeWood(1) * k, 0), hi = resRoll(treeWood(1) * k, 1);
+    check(r.map.treeDown.has(felled.d.id) && felled.got >= lo && felled.got <= hi, `arbre abattu (zone 1, taille ×${k.toFixed(2)}) : +${felled.got} bois (entre ${lo} et ${hi})`);
     check(!r.map.blocked(felled.t.x, felled.t.y), 'abattu : on passe à travers sa souche');
     [p.x, p.y] = [felled.t.x + 400, felled.t.y];
     r.time += TREE_RESPAWN_S + 1;
@@ -509,7 +509,7 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     [p.x, p.y] = [o.x + 30, o.y];
     const gold0 = p.gold;
     for (let i = 0; i < 20 * 15 && r.oreHp[o.id] > 0; i++) r.step();
-    check(r.oreHp[o.id] <= 0 && p.gold === gold0 + oreGold(o.zone), `filon miné : +${p.gold - gold0} or (zone ${o.zone})`);
+    check(r.oreHp[o.id] <= 0 && p.gold === gold0 + Math.round(oreGold(o.zone) * o.size), `filon miné : +${p.gold - gold0} or (zone ${o.zone}, taille ×${o.size.toFixed(2)})`);
     check(!r.map.blocked(o.x, o.y), 'épuisé, il disparaît : on passe à travers');
     r.time += 1000;
     r.tick = 9;
@@ -574,6 +574,18 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     r2.addSleeper('lou', profA);
     const a2 = r2.addPlayer('Lou', noop, { userId: 'lou', profile: profA });
     check(a2.color === PLAYER_COLORS[0], 'Lou revient : la sienne aussi');
+  });
+
+  rule('Rochers petits, moyens ou gros, et arbres de toutes tailles : PV et récolte suivent la taille.', () => {
+    const r = room(), m = r.map;
+    const sizes = m.ores.map((o: { size: number }) => o.size);
+    const small = sizes.filter((s: number) => s < 0.8).length, big = sizes.filter((s: number) => s > 1.25).length;
+    check(small > 0 && big > 0 && sizes.every((s: number) => s > 0.6 && s < 1.5), `${small} petits et ${big} gros rochers sur ${sizes.length}`);
+    check(m.ores.every((o: { id: number; zone: number; size: number }) => Math.abs(r.oreHp[o.id] - oreHp(o.zone) * o.size) < 1e-6), 'PV de chaque rocher proportionnels à sa taille');
+    const scales = m.decor.filter((d: { kind: number }) => d.kind === 0).map((d: unknown) => m.treeScale(d));
+    check(Math.min(...scales) >= 0.5 && Math.max(...scales) <= 1.5 && Math.max(...scales) - Math.min(...scales) > 0.8, 'arbres de ×0,5 à ×1,5 (bois et coups de hache)');
+    // même graine, même carte : les tailles ne dépendent que de la position
+    check(new Room('TEST2', r.seed).map.ores.every((o: { size: number }, i: number) => o.size === m.ores[i].size), 'mêmes tailles à chaque génération');
   });
 
   rule('Profil : une couleur libre au choix, des chapeaux achetés une fois en or, gardés à la reconnexion.', () => {

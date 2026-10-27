@@ -164,7 +164,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
         ? { pos: map.depths.inside, reach: HEART_REACH + 40, label: `Scellé : encore ${left} géant${left > 1 ? 's' : ''} du volcan à vaincre` }
         : { heart: true, pos: map.depths.inside, reach: HEART_REACH, label: 'E — Prendre le cœur volcanique' }];
     })(),
-    ...map.caves.filter((c) => c.zone !== VOYAGE_ZONE).flatMap((c): Spot[] => [
+    ...map.caves.filter((c) => c.zone !== VOYAGE_ZONE && c.open === undefined).flatMap((c): Spot[] => [
       v.unlocked.includes(c.id)
         ? {
           cave: { id: c.id, enter: true }, pos: c.entrance,
@@ -173,7 +173,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
         : { panel: 'buy', pos: c.entrance, buy: { cave: c.id }, label: 'E — Débloquer la grotte' },
       { cave: { id: c.id, enter: false }, pos: c.exit, label: 'E — Sortir de la grotte' },
     ]),
-    ...v.chests.filter((c) => !c[3]).map((c): Spot => ({ chest: c[0], pos: { x: c[1], y: c[2] }, label: 'E — Ouvrir le coffre' })),
+    ...v.chests.filter((c) => !c[3]).map((c): Spot => ({ chest: c[0], pos: { x: c[1], y: c[2] }, label: c[0] < 0 ? 'E — Ouvrir le coffre du naufragé' : 'E — Ouvrir le coffre' })),
     ...map.bushes.filter((b) => !v.bare.includes(b.id) && Math.hypot(x - b.x, y - b.y) < BUSH_PICK_R)
       .map((b): Spot => ({ pick: true, pos: b, reach: BUSH_PICK_R, label: 'E — Cueillir' })),
     ...v.sleepers.filter((z) => map.caves[z.cave]?.zone !== VOYAGE_ZONE).map((z): Spot => ({ panel: 'talk', pos: z, at: z.cave, reach: z.r + BOSS_TALK_R, label: `E — Parler à ${SPECIES[map.caves[z.cave].boss].name}` })),
@@ -835,6 +835,11 @@ export class Hud {
     $('school-where').replaceChildren(
       ...ROMAN.map((t, i) => where(`Tome ${t}`, `géants ${ZONE_NAMES.slice(0, ZONES).filter((_, z) => tomeOfZone(z + 1) === i).join(', ')}`)),
       ...LESSON_KINDS.filter((kind) => DISCIPLINES[kind].volcano).map((kind) => where(DISCIPLINES[kind].tomes[0], `géants du volcan, ${ZONE_NAMES[VOLCANO_ZONE - 1]} (${DISCIPLINES[kind].name})`)),
+      // les tomes des îlots du large : chacun gardé par son géant
+      ...LESSON_KINDS.filter((kind) => DISCIPLINES[kind].isle).map((kind) => {
+        const boss = SPECIES.find((sp) => sp.tome === kind);
+        return where(DISCIPLINES[kind].tomes[0], `${boss?.name ?? 'géant'}, sur un îlot au large (${DISCIPLINES[kind].name})`);
+      }),
     );
     $('school-list').replaceChildren(...LESSON_KINDS.map((kind, k) => {
       const d = DISCIPLINES[kind], n = me.learned[k] ?? 0, next = tomeForLesson(n, k), solo = d.tomes.length === 1;
@@ -1879,7 +1884,7 @@ export class Hud {
 
   /** Grottes affichées sur la carte : repérées (hors brouillard), dans une zone ouverte, sur l'île. */
   private shownCaves() {
-    return this.map.caves.filter((c) => c.entrance.x < WORLD_HALF && c.zone !== VOYAGE_ZONE && this.zoneOpen(c.zone) && this.fog.isExplored(c.entrance.x, c.entrance.y));
+    return this.map.caves.filter((c) => c.entrance.x < WORLD_HALF && c.zone !== VOYAGE_ZONE && c.open === undefined && this.zoneOpen(c.zone) && this.fog.isExplored(c.entrance.x, c.entrance.y));
   }
 
   /** Grotte affichée sous ce point de la carte (px du canvas), la plus proche à moins de r, ou null. */

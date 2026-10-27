@@ -13,7 +13,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     const seen = new Set([...r.units.values()].map((u: { s: number }) => u.s));
     check(SPECIES.every((sp, i) => seen.has(i) || sp.night || (!sp.boss && !sp.population)), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement (de jour, sauf les bêtes de nuit et le Tréant, caché dans les arbres)`);
     const zones = new Map<number, number>();
-    for (const sp of SPECIES) if (!sp.boss && !sp.passive && sp.population) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
+    for (const sp of SPECIES) if (!sp.boss && !sp.passive && sp.population && !sp.isle) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
     check([1, 2, 3].every((z) => zones.get(z) === 2) && zones.get(4) === 3 && zones.get(5) === 3, 'deux espèces hostiles par zone, trois en zones 4 et 5');
   });
 
@@ -70,7 +70,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
       const zones = [1, 2, 3, 4, 5, 6, 7].map((z) => { const q = m.spineAt((m.zoneFrom(z) + m.zoneTo(z)) / 2); return m.zoneAt(q.x, q.y); }).join('');
       const end = m.spineAt(m.length - 250);
       const reachEnd = m.findPath(stone.x, stone.y + 50, end.x, end.y, 600000);
-      check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '1234567' && m.caves.filter((c) => c.zone <= ZONES).length === 19 && m.caves.filter((c) => c.zone === ZONES + 1).length === 3 && m.caves.filter((c) => c.zone === ZONES + 2).length === 1,
+      check(m.sites.length === 1 && m.zoneAt(site.x, site.y) === 4 && !!reach && !!reachEnd && zones === '1234567' && m.caves.filter((c) => c.zone <= ZONES && !SPECIES[c.boss].isle).length === 19 && m.caves.filter((c) => c.zone === ZONES + 1).length === 3 && m.caves.filter((c) => c.zone === ZONES + 2).length === 1,
         `graine ${seed} : île de ${m.length} px de long, zones ${zones} de plus en plus loin de la plage, camp au bout de la zone 4, bout de l'île (Mer de sable) atteignable, 18 grottes sur l'île (dont 3 temples dans la jungle) et 3 antres sous le volcan`);
       const mid = m.length / 2, c = m.spineAt(mid), nv = m.normalAt(mid), far = m.halfWidth(mid) + 1700;
       let shallow = false;
@@ -192,7 +192,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
   });
 
   rule('Ordre des espèces figé : leur index sert dans les sauvegardes (essences, Alphas). On n\'ajoute qu\'à la fin.', () => {
-    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise kraken_tentacle kraken gorilla croc masked gorilla_king croc_king mask_lord scorpion scorpion_king';
+    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise kraken_tentacle kraken gorilla croc masked gorilla_king croc_king mask_lord scorpion scorpion_king drake wyvern dragon drake_king wyvern_king dragon_king';
     check(SPECIES.map((sp) => sp.key).join(' ') === order, `ordre des ${SPECIES.length} espèces inchangé (sauvegardes intactes)`);
   });
 

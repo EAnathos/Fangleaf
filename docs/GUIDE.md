@@ -193,6 +193,15 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Le **Roi-Vautour** lâche des **tornades** qui poursuivent leur cible : elles blessent et aspirent ce qui les approche.
 - Le **Scorpion Empereur**, 4e géant de la Mer de sable, est **facultatif** : ni porte, ni parchemin, ni volcan n'en
   dépendent. Ses pinces et son dard empoisonnent, il crache son venin en éventail et appelle ses scorpions.
+- **Îlots du large** : cinq petites îles au large de la côte (zones 2 à 6), qu'on rejoint **à dos de serpent** (la
+  meute débarque avec son dompteur). Trois sont gardées par un géant facultatif, **à l'air libre** sur son îlot (on lui
+  parle pour le défier ; il se rendort quand plus personne n'est sur l'îlot), avec ses créatures autour, du plus
+  facile au plus dur : le **Grand Drake** (zone 3 ; Drakes des marées, qui crachent de l'eau), la **Wyverne-Reine**
+  (zone 5 ; Wyvernes des falaises, au dard empoisonné) et le **Dragon ancien** (zone 6 ; Dragonnets de braise, qui
+  crachent des boules de feu). Chacun garde dans son coffre un **tome qu'on
+  ne trouve que là** : **Endurance** (+10 % de PV max), **Navigation** (+25 % de vitesse à dos de serpent) et
+  **Trésors** (+15 % d'or des monstres, filons et coffres). Les deux autres îlots ont un **coffre de naufragé** plein
+  d'or, qui se remplit de nouveau au bout de 30 minutes (chacun le sien).
 - Vaincu, il laisse un **coffre** (chacun l'ouvre une fois, pour un montant d'or aléatoire) et parfois son **âme**.
   Le dernier géant d'une zone que le village bat (une fois tous vaincus) laisse le **parchemin de la zone** pour le
   vieil homme. Il revient après un délai. Si tout le monde sort, il se

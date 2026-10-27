@@ -10,8 +10,8 @@ describe('Géants et grottes', () => {
     const p = r.addPlayer('a', noop);
     const c = r.map.caves[0];
     const perZone = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((z) => r.map.caves.filter((cv: { zone: number }) => cv.zone === z).length).join('');
-    check(r.map.caves.length === 23 && perZone === '222333431' && r.map.caves.every((cv: { boss: number; zone: number }) => SPECIES[cv.boss].boss && SPECIES[cv.boss].zone === cv.zone),
-      `23 grottes (${perZone} par zone : la 6e, les temples de la jungle ; la 7e avec le Scorpion Empereur, facultatif ; la 8e sous le volcan, la 9e en haute mer), un géant par espèce`);
+    check(r.map.caves.length === 26 && perZone === '223344431' && r.map.caves.every((cv: { boss: number; zone: number }) => SPECIES[cv.boss].boss && SPECIES[cv.boss].zone === cv.zone),
+      `26 grottes (${perZone} par zone : la 6e, les temples de la jungle ; la 7e avec le Scorpion Empereur, facultatif ; la 8e sous le volcan, la 9e en haute mer ; 3 sur les îlots du large), un géant par espèce`);
     const emperor = SPECIES.findIndex((sp) => sp.key === 'scorpion_king');
     check(SPECIES[emperor].optional && r.map.caves.some((cv: { boss: number }) => cv.boss === emperor) && !zoneBosses(7).includes(emperor),
       'Scorpion Empereur : sa grotte dans le désert, mais ni porte, ni parchemin, ni volcan n\'en dépendent');
@@ -214,6 +214,7 @@ describe('Géants et grottes', () => {
     const r = room();
     for (const c of r.map.caves) {
       if (SPECIES[c.boss].anchored) continue; // le Kraken ne quitte pas l'eau : ses coups de tentacule portent sur tout le pont
+      if (c.open !== undefined) continue; // géant d'un îlot : son îlot est trop petit pour reculer 500 px (on fuit à la nage)
       const boss = r.units.get(r.caveBoss[c.id]);
       boss.moveCd = boss.moveCd.map(() => 99); // on mesure la poursuite, pas les attaques spéciales
       boss.dormant = false;

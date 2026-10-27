@@ -134,13 +134,14 @@ export const PLAN_REACH = 80; // pour ouvrir le coffre du plan
 // À part, la Maîtrise des Alphas n'a qu'un tome, que seuls les coffres des géants du volcan renferment.
 // Une leçon lue à l'école prend 30 minutes.
 export const SCHOOL_CAMP = 0; // le plan de l'école attend au premier camp
-export type LessonKind = 'pack' | 'tame' | 'essence' | 'gather' | 'alpha';
+export type LessonKind = 'pack' | 'tame' | 'essence' | 'gather' | 'alpha' | 'vigor' | 'swim' | 'treasure';
 export interface Discipline {
   name: string;
   tomes: string[]; // nom du livre de chaque tome (I, II, III)
   per: number; // gain par leçon apprise
   desc: string; // ce que rapporte une leçon
   volcano?: boolean; // ses tomes ne se trouvent que dans les coffres des géants du volcan (et nulle part ailleurs)
+  isle?: boolean; // son tome ne se trouve que dans le coffre d'un géant des îlots du large (celui qui le garde : Species.tome)
 }
 export const DISCIPLINES: Record<LessonKind, Discipline> = {
   pack: { name: 'Meute', tomes: ['Traité du jeune dompteur', 'Manuel de la grande meute', 'Codex du maître des bêtes'], per: 1, desc: '+1 place dans la meute' },
@@ -148,6 +149,10 @@ export const DISCIPLINES: Record<LessonKind, Discipline> = {
   essence: { name: 'Essences', tomes: ['Herbier des essences', 'Traité des âmes sauvages', 'Codex de l\'éveil'], per: 0.03, desc: '+3 % de chance de recueillir une essence' },
   gather: { name: 'Récolte', tomes: ['Almanach du bûcheron', 'Manuel du mineur', 'Somme des artisans'], per: 0.1, desc: '+10 % de bois et de pierre récoltés' },
   alpha: { name: 'Maîtrise des Alphas', tomes: ['Livre des braises'], per: 1, desc: '+1 Alpha équipé en même temps', volcano: true },
+  // îlots du large : chacun gardé par un géant
+  vigor: { name: 'Endurance', tomes: ['Traité de la robustesse'], per: 0.1, desc: '+10 % de PV max', isle: true },
+  swim: { name: 'Navigation', tomes: ['Carnet du navigateur'], per: 0.25, desc: '+25 % de vitesse à dos de monture nageuse', isle: true },
+  treasure: { name: 'Trésors', tomes: ['Almanach des trésors'], per: 0.15, desc: '+15 % d\'or (monstres, filons, coffres)', isle: true },
 };
 /** Disciplines dans l'ordre de la sauvegarde (n'ajouter qu'à la fin). */
 export const LESSON_KINDS = Object.keys(DISCIPLINES) as LessonKind[];
@@ -158,6 +163,10 @@ export const LESSONS = TOMES * LESSONS_PER_TOME; // leçons par discipline (au p
 export const lessonsOf = (k: number) => (DISCIPLINES[LESSON_KINDS[k]]?.tomes.length ?? 0) * LESSONS_PER_TOME;
 export const LESSON_MS = 30 * 60 * 1000; // lecture d'une leçon (temps réel : elle continue hors ligne)
 export const TOME_DROP = 0.25; // chance, à l'ouverture d'un coffre de géant, d'y trouver un livre
+export const ISLE_TOME_DROP = 0.5; // pour le tome que garde un géant des îlots du large
+// Îlots du large : les autres ont un coffre de naufragé, qui se remplit de nouveau (chacun l'ouvre de son côté).
+export const ISLE_CHEST_S = 30 * 60; // un coffre de naufragé se remplit en 30 minutes
+export const isleChestGold = (zone: number) => 120 * zone * zone; // or moyen d'un coffre de naufragé (± 30 %)
 /** Index d'un livre dans le sac : discipline k, tome t. */
 export const bookIndex = (k: number, tome: number) => k * TOMES + tome;
 export const BOOKS = LESSON_KINDS.length * TOMES;
@@ -397,6 +406,8 @@ export const FLY_MOUNTS = new Set(['vulture']);
 export const flyMount = (species: number) => FLY_MOUNTS.has(SPECIES_KEYS[species]);
 export const SHORE_R = 140;
 export const swimMount = (species: number) => SWIM_MOUNTS.has(SPECIES_KEYS[species]);
+/** Vitesse à dos de sa monture (multiplicateur) : la Navigation (tome d'un îlot) accélère les montures nageuses. */
+export const riderSpeed = (species: number, saddle: number, learned: readonly number[]) => rideSpeed(species, saddle) * (swimMount(species) ? 1 + lessonBonus(learned, 'swim') : 1);
 export const MOUNT_SHARE = 0.75; // part des dégâts reçus par la monture
 export const MOUNT_REACH = 240; // distance max pour enfourcher sa monture
 export const mountSpeedOf = (species: number) => MOUNTS[SPECIES_KEYS[species]] ?? 1;
@@ -544,6 +555,9 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   titan_crab: [{ kind: 'pincer', cd: 4.5 }, { kind: 'bubbles', cd: 7, n: 5 }, { kind: 'enrage', below: 0.3 }],
   sand_queen: [{ kind: 'blink', cd: 5 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'slam', cd: 8 }], // elle plonge et resurgit sous sa cible
   vulture_king: [{ kind: 'tornado', cd: 9, n: 2, dur: 6 }, { kind: 'leap', cd: 5 }, { kind: 'mortar', cd: 7, n: 4 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // tornades, piqués, pluie d'ossements, ses vautours
+  drake_king: [{ kind: 'volley', cd: 5, n: 5, shot: 'jet' }, { kind: 'charge', cd: 6 }, { kind: 'slam', cd: 8 }, { kind: 'summon', cd: 12, n: 2, max: 4 }, { kind: 'enrage', below: 0.3 }], // jets d'eau en éventail, il charge, ses petits
+  wyvern_king: [{ kind: 'leap', cd: 6 }, { kind: 'tornado', cd: 10, n: 2, dur: 5 }, { kind: 'volley', cd: 5, n: 6, shot: 'dart' }, { kind: 'charge', cd: 7 }, { kind: 'enrage', below: 0.35 }], // elle fond du ciel, bourrasques de ses ailes, épines de sa queue (poison)
+  dragon_king: [{ kind: 'spin', cd: 9, arms: 3, dur: 3.5 }, { kind: 'mortar', cd: 6, n: 6 }, { kind: 'trail', cd: 11, dur: 4 }, { kind: 'leap', cd: 8 }, { kind: 'slam', cd: 7, power: 2, fire: true }, { kind: 'enrage', below: 0.3 }], // souffle de feu tournoyant, pluie de braises, il embrase le sol
   scorpion_king: [{ kind: 'pincer', cd: 6 }, { kind: 'volley', cd: 5, n: 5, shot: 'dart' }, { kind: 'charge', cd: 8 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'enrage', below: 0.3 }], // pinces, crachats de venin, ses scorpions
   moon_jackal: [{ kind: 'charge', cd: 4 }, { kind: 'summon', cd: 9, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
   // elle fonce en laissant une traînée de lave, appelle ses petits
@@ -619,6 +633,8 @@ export interface Species {
   day?: boolean; // n'apparaît que le jour (il s'enfouit au coucher du soleil)
   venom?: boolean; // ses coups au corps à corps empoisonnent (le scorpion)
   optional?: boolean; // géant ajouté après coup : ni porte, ni parchemin, ni volcan, ni bateau n'en dépendent
+  isle?: boolean; // vit sur un îlot du large (son géant, dans une grotte de l'îlot) : on y va à dos de serpent
+  tome?: LessonKind; // géant d'un îlot : le tome qu'il garde dans son coffre
   sleeps?: 'night' | 'day'; // sauvage, il dort la nuit (lièvre) ou le jour (ours) : ni aggro ni errance, jusqu'à ce qu'on le frappe
   shell?: boolean; // sauvage, il rentre dans sa coquille (intouchable) quand un dompteur sans fruit en main approche
   rainSpeed?: number; // sauvage, sa vitesse sous une grosse averse (multiplicateur ; l'escargot aime la pluie)
@@ -720,6 +736,13 @@ export const SPECIES: Species[] = [
   // Mer de sable, de jour seulement (il s'enfouit au coucher du soleil, quand sortent les chacals) : son dard empoisonne.
   { key: 'scorpion', name: 'Scorpion des dunes', color: '#C8913E', r: 20, hp: 1900, dmg: 100, speed: 135, atkCd: 1.2, gold: 85, zone: 7, population: 18, pack: [1, 3], day: true, venom: true },
   { key: 'scorpion_king', name: 'Scorpion Empereur', color: '#7A2E22', r: 63, hp: 80000, dmg: 290, speed: 200, atkCd: 1.1, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, optional: true, venom: true, title: 'Seth-Akrab, l\'Empereur des Dunes', sprite: 'scorpion', base: 'scorpion' },
+  // Îlots du large (on y va à dos de serpent) : chacun a sa créature, et son géant au fond d'une grotte, qui garde un tome.
+  { key: 'drake', name: 'Drake des marées', color: '#2E7A80', r: 22, hp: 450, dmg: 22, speed: 100, atkCd: 1.3, gold: 20, zone: 3, population: 3, pack: [1, 2], isle: true, ranged: { kind: 'jet', range: 280, windup: 0.55, speed: 480 }, brawler: true },
+  { key: 'wyvern', name: 'Wyverne des falaises', color: '#5A6A3A', r: 24, hp: 1600, dmg: 65, speed: 125, atkCd: 1.3, gold: 58, zone: 5, population: 3, pack: [1, 2], isle: true, venom: true },
+  { key: 'dragon', name: 'Dragonnet de braise', color: '#A8402E', r: 26, hp: 1900, dmg: 90, speed: 105, atkCd: 1.4, gold: 66, zone: 6, population: 3, pack: [1, 2], isle: true, ranged: { kind: 'arc', range: 340, windup: 0.6, speed: 0, splash: 50 }, brawler: true },
+  { key: 'drake_king', name: 'Grand Drake', color: '#1E5A66', r: 63, hp: 8500, dmg: 50, speed: 180, atkCd: 1.3, gold: 450, zone: 3, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, tome: 'vigor', title: 'Marégrave, le Drake des Marées', sprite: 'drake', base: 'drake' },
+  { key: 'wyvern_king', name: 'Wyverne-Reine', color: '#3E4A2A', r: 66, hp: 42000, dmg: 125, speed: 200, atkCd: 1.2, gold: 1800, zone: 5, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, venom: true, tome: 'swim', title: 'Vipéra, la Reine des Falaises', sprite: 'wyvern', base: 'wyvern' },
+  { key: 'dragon_king', name: 'Dragon ancien', color: '#7A2418', r: 70, hp: 80000, dmg: 230, speed: 190, atkCd: 1.2, gold: 2600, zone: 6, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, tome: 'treasure', title: 'Pyrakhan, le Dragon Ancien', sprite: 'dragon', base: 'dragon' },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);

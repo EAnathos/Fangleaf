@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  ARC_FLIGHT_S, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, riderSpeed, bootsSpeed, ISLE_CHEST_S, isleChestGold, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost,
@@ -15,7 +15,7 @@ import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
 import { STAT_KEYS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, type HazardTuple, type ShotTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
-import { HALL_ID, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
+import { HALL_ID, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky } from '../shared/weather.ts';
 import { Grid } from './grid.ts';
 import type { Profile } from './persist.ts';
@@ -309,7 +309,7 @@ export interface VillageState {
   banned: { id: string; name: string }[]; // comptes expulsés par le fondateur
 }
 
-const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * heroOf(p.cls, p.spec).hp);
+export const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * heroOf(p.cls, p.spec).hp * (1 + lessonBonus(p.learned, 'vigor'))); // Endurance (tome d'un îlot)
 
 const WORM_STRIKE_R = 110; // ver : il remonte quand il est à cette distance (sous) sa cible
 const WORM_WARN_S = 0.9; // annonce de sa sortie
@@ -341,6 +341,7 @@ export class Room {
   private nextSpawn = SPECIES.map(() => 0);
   private oreHp: number[] = [];
   private oreBack: number[] = []; // temps de simulation où un filon épuisé réapparaît
+  private wreckChests = new Map<string, number>(); // coffres de naufragé ouverts : « îlot|compte » → quand il sera de nouveau plein (ms)
   private treeHp = new Map<number, number>(); // arbres entamés ou abattus (index dans decor) : leurs PV ; absents : intacts
   private treeBack = new Map<number, number>(); // arbres abattus : temps de simulation où ils repoussent
   private caveBoss: number[] = []; // id du mini-boss de chaque grotte (0 : vaincu)
@@ -403,7 +404,7 @@ export class Room {
     this.stock.wood = Math.max(0, Math.floor(Number(saved.wood) || 0));
     this.stock.stone = Math.max(0, Math.floor(Number(saved.stone) || 0));
     this.banned = (saved.banned ?? []).filter((b) => b && typeof b.id === 'string');
-    this.oreHp = this.map.ores.map((o) => oreHp(o.zone));
+    this.oreHp = this.map.ores.map((o) => oreHp(o.zone) * o.size);
     this.oreBack = this.map.ores.map(() => 0);
     this.bushBack = this.map.bushes.map(() => 0);
     this.caveBoss = this.map.caves.map((c) => this.spawnBoss(c.id));
@@ -749,7 +750,7 @@ export class Room {
     const slow = p.slowUntil > this.time ? WEB_SLOW : 1;
     const swimming = !!mounted && swimMount(mounted.s); // sur le serpent : seulement l'eau
     const flying = !!mounted && flyMount(mounted.s); // à dos de vautour : par-dessus l'eau et les obstacles
-    const allowed = (PLAYER_SPEED * slow * (mounted ? rideSpeed(mounted.s, p.saddle) : bootsSpeed(p.boots)) * 1.35 + STORM_PUSH * this.storm) * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12; // (le vent de la tempête pousse en plus)
+    const allowed = (PLAYER_SPEED * slow * (mounted ? riderSpeed(mounted.s, p.saddle, p.learned) : bootsSpeed(p.boots)) * 1.35 + STORM_PUSH * this.storm) * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12; // (le vent de la tempête pousse en plus)
     p.lastPosMs = now;
     let dx = x - p.x, dy = y - p.y;
     const d = Math.hypot(dx, dy);
@@ -1415,7 +1416,7 @@ export class Room {
         add(e.to, 'wood', e.wood);
         add(e.to, 'stone', e.stone);
       } else if (e.e === 'essence') add(e.to, 'essences');
-      else if (e.e === 'chest') add(e.to, 'chests');
+      else if (e.e === 'chest' && e.id >= 0) add(e.to, 'chests'); // pas les coffres de naufragé
       else if (e.e === 'pdie') add(e.id, 'deaths');
       else if (e.e === 'previve') add(e.by, 'revives');
     }
@@ -1593,10 +1594,10 @@ export class Room {
       // il réapparaît (solide) seulement quand personne ne se tient à sa place
       let free = true;
       this.grid.query(o.x, o.y, 80, (e) => {
-        if (dist2(e.x, e.y, o.x, o.y) < (e.r + 18 + o.zone * 2 + 6) ** 2) free = false;
+        if (dist2(e.x, e.y, o.x, o.y) < (e.r + oreRadius(o) + 6) ** 2) free = false;
       });
       if (!free) return;
-      this.oreHp[i] = oreHp(o.zone);
+      this.oreHp[i] = oreHp(o.zone) * o.size;
       this.map.oreDown.delete(i);
     });
     // les arbres abattus repoussent (eux aussi quand la place est libre) ; un arbre entamé finit par cicatriser
@@ -1683,6 +1684,7 @@ export class Room {
   /** Population visée d'une espèce sauvage : nulle le jour pour les bêtes de nuit, la nuit pour les bêtes de jour. */
   private population(s: number) {
     const night = this.isNight();
+    if (SPECIES[s].isle) return SPECIES[s].population; // quelques-unes sur leur îlot, quelle que soit la taille de la zone
     return (SPECIES[s].night && !night) || (SPECIES[s].day && night) ? 0 : populationOf(s);
   }
 
@@ -1715,6 +1717,13 @@ export class Room {
         [cx, cy] = [h.inside.x + Math.cos(a) * (h.rx ?? 0) * k, h.inside.y + Math.sin(a) * (h.ry ?? 0) * k];
         if (dist2(cx, cy, h.exit.x, h.exit.y) < 450 ** 2 || dist2(cx, cy, h.inside.x, h.inside.y) < 330 ** 2) continue;
         if (map.caves.some((c) => c.zone === VOLCANO_ZONE && dist2(cx, cy, c.entrance.x, c.entrance.y) < 300 ** 2)) continue;
+      } else if (sp.isle) {
+        // créature d'un îlot du large : sur la terre de l'îlot de son géant
+        const t = map.islets.find((q) => q.boss >= 0 && SPECIES[q.boss].base === sp.key);
+        if (!t) return false;
+        const a = Math.random() * Math.PI * 2, k = Math.sqrt(Math.random()) * 0.6;
+        [cx, cy] = [t.x + Math.cos(a) * t.r * k, t.y + Math.sin(a) * t.r * k];
+        if (map.blocked(cx, cy) || map.isWater(cx, cy)) continue;
       } else if (sp.swim) {
         // créature aquatique : un point d'eau profonde de sa zone
         const pool = map.deepWater[sp.zone];
@@ -1729,7 +1738,7 @@ export class Room {
         const off = (Math.random() - 0.5) * 2 * (map.halfWidth(at) - 60);
         [cx, cy] = [c.x + nv.x * off, c.y + nv.y * off];
       }
-      if ((sp.swim ? !map.isWater(cx, cy) : map.blocked(cx, cy)) || map.zoneAt(cx, cy) !== sp.zone) continue;
+      if ((sp.swim ? !map.isWater(cx, cy) : map.blocked(cx, cy)) || (!sp.isle && map.zoneAt(cx, cy) !== sp.zone)) continue;
       if (sp.zone !== VOLCANO_ZONE && fog >= 0 && map.gateArc(fog, cx, cy) > map.gates[fog] - 150) continue; // jamais dans la brume (ni tout contre)
       if (map.onIsle(cx, cy) || dist2(cx, cy, map.bridge.a.x, map.bridge.a.y) < 350 ** 2 || dist2(cx, cy, map.spawn.x, map.spawn.y) < SPAWN_SAFE_R ** 2) continue; // ni au pied du pont
       if (map.siteAt(cx, cy, CAMP_R + 300) >= 0) continue;
@@ -1740,7 +1749,7 @@ export class Room {
       for (let i = 0; i < n; i++) {
         const x = cx + (Math.random() - 0.5) * 120, y = cy + (Math.random() - 0.5) * 120;
         // chaque membre reste dans la zone de son espèce (une meute en lisière ne déborde pas)
-        if (sp.swim ? map.isWater(x, y) : !map.blocked(x, y) && map.zoneAt(x, y) === sp.zone) this.createUnit(s, false, x, y);
+        if (sp.swim ? map.isWater(x, y) : !map.blocked(x, y) && !map.isWater(x, y) && (sp.isle ? map.isletAt(x, y) : map.zoneAt(x, y) === sp.zone)) this.createUnit(s, false, x, y);
       }
       return true;
     }
@@ -1956,12 +1965,11 @@ export class Room {
    * (en attaque auto, seulement arrêté : on ne rase pas la forêt en la traversant).
    */
   private mine(p: Player) {
-    const reach = PLAYER_R + PLAYER_RANGE + ORE_R;
-    let best = -1, bd = reach * reach;
+    let best = -1, bd = Infinity;
     for (const o of this.map.ores) {
       if (this.oreHp[o.id] <= 0) continue;
-      const d = dist2(p.x, p.y, o.x, o.y);
-      if (d < bd) [bd, best] = [d, o.id];
+      const reach = PLAYER_R + PLAYER_RANGE + ORE_R * o.size, d = dist2(p.x, p.y, o.x, o.y); // un gros rocher se frappe de plus loin
+      if (d < reach * reach && d < bd) [bd, best] = [d, o.id];
     }
     if (best < 0 && (p.manual || this.time - p.movedAt >= TREE_STILL_S)) {
       let tree = -1, td = Infinity;
@@ -1984,12 +1992,12 @@ export class Room {
     this.map.oreDown.add(best); // épuisé : il disparaît, on passe à travers jusqu'à son retour
     p.dirty = true;
     if (o.res === 'gold') {
-      const gold = oreGold(o.zone);
+      const gold = Math.round(oreGold(o.zone) * o.size * (1 + lessonBonus(p.learned, 'treasure'))); // un gros filon rapporte plus
       p.gold += gold;
       this.events.push({ e: 'gold', to: p.id, n: gold, x: o.x, y: o.y - 10 });
     }
     // un filon donne aussi un peu de pierre ; rochers et bois mort donnent leur matière (quantité un peu au hasard)
-    const more = 1 + lessonBonus(p.learned, 'gather'); // leçons de récolte de l'école
+    const more = (1 + lessonBonus(p.learned, 'gather')) * o.size; // leçons de récolte de l'école ; taille du rocher
     const wood = o.res === 'wood' ? resRoll(resYield(o.zone) * more) : 0, stone = o.res === 'stone' ? resRoll(resYield(o.zone) * more) : o.res === 'gold' ? resRoll(oreStone(o.zone) * more) : 0;
     p.wood += wood;
     p.stone += stone;
@@ -1998,7 +2006,7 @@ export class Room {
 
   /** Un coup de hache : abattu, l'arbre donne un peu de bois et disparaît jusqu'à ce qu'il repousse (Bois profonds : parfois un Tréant). */
   private chop(p: Player, i: number) {
-    const d = this.map.decor[i], full = treeHp(d.zone);
+    const d = this.map.decor[i], full = treeHp(d.zone) * this.map.treeScale(d); // un grand arbre résiste plus
     p.atkCd = PLAYER_ATK_CD;
     const hp = (this.treeHp.get(i) ?? full) - mineDmg(p.weapon);
     this.treeHp.set(i, Math.max(0, hp));
@@ -2010,7 +2018,7 @@ export class Room {
     }
     this.treeBack.set(i, this.time + TREE_RESPAWN_S);
     this.map.treeDown.add(i);
-    const wood = resRoll(treeWood(d.zone) * (1 + lessonBonus(p.learned, 'gather'))), t = this.map.trunkOf(d);
+    const wood = resRoll(treeWood(d.zone) * this.map.treeScale(d) * (1 + lessonBonus(p.learned, 'gather'))), t = this.map.trunkOf(d); // et donne plus de bois
     p.wood += wood;
     p.dirty = true;
     this.events.push({ e: 'res', to: p.id, wood, stone: 0, x: t.x, y: t.y - 40 });
@@ -2080,7 +2088,7 @@ export class Room {
     if (this.tick % 5 !== 0) return;
     const occupied = new Set<number>();
     for (const p of this.players.values()) {
-      const c = p.dead ? undefined : this.map.caveAt(p.x, p.y);
+      const c = p.dead ? undefined : this.map.arenaAt(p.x, p.y); // dans la grotte, ou sur l'îlot d'un géant à l'air libre
       if (c) occupied.add(c.id);
     }
     const bosses = new Set(this.caveBoss.filter((id, cave) => id && !occupied.has(cave)));
@@ -2104,11 +2112,12 @@ export class Room {
 
   /** Ouvrir le coffre d'un géant vaincu, devant lui : une fois par dompteur, un montant d'or tiré au hasard. */
   onChest(p: Player, id: number) {
+    if (id < 0) return this.openWreckChest(p, -id - 1);
     const ch = this.chests.find((c) => c.id === id);
     if (!ch || p.dead || !ch.eligible.has(p.id) || ch.opened.has(p.id) || !this.near(p, ch)) return;
     ch.opened.add(p.id);
     const [lo, hi] = CHEST_GOLD;
-    const gold = Math.round(SPECIES[ch.s].gold * (lo + Math.random() * (hi - lo)));
+    const gold = Math.round(SPECIES[ch.s].gold * (lo + Math.random() * (hi - lo)) * (1 + lessonBonus(p.learned, 'treasure')));
     p.gold += gold;
     p.dirty = true;
     // parfois un livre d'apprentissage, du tome de la zone du géant, d'une discipline au hasard : un seul exemplaire
@@ -2116,14 +2125,34 @@ export class Room {
     // là (Maîtrise des Alphas) passe en premier, tant qu'il reste à lire.
     const zone = SPECIES[ch.s].zone, books = (volcano: boolean, tome: number) => LESSON_KINDS
       .map((kind, k) => ({ k, b: bookIndex(k, tome), d: DISCIPLINES[kind] }))
-      .filter(({ k, b, d }) => !!d.volcano === volcano && tome < d.tomes.length && !p.tomes[b] && lessonsLeft(tome, p.learned[k]) > 0)
+      .filter(({ k, b, d }) => !!d.volcano === volcano && !d.isle && tome < d.tomes.length && !p.tomes[b] && lessonsLeft(tome, p.learned[k]) > 0)
       .map(({ b }) => b);
     const fire = zone === VOLCANO_ZONE ? books(true, 0) : [];
-    const useful = fire.length ? fire : books(false, tomeOfZone(zone));
+    // géant d'un îlot du large : le tome qu'il garde passe en premier (bien plus souvent), tant qu'il reste à lire
+    const kept = SPECIES[ch.s].tome, k = kept ? LESSON_KINDS.indexOf(kept) : -1;
+    const isle = k >= 0 && !p.tomes[bookIndex(k, 0)] && lessonsLeft(0, p.learned[k]) > 0 ? [bookIndex(k, 0)] : [];
+    const useful = isle.length ? isle : fire.length ? fire : books(false, tomeOfZone(zone));
     // pas de livre tant que le village n'a pas bâti l'école des dompteurs : on ne saurait où le lire
-    const book = useful.length && this.buildings.includes('school') && Math.random() < TOME_DROP ? useful[Math.floor(Math.random() * useful.length)] : -1;
+    const book = useful.length && this.buildings.includes('school') && Math.random() < (isle.length ? ISLE_TOME_DROP : TOME_DROP) ? useful[Math.floor(Math.random() * useful.length)] : -1;
     if (book >= 0) p.tomes[book] = 1;
     this.events.push({ e: 'chest', id, to: p.id, gold, x: Math.round(ch.x), y: Math.round(ch.y), ...(book >= 0 ? { book } : {}) });
+  }
+
+  /** Coffre de naufragé d'un îlot du large : chacun l'ouvre de son côté, et il se remplit au bout de ISLE_CHEST_S. */
+  private wreckChestKey(p: Player, islet: number) {
+    return `${islet}|${p.userId ?? p.name}`;
+  }
+  private wreckChestShut(p: Player, islet: number) {
+    return (this.wreckChests.get(this.wreckChestKey(p, islet)) ?? 0) > Date.now();
+  }
+  private openWreckChest(p: Player, islet: number) {
+    const t = this.map.islets[islet];
+    if (!t?.chest || p.dead || !this.zoneOpen(t.zone) || this.wreckChestShut(p, islet) || !this.near(p, t.chest)) return;
+    this.wreckChests.set(this.wreckChestKey(p, islet), Date.now() + ISLE_CHEST_S * 1000);
+    const gold = Math.round(isleChestGold(t.zone) * (0.7 + Math.random() * 0.6) * (1 + lessonBonus(p.learned, 'treasure')));
+    p.gold += gold;
+    p.dirty = true;
+    this.events.push({ e: 'chest', id: -islet - 1, to: p.id, gold, x: Math.round(t.chest.x), y: Math.round(t.chest.y) });
   }
 
   /**
@@ -2158,7 +2187,7 @@ export class Room {
   onChallenge(p: Player, cave: number) {
     const c = this.map.caves[cave];
     const u = c && this.units.get(this.caveBoss[cave]);
-    if (!u || !u.dormant || p.dead || this.map.caveAt(p.x, p.y)?.id !== c.id) return;
+    if (!u || !u.dormant || p.dead || this.map.arenaAt(p.x, p.y)?.id !== c.id) return;
     if (dist2(p.x, p.y, u.x, u.y) > (u.r + BOSS_TALK_R) ** 2) return;
     u.dormant = false;
     u.target = p.id;
@@ -2587,14 +2616,14 @@ export class Room {
 
   /** Géant endormi de la grotte où se trouve le dompteur (un obstacle : on ne le traverse pas). */
   private sleepingBosses(p: Player): Unit[] {
-    const c = this.map.caveAt(p.x, p.y);
+    const c = this.map.arenaAt(p.x, p.y);
     const u = c && this.units.get(this.caveBoss[c.id]);
     return u && u.dormant ? [u] : [];
   }
 
   /** Le dompteur est dans une grotte dont le géant est réveillé (combat en cours). */
   private bossFight(p: Player) {
-    const c = this.map.caveAt(p.x, p.y);
+    const c = this.map.arenaAt(p.x, p.y);
     const u = c && this.units.get(this.caveBoss[c.id]);
     return !!u && !u.dormant && u.hp > 0;
   }
@@ -3303,7 +3332,7 @@ export class Room {
     const sx = hx + Math.cos(ang) * rad, sy = hy + Math.sin(ang) * rad;
     const far = dist2(u.x, u.y, sx, sy) > 70 ** 2;
     const om = o.mount ? this.units.get(o.mount) : undefined;
-    const ownerSpeed = PLAYER_SPEED * (om ? rideSpeed(om.s, o.saddle) : bootsSpeed(o.boots)); // la meute suit aussi un dompteur à cheval
+    const ownerSpeed = PLAYER_SPEED * (om ? riderSpeed(om.s, o.saddle, o.learned) : bootsSpeed(o.boots)); // la meute suit aussi un dompteur à cheval
     // Place libre dans la formation (pas au milieu d'un arbre), puis on y va en contournant les obstacles.
     const slot = this.blockedFor(u, sx, sy) ? { x: hx, y: hy } : { x: sx, y: sy };
     this.navTo(u, slot.x, slot.y, far ? Math.max(u.speed, ownerSpeed * 1.15) : Math.max(u.speed, 90), 3, !!bank);
@@ -3328,7 +3357,7 @@ export class Room {
       }
       if (u.eatOre < 0) return false;
     }
-    const ore = this.map.ores[u.eatOre], reach = u.r + ORE_R + 8;
+    const ore = this.map.ores[u.eatOre], reach = u.r + oreRadius(ore) + 8;
     if (dist2(u.x, u.y, ore.x, ore.y) > reach ** 2) {
       this.navTo(u, ore.x, ore.y, u.speed, reach - 6);
       return true;
@@ -3336,13 +3365,13 @@ export class Room {
     u.atkCd -= DT;
     if (u.atkCd > 0) return true;
     u.atkCd = GOLEM_BITE_S;
-    this.oreHp[ore.id] -= oreHp(ore.zone) / GOLEM_BITES + 0.01;
+    this.oreHp[ore.id] -= (oreHp(ore.zone) * ore.size) / GOLEM_BITES + 0.01;
     const done = this.oreHp[ore.id] <= 0;
     this.events.push({ e: 'munch', id: u.id, ore: ore.id, done });
     if (!done) return true;
     this.oreBack[ore.id] = this.time + ORE_RESPAWN_S;
     this.map.oreDown.add(ore.id);
-    const stone = resRoll(resYield(ore.zone) * (1 + lessonBonus(o.learned, 'gather')));
+    const stone = resRoll(resYield(ore.zone) * ore.size * (1 + lessonBonus(o.learned, 'gather')));
     o.stone += stone;
     o.dirty = true;
     this.events.push({ e: 'res', to: o.id, wood: 0, stone, x: ore.x, y: ore.y - 10 });
@@ -3580,14 +3609,15 @@ export class Room {
     for (const p of this.players.values()) {
       if (sp.minion) break; // un tentacule ne rapporte rien
       if (p.dead || dist2(p.x, p.y, u.x, u.y) > GOLD_SHARE_R ** 2) continue;
-      if (!boss) p.gold += gold; // l'or d'un géant est dans son coffre
+      const won = Math.round(gold * (1 + lessonBonus(p.learned, 'treasure'))); // Trésors (tome d'un îlot)
+      if (!boss) p.gold += won; // l'or d'un géant est dans son coffre
       if (boss && !this.wantsSoul(p, u.s)) continue; // Alpha déjà légendaire, ou déjà 3 âmes : pas d'âme en plus
       if (Math.random() < (boss ? BOSS_SOUL_DROP : ESSENCE_DROP + lessonBonus(p.learned, 'essence'))) {
         p.essences[u.s] += 1; // pour un mini-boss, c'est son âme
         this.events.push({ e: boss ? 'soul' : 'essence', to: p.id, s: u.s, x: u.x, y: u.y });
       }
       p.dirty = true;
-      if (!boss) this.events.push({ e: 'gold', to: p.id, n: gold, x: u.x, y: u.y });
+      if (!boss) this.events.push({ e: 'gold', to: p.id, n: won, x: u.x, y: u.y });
     }
     if (boss) {
       // Mini-boss vaincu : ses renforts et ses attaques en cours disparaissent avec lui.
@@ -3614,7 +3644,8 @@ export class Room {
       const cave = this.caveBoss.indexOf(u.id);
       if (cave >= 0) {
         const c = this.map.caves[cave];
-        const at = this.map.freeNear(c.inside.x, c.inside.y - 190); // au fond, derrière la place du géant (son compte à rebours reste visible)
+        // au fond, derrière la place du géant (son compte à rebours reste visible) ; sur un îlot, à côté
+        const at = c.open !== undefined ? this.map.freeNear(c.inside.x + 90, c.inside.y + 30) : this.map.freeNear(c.inside.x, c.inside.y - 190);
         this.chests.push({ id: this.nextId++, cave, s: u.s, x: at.x, y: at.y, opened: new Set(), eligible: new Set(u.hitters) });
         this.caveBoss[cave] = 0;
         this.caveBack[cave] = this.time + BOSS_RESPAWN_S;
@@ -3799,7 +3830,7 @@ export class Room {
       const ores: [number, number][] = [];
       for (const o of this.map.ores) {
         if (dist2(o.x, o.y, viewer.x, viewer.y) > vr2) continue;
-        ores.push([o.id, Math.round((100 * Math.max(0, this.oreHp[o.id])) / oreHp(o.zone))]);
+        ores.push([o.id, Math.round((100 * Math.max(0, this.oreHp[o.id])) / (oreHp(o.zone) * o.size))]);
       }
       const sleepers: SleeperTuple[] = [], dozers: DozerTuple[] = [];
       for (const z of this.sleepers.values()) {
@@ -3819,12 +3850,16 @@ export class Room {
       const trees: [number, number][] = [];
       for (const [i, hp] of this.treeHp) {
         const d = this.map.decor[i];
-        if (dist2(d.x, d.y, viewer.x, viewer.y) <= vr2) trees.push([i, Math.round((100 * hp) / treeHp(d.zone))]);
+        if (dist2(d.x, d.y, viewer.x, viewer.y) <= vr2) trees.push([i, Math.round((100 * hp) / (treeHp(d.zone) * this.map.treeScale(d)))]);
       }
       const chests: [number, number, number, number][] = [];
       for (const ch of this.chests) {
         if (ch.eligible.has(viewer.id) && dist2(ch.x, ch.y, viewer.x, viewer.y) <= vr2) chests.push([ch.id, Math.round(ch.x), Math.round(ch.y), ch.opened.has(viewer.id) ? 1 : 0]);
       }
+      // coffres de naufragé des îlots (id négatif) : ouverts tant qu'ils ne se sont pas remplis pour ce dompteur
+      this.map.islets.forEach((t, i) => {
+        if (t.chest && this.zoneOpen(t.zone) && dist2(t.chest.x, t.chest.y, viewer.x, viewer.y) <= vr2) chests.push([-i - 1, Math.round(t.chest.x), Math.round(t.chest.y), this.wreckChestShut(viewer, i) ? 1 : 0]);
+      });
       const hazards: HazardTuple[] = [];
       for (const h of this.hazards) {
         if (dist2(h.x, h.y, viewer.x, viewer.y) > vr2) continue;

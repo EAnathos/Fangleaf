@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, TORNADO_PULL, TORNADO_PULL_R, riderSpeed, ISLE_CHEST_S } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -834,7 +834,7 @@ export class Game {
           this.fx.burst(e.x, e.y - 30, '#F0B64A', 40, 220);
           this.fx.ring(e.x, e.y - 10, '#F0B64A', 10, 110, 0.9);
           this.fx.text(e.x, e.y - 70, `+${e.gold} or`, '#F0B64A', 26, 2);
-          this.hud.toast(`Coffre ouvert : +${e.gold} or !`, 'good');
+          this.hud.toast(e.id < 0 ? `Coffre du naufragé : +${e.gold} or ! Il se remplira dans ${ISLE_CHEST_S / 60} minutes.` : `Coffre ouvert : +${e.gold} or !`, 'good');
           if (e.book !== undefined) {
             this.fx.text(e.x, e.y - 100, bookName(e.book), '#B48CFF', 18, 2.4);
             this.hud.toast(`Un livre au fond du coffre : ${bookName(e.book)} ! À lire à l'École des dompteurs, au Camp avancé.`, 'alpha');
@@ -1110,10 +1110,10 @@ export class Game {
       }
       case 'boss': {
         const c = this.map.caves[e.cave];
-        const near = c && (this.map.caveAt(this.me.x, this.me.y)?.id === c.id || Math.hypot(this.me.x - c.entrance.x, this.me.y - c.entrance.y) < 1500);
+        const near = c && (this.map.arenaAt(this.me.x, this.me.y)?.id === c.id || Math.hypot(this.me.x - c.entrance.x, this.me.y - c.entrance.y) < 1500);
         if (e.down) this.hud.toast(`${bossName(e.s)} est vaincu !`, 'good');
-        else if (near) this.hud.toast(`${bossName(e.s)} est de retour dans sa grotte…`);
-        if (!e.down && c && this.map.caveAt(this.me.x, this.me.y)?.id === c.id) {
+        else if (near) this.hud.toast(`${bossName(e.s)} est de retour ${c.open !== undefined ? 'sur son îlot' : 'dans sa grotte'}…`);
+        if (!e.down && c && this.map.arenaAt(this.me.x, this.me.y)?.id === c.id) {
           // il réapparaît sous nos yeux : le cercle d'invocation éclate
           const x = c.inside.x, y = c.inside.y - 60, col = SPECIES[e.s].color;
           this.fx.ring(x, y, '#F0B64A', 20, 220, 1.0);
@@ -1258,7 +1258,7 @@ export class Game {
       // Même règle que le serveur : pas d'eau, on glisse le long des berges.
       const swimming = !!st?.mount && swimMount(st.mount.species); // sur le serpent : seulement l'eau
       const flying = !!st?.mount && flyMount(st.mount.species); // à dos de vautour : par-dessus l'eau et les obstacles
-      const speed = PLAYER_SPEED * (st?.mount ? rideSpeed(st.mount.species, st.saddle ?? 1) : bootsSpeed(st?.boots ?? 0)) * (st?.slowed ? WEB_SLOW : 1);
+      const speed = PLAYER_SPEED * (st?.mount ? riderSpeed(st.mount.species, st.saddle ?? 1, st.learned ?? []) : bootsSpeed(st?.boots ?? 0)) * (st?.slowed ? WEB_SLOW : 1);
       // (bords du monde et intérieurs de grotte : gérés par blocked())
       const nx = this.me.x + dx * speed * dt, ny = this.me.y + dy * speed * dt;
       // Même règle que le serveur pour les portes fermées : on ne les franchit pas en avançant.
@@ -1355,7 +1355,7 @@ export class Game {
     this.hud.school = this.net.latest?.school ?? [0, 0];
     this.watchGates();
     this.hud.sleepers = (view?.units ?? []).flatMap((u) => {
-      const cave = u[2] & UNIT_FLAG_DORMANT ? this.map.caveAt(u[3], u[4]) : undefined;
+      const cave = u[2] & UNIT_FLAG_DORMANT ? this.map.arenaAt(u[3], u[4]) : undefined;
       return cave ? [{ cave: cave.id, x: u[3], y: u[4], r: SPECIES[u[1]].r }] : [];
     });
     // Le brouillard se lève autour de chaque dompteur du village.
@@ -1748,6 +1748,11 @@ export class Game {
     } else if (here?.zone === VOYAGE_ZONE) drawVoyage(ctx, here, this.time, camX, camY, hw, hh);
     else if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
     if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id]);
+    // géants des îlots, à l'air libre : le cercle de leur retour, sur leur îlot
+    for (const c of this.map.caves) {
+      const home = c.home ?? c.inside;
+      if (!here && c.open !== undefined && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id]);
+    }
     const br = this.map.bridge;
     if (!here && inView((br.a.x + br.b.x) / 2, (br.a.y + br.b.y) / 2, Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y) / 2 + 120)) this.world.drawBridge(ctx, this.hud.buildings.includes('bridge'), this.time);
     const cs = this.world.campSize;
@@ -1783,7 +1788,7 @@ export class Game {
     const list = this.drawList; // réutilisée d'une image à l'autre
     list.length = 0;
     for (const c of this.map.caves) {
-      if (c.zone === VOYAGE_ZONE || !inView(c.entrance.x, c.entrance.y, 160)) continue; // le large : on y part depuis le bateau
+      if (c.zone === VOYAGE_ZONE || c.open !== undefined || !inView(c.entrance.x, c.entrance.y, 160)) continue; // le large : on y part depuis le bateau ; un géant d'îlot : à l'air libre
       list.push({ y: c.entrance.y + 20, draw: () => this.world.drawCaveEntrance(ctx, c, this.time, !this.hud.caves[c.id]) });
     }
     const sc = this.map.school, [plan, wait] = this.hud.school;
@@ -1916,7 +1921,7 @@ export class Game {
       if (!inView(o.x, o.y, 60)) continue;
       const hp = oreState.get(o.id) ?? 100;
       if (hp <= 0) continue;
-      list.push({ y: o.y, draw: () => drawOre(ctx, o.x, o.y, o.zone, hp, this.time, o.id, o.res) });
+      list.push({ y: o.y, draw: () => drawOre(ctx, o.x, o.y, o.zone, hp, this.time, o.id, o.res, o.size) });
     }
 
     const topBoss = this.updateBossBar(units);
