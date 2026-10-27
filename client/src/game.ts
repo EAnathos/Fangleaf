@@ -17,7 +17,7 @@ import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './sett
 import type { Net } from './net.ts';
 import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, drawTornado, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
-import { desertMix, jungleMix, lakesMix, terraceAt, World } from './world.ts';
+import { desertMix, jungleMix, lakesMix, World } from './world.ts';
 import { sky as skyAt } from '../../shared/weather.ts';
 import { HALL_ID, WorldMap } from '../../shared/worldmap.ts';
 import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts';
@@ -31,7 +31,6 @@ const SPRITE_FPS = 20; // animation des monstres (images par seconde)
 const SHOUT_ANIM_S = 1.1; // un Alpha suricate se dresse et crie (un escargot dresse sa carapace) pendant ce temps-là
 const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
 
-const HOP_S = 0.3; // durée du petit saut d'un changement de palier
 const FLY_HEIGHT = 2.2; // hauteur de vol à dos de vautour (en rayons de l'oiseau)
 
 const GEAR_NAMES = { weapon: 'Arme améliorée', armor: 'Armure améliorée', torch: 'Torche améliorée', boots: 'Bottes améliorées', saddle: 'Selle améliorée' };
@@ -65,7 +64,6 @@ export class Game {
   me = { x: 0, y: 0, fx: 1, fy: 0, moving: false };
   private flashes = new Map<number, number>();
   private charges = new Map<number, number>(); // tireur → début de la charge de son tir
-  private steps = new Map<number, { lvl: number; x: number; y: number; at: number; up: boolean }>(); // palier de chacun, dernier saut
   private wings = new Map<number, { k: number; at: number; x: number; y: number; ang: number }>(); // vautours de la meute : 0 posé, 1 en vol
   private chestOpen = new Map<number, number>(); // coffre → moment où on l'a ouvert (animation du couvercle)
   private chestSeen = new Map<number, number>(); // coffre → première apparition (il tombe en rebondissant)
@@ -1449,26 +1447,6 @@ export class Game {
     return 0;
   }
 
-  /**
-   * Petit saut quand on change de palier du relief (comme un cheval qui monte une marche) : hauteur à ce moment, en px.
-   * Seulement là où la falaise se voit (pas au village, au bord de l'eau…), et pas sur un grand déplacement (voyage).
-   */
-  private hop(id: number, x: number, y: number) {
-    let s = this.steps.get(id);
-    if (!s) {
-      this.steps.set(id, (s = { lvl: terraceAt(this.map, x, y), x, y, at: -9, up: true }));
-      return 0;
-    }
-    const moved = Math.abs(x - s.x) + Math.abs(y - s.y);
-    if (moved > 4) {
-      const lvl = terraceAt(this.map, x, y);
-      if (lvl !== s.lvl && moved < 200 && this.world.cliffFade(x, y) > 0.3) [s.at, s.up] = [this.time, lvl > s.lvl];
-      [s.lvl, s.x, s.y] = [lvl, x, y];
-    }
-    const t = (this.time - s.at) / HOP_S;
-    return t < 1 ? Math.sin(t * Math.PI) * (s.up ? 13 : 8) : 0;
-  }
-
   private drawUnitCached(ctx: CanvasRenderingContext2D, id: number, look: UnitLook, pose: Pose = REST) {
     const r = look.r, res = this.scale;
     const l = r * 2.6, t = r * 2.9, w = r * 5.2, h = r * 4.8; // de quoi contenir aura, couronne, pattes et bond
@@ -2019,8 +1997,7 @@ export class Game {
       list.push({
         y,
         draw: () => {
-          const hop = this.hop(id, x, y); // changement de palier : un petit saut
-          this.drawUnitCached(ctx, id, hop ? { ...look(), y: y - hop } : look(), pose);
+          this.drawUnitCached(ctx, id, look(), pose);
           if (boss && flags & UNIT_FLAG_DORMANT) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
           if (flags & UNIT_FLAG_ASLEEP) this.snore(x + r * 0.6, y - r * 1.2, 12, id); // lièvre qui dort la nuit, ours le jour
           if (boss && id !== topBoss) {
@@ -2101,7 +2078,6 @@ export class Game {
         y,
         draw: () => {
           const fx = isMe ? this.me.fx : p.fx, fy = isMe ? this.me.fy : p.fy;
-          const hop = p.mount && flyMount(p.mount.species) ? 0 : this.hop(p.id, x, y); // changement de palier : un petit saut
           let lift = 0, back = 0;
           if (p.mount) {
             // Monture dessinée sous le cavalier, tournée dans le sens de la marche.
@@ -2112,7 +2088,7 @@ export class Game {
               drawSoaring(ctx, x, y, mr, this.time, p.mount.id, FLY_HEIGHT);
               lift = mr * (FLY_HEIGHT - 0.3) + Math.sin(this.time * 1.3 + p.mount.id) * mr * 0.3;
             } else this.drawUnitCached(ctx, p.mount.id, {
-              x, y: y - hop, r: mr, species: p.mount.species, alpha: true, wild: false, ownerColor: p.color, legend: p.mount.legend,
+              x, y, r: mr, species: p.mount.species, alpha: true, wild: false, ownerColor: p.color, legend: p.mount.legend,
               face: fx < -0.1 ? -1 : 1, t: this.time * (isMe && this.me.moving ? 1.8 : 1), seed: p.mount.id,
               flash: (this.flashes.get(p.mount.id) ?? 0) > this.time, inWater: swimMount(p.mount.species) && this.map.isWater(x, y), shout: this.shoutOf(p.mount.id),
             });
@@ -2129,7 +2105,7 @@ export class Game {
             : used && this.time - used.at < 0.9 ? { kind: used.kind, ang: Math.atan2(used.ty - y, used.tx - x), k: Math.min(1, k) } : null;
           drawPlayer(
             ctx, x + back, y - lift, p.color, fx, fy, p.armor, p.name, this.time,
-            isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool, p.weapon, (p.sword ?? SWORD_PULLS) >= SWORD_PULLS, p.hat ?? 0, hop,
+            isMe ? this.me.moving : false, (this.flashes.get(p.id) ?? 0) > this.time, isMe, !!p.mount, p.cls, tool, p.weapon, (p.sword ?? SWORD_PULLS) >= SWORD_PULLS, p.hat ?? 0,
           );
           if (p.torch && sky.light < 0.85) drawTorch(ctx, x + back - (fx < -0.1 ? -15 : 15), y - lift - 2, p.torch, this.time); // de l'autre main
           if (p.slowed) drawWebbed(ctx, x, y - lift, this.time);

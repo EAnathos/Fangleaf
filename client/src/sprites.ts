@@ -484,11 +484,10 @@ export function armorColor(lvl: number) {
 
 export function drawPlayer(
   ctx: Ctx, x: number, y: number, color: string, fx: number, fy: number, armor: number, name: string,
-  t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null, tool: Tool | null = null, weapon = 0, armed = true, hat = 0, hop = 0,
+  t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null, tool: Tool | null = null, weapon = 0, armed = true, hat = 0,
 ) {
   const r = 16;
-  // hop : petit saut (changement de palier) ; l'ombre reste au sol
-  const bob = (moving ? Math.abs(Math.sin(t * (riding ? 16 : 12))) * 2 : 0) + hop;
+  const bob = moving ? Math.abs(Math.sin(t * (riding ? 16 : 12))) * 2 : 0;
   if (!riding) shadow(ctx, x, y, r);
   if (isMe && !riding) {
     ctx.strokeStyle = 'rgba(238,231,215,0.5)';

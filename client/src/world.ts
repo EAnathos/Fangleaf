@@ -122,47 +122,17 @@ export function lakeColor(map: WorldMap, x: number, y: number, deep: boolean, ba
   return k ? lerp3(base, SEA_SHALLOW_COL, k) : base;
 }
 
-/** Distance d'un point au segment [a, b]. */
-const segDist = (x: number, y: number, a: [number, number], b: [number, number]) => {
-  const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy || 1;
-  const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / l2));
-  return Math.hypot(x - a[0] - t * dx, y - a[1] - t * dy);
-};
-
-// Relief en paliers (affichage seulement : on passe partout) : les collines sont découpées en TERRACES niveaux ; au bord
-// de chaque palier tourné vers le bas de l'écran, une petite falaise (CLIFF_H px) avec ses strates et son ombre portée.
-const TERRACES = 7;
-const CLIFF_H = 28;
-const CLIFF_G = 6; // résolution des falaises (px)
-const TERRACE_MIN = 15 * CLIFF_G; // un palier fait au moins deux fois ça de large (90 px) : pas de tout petit étage
-/** Palier brut d'un point (0 : au niveau de la mer) ; le bord des paliers ondule un peu. */
-function terraceRaw(map: WorldMap, x: number, y: number) {
-  const h = map.height(x, y);
-  if (h <= 0) return 0;
-  return Math.max(0, Math.min(TERRACES - 1, Math.floor((h + (fbm(x / 140, y / 140, map.seed + 410, 2) - 0.5) * 0.06) * TERRACES)));
-}
-/**
- * Palier d'un point : le plus bas des paliers bruts autour de lui (à TERRACE_MIN en croix). Un étage trop étroit
- * disparaît, les autres rétrécissent un peu.
- */
-export function terraceAt(map: WorldMap, x: number, y: number) {
-  const R = TERRACE_MIN;
-  return Math.min(terraceRaw(map, x, y), terraceRaw(map, x - R, y), terraceRaw(map, x + R, y), terraceRaw(map, x, y - R), terraceRaw(map, x, y + R));
-}
-
 /**
  * Couleur d'un point de l'île vu d'en haut : son sol, la plage au bord de la mer, et le relief (versants
  * éclairés au nord-ouest, à l'ombre au sud-est ; sommets un peu plus clairs).
  */
-/** fine : palier exact (le sol à l'écran) ; sinon le palier brut, moins cher (minicarte, grande carte). */
-export function landColor(map: WorldMap, x: number, y: number, fine = true) {
+export function landColor(map: WorldMap, x: number, y: number) {
   let col = groundColor(map, x, y);
   const sh = map.shoreAt(x, y);
   if (sh > -BEACH) col = lerp3(col, BEACH_SAND, Math.min(1, (sh + BEACH) / (BEACH * 0.7)));
   const e = 24, h = map.height(x, y);
   const slope = (map.height(x - e, y - e) - map.height(x + e, y + e)) * 9;
-  // chaque palier un peu plus clair que celui du dessous
-  const k = 1 + Math.max(-0.22, Math.min(0.22, slope)) * 0.6 + (h - 0.5) * 0.04 + ((fine ? terraceAt : terraceRaw)(map, x, y) - 3) * 0.028;
+  const k = 1 + Math.max(-0.22, Math.min(0.22, slope)) + (h - 0.5) * 0.08;
   return [col[0] * k, col[1] * k, col[2] * k];
 }
 
@@ -297,7 +267,6 @@ export class World {
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(ground.canvas, ox - TILE, oy - TILE, T * TILE, T * TILE);
-    this.drawCliffs(ctx, ox, oy);
 
     // Quelques vagues au large (l'écume du bord est dans la couleur de la mer : voir seaColor).
     ctx.strokeStyle = 'rgba(220,240,245,0.35)';
@@ -448,129 +417,6 @@ export class World {
     for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) this.smallDeco(ctx, gx, gy);
     this.chunks.set(k, c);
     return c;
-  }
-
-  /**
-   * Falaise possible ici (0 à 1) : sur la terre ferme, et qui s'efface en douceur à l'approche de l'eau, du village, des
-   * camps, des grottes et de l'épave (pas de paroi coupée net).
-   */
-  cliffFade(x: number, y: number) {
-    const m = this.map;
-    if (m.caveAt(x, y) || m.isWater(x, y)) return 0;
-    const fade = (d: number, r: number, ramp = 140) => Math.max(0, Math.min(1, (d - r) / ramp));
-    let f = Math.min(fade(-m.shoreAt(x, y), 90), fade(m.wetDistAt(x, y), 40, 60)); // ni au bord de la mer, ni des lacs
-    // ni sous les chemins de terre
-    for (const path of m.paths) {
-      for (let k = 1; k < path.length && f > 0; k++) f = Math.min(f, fade(segDist(x, y, path[k - 1], path[k]), 40, 50));
-    }
-    // ni au pied d'un arbre (la paroi passe entre les troncs)
-    for (const i of m.treesNear(x, y, 40)) {
-      const t = m.trunkOf(m.decor[i]);
-      f = Math.min(f, fade(Math.hypot(x - t.x, y - t.y), t.r + 10, 30));
-    }
-    f = Math.min(f, fade(Math.hypot(x - m.village.x, y - m.village.y), VILLAGE_R * 1.3 + 120));
-    f = Math.min(f, fade(Math.hypot(x - m.shipwreck.x, y - m.shipwreck.y), 360));
-    for (const c of m.sites) f = Math.min(f, fade(Math.hypot(x - c.x, y - c.y), 380));
-    for (const c of m.caves) if (f > 0 && Math.abs(x - c.entrance.x) < 400 && Math.abs(y - c.entrance.y) < 400) f = Math.min(f, fade(Math.hypot(x - c.entrance.x, y - c.entrance.y), 170));
-    return f;
-  }
-
-  /**
-   * Falaises des paliers, peintes sur le sol d'un morceau : sous chaque bord tourné vers le bas de l'écran, la paroi
-   * (strates, plus sombre en bas) et son ombre sur le palier inférieur ; un liseré clair sur l'arête ; les autres bords,
-   * un simple trait d'ombre.
-   */
-  private drawCliffs(ctx: CanvasRenderingContext2D, ox: number, oy: number) {
-    const G = CLIFF_G, UP = Math.ceil(CLIFF_H / G) + 3; // rangées au-dessus du morceau (une falaise peut y commencer)
-    const W = Math.ceil(CHUNK / G) + 2, H = Math.ceil(CHUNK / G) + 2, gh = H + UP + 1;
-    const x0 = ox - G, y0 = oy - G - UP * G;
-    // paliers bruts avec une marge de TERRACE_MIN tout autour, puis le plus bas en croix (comme terraceAt, sans recalcul)
-    const M = TERRACE_MIN / G, RW = W + 2 * M, raw = new Int8Array(RW * (gh + 2 * M));
-    for (let j = 0; j < gh + 2 * M; j++) {
-      for (let i = 0; i < RW; i++) raw[j * RW + i] = terraceRaw(this.map, x0 + (i - M) * G + G / 2, y0 + (j - M) * G + G / 2);
-    }
-    const lv = new Int8Array(W * gh), fd = new Float32Array(W * gh).fill(-1);
-    const dry = new Uint8Array(W * gh);
-    let any = false;
-    for (let j = 0; j < gh; j++) {
-      for (let i = 0; i < W; i++) {
-        const x = x0 + i * G + G / 2, y = y0 + j * G + G / 2, k = (j + M) * RW + i + M;
-        const good = !this.map.caveAt(x, y) && !this.map.isWater(x, y);
-        dry[j * W + i] = good ? 1 : 0;
-        lv[j * W + i] = good ? Math.min(raw[k], raw[k - M], raw[k + M], raw[k - M * RW], raw[k + M * RW]) : -1;
-        if (good && i && lv[j * W + i] !== lv[j * W + i - 1] && lv[j * W + i - 1] >= 0) any = true;
-        if (good && j && lv[j * W + i] !== lv[(j - 1) * W + i] && lv[(j - 1) * W + i] >= 0) any = true;
-      }
-    }
-    if (!any) return;
-    // effacement près de l'eau, des chemins, des arbres… calculé seulement là où l'on peint
-    const fadeAt = (i: number, j: number) => {
-      const k = j * W + i;
-      if (fd[k] < 0) fd[k] = dry[k] ? this.cliffFade(x0 + i * G + G / 2, y0 + j * G + G / 2) : 0;
-      return fd[k];
-    };
-    const canvas = document.createElement('canvas');
-    canvas.width = W;
-    canvas.height = H;
-    const c2 = canvas.getContext('2d')!, img = c2.createImageData(W, H);
-    const L = (i: number, j: number) => lv[j * W + i];
-    const put = (i: number, j: number, col: number[], a: number) => {
-      a *= fadeAt(i, j);
-      if (a <= 0) return;
-      const o = ((j - UP - 1) * W + i) * 4;
-      img.data[o] = col[0];
-      img.data[o + 1] = col[1];
-      img.data[o + 2] = col[2];
-      img.data[o + 3] = a * 255;
-    };
-    const steps = Math.round(CLIFF_H / G);
-    for (let j = UP + 1; j < gh; j++) {
-      for (let i = 0; i < W; i++) {
-        const me = L(i, j);
-        if (me < 0) continue;
-        // paroi : un palier plus haut juste au-dessus (à moins de CLIFF_H) dont l'arête est au-dessus de nous
-        let d = 0;
-        for (let k = 1; k <= steps; k++) {
-          const up = L(i, j - k);
-          if (up > me) {
-            d = k;
-            break;
-          }
-          if (up < me) break;
-        }
-        const x = x0 + i * G + G / 2, y = y0 + j * G + G / 2;
-        if (d) {
-          // paroi : la roche prend la teinte du sol (grès clair dans le désert, terre et pierre ailleurs)
-          const base = groundColor(this.map, x, y), light = (base[0] + base[1] + base[2]) / 3 > 150;
-          const rock = light ? lerp3(base, [196, 150, 100], 0.4) : lerp3(base, [128, 106, 84], 0.55);
-          const t = d / steps, strata = Math.floor((y + hash2(Math.floor(x / 30), 0, this.seed + 412) * 8) / 7) % 2 ? 0.88 : 1;
-          const shade = (light ? 0.92 - t * 0.3 : 0.8 - t * 0.38) * strata; // claire sous l'arête, sombre au pied
-          put(i, j, [rock[0] * shade, rock[1] * shade, rock[2] * shade], 1);
-          continue;
-        }
-        // ombre portée au pied de la paroi
-        const s1 = L(i, j - steps - 1), s2 = L(i, j - steps - 2);
-        if (s1 > me || s2 > me) {
-          put(i, j, [10, 16, 14], s1 > me ? 0.3 : 0.15);
-          continue;
-        }
-        // arête éclairée : le palier du dessous commence juste en dessous
-        const below = j + 1 < gh ? L(i, j + 1) : me;
-        if (below >= 0 && below < me) {
-          put(i, j, [255, 250, 225], 0.22);
-          continue;
-        }
-        // bord tourné vers le haut de l'écran ou sur le côté : un trait d'ombre discret
-        const n = L(i, j - 1), l = i ? L(i - 1, j) : me, r = i + 1 < W ? L(i + 1, j) : me;
-        if (n >= 0 && n < me) put(i, j, [10, 16, 14], 0.14);
-        else if ((l >= 0 && l !== me) || (r >= 0 && r !== me)) put(i, j, [10, 16, 14], 0.08);
-      }
-    }
-    c2.putImageData(img, 0, 0);
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(canvas, ox - G, oy - G, W * G, H * G);
-    ctx.restore();
   }
 
   private ground?: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; img: ImageData };
