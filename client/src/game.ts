@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, TORNADO_PULL, TORNADO_PULL_R, riderSpeed, ISLE_CHEST_S } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, TORNADO_PULL, TORNADO_PULL_R, riderSpeed, ISLE_CHEST_S } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -18,7 +18,7 @@ import type { Net } from './net.ts';
 import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, drawTornado, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, jungleMix, lakesMix, World } from './world.ts';
-import { sky as skyAt } from '../../shared/weather.ts';
+import { SEASON_NAMES, sky as skyAt, WINTER } from '../../shared/weather.ts';
 import { HALL_ID, WorldMap } from '../../shared/worldmap.ts';
 import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts';
 import { drawSubmerged, drawVoyage } from './voyage.ts';
@@ -36,7 +36,7 @@ const FLY_HEIGHT = 2.2; // hauteur de vol à dos de vautour (en rayons de l'oise
 const GEAR_NAMES = { weapon: 'Arme améliorée', armor: 'Armure améliorée', torch: 'Torche améliorée', boots: 'Bottes améliorées', saddle: 'Selle améliorée' };
 
 // En local seulement : ?ciel=nuit, ?ciel=pluie, ?ciel=orage (nuit et pluie) ou ?ciel=tempete (dans la Mer de sable) pour voir le ciel sans attendre.
-const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1 }, tempete: { storm: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
+const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1 }, tempete: { storm: 1 }, printemps: { season: 0 }, automne: { season: 2 }, hiver: { season: 3 }, neige: { season: 3, rain: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
 
 /** Rayon runique suivi par le client : angle et vitesse de rotation (extrapolés entre deux snapshots), dernier passage, sol brûlé. */
 interface LaserState {
@@ -71,6 +71,7 @@ export class Game {
   private chopAt = new Map<number, number>(); // arbre → dernier coup de hache (il tremble)
   private gatesOpen: boolean[] | null = null; // état des portes au dernier snapshot (null : pas encore connu)
   private gateToast = -99; // dernier rappel « porte fermée » // arbre → opacité de son feuillage (1 : opaque)
+  private sandToast = -99; // dernier avertissement « sables mouvants »
   private tools = new Map<number, { kind: Tool['kind']; at: number; tx: number; ty: number }>(); // dompteur → dernier coup d'outil (récolte)
   private shotsAt = 0; // réception du dernier snapshot (les projectiles droits sont extrapolés depuis)
   private faces = new Map<number, { x: number; y: number; face: number; movedAt: number }>();
@@ -268,7 +269,6 @@ export class Game {
     if (!st || st.dead) return;
     if (!st.holding && !st.fruits) return this.hud.toast('Aucune baie : cueille-en aux buissons garnis (E).');
     this.net.send({ t: 'hold', on: !st.holding });
-    if (!st.holding) this.hud.toast('Fruit en main : le gibier approche. Tu ne te bats plus tant que tu le tends (T pour le ranger).');
   }
 
   /** R maintenu près d'un coéquipier à terre : le serveur compte les secondes. */
@@ -1258,7 +1258,12 @@ export class Game {
       // Même règle que le serveur : pas d'eau, on glisse le long des berges.
       const swimming = !!st?.mount && swimMount(st.mount.species); // sur le serpent : seulement l'eau
       const flying = !!st?.mount && flyMount(st.mount.species); // à dos de vautour : par-dessus l'eau et les obstacles
-      const speed = PLAYER_SPEED * (st?.mount ? riderSpeed(st.mount.species, st.saddle ?? 1, st.learned ?? []) : bootsSpeed(st?.boots ?? 0)) * (st?.slowed ? WEB_SLOW : 1);
+      const sand = !flying && this.map.quicksandAt(this.me.x, this.me.y) >= 0; // sables mouvants : on s'y enlise
+      const speed = PLAYER_SPEED * (st?.mount ? riderSpeed(st.mount.species, st.saddle ?? 1, st.learned ?? []) : bootsSpeed(st?.boots ?? 0)) * (st?.slowed ? WEB_SLOW : 1) * (sand ? QUICKSAND_SLOW : 1);
+      if (sand && this.time - this.sandToast > 8) {
+        this.sandToast = this.time;
+        this.hud.toast('Sables mouvants ! Tu t\'enlises : sors-en vite.');
+      }
       // (bords du monde et intérieurs de grotte : gérés par blocked())
       const nx = this.me.x + dx * speed * dt, ny = this.me.y + dy * speed * dt;
       // Même règle que le serveur pour les portes fermées : on ne les franchit pas en avançant.
@@ -1630,6 +1635,19 @@ export class Game {
 
   private stormOn = false;
   /** Alerte quand une tempête de sable se lève là où l'on est (et quand elle retombe). */
+  /** Saison : le sol et les arbres changent, et on l'annonce quand elle tourne (pas à l'arrivée). */
+  private seasonSeen = -1;
+  private watchSeason(season: number) {
+    this.world.setSeason(season);
+    if (season === this.seasonSeen) return;
+    if (this.seasonSeen >= 0) {
+      const say = ['Le printemps est là : les arbres fleurissent.', 'L\'été arrive.', 'L\'automne arrive : les feuilles roussissent.', 'L\'hiver tombe sur l\'île : la neige recouvre tout, et des Bigfoots rôdent dans les Bois profonds…'][season];
+      this.hud.toast(say, season === WINTER ? '' : 'good');
+    }
+    this.seasonSeen = season;
+    this.hud.setSeason(SEASON_NAMES[season]);
+  }
+
   private watchStorm(level: number) {
     if (!this.stormOn && level >= 0.4) {
       this.stormOn = true;
@@ -1733,6 +1751,7 @@ export class Game {
     sky.rain *= 1 - desert;
     const storm = sky.storm * desert * (this.gateOpen(DESERT_ZONE - 1) ? 1 : 0); // pas de tempête avant que le village ait ouvert le désert
     this.watchStorm(storm);
+    this.watchSeason(sky.season);
 
     // Dans une grotte, on ne voit que la grotte (pas la forêt qui borde le monde).
     if (!this.map.caveAt(camX, camY)) this.world.draw(ctx, camX - hw, camY - hh, camX + hw, camY + hh);
@@ -1925,6 +1944,7 @@ export class Game {
     }
 
     const topBoss = this.updateBossBar(units);
+    const sleepingDens = new Set<number>(); // tanières où la colonie de suricates dort (la nuit) : des « z » au-dessus
     for (const u of units) {
       const [id, s, flags, x, y, hp, owner] = u;
       if (flags & UNIT_FLAG_MOUNTED) continue; // dessinée sous son cavalier
@@ -1952,7 +1972,15 @@ export class Game {
             drawSoaring(ctx, x, y, r, this.time, id, 4.2 + storm * 3.5);
             ctx.restore();
           } });
-        } else list.push({ y, draw: () => drawBurrow(ctx, x, y, r, !!SPECIES[s].burrows, this.time, id) });
+        } else {
+          list.push({ y, draw: () => drawBurrow(ctx, x, y, r, !!SPECIES[s].burrows, this.time, id) });
+          const den = SPECIES[s].shy && sky.light < 0.5 ? this.map.denNear(x, y) : -1;
+          if (den >= 0 && !sleepingDens.has(den)) {
+            sleepingDens.add(den);
+            const d = this.map.dens[den];
+            list.push({ y: d.y + 30, draw: () => this.snore(d.x + 18, d.y - 30, 16, den) });
+          }
+        }
         continue;
       }
       const f = this.faces.get(id) ?? { x, y, face: 1, movedAt: -9 };
@@ -2141,7 +2169,7 @@ export class Game {
       this.skyFx.sandstorm(ctx, scale, camX, camY, storm, this.dt, this.dpr, sky.light);
       this.drawCanopy(camX, camY);
     }
-    sound.rain(here || !settings.display.weather ? 0 : sky.rain);
+    sound.rain(here || !settings.display.weather || sky.season === WINTER ? 0 : sky.rain); // la neige tombe sans bruit
     sound.storm(here ? 0 : storm);
 
     // Joystick tactile / souris.

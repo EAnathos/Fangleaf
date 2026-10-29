@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, riderSpeed, bootsSpeed, ISLE_CHEST_S, isleChestGold, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  ARC_FLIGHT_S, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, QUICKSAND_SINK, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, riderSpeed, bootsSpeed, ISLE_CHEST_S, isleChestGold, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost,
@@ -172,6 +172,7 @@ export interface Player {
   userId: string | null; // compte Supabase, null = invité (tests uniquement)
   dirty: boolean; // progression à sauvegarder
   prickAt?: number; // prochain moment où un cactus peut le piquer
+  sinkSince?: number; // entré dans des sables mouvants à ce moment-là (undefined : au sec)
   dead: boolean;
   respawnAt: number;
   helping: boolean; // R maintenu : relève le coéquipier à terre le plus proche
@@ -1362,6 +1363,7 @@ export class Room {
     this.updateSpawns();
     this.stormDamage();
     this.cactusDamage();
+    this.quicksandDamage();
     this.updateSeen();
 
     // La monture suit exactement son cavalier (elle n'est pas une cible séparée).
@@ -1647,12 +1649,20 @@ export class Room {
         if (![...this.players.values()].some((p) => dist2(p.x, p.y, u.x, u.y) < VIEW_R ** 2)) this.units.delete(u.id);
       }
     }
+    // la saison finie, ses bêtes (le Bigfoot de l'hiver) s'en vont, toujours hors de vue
+    this.season = sky.season;
+    for (const u of [...this.units.values()]) {
+      const sn = SPECIES[u.s].season;
+      if (u.owner || u.alpha || sn === undefined || sn === this.season) continue;
+      if (![...this.players.values()].some((p) => dist2(p.x, p.y, u.x, u.y) < VIEW_R ** 2)) this.units.delete(u.id);
+    }
   }
 
   /** Nuit au village (même ciel que celui qu'affichent les clients). */
   private night = false; // mis à jour 2 fois par seconde
   private storm = 0; // tempête de sable (Mer de sable), mise à jour 2 fois par seconde
   private rain = 0; // force de l'averse (0 à 1), mise à jour 2 fois par seconde
+  private season = 0; // saison du village (0 printemps … 3 hiver), mise à jour 2 fois par seconde
   private sky() {
     return sky(this.seed, Date.now());
   }
@@ -1669,6 +1679,18 @@ export class Room {
     }
   }
 
+  /** Sables mouvants : passé un moment dedans, le dompteur s'enlise (une part des PV max par seconde), sauf en vol. */
+  private quicksandDamage() {
+    for (const p of this.players.values()) {
+      if (p.dead || this.airborne(p) || this.map.quicksandAt(p.x, p.y) < 0) {
+        p.sinkSince = undefined;
+        continue;
+      }
+      p.sinkSince ??= this.time;
+      if (this.time - p.sinkSince >= QUICKSAND_GRACE_S && this.tick % TICK_HZ === 0) this.damage(p, maxHpOf(p) * QUICKSAND_SINK, p);
+    }
+  }
+
   /** Cactus de la Mer de sable : s'y frotter pique (une part des PV max, à intervalles), sauf à dos de monture volante. */
   private cactusDamage() {
     for (const p of this.players.values()) {
@@ -1681,10 +1703,11 @@ export class Room {
     }
   }
 
-  /** Population visée d'une espèce sauvage : nulle le jour pour les bêtes de nuit, la nuit pour les bêtes de jour. */
+  /** Population visée d'une espèce sauvage : nulle le jour pour les bêtes de nuit, la nuit pour les bêtes de jour, hors de leur saison pour les autres. */
   private population(s: number) {
     const night = this.isNight();
     if (SPECIES[s].isle) return SPECIES[s].population; // quelques-unes sur leur îlot, quelle que soit la taille de la zone
+    if (SPECIES[s].season !== undefined && SPECIES[s].season !== this.sky().season) return 0; // bête d'une autre saison
     return (SPECIES[s].night && !night) || (SPECIES[s].day && night) ? 0 : populationOf(s);
   }
 

@@ -452,6 +452,9 @@ export const GOLEM_BITE_S = 0.9; // … et le grignote, une bouchée toutes les 
 export const GOLEM_BITES = 4; // … en quatre bouchées : la pierre revient à son dompteur
 export const CACTUS_PRICK = 0.05; // s'y frotter : 5 % des PV max…
 export const CACTUS_CD = 0.8; // … au plus toutes les 0,8 s
+export const QUICKSAND_SLOW = 0.4; // sables mouvants (plages de la Mer de sable) : on y avance à 40 % de sa vitesse…
+export const QUICKSAND_GRACE_S = 1.5; // … et passé 1,5 s dedans, on s'enlise…
+export const QUICKSAND_SINK = 0.04; // … 4 % des PV max par seconde, jusqu'à en sortir (à dos de monture volante : rien)
 export const BOSS_HP_BONUS = 1.2; // PV des géants : +20 % par-dessus le tableau des espèces
 export const BOSS_TALK_R = 140; // distance (depuis le bord du géant) pour lui parler et lancer le combat
 export const BOSS_SOUL_DROP = 0.35;
@@ -631,6 +634,7 @@ export interface Species {
   amphibious?: boolean; // apprivoisé, il suit son dompteur dans l'eau (sauvage, il reste à terre)
   night?: boolean; // n'apparaît que la nuit (il s'envole au lever du jour)
   day?: boolean; // n'apparaît que le jour (il s'enfouit au coucher du soleil)
+  season?: number; // n'apparaît qu'en cette saison (0 printemps … 3 hiver, voir weather.ts) : il s'en va quand elle finit
   venom?: boolean; // ses coups au corps à corps empoisonnent (le scorpion)
   optional?: boolean; // géant ajouté après coup : ni porte, ni parchemin, ni volcan, ni bateau n'en dépendent
   isle?: boolean; // vit sur un îlot du large (son géant, dans une grotte de l'îlot) : on y va à dos de serpent
@@ -743,6 +747,8 @@ export const SPECIES: Species[] = [
   { key: 'drake_king', name: 'Grand Drake', color: '#1E5A66', r: 63, hp: 8500, dmg: 50, speed: 180, atkCd: 1.3, gold: 450, zone: 3, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, tome: 'vigor', title: 'Marégrave, le Drake des Marées', sprite: 'drake', base: 'drake' },
   { key: 'wyvern_king', name: 'Wyverne-Reine', color: '#3E4A2A', r: 66, hp: 42000, dmg: 125, speed: 200, atkCd: 1.2, gold: 1800, zone: 5, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, venom: true, tome: 'swim', title: 'Vipéra, la Reine des Falaises', sprite: 'wyvern', base: 'wyvern' },
   { key: 'dragon_king', name: 'Dragon ancien', color: '#7A2418', r: 70, hp: 80000, dmg: 230, speed: 190, atkCd: 1.2, gold: 2600, zone: 6, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, tome: 'treasure', title: 'Pyrakhan, le Dragon Ancien', sprite: 'dragon', base: 'dragon' },
+  // Bois profonds, l'hiver seulement : le Bigfoot sort des sapins enneigés (il repart à la fonte des neiges). Rare, solide, il frappe fort.
+  { key: 'bigfoot', name: 'Bigfoot', color: '#7A5A44', r: 27, hp: 420, dmg: 22, speed: 105, atkCd: 1.4, gold: 24, zone: 2, population: 7, pack: [1, 1], season: 3, awaken: 25 },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);

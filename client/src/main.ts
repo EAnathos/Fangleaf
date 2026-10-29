@@ -97,7 +97,19 @@ function since(d: Date) {
   return Number.isNaN(days) ? '' : days <= 0 ? 'aujourd\'hui' : days === 1 ? 'hier' : `il y a ${days} jours`;
 }
 
-/** Villages du compte : une carte par village (son nom, dernière partie), la plus récente choisie. */
+/** Blason d'un village : sa petite île sur la mer, avec un fanion à ses couleurs (tirées de son code). */
+function crest(code: string) {
+  let h = 0;
+  for (const ch of code) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const hue = h % 360, v = (h >>> 9) % 3;
+  const isle = ['M14 34 C10 26 18 18 28 19 C36 12 50 15 52 25 C58 30 54 40 44 40 C36 46 20 44 14 34 Z', 'M12 32 C12 22 24 20 30 22 C38 16 52 20 50 30 C54 38 42 44 32 41 C24 46 12 40 12 32 Z', 'M16 36 C8 30 14 20 24 22 C30 14 44 14 48 22 C56 24 56 36 46 38 C40 46 24 44 16 36 Z'][v];
+  return `<svg class="crest" viewBox="0 0 64 56" aria-hidden="true"><ellipse cx="32" cy="30" rx="30" ry="24" fill="#2E6F80"/><ellipse cx="32" cy="30" rx="26" ry="20" fill="#3E8A98"/>`
+    + `<path d="${isle}" fill="#DEC896"/><path d="${isle}" fill="#4E8A44" transform="translate(32 30) scale(0.78) translate(-32 -30)"/>`
+    + `<circle cx="24" cy="31" r="4.5" fill="#2F6B36"/><circle cx="40" cy="34" r="3.8" fill="#2F6B36"/>`
+    + `<path d="M33 30 V12" stroke="#5B3F2C" stroke-width="2.2" stroke-linecap="round"/><path d="M34 12 L46 15.5 L34 19 Z" fill="hsl(${hue} 70% 58%)"/></svg>`;
+}
+
+/** Villages du compte : une carte par village (son blason, son nom, dernière partie), la plus récente choisie. */
 function renderVillages() {
   $('tab-mine').hidden = !villages.length;
   if (!villages.some((v) => v.code === picked)) picked = villages[0]?.code ?? '';
@@ -108,7 +120,7 @@ function renderVillages() {
       btn.className = 'village-pick';
       btn.setAttribute('role', 'radio');
       btn.setAttribute('aria-checked', String(v.code === picked));
-      btn.innerHTML = '<b></b><span class="when"></span>';
+      btn.innerHTML = `${crest(v.code)}<b></b><span class="when"></span><span class="vcode">${v.code}</span>`;
       // le nom du village (« Sans nom » tant que l'Hôtel de ville ne l'a pas baptisé)
       const b = btn.querySelector('b')!;
       b.textContent = v.village || 'Sans nom';
@@ -180,6 +192,7 @@ async function refreshAccount() {
   $('play').hidden = !acc;
   if (acc) {
     $('account-name').textContent = acc.name;
+    $('account-avatar').textContent = acc.name.trim().charAt(0).toUpperCase() || '?';
     if (!nameInput.value) nameInput.value = acc.name.split(' ')[0].slice(0, 16);
   }
 }

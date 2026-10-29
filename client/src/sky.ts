@@ -3,7 +3,7 @@
 //   créatures lumineuses), appliquée sur l'image en « multiply ». Une seule copie plein écran par image.
 // - Pluie : des traits obliques recyclés, accrochés au monde (ils défilent quand on bouge), et des éclaboussures.
 
-import type { Sky } from '../../shared/weather.ts';
+import { type Sky, WINTER } from '../../shared/weather.ts';
 import { particleRate, settings } from './settings.ts';
 
 const LIGHT_RES = 4; // la carte de lumière est 4 fois moins fine que l'écran : ses halos sont flous de toute façon
@@ -190,6 +190,7 @@ export class SkyFx {
       return;
     }
     const n = Math.min(MAX_DROPS, Math.round(MAX_DROPS * sky.rain * particleRate() * Math.min(1, (W * H) / (1920 * 1080))));
+    if (sky.season === WINTER) return this.snow(ctx, n, dx, dy, sky, dt, dpr);
     const d = this.drops, wind = -0.22;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -200,8 +201,8 @@ export class SkyFx {
     ctx.beginPath();
     for (let i = 0; i < n; i++) {
       const o = i * 4;
-      if (d[o + 3] === 0) {
-        // première fois : n'importe où sur l'écran
+      if (d[o + 3] < 300 * dpr) {
+        // première fois (ou des flocons d'avant) : n'importe où sur l'écran
         d[o] = Math.random() * W;
         d[o + 1] = Math.random() * H;
         d[o + 2] = (14 + Math.random() * 12) * dpr;
@@ -242,4 +243,38 @@ export class SkyFx {
     }
     ctx.restore();
   }
+  /** L'hiver, la pluie tombe en neige : des flocons qui descendent lentement en se balançant (accrochés au monde, eux aussi). */
+  private snow(ctx: CanvasRenderingContext2D, n: number, dx: number, dy: number, sky: Sky, dt: number, dpr: number) {
+    const W = ctx.canvas.width, H = ctx.canvas.height, d = this.drops;
+    this.splashes.length = 0;
+    this.snowT += dt;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = `rgba(246,250,255,${0.6 + sky.light * 0.3})`;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const o = i * 4;
+      if (d[o + 3] === 0 || d[o + 3] > 200 * dpr) {
+        // première fois (ou des gouttes de pluie d'avant) : n'importe où sur l'écran, taille et vitesse de flocon
+        d[o] = Math.random() * W;
+        d[o + 1] = Math.random() * H;
+        d[o + 2] = (1.2 + Math.random() * 2.2) * dpr;
+        d[o + 3] = (45 + Math.random() * 60) * dpr;
+      }
+      const v = d[o + 3] * dt;
+      d[o] += Math.sin(this.snowT * 1.3 + i) * 18 * dpr * dt - 12 * dpr * dt - dx;
+      d[o + 1] += v - dy;
+      if (d[o + 1] > H + 4) {
+        d[o + 1] -= H + 8;
+        d[o] = Math.random() * W;
+      } else if (d[o + 1] < -4) d[o + 1] += H + 8;
+      if (d[o] < 0) d[o] += W;
+      else if (d[o] > W) d[o] -= W;
+      ctx.moveTo(d[o] + d[o + 2], d[o + 1]);
+      ctx.arc(d[o], d[o + 1], d[o + 2], 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+  private snowT = 0;
 }

@@ -3,7 +3,7 @@
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
 import { DT, mountSpeedOf, BERRIES_PICKED, fruitTameChance, BUSH_REGROW_S, SPECIES } from '../../shared/config.ts';
-import { DAY_MS, sky } from '../../shared/weather.ts';
+import { DAY_MS, SEASON_MS, season, sky, WINTER } from '../../shared/weather.ts';
 
 describe('Faune : tireurs, gibier, baies, bestiaire', () => {
   rule('Tireurs : charge visible, projectile esquivable, tir en cloche annoncé, serpent qui reste dans l\'eau.', () => {
@@ -376,5 +376,28 @@ describe('Faune : tireurs, gibier, baies, bestiaire', () => {
       r.step();
     }
     check(wild.hp < hp0 || !r.units.has(wild.id), `le vautour sauvage, en plein vol, est touché par le nôtre (${Math.round(wild.hp)}/${Math.round(hp0)} PV)`);
+  });
+  rule('Saisons : le Bigfoot ne sort qu\'en hiver, dans les Bois profonds, et s\'en va quand l\'hiver finit (loin des dompteurs).', () => {
+    const r = room();
+    const big = SPECIES.findIndex((sp) => sp.key === 'bigfoot');
+    check(big === SPECIES.length - 1 && SPECIES[big].zone === 2 && SPECIES[big].season === WINTER && !SPECIES[big].passive, 'Bigfoot : zone 2, hiver, hostile, ajouté en fin de liste (sauvegardes intactes)');
+    const realNow = Date.now, t0 = realNow();
+    let winter = -1, spring = -1;
+    for (let t = t0; t < t0 + 4 * SEASON_MS && (winter < 0 || spring < 0); t += 60_000) {
+      if (season(r.seed, t) === WINTER && winter < 0) winter = t;
+      if (season(r.seed, t) === 0 && spring < 0) spring = t;
+    }
+    check(winter >= 0 && spring >= 0, 'les quatre saisons passent en une année');
+    const bigs = () => [...r.units.values()].filter((u: any) => u.s === big && !u.owner);
+    Date.now = () => spring;
+    for (let i = 0; i < 30; i++) r.updateSpawns(), (r.time += 3);
+    check(bigs().length === 0, 'au printemps, pas de Bigfoot');
+    Date.now = () => winter;
+    for (let i = 0; i < 30; i++) r.updateSpawns(), (r.time += 3);
+    check(bigs().length > 0 && bigs().every((u: any) => r.map.zoneAt(u.x, u.y) === 2), `l'hiver, des Bigfoots apparaissent dans les Bois profonds (${bigs().length})`);
+    Date.now = () => spring;
+    r.updateSpawns();
+    check(bigs().length === 0, 'au printemps, les Bigfoots sauvages s\'en vont');
+    Date.now = realNow;
   });
 });

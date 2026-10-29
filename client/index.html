@@ -52,7 +52,8 @@
           Se connecter avec Google
         </button>
         <div id="signed-in" class="signed-in" hidden>
-          <span>Connecté : <b id="account-name"></b></span>
+          <span id="account-avatar" class="avatar" aria-hidden="true"></span>
+          <span class="who"><span class="muted small">Connecté</span><b id="account-name"></b></span>
           <button type="button" id="logout" class="link-btn">Se déconnecter</button>
         </div>
         <p id="guest-note" class="hint">Chargement…</p>
@@ -129,6 +130,7 @@
         <button id="chat-open" class="btn chat-open" aria-label="Chat">💬<span id="chat-unread" class="unread" hidden></span></button>
         <button id="menu-open" class="btn" aria-label="Menu">☰ Menu</button>
       </div>
+      <span id="season" class="season small" title="Saison"></span>
       <span id="ping" class="muted small"></span>
     </section>
 

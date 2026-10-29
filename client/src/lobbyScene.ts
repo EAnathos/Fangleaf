@@ -83,10 +83,10 @@ export function startLobbyScene(canvas: HTMLCanvasElement, isActive: () => boole
     }
     const t = (now - t0) / 1000, dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    const narrow = w < 960;
-    const S = clamp(Math.min(h / 900, w / 1500), 0.4, 1.3) * 2.5; // échelle des personnages
-    const groundY = h * (narrow ? 0.9 : 0.79);
-    const cx = w / 2;
+    const narrow = w < 960, phone = w < 600 && h > w; // téléphone en portrait : la clairière entre le titre et le panneau du bas
+    const S = phone ? w / 620 : clamp(Math.min(h / 900, w / 1500), 0.4, 1.3) * 2.5; // échelle des personnages
+    const groundY = h * (phone ? 0.3 : narrow ? 0.9 : 0.79);
+    const cx = w / 2 - (phone ? 49 * S : 0); // en portrait : la meute et les monstres centrés
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);

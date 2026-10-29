@@ -469,7 +469,7 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
       for (const i of others) r.map.treeDown.delete(i);
       const treant = SPECIES.findIndex((sp) => sp.key === 'treant');
       check(r.map.treeDown.has(d.id) && [...r.units.values()].some((u: { s: number; owner: number }) => u.s === treant && !u.owner), 'Bois profonds : un arbre abattu peut réveiller un Tréant');
-      check(SPECIES[treant].hp > Math.max(...SPECIES.filter((sp) => sp.zone === TREANT_ZONE && !sp.boss && !sp.passive && sp.population).map((sp) => sp.hp)), 'le Tréant est plus solide que les autres monstres des Bois profonds');
+      check(SPECIES[treant].hp > Math.max(...SPECIES.filter((sp) => sp.zone === TREANT_ZONE && !sp.boss && !sp.passive && sp.population && sp.season === undefined).map((sp) => sp.hp)), 'le Tréant est plus solide que les autres monstres des Bois profonds (hors Bigfoot, rare, l\'hiver)');
     }
     for (const res of ['stone', 'gold'] as const) {
       const o = r.map.ores.find((x: { res: string }) => x.res === res);

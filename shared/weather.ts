@@ -1,6 +1,6 @@
 // Ciel du village : jour, nuit et averses découlent de l'heure du serveur et de la graine du village.
 // Aucun message réseau : tous les joueurs d'un village voient la même nuit et la même averse au même moment.
-// Affichage seulement pour l'instant (les règles du jeu n'en dépendent pas).
+// La saison aussi (certaines bêtes ne sortent qu'en hiver).
 
 import { clamp, hash2 } from './math.ts';
 
@@ -18,6 +18,22 @@ const STORM_SLOT = 5 * 60_000;
 const STORM_CHANCE = 0.14; // environ une toutes les 35 min
 const STORM_FADE = 40_000; // elle se lève et retombe en 40 s
 
+// Saisons : printemps, été, automne, hiver, trois jours chacune (une heure), chaque village à son propre moment de l'année.
+export const SEASON_MS = 3 * DAY_MS;
+export const SEASON_NAMES = ['Printemps', 'Été', 'Automne', 'Hiver'] as const;
+export const SPRING = 0, SUMMER = 1, AUTUMN = 2, WINTER = 3;
+
+/** Saison du village à cet instant (0 printemps … 3 hiver). */
+export function season(seed: number, now: number) {
+  return Math.floor((now / SEASON_MS / 4 + hash2(4, 6, seed + 95)) * 4) % 4;
+}
+
+/** Part de la saison écoulée (0 au début, 1 à la fin). */
+export function seasonProgress(seed: number, now: number) {
+  const u = (now / SEASON_MS / 4 + hash2(4, 6, seed + 95)) * 4;
+  return u - Math.floor(u);
+}
+
 const smooth = (u: number) => u * u * (3 - 2 * u);
 
 export interface Sky {
@@ -25,6 +41,7 @@ export interface Sky {
   dusk: number; // 0 à 1 : teinte chaude du crépuscule et de l'aube (au milieu de la transition)
   rain: number; // 0 = sec, 1 = grosse averse
   storm: number; // tempête de sable (Mer de sable seulement) : 0 = calme, 1 = en plein dedans
+  season: number; // 0 printemps, 1 été, 2 automne, 3 hiver (l'hiver, la pluie tombe en neige)
 }
 
 /** Force de la pluie d'une tranche (0 si elle est sèche). */
@@ -56,5 +73,5 @@ export function sky(seed: number, now: number): Sky {
 
   const rain = slotted(now, RAIN_SLOT, RAIN_FADE, (k) => slotRain(seed, k));
   const storm = slotted(now, STORM_SLOT, STORM_FADE, (k) => slotStorm(seed, k));
-  return { light, dusk, rain: clamp(rain, 0, 1), storm: clamp(storm, 0, 1) };
+  return { light, dusk, rain: clamp(rain, 0, 1), storm: clamp(storm, 0, 1), season: season(seed, now) };
 }

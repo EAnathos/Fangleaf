@@ -642,7 +642,13 @@ export class Hud {
     el.style.animation = '';
   }
 
-  toast(text: string, kind: '' | 'alpha' | 'good' = '') {
+  /** Saison du village, sous la minicarte. */
+  setSeason(name: string) {
+    const icon: Record<string, string> = { Printemps: '🌸', Été: '☀️', Automne: '🍂', Hiver: '❄️' };
+    $('season').textContent = `${icon[name] ?? ''} ${name}`;
+  }
+
+    toast(text: string, kind: '' | 'alpha' | 'good' = '') {
     const el = document.createElement('div');
     el.className = `toast ${kind}`;
     el.textContent = text;

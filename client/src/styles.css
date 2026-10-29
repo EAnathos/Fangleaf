@@ -85,12 +85,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tabs.auto { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
 .hint { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
 .village-list { display: flex; flex-direction: column; gap: 8px; }
-.village-pick { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 14px; min-height: 60px; padding: 10px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--night); color: var(--text); text-align: left; cursor: pointer; }
+.village-pick { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; gap: 2px 12px; min-height: 64px; padding: 8px 14px 8px 10px; border-radius: 12px; border: 2px solid var(--line); background: var(--night); color: var(--text); text-align: left; cursor: pointer; transition: transform 0.15s, border-color 0.15s; }
 .village-pick:hover { border-color: var(--ally); }
+.village-pick:active { transform: scale(0.97); }
 .village-pick[aria-checked="true"] { border-color: var(--amber); background: rgba(240, 182, 74, 0.1); }
-.village-pick b { grid-column: 1; font: 700 19px var(--display); letter-spacing: 0.5px; color: var(--amber); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.village-pick .crest { grid-row: 1 / 3; grid-column: 1; width: 48px; height: 42px; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.4)); }
+.village-pick b { grid-column: 2; font: 700 19px var(--display); letter-spacing: 0.5px; color: var(--amber); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .village-pick b.unnamed { color: var(--muted); font-style: italic; }
-.village-pick .when { grid-column: 2; font-size: 13px; color: var(--muted); text-align: right; white-space: nowrap; }
+.village-pick .when { grid-column: 3; grid-row: 1; font-size: 13px; color: var(--muted); text-align: right; white-space: nowrap; }
+.village-pick .vcode { grid-column: 2; grid-row: 2; font: 500 12px var(--display); letter-spacing: 2px; color: var(--muted); }
 .error { margin: 0; color: #FF9B78; font-size: 14px; }
 .error:empty { display: none; }
 
@@ -104,6 +107,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .tagline { order: 1; margin-top: -12px; }
   .lobby-card { width: 100%; order: 2; }
   }
+
 
 /* ───── HUD ───── */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
@@ -123,6 +127,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .party b { font-weight: 600; }
 
 .hud-tr { position: absolute; right: 16px; top: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.season { color: var(--text); opacity: 0.85; text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
 #minimap { cursor: pointer; pointer-events: auto; } /* cliquer dessus ouvre la grande carte */
 .tr-buttons { gap: 8px; }
 .mount-row { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid var(--line); }
@@ -553,3 +558,58 @@ body.waking #hud { opacity: 0; pointer-events: none; }
 .scroll-pick:hover { border-color: #C9A24A; }
 .scroll-pick .small { color: #E8DCC2; }
 .elder-boat { max-height: 46vh; overflow-y: auto; } /* les 15 parchemins défilent */
+
+/* ───── Lobby sur téléphone (à la fin : il l'emporte sur les règles du lobby plus haut) ───── */
+/* Téléphone en portrait : comme une appli de jeu. Le titre en haut, la clairière animée au milieu, et un panneau qui
+   monte du bas de l'écran : compte, carrousel des villages (on glisse de l'un à l'autre), gros bouton pour jouer. */
+@media (max-width: 600px) and (orientation: portrait) {
+  #lobby { overflow: hidden; background: radial-gradient(ellipse at 50% 42%, #2A4A33 0%, #172A21 40%, var(--night) 80%); }
+  #lobby-scene { opacity: 1; }
+  .lobby-inner { height: 100%; min-height: 100dvh; padding: calc(env(safe-area-inset-top) + 18px) 0 0; gap: 0; justify-content: flex-start; align-items: stretch; }
+  .lobby-hero { display: flex; align-items: center; text-align: center; gap: 4px; padding: 0 16px; }
+  .lobby-hero h1 { font-size: clamp(44px, 15vw, 60px); text-shadow: 0 3px 0 #5B3F2C, 0 0 24px rgba(240, 182, 74, 0.35); animation: lobby-float 4s ease-in-out infinite; }
+  .tagline { margin: 0; font-size: 15px; color: var(--text-2); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+  .lobby-card {
+    order: 2; margin-top: auto; width: 100%; max-height: 64dvh; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+    padding: 22px 16px calc(14px + env(safe-area-inset-bottom)); gap: 14px;
+    border-radius: 24px 24px 0 0; border-width: 2px 0 0; border-color: rgba(240, 182, 74, 0.35);
+    background: linear-gradient(180deg, rgba(30, 44, 40, 0.97), rgba(16, 24, 26, 0.99));
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55); animation: sheet-up 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  }
+  .lobby-card::before { content: ''; position: absolute; top: 8px; left: 50%; width: 44px; height: 5px; margin-left: -22px; border-radius: 3px; background: var(--line); }
+  .lobby-card { position: relative; }
+  .card-title { font-size: 22px; text-align: center; }
+  .invite-badge { align-self: center; }
+  .signed-in { flex-wrap: nowrap; justify-content: flex-start; gap: 10px; padding: 8px 10px; border-radius: 14px; }
+  .signed-in .who { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; flex: 1; }
+  .signed-in .who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .play { gap: 12px; }
+  .field { gap: 6px; font-size: 13px; }
+  .field input { height: 44px; }
+  .tabs { padding: 4px; border-radius: 14px; }
+  .tabs button { height: 40px; font: 700 15px var(--display); letter-spacing: 0.3px; }
+  .tabs button[aria-selected="true"] { background: var(--amber); color: var(--amber-ink); box-shadow: 0 2px 0 #8A5E1C; }
+  /* les villages : un carrousel de grandes cartes, on glisse de l'une à l'autre */
+  .village-list { flex-direction: row; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 4px 16px 10px; scrollbar-width: none; }
+  .village-list::-webkit-scrollbar { display: none; }
+  .village-pick {
+    flex: 0 0 62%; scroll-snap-align: center; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto;
+    justify-items: center; text-align: center; gap: 4px; min-height: 0; padding: 14px 10px 12px; border-radius: 18px;
+    background: linear-gradient(180deg, var(--panel-2), var(--night));
+  }
+  .village-list > .village-pick:only-child { flex-basis: 100%; }
+  .village-pick[aria-checked="true"] { background: linear-gradient(180deg, rgba(240, 182, 74, 0.22), var(--night)); box-shadow: 0 0 0 2px rgba(240, 182, 74, 0.25), 0 8px 20px rgba(0, 0, 0, 0.4); transform: translateY(-2px); }
+  .village-pick .crest { grid-row: 1; grid-column: 1; width: 76px; height: 66px; }
+  .village-pick b { grid-column: 1; grid-row: 2; font-size: 20px; max-width: 100%; }
+  .village-pick .vcode { grid-column: 1; grid-row: 3; }
+  .village-pick .when { grid-column: 1; grid-row: 4; text-align: center; font-size: 12px; }
+  .hint { font-size: 13px; text-align: center; }
+  #go { position: sticky; bottom: 0; z-index: 1; width: 100%; height: 60px; font-size: 24px; letter-spacing: 1px; border-radius: 16px; box-shadow: 0 5px 0 #8A5E1C, 0 10px 24px rgba(0, 0, 0, 0.5); animation: cta-glow 2.4s ease-in-out infinite; }
+  #go:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 1px 0 #8A5E1C, 0 4px 12px rgba(0, 0, 0, 0.5); }
+  #go:disabled { box-shadow: none; animation: none; }
+}
+.avatar { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--ally); color: var(--night); font: 700 18px var(--display); box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--ally); }
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes lobby-float { 50% { transform: translateY(-4px); } }
+@keyframes cta-glow { 50% { box-shadow: 0 5px 0 #8A5E1C, 0 0 26px rgba(240, 182, 74, 0.55); } }
+@media (prefers-reduced-motion: reduce) { .lobby-hero h1, .lobby-card, #go { animation: none !important; } }

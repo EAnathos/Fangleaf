@@ -15,7 +15,7 @@ describe('Géants et grottes', () => {
     const emperor = SPECIES.findIndex((sp) => sp.key === 'scorpion_king');
     check(SPECIES[emperor].optional && r.map.caves.some((cv: { boss: number }) => cv.boss === emperor) && !zoneBosses(7).includes(emperor),
       'Scorpion Empereur : sa grotte dans le désert, mais ni porte, ni parchemin, ni volcan n\'en dépendent');
-    check(SPECIES.filter((sp) => !sp.boss && !sp.passive && sp.population).every((sp) => SPECIES.some((b) => b.boss && b.base === sp.key)), 'chaque espèce hostile a son géant (âme → Alpha légendaire ; sauf le Tréant, caché dans les arbres)');
+    check(SPECIES.filter((sp) => !sp.boss && !sp.passive && sp.population && sp.season === undefined).every((sp) => SPECIES.some((b) => b.boss && b.base === sp.key)), 'chaque espèce hostile a son géant (âme → Alpha légendaire ; sauf le Tréant, caché dans les arbres, et le Bigfoot, qui ne sort que l\'hiver)');
     const f = r.createUnit(0, false, 0, 0);
     f.owner = p.id;
     p.army.push(f.id);

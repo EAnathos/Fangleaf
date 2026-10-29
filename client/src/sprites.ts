@@ -2,6 +2,7 @@
 
 import { DESERT_ZONE, PINCER_HALF, SPECIES, type Resource } from '../../shared/config.ts';
 import { HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
+import { hash2 } from '../../shared/math.ts';
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -62,9 +63,9 @@ export interface Leap { ext: number; reach: number; crouch: number }
 /** Grande couronne d'un géant : décalage vertical, en rayons, pour ceux dont la tête est bien plus basse (ou plus haute). */
 const BOSS_CROWN_Y: Record<string, number> = { drake: -0.12, wyvern: -0.55, dragon: -0.45, croc: 0.75, masked: -1.05 };
 /** Décalage de la couronne (Alpha, géant) vers la tête, en rayons, pour les espèces dont la tête est loin devant. */
-const CROWN_X: Record<string, number> = { drake: 0.7, wyvern: 0.7, dragon: 0.8, scorpion: 0.45, gorilla: 0.7, croc: 0.6, masked: 0.02, bear: 0.8, boar: 0.9, firefly: 0.5, sandworm: 0.5, vulture: 0.55, jackal: 0.85, meerkat: 0.08, salamander: 0.95, lava_tortoise: 1.05 };
+const CROWN_X: Record<string, number> = { drake: 0.7, wyvern: 0.7, dragon: 0.8, scorpion: 0.45, gorilla: 0.7, croc: 0.6, masked: 0.02, bear: 0.8, boar: 0.9, firefly: 0.5, sandworm: 0.5, vulture: 0.55, jackal: 0.85, meerkat: 0.08, bigfoot: 0.12, salamander: 0.95, lava_tortoise: 1.05 };
 /** … et vers le bas, en rayons, pour celles dont la tête est plus basse que le haut du corps. */
-const CROWN_Y: Record<string, number> = { drake: -0.15, wyvern: -0.55, dragon: -0.35, scorpion: 0.05, gorilla: 0.25, croc: 0.82, masked: -0.95, kraken: -0.6, crab: -0.05, boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
+const CROWN_Y: Record<string, number> = { drake: -0.15, wyvern: -0.55, dragon: -0.35, scorpion: 0.05, gorilla: 0.25, croc: 0.82, masked: -0.95, kraken: -0.6, crab: -0.05, boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, bigfoot: -0.35, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
 
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
@@ -5236,6 +5237,118 @@ function dragon(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
   dragonWing(ctx, r, [0.05, -0.32], [0.3, -1.15 - beat], [[-0.1, -1.6 - beat * 1.4], [-0.62, -1.42 - beat], [-0.98, -0.95], [-0.82, -0.4]], bone, skin, vein);
 }
 
+/**
+ * Bigfoot (Bois profonds, l'hiver) : grand primate debout, à longs poils roux sombre en mèches, de très grands pieds nus,
+ * de longs bras qui balancent, un crâne en pointe, le visage gris dans l'ombre des arcades ; de la neige sur la tête et
+ * les épaules, et la buée de son souffle dans le froid.
+ */
+function bigfoot(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
+  const W = (c: string) => whiteIf(u, c);
+  const fur = W('#7A5A44'), shade = W('#5A4030'), dark = W('#3E2C20'), skin = W('#4A403A'), light = W('#9A7A5C'), snow = W('#F2F6FA');
+  const g = gait(u, 6), breath = Math.sin(u.t * 1.8 + u.seed) * r * 0.02, sway = u.moving ? Math.sin(u.t * 6 + u.seed) * 0.05 : 0;
+  // jambes, la plus éloignée d'abord, et leurs grands pieds
+  const leg = (i: number, x: number, col: string) => {
+    const lift = g[i].lift * 0.1 * r, swing = g[i].a * 0.18 * r;
+    ctx.strokeStyle = col;
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 0.3 * r;
+    ctx.beginPath();
+    ctx.moveTo(x, 0.15 * r);
+    ctx.lineTo(x + swing, 0.62 * r - lift);
+    ctx.stroke();
+    blot(ctx, x + swing + 0.1 * r, 0.7 * r - lift, 0.24 * r, 0.09 * r, skin);
+    blot(ctx, x + swing + 0.04 * r, 0.66 * r - lift, 0.16 * r, 0.06 * r, col);
+  };
+  // long bras qui balance, la main près du genou
+  const arm = (i: number, sx: number, col: string) => {
+    const hx = sx + g[i].a * 0.22 * r + 0.08 * r, hy = 0.3 * r - Math.abs(g[i].a) * 0.05 * r;
+    ctx.lineCap = 'round';
+    for (const [c, w] of [['rgba(12,18,16,0.75)', 0.34], [col, 0.24]] as const) { // cerné, pour qu'il se détache du corps
+      ctx.strokeStyle = c;
+      ctx.lineWidth = w * r;
+      ctx.beginPath();
+      ctx.moveTo(sx, -0.45 * r + breath);
+      ctx.quadraticCurveTo(sx + 0.16 * r, -0.05 * r, hx, hy);
+      ctx.stroke();
+    }
+    blot(ctx, hx + 0.03 * r, hy + 0.06 * r, 0.12 * r, 0.1 * r, skin);
+  };
+  leg(0, -0.18 * r, dark);
+  arm(1, -0.36 * r, dark);
+  leg(2, 0.16 * r, shade);
+  ctx.save();
+  ctx.rotate(sway);
+  // corps hirsute : bord en mèches
+  const body = (grow: number) => {
+    ctx.beginPath();
+    for (let k = 0; k <= 22; k++) {
+      const a = (k / 22) * TAU, rr = 1 + (k % 2 ? 0.07 : -0.02);
+      const x = Math.cos(a) * (0.5 * r + grow) * rr, y = -0.22 * r + breath + Math.sin(a) * (0.62 * r + grow) * rr;
+      if (k) ctx.lineTo(x, y);
+      else ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+  };
+  ctx.fillStyle = fur;
+  body(0);
+  ctx.fill();
+  ink(ctx, r);
+  ctx.fillStyle = fur;
+  body(-1);
+  ctx.fill();
+  blot(ctx, 0.14 * r, -0.12 * r + breath, 0.26 * r, 0.36 * r, light, 0.1); // poitrail plus clair
+  if (!u.flash) {
+    ctx.strokeStyle = 'rgba(40,26,18,0.45)'; // mèches
+    ctx.lineWidth = Math.max(1, r * 0.035);
+    ctx.beginPath();
+    for (let k = 0; k < 7; k++) {
+      const x = -0.38 * r + k * 0.11 * r, y = -0.1 * r + (k % 3) * 0.12 * r;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - 0.03 * r, y + 0.16 * r);
+    }
+    ctx.stroke();
+  }
+  // tête : crâne en pointe, visage gris, arcades lourdes
+  const hx = 0.14 * r, hy = -0.92 * r + breath;
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.moveTo(hx - 0.3 * r, hy + 0.1 * r);
+  ctx.quadraticCurveTo(hx - 0.32 * r, hy - 0.3 * r, hx - 0.04 * r, hy - 0.42 * r);
+  ctx.quadraticCurveTo(hx + 0.28 * r, hy - 0.3 * r, hx + 0.32 * r, hy + 0.08 * r);
+  ctx.quadraticCurveTo(hx, hy + 0.32 * r, hx - 0.3 * r, hy + 0.1 * r);
+  ctx.fill();
+  ink(ctx, r);
+  ctx.fill();
+  blot(ctx, hx + 0.1 * r, hy + 0.04 * r, 0.2 * r, 0.17 * r, skin);
+  blot(ctx, hx + 0.1 * r, hy - 0.08 * r, 0.22 * r, 0.06 * r, dark); // arcades
+  if (!u.flash) {
+    ctx.fillStyle = u.wild ? '#E8C25A' : '#F2EAD8';
+    ctx.beginPath();
+    ctx.arc(hx + 0.03 * r, hy - 0.01 * r, 0.035 * r, 0, TAU);
+    ctx.arc(hx + 0.19 * r, hy - 0.01 * r, 0.035 * r, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(20,14,10,0.8)'; // bouche
+    ctx.lineWidth = Math.max(1, r * 0.03);
+    ctx.beginPath();
+    ctx.moveTo(hx + 0.04 * r, hy + 0.13 * r);
+    ctx.lineTo(hx + 0.2 * r, hy + 0.12 * r);
+    ctx.stroke();
+  }
+  // neige sur le crâne et les épaules
+  blot(ctx, hx - 0.06 * r, hy - 0.33 * r, 0.14 * r, 0.06 * r, snow, -0.4);
+  blot(ctx, -0.28 * r, -0.72 * r + breath, 0.18 * r, 0.06 * r, snow, -0.5);
+  blot(ctx, 0.36 * r, -0.62 * r + breath, 0.13 * r, 0.05 * r, snow, 0.5);
+  ctx.restore();
+  arm(3, 0.3 * r, shade);
+  // buée du souffle dans le froid
+  if (!u.flash) {
+    for (let k = 0; k < 3; k++) {
+      const p = (u.t * 0.6 + u.seed * 0.1 + k / 3) % 1;
+      blot(ctx, hx + (0.4 + p * 0.45) * r, hy + (0.1 - p * 0.25) * r, (0.06 + p * 0.1) * r, (0.04 + p * 0.07) * r, `rgba(235,242,248,${0.55 * (1 - p)})`);
+    }
+  }
+}
+
 const DRAWERS: Record<string, (ctx: Ctx, r: number, fill: string, u: UnitLook) => void> = {
   slime, wolf, boar, golem, treant,
   sporelin, spider, bear, wisp,
@@ -5246,6 +5359,7 @@ const DRAWERS: Record<string, (ctx: Ctx, r: number, fill: string, u: UnitLook) =
   kraken, kraken_tentacle: krakenTentacle,
   gorilla, croc, masked,
   scorpion, drake, wyvern, dragon,
+  bigfoot,
 };
 
 // ───────────────────────── Buissons à fruits ─────────────────────────
@@ -5323,15 +5437,15 @@ export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: num
   ctx.save();
   ctx.translate(x + shake, y);
   if (res === 'stone') {
-    // rocher à casser : bloc à trois faces, coussin de mousse sur le dessus, une fissure, des cailloux autour
-    facetRock(ctx, r, '#A3A9A3', '#828882', '#626863');
+    // rocher à casser : sa forme suit sa taille (galet, bloc, éperon), coussin de mousse sur le dessus, une fissure, des cailloux autour
+    const top = rockBody(ctx, r, size, seed, '#A3A9A3', '#828882', '#626863');
     ctx.fillStyle = '#5E8A4E';
     ctx.beginPath();
-    ctx.ellipse(-r * 0.2, -r * 0.55, r * 0.35, r * 0.16, -0.25, 0, TAU);
+    ctx.ellipse(top.x, top.y + r * 0.05, r * 0.35 * top.k, r * 0.16 * top.k, -0.25, 0, TAU);
     ctx.fill();
     ctx.fillStyle = '#76A35E';
     ctx.beginPath();
-    ctx.ellipse(-r * 0.27, -r * 0.6, r * 0.2, r * 0.08, -0.25, 0, TAU);
+    ctx.ellipse(top.x - r * 0.07 * top.k, top.y, r * 0.2 * top.k, r * 0.08 * top.k, -0.25, 0, TAU);
     ctx.fill();
     ctx.strokeStyle = 'rgba(40,46,42,0.5)';
     ctx.lineWidth = 1.5;
@@ -5347,7 +5461,7 @@ export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: num
       ctx.fill();
     }
     ctx.restore();
-    if (hpPct < 100) hpBar(ctx, x, y - r - 10, 28, hpPct, '#B9C2BC');
+    if (hpPct < 100) hpBar(ctx, x, y - r * (size > 1.2 ? 1.5 : 1) - 10, 28, hpPct, '#B9C2BC');
     return;
   }
   // filon d'or : bloc gris d'où jaillissent des cristaux dorés, dans un léger halo qui pulse
@@ -5355,7 +5469,7 @@ export function drawOre(ctx: Ctx, x: number, y: number, zone: number, hpPct: num
   ctx.beginPath();
   ctx.ellipse(0, -r * 0.45, r * 0.85, r * 0.65, 0, 0, TAU);
   ctx.fill();
-  facetRock(ctx, r, '#8F958F', '#727873', '#575D58');
+  rockBody(ctx, r, size, seed, '#8F958F', '#727873', '#575D58');
   const crystal = (bx: number, by: number, h: number, w: number, a: number) => {
     ctx.save();
     ctx.translate(bx, by);
@@ -5392,6 +5506,48 @@ function fillPoly(ctx: Ctx, pts: readonly (readonly [number, number] | number[])
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
   ctx.closePath();
   ctx.fill();
+}
+
+/**
+ * Corps d'un rocher selon sa taille : petit, un galet arrondi et un caillou à côté ; moyen, un bloc à trois faces ;
+ * gros, un éperon pointu qui se dresse derrière un bloc. Rend le milieu du dessus (pour la mousse) et l'échelle de ce dessus.
+ */
+function rockBody(ctx: Ctx, r: number, size: number, seed: number, light: string, mid: string, dark: string) {
+  const flip = hash2(seed, 3, 11) < 0.5 ? -1 : 1; // pas tous tournés du même côté
+  if (size < 0.85) {
+    blot(ctx, r * 0.95 * flip, r * 0.42, r * 0.3, r * 0.2, dark);
+    blot(ctx, r * 0.9 * flip, r * 0.37, r * 0.24, r * 0.15, mid);
+    blot(ctx, r * 0.1, r * 0.06, r * 0.95, r * 0.6, dark);
+    blot(ctx, -r * 0.04, -r * 0.04, r * 0.88, r * 0.55, mid);
+    blot(ctx, -r * 0.25, -r * 0.24, r * 0.5, r * 0.26, light, -0.25);
+    blot(ctx, -r * 0.4, -r * 0.33, r * 0.14, r * 0.06, 'rgba(255,255,255,0.25)', -0.25);
+    return { x: -r * 0.1, y: -r * 0.42, k: 0.75 };
+  }
+  if (size <= 1.2) {
+    facetRock(ctx, r, light, mid, dark);
+    return { x: -r * 0.2, y: -r * 0.6, k: 1 };
+  }
+  // éperon : une aiguille de roche derrière, penchée, puis le bloc devant (un peu plus petit, décalé)
+  const lean = (hash2(seed, 5, 11) - 0.5) * 0.3;
+  ctx.save();
+  ctx.scale(flip, 1);
+  fillPoly(ctx, [[r * 0.05, r * 0.1], [r * (0.25 + lean), -r * 1.45], [r * (0.42 + lean), -r * 1.3], [r * 0.4, r * 0.2]], light);
+  fillPoly(ctx, [[r * 0.4, r * 0.2], [r * (0.42 + lean), -r * 1.3], [r * (0.62 + lean), -r * 1.05], [r * 0.9, -r * 0.1], [r * 0.85, r * 0.3]], dark);
+  ctx.strokeStyle = 'rgba(40,46,42,0.35)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(r * (0.3 + lean * 0.5), -r * 0.9);
+  ctx.lineTo(r * 0.28, -r * 0.5);
+  ctx.moveTo(r * (0.36 + lean * 0.7), -r * 1.1);
+  ctx.lineTo(r * 0.4, -r * 0.75);
+  ctx.stroke();
+  ctx.translate(-r * 0.22, r * 0.12);
+  facetRock(ctx, r * 0.85, light, mid, dark);
+  // un petit bloc tombé de l'éperon, à son pied
+  ctx.translate(r * 1.1, r * 0.25);
+  facetRock(ctx, r * 0.3, light, mid, dark);
+  ctx.restore();
+  return { x: (-r * 0.22 - r * 0.17) * flip, y: r * 0.12 - r * 0.51, k: 0.85 };
 }
 
 /** Rocher à trois faces : le dessus clair, la face avant moyenne, le flanc droit sombre (lumière en haut à gauche). */

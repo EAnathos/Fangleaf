@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { DESERT_ZONE, JUNGLE_ZONE, ZONES, CACTUS_CD, CACTUS_PRICK, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
+import { DESERT_ZONE, JUNGLE_ZONE, ZONES, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, QUICKSAND_SINK, TICK_HZ, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
 import { BEACH, SEA_SHALLOW, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { sky } from '../../shared/weather.ts';
 import { Room } from '../../server/room.ts';
@@ -12,9 +12,9 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     const r = room();
     const seen = new Set([...r.units.values()].map((u: { s: number }) => u.s));
     const night = r.isNight(); // le ciel dépend de la graine du village : de jour, les bêtes de nuit sont absentes ; de nuit, celles de jour
-    check(SPECIES.every((sp, i) => seen.has(i) || (sp.night && !night) || (sp.day && night) || (!sp.boss && !sp.population)), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement (sauf, selon l'heure, les bêtes de nuit ou de jour, et le Tréant, caché dans les arbres)`);
+    check(SPECIES.every((sp, i) => seen.has(i) || (sp.night && !night) || (sp.day && night) || (sp.season !== undefined && sp.season !== r.sky().season) || (!sp.boss && !sp.population)), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement (sauf, selon l'heure et la saison, les bêtes de nuit, de jour ou d'une autre saison, et le Tréant, caché dans les arbres)`);
     const zones = new Map<number, number>();
-    for (const sp of SPECIES) if (!sp.boss && !sp.passive && sp.population && !sp.isle) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
+    for (const sp of SPECIES) if (!sp.boss && !sp.passive && sp.population && !sp.isle && sp.season === undefined) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
     check([1, 2, 3].every((z) => zones.get(z) === 2) && zones.get(4) === 3 && zones.get(5) === 3, 'deux espèces hostiles par zone, trois en zones 4 et 5');
   });
 
@@ -201,7 +201,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
   });
 
   rule('Ordre des espèces figé : leur index sert dans les sauvegardes (essences, Alphas). On n\'ajoute qu\'à la fin.', () => {
-    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise kraken_tentacle kraken gorilla croc masked gorilla_king croc_king mask_lord scorpion scorpion_king drake wyvern dragon drake_king wyvern_king dragon_king';
+    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise kraken_tentacle kraken gorilla croc masked gorilla_king croc_king mask_lord scorpion scorpion_king drake wyvern dragon drake_king wyvern_king dragon_king bigfoot';
     check(SPECIES.map((sp) => sp.key).join(' ') === order, `ordre des ${SPECIES.length} espèces inchangé (sauvegardes intactes)`);
   });
 
@@ -339,6 +339,24 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     r.cactusDamage();
     const other = r.map.treesNear(p.x, p.y, p.r + 10).some((i: number) => r.map.isCactus(r.map.decor[i]));
     check(other || p.hp === 1000, 'à distance, rien');
+
+    // sables mouvants : sur les plages du désert, on s'y enlise passé un moment
+    check(r.map.quicksands.length >= 6 && r.map.quicksands.every((q: { x: number; y: number }) => r.map.zoneAt(q.x, q.y) === DESERT_ZONE && !r.map.isWater(q.x, q.y) && r.map.shoreAt(q.x, q.y) > -BEACH - 120),
+      `${r.map.quicksands.length} sables mouvants, tous sur les plages de la Mer de sable`);
+    const qs = r.map.quicksands[0];
+    check(r.map.quicksandAt(qs.x, qs.y) === 0 && r.map.quicksandAt(qs.x + qs.r * 1.2, qs.y) < 0, 'on est dedans au centre, pas à côté');
+    [p.x, p.y, p.hp] = [qs.x, qs.y, 1000];
+    r.tick = 0;
+    r.quicksandDamage();
+    check(p.hp === 1000, 'à peine entré : rien encore');
+    r.time += QUICKSAND_GRACE_S;
+    r.tick = TICK_HZ;
+    r.quicksandDamage();
+    check(p.hp < 1000 && 1000 - p.hp <= Math.ceil(2000 * QUICKSAND_SINK), `resté dedans : il s'enlise (${1000 - p.hp} PV)`);
+    [p.x, p.y, p.hp] = [qs.x + qs.r * 3, qs.y, 1000];
+    r.time += 5;
+    r.quicksandDamage();
+    check(p.hp === 1000 && p.sinkSince === undefined, 'sorti : plus rien');
 
     // Vautour : il se chevauche et vole, par-dessus l'eau ; on se pose sur la terre ferme.
     const r3 = room();

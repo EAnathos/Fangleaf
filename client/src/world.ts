@@ -5,6 +5,7 @@ import { BUILDINGS, CAVE_RX, CAVE_RY, JUNGLE_ZONE, DESERT_ZONE, LAKES_ZONE, DEN_
 import { fbm, hash2 } from '../../shared/math.ts';
 import { atVillageGate, BEACH, BRIDGE_W, caveEdge, coastGreen, MAP_CELL, MOUTH_FADE, SEA_SHALLOW, VILLAGE_GATES, villageEdge, type Cave, type WorldMap } from '../../shared/worldmap.ts';
 import { maxDpr, settings } from './settings.ts';
+import { AUTUMN, SPRING, SUMMER, WINTER } from '../../shared/weather.ts';
 import { drawCocoon, drawEntrance, drawWeb, INSIDE, insideProp, liana } from './caves.ts';
 
 const CHUNK = 512;
@@ -122,12 +123,30 @@ export function lakeColor(map: WorldMap, x: number, y: number, deep: boolean, ba
   return k ? lerp3(base, SEA_SHALLOW_COL, k) : base;
 }
 
+const SNOW = [226, 233, 240];
+const AUTUMN_GROUND = [150, 112, 56];
+const SPRING_GROUND = [96, 146, 66];
+
 /**
- * Couleur d'un point de l'île vu d'en haut : son sol, la plage au bord de la mer, et le relief (versants
+ * Le sol selon la saison (ni le désert ni la jungle n'en changent) : l'hiver, la neige par grandes plaques ; l'automne,
+ * l'herbe roussie ; le printemps, un vert plus tendre ; l'été, rien.
+ */
+function seasonGround(map: WorldMap, col: number[], x: number, y: number, season: number) {
+  if (season === SUMMER) return col;
+  const k = 1 - Math.max(desertMix(map, x, y), jungleMix(map, x, y) * 0.8);
+  if (k <= 0) return col;
+  const n = fbm(x / 190, y / 190, map.seed + 201, 3);
+  if (season === WINTER) return lerp3(col, SNOW, (0.55 + smooth((n - 0.3) / 0.3) * 0.38) * k);
+  if (season === AUTUMN) return lerp3(col, AUTUMN_GROUND, (0.22 + n * 0.3) * k);
+  return lerp3(col, SPRING_GROUND, (0.12 + n * 0.12) * k);
+}
+
+/**
+ * Couleur d'un point de l'île vu d'en haut : son sol (selon la saison), la plage au bord de la mer, et le relief (versants
  * éclairés au nord-ouest, à l'ombre au sud-est ; sommets un peu plus clairs).
  */
-export function landColor(map: WorldMap, x: number, y: number) {
-  let col = groundColor(map, x, y);
+export function landColor(map: WorldMap, x: number, y: number, season = SUMMER) {
+  let col = seasonGround(map, groundColor(map, x, y), x, y, season);
   const sh = map.shoreAt(x, y);
   if (sh > -BEACH) col = lerp3(col, BEACH_SAND, Math.min(1, (sh + BEACH) / (BEACH * 0.7)));
   const e = 24, h = map.height(x, y);
@@ -188,6 +207,14 @@ export class World {
   }
 
 
+  /** Saison affichée (0 printemps … 3 hiver) : le sol et les arbres en changent. */
+  season = SUMMER;
+  setSeason(season: number) {
+    if (season === this.season) return;
+    this.season = season;
+    this.chunks.clear(); // le sol est à repeindre ; les arbres ont une image par saison
+  }
+
   /** Dessine les chunks visibles du rectangle monde [x0,x1]×[y0,y1]. */
   draw(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number) {
     const cx0 = Math.floor(x0 / CHUNK), cx1 = Math.floor(x1 / CHUNK);
@@ -229,7 +256,7 @@ export class World {
         const sea = map.isSea(px, py), sh = map.caveAt(px, py) ? -1e9 : map.shoreAt(px, py);
         const meadow = fbm(px / 420, py / 420, this.seed + 3, 2);
         const v = sea ? 0.97 + meadow * 0.06 : 0.93 + meadow * 0.12;
-        let col = sea ? seaColor(map, px, py) : landColor(map, px, py);
+        let col = sea ? seaColor(map, px, py) : landColor(map, px, py, this.season);
         // Près d'une embouchure, l'eau du lac est peinte avec le sol (les disques s'y effacent, voir plus bas) ; son bord
         // est adouci comme celui de la côte : part d'eau parmi les cases voisines (pondérées), pas de marches.
         let wet = 0, mouth = false;
@@ -254,7 +281,7 @@ export class World {
           // au bord de l'eau, la mer et le sable se fondent : la côte est continue une fois agrandie (pas de marches) ;
           // face à une embouchure, la mer reste de l'eau (pas de sable sous l'eau du lac qui s'y jette)
           const k = (sh + 32) / 64, f = k * k * (3 - 2 * k), s = sea ? surfAt(map, px, py) : 1;
-          if (s) col = lerp3(col, lerp3(sea ? landColor(map, px, py) : col, sea ? col : seaColor(map, px, py), f), s);
+          if (s) col = lerp3(col, lerp3(sea ? landColor(map, px, py, this.season) : col, sea ? col : seaColor(map, px, py), f), s);
         }
         const o = (j * T + i) * 4;
         ground.img.data[o] = col[0] * v;
@@ -407,6 +434,64 @@ export class World {
         ctx.beginPath();
         ctx.ellipse(d.x + hx, d.y + hy + 1, hr, hr * 0.5, 0, 0, TAU);
         ctx.fill();
+      }
+    }
+
+    // Sables mouvants (plages de la Mer de sable) : une mare de sable mouillé, plus sombre, aux remous en spirale.
+    for (const q of map.quicksands) {
+      if (q.x < ox - q.r - 20 || q.x > ox + CHUNK + q.r + 20 || q.y < oy - q.r - 20 || q.y > oy + CHUNK + q.r + 20) continue;
+      const ry = q.r * 0.6, wob = (a: number, k: number) => 1 + Math.sin(a * 5 + q.x * 0.01) * 0.05 * k + Math.sin(a * 3 + q.y * 0.01) * 0.04 * k;
+      const blobAt = (k: number, grow: number) => {
+        ctx.beginPath();
+        for (let i = 0; i <= 40; i++) {
+          const a = (i / 40) * TAU, w = wob(a, 1);
+          const px = q.x + Math.cos(a) * (q.r * k + grow) * w, py = q.y + Math.sin(a) * (ry * k + grow * 0.6) * w;
+          if (i) ctx.lineTo(px, py);
+          else ctx.moveTo(px, py);
+        }
+        ctx.closePath();
+      };
+      ctx.fillStyle = 'rgba(214,186,128,0.8)'; // bourrelet de sable sec autour
+      blobAt(1, 8);
+      ctx.fill();
+      ctx.fillStyle = '#A88A58';
+      blobAt(1, 0);
+      ctx.fill();
+      ctx.fillStyle = '#937648';
+      blobAt(0.72, 0);
+      ctx.fill();
+      ctx.fillStyle = '#7E6439';
+      blobAt(0.38, 0);
+      ctx.fill();
+      // remous : une spirale vers le centre
+      ctx.strokeStyle = 'rgba(70,54,30,0.45)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i <= 80; i++) {
+        const u = i / 80, a = u * TAU * 2.6 + q.x, k = 0.92 - u * 0.85;
+        const px = q.x + Math.cos(a) * q.r * k, py = q.y + Math.sin(a) * ry * k;
+        if (i) ctx.lineTo(px, py);
+        else ctx.moveTo(px, py);
+      }
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(232,206,150,0.35)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (let i = 0; i <= 80; i++) {
+        const u = i / 80, a = u * TAU * 2.6 + q.x + 0.5, k = 0.9 - u * 0.85;
+        const px = q.x + Math.cos(a) * q.r * k, py = q.y - 1.5 + Math.sin(a) * ry * k;
+        if (i) ctx.lineTo(px, py);
+        else ctx.moveTo(px, py);
+      }
+      ctx.stroke();
+      // quelques bulles crevées
+      for (let i = 0; i < 4; i++) {
+        const a = hash2(i, q.x | 0, 31) * TAU, k = 0.2 + hash2(i, q.y | 0, 32) * 0.6;
+        ctx.strokeStyle = 'rgba(60,46,26,0.5)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.ellipse(q.x + Math.cos(a) * q.r * k, q.y + Math.sin(a) * ry * k, 3, 1.6, 0, 0, TAU);
+        ctx.stroke();
       }
     }
 
@@ -730,7 +815,7 @@ export class World {
     const k = s / TREE_REF;
     const trunk = this.treeLayer('trunk', () => this.drawTrunk);
     ctx.drawImage(trunk, x - TREE_BOX.l * k, y - TREE_BOX.t * k, TREE_BOX.w * k, TREE_BOX.h * k);
-    const leaves = this.treeLayer(`${z}|${pine ? 1 : 0}|${fruit ? 1 : 0}|${v}`, () => (g) => this.drawLeaves(g, z, pine, fruit, v));
+    const sn = this.season, leaves = this.treeLayer(`${z}|${pine ? 1 : 0}|${fruit ? 1 : 0}|${v}|${sn}`, () => (g) => this.drawLeaves(g, z, pine, fruit, v, sn));
     const a = ctx.globalAlpha;
     ctx.globalAlpha = a * fade;
     ctx.drawImage(leaves, x - TREE_BOX.l * k, y - TREE_BOX.t * k, TREE_BOX.w * k, TREE_BOX.h * k);
@@ -1050,12 +1135,17 @@ export class World {
   };
 
   /** Feuillage d'une forme d'arbre, pied en (0, 0), à la taille TREE_REF. */
-  private drawLeaves(ctx: CanvasRenderingContext2D, z: number, pine: boolean, fruit: boolean, v: number) {
+  private drawLeaves(ctx: CanvasRenderingContext2D, z: number, pine: boolean, fruit: boolean, v: number, season = SUMMER) {
     const s = TREE_REF, x = 0, y = 0;
-    const dark = z === 5 ? '#23403F' : z === 4 ? '#1E3634' : z === 3 ? '#2E3A22' : '#1C3324';
-    const mid = z === 5 ? '#36605A' : z === 4 ? '#2B4A45' : z === 3 ? '#425230' : '#28472F';
-    const light = z === 5 ? '#5A8A80' : z === 4 ? '#3C625A' : z === 3 ? '#5A6B3C' : '#386240';
+    let dark = z === 5 ? '#23403F' : z === 4 ? '#1E3634' : z === 3 ? '#2E3A22' : '#1C3324';
+    let mid = z === 5 ? '#36605A' : z === 4 ? '#2B4A45' : z === 3 ? '#425230' : '#28472F';
+    let light = z === 5 ? '#5A8A80' : z === 4 ? '#3C625A' : z === 3 ? '#5A6B3C' : '#386240';
     const ink = 'rgba(10,18,14,0.55)';
+    if (!pine && season === AUTUMN) {
+      // feuillus roux, orangés ou jaunes selon l'arbre
+      [dark, mid, light] = [['#6A2E18', '#9A4A22', '#C8743A'], ['#7A4A14', '#B07020', '#E0A040'], ['#5E3A1A', '#8A5A28', '#B88A3E']][v % 3];
+    } else if (!pine && season === WINTER) [dark, mid, light] = ['#3A3430', '#56504A', '#6E6862']; // presque nus : branchages gris
+    else if (!pine && season === SPRING) [mid, light] = [z === 5 ? '#3E7062' : '#30583A', z === 5 ? '#6AA090' : '#4E8452'];
     if (pine) {
       // sapin : trois étages, le bas de chacun dentelé
       for (let k = 0; k < 3; k++) {
@@ -1067,6 +1157,18 @@ export class World {
           ctx.lineTo(x + w, base + dy);
           for (let t = 1; t < 6; t++) ctx.lineTo(x + w - (2 * w * t) / 6, base + dy - (t % 2 ? s * 0.1 : 0));
           ctx.lineTo(x - w, base + dy);
+          ctx.closePath();
+          ctx.fill();
+        }
+        if (season === WINTER) {
+          // neige sur l'étage : une coulée claire le long du flanc éclairé, un bourrelet sur le bord
+          ctx.fillStyle = '#EEF3F8';
+          ctx.beginPath();
+          ctx.moveTo(x, top);
+          ctx.lineTo(x - w * 0.82, base - s * 0.08);
+          ctx.lineTo(x - w * 0.3, base - s * 0.16);
+          ctx.lineTo(x + w * 0.1, base - s * 0.12);
+          ctx.lineTo(x + w * 0.35, top + (base - top) * 0.55);
           ctx.closePath();
           ctx.fill();
         }
@@ -1103,6 +1205,32 @@ export class World {
       ctx.beginPath();
       ctx.arc(lx - lr * 0.25, ly - lr * 0.3, lr * 0.42, 0, TAU);
       ctx.fill();
+    }
+    if (season === WINTER) {
+      // neige posée sur les touffes du haut
+      ctx.fillStyle = '#EEF3F8';
+      for (const [lx, ly, lr] of lumps) {
+        if (ly > cy + s * 0.05) continue;
+        ctx.beginPath();
+        ctx.ellipse(lx - lr * 0.1, ly - lr * 0.55, lr * 0.62, lr * 0.3, 0, 0, TAU);
+        ctx.fill();
+      }
+    } else if (season === SPRING && z !== 5) {
+      // fleurs blanches et roses
+      for (let k = 0; k < 9; k++) {
+        ctx.fillStyle = k % 2 ? '#F4D2E4' : '#FBF4EE';
+        ctx.beginPath();
+        ctx.arc(x + (hash2(k, 5, v) - 0.5) * s * 1.3, cy + (hash2(k, 9, v) - 0.5) * s * 0.95, 2.2, 0, TAU);
+        ctx.fill();
+      }
+    } else if (season === AUTUMN) {
+      // feuilles tombées au pied
+      for (let k = 0; k < 6; k++) {
+        ctx.fillStyle = k % 2 ? mid : light;
+        ctx.beginPath();
+        ctx.ellipse(x + (hash2(k, 11, v) - 0.5) * s * 1.4, y + s * 0.42 + hash2(k, 13, v) * s * 0.12, 2.6, 1.4, hash2(k, 17, v) * 3, 0, TAU);
+        ctx.fill();
+      }
     }
     if (z === 5) {
       // saule : longues branches qui retombent

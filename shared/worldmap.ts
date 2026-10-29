@@ -36,6 +36,7 @@ const COAST_NOISE = 900; // la côte s'écarte de ± la moitié de ceci
 export const SEA_SHALLOW = 520; // mer peu profonde le long de la côte (le serpent y nage), puis mer profonde
 export const BEACH = 190; // largeur de la plage, côté terre
 const DENS = 7; // tanières de suricates
+const QUICKSANDS = 14; // sables mouvants sur les plages de la Mer de sable
 const ZONE_BLEND = 900; // largeur de la transition (affichage) entre deux zones
 const STAMP_R = 4300; // au-delà, mer profonde : on ne calcule plus la distance à la colonne
 const LANE = 280; // voie centrale jamais inondée (bord bruité)
@@ -251,6 +252,7 @@ export class WorldMap {
   readonly decor: Decor[] = [];
   readonly bushes: Bush[] = []; // buissons à fruits (décor franchissable : le gibier vient y manger)
   readonly dens: Pt[] = []; // tanières de suricates (Mer de sable) : buttes percées de trous, franchissables
+  readonly quicksands: (Pt & { r: number })[] = []; // sables mouvants sur les plages de la Mer de sable : on s'y enlise
   readonly paths: [number, number][][] = []; // chemins de terre : de la plage au pont, puis du pont à la porte du village
   private buckets = new Map<number, number[]>(); // décor par case de 256 px
   readonly islets: Islet[] = []; // îlots du large
@@ -436,6 +438,7 @@ export class WorldMap {
     this.buildBushes();
     this.buildHarvest();
     this.buildDens();
+    this.buildQuicksands();
     // Eau profonde (pas une berge) par zone : là où peuvent apparaître les créatures aquatiques.
     for (let z = 0; z <= ZONES; z++) this.deepWater.push([]);
     for (let j = 2; j < N - 2; j += 2) {
@@ -1135,6 +1138,36 @@ export class WorldMap {
       if (this.bushes.some((b) => dist2(x, y, b.x, b.y) < 100 ** 2)) continue;
       this.dens.push({ x, y });
     }
+  }
+
+  /**
+   * Sables mouvants (hasard à part) : des mares de sable sur les plages de la Mer de sable, entre l'eau et les dunes,
+   * loin des chemins, de l'épave, des grottes, des tanières et les unes des autres.
+   */
+  private buildQuicksands() {
+    const rand = rng(this.seed ^ 0x9a1c5);
+    const lo = this.zoneFrom(DESERT_ZONE) + 200, hi = this.zoneTo(DESERT_ZONE) - 200;
+    for (let tries = 0; tries < 600 && this.quicksands.length < QUICKSANDS && hi > lo; tries++) {
+      const s = lo + rand() * (hi - lo), side = rand() < 0.5 ? -1 : 1, r = 55 + rand() * 30;
+      const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
+      // de la colonne vers la mer jusqu'au sable de la plage, à un peu plus d'un rayon de l'eau
+      const want = -(r + 30 + rand() * 50);
+      let d = 0;
+      while (d < 6000 && this.shoreAt(sx + n.x * side * d, sy + n.y * side * d) < want) d += 12;
+      const x = sx + n.x * side * d, y = sy + n.y * side * d;
+      if (d >= 6000 || this.zoneAt(x, y) !== DESERT_ZONE || this.isWater(x, y)) continue;
+      if ([0, 1, 2, 3, 4, 5].some((k) => { const a = (k / 6) * Math.PI * 2; return this.isWater(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.6) || this.blocked(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.6); })) continue;
+      if (this.pathDist(x, y) < r + 70 || this.nearWreck(x, y, 450) || this.nearVolcano(x, y, 300)) continue;
+      if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 300 ** 2) || this.dens.some((dn) => dist2(x, y, dn.x, dn.y) < 300 ** 2)) continue;
+      if (this.ores.some((o) => dist2(x, y, o.x, o.y) < (r + 60) ** 2) || this.bushes.some((b) => dist2(x, y, b.x, b.y) < (r + 40) ** 2)) continue;
+      if (this.islets.some((t) => dist2(x, y, t.x, t.y) < (t.r + 400) ** 2) || this.quicksands.some((q) => dist2(x, y, q.x, q.y) < 500 ** 2)) continue;
+      this.quicksands.push({ x, y, r });
+    }
+  }
+
+  /** Index des sables mouvants sous ce point (-1 : aucun). Une mare est une ellipse (r × 0,6 r). */
+  quicksandAt(x: number, y: number) {
+    return this.quicksands.findIndex((q) => ((x - q.x) / q.r) ** 2 + ((y - q.y) / (q.r * 0.6)) ** 2 < 1);
   }
 
   /** Parchemin laissé par le géant de cette grotte, à côté de son coffre (au fond de la grotte). */

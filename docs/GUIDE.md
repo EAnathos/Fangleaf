@@ -16,7 +16,7 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 - [Le volcan et le cœur volcanique](#le-volcan-et-le-cœur-volcanique)
 - [Le vieil homme et le bateau](#le-vieil-homme-et-le-bateau)
 - [La haute mer et le Kraken](#la-haute-mer-et-le-kraken)
-- [Jour, nuit et météo](#jour-nuit-et-météo)
+- [Jour, nuit, saisons et météo](#jour-nuit-saisons-et-météo)
 - [Jouer à plusieurs](#jouer-à-plusieurs)
 
 ## Contrôles
@@ -48,7 +48,7 @@ d'un village à l'autre. Les zones sont des bandes successives, de plus en plus 
 s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois plus grandes, et plus peuplées) :
 
 1. **Lisière** : Gluants, Sporelins, Escargots des mousses.
-2. **Bois profonds** : Loups, Araignées sylvestres ; Lucioles la nuit ; un arbre abattu réveille parfois un **Tréant**.
+2. **Bois profonds** : Loups, Araignées sylvestres ; Lucioles la nuit ; Bigfoots l'hiver ; un arbre abattu réveille parfois un **Tréant**.
 3. **Landes** : Sangliers, Ours des fourrés (ils chassent la nuit, dorment le jour), Lièvres des ronces.
 4. **Ruines moussues** : Golems de mousse, Feux follets, Guetteurs runiques.
 5. **Lacs brumeux** : Crapauds-mortiers, Serpents des brumes (dans l'eau), Crabes des berges ; une brume légère y flotte.
@@ -57,7 +57,7 @@ s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois 
    (tapis dans l'eau, on ne voit que leurs yeux ; ils en sortent pour attaquer ce qui passe près de la rive, puis y
    retournent ; ils se montent, dans l'eau) et Petits Masqués à la sarbacane (leurs fléchettes **empoisonnent** : on
    perd des PV quelques secondes, une goutte verte au-dessus de la tête). Leurs géants dorment au fond de **temples** à degrés.
-7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable. Un grand volcan s'y dresse.
+7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable, sables mouvants sur les plages. Un grand volcan s'y dresse.
 8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles crachent de la lave en cloche) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
@@ -243,15 +243,20 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Tant qu'il n'est pas vaincu, on ne va pas plus loin. Vaincu, il laisse un coffre, et la route du Colisée est libre
   (le Colisée arrive bientôt). S'il ne reste plus personne à bord, il replonge, guéri.
 
-## Jour, nuit et météo
+## Jour, nuit, saisons et météo
 
 - Le ciel suit l'heure du serveur : tout le village voit la même nuit et la même averse.
 - **Nuit** : certains monstres dorment (le Lièvre), d'autres se réveillent (l'Ours), d'autres n'apparaissent
   qu'alors (Lucioles, Chacals fantômes). La torche éclaire autour du dompteur.
+- **Saisons** : printemps, été, automne, hiver, une heure chacune (affichée sous la minicarte). Les arbres fleurissent,
+  roussissent, se couvrent de neige ; l'hiver, la pluie tombe en neige et des **Bigfoots** rôdent dans les Bois
+  profonds (rares et costauds, ils repartent à la fin de l'hiver).
 - **Pluie** : l'Escargot l'adore, il va plus vite.
 - **Tempête de sable** (Mer de sable) : elle blesse ceux qui restent dehors ; les vers restent sous le sable, les
   vautours très haut, les suricates cachés.
 - **Cactus** (Mer de sable) : s'y frotter pique. Les palmiers de la lisière verte, eux, ne piquent pas.
+- **Sables mouvants** (plages de la Mer de sable) : on y avance au ralenti, et à y rester on s'enlise (on perd des PV).
+  À dos de monture volante, on passe au-dessus.
 
 ## Jouer à plusieurs
 
