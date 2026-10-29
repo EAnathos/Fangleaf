@@ -5342,9 +5342,17 @@ function bigfoot(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
   arm(3, 0.3 * r, shade);
   // buée du souffle dans le froid
   if (!u.flash) {
-    for (let k = 0; k < 3; k++) {
-      const p = (u.t * 0.6 + u.seed * 0.1 + k / 3) % 1;
-      blot(ctx, hx + (0.4 + p * 0.45) * r, hy + (0.1 - p * 0.25) * r, (0.06 + p * 0.1) * r, (0.04 + p * 0.07) * r, `rgba(235,242,248,${0.55 * (1 - p)})`);
+    // bleutée et cernée d'un trait clair-obscur : elle se voit aussi sur la neige
+    for (let k = 0; k < 4; k++) {
+      const p = (u.t * 0.6 + u.seed * 0.1 + k / 4) % 1, a = Math.sin(Math.min(1, p * 4) * Math.PI / 2) * (1 - p);
+      const bx = hx + (0.42 + p * 0.6) * r, by = hy + (0.12 - p * 0.35) * r, rx = (0.08 + p * 0.16) * r, ry = (0.06 + p * 0.11) * r;
+      ctx.beginPath();
+      ctx.ellipse(bx, by, rx, ry, 0, 0, TAU);
+      ctx.fillStyle = `rgba(214,228,242,${0.85 * a})`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(110,135,160,${0.55 * a})`;
+      ctx.lineWidth = Math.max(1, r * 0.03);
+      ctx.stroke();
     }
   }
 }
