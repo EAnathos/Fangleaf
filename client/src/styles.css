@@ -571,8 +571,8 @@ body.waking #hud { opacity: 0; pointer-events: none; }
   .lobby-hero h1 { font-size: clamp(44px, 15vw, 60px); text-shadow: 0 3px 0 #5B3F2C, 0 0 24px rgba(240, 182, 74, 0.35); animation: lobby-float 4s ease-in-out infinite; }
   .tagline { margin: 0; font-size: 15px; color: var(--text-2); text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
   .lobby-card {
-    order: 2; margin-top: auto; width: 100%; max-height: 64dvh; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
-    padding: 22px 16px calc(14px + env(safe-area-inset-bottom)); gap: 14px;
+    order: 2; margin-top: auto; width: 100%; overflow: visible; /* tout tient : pas de défilement */
+    padding: 20px 16px calc(12px + env(safe-area-inset-bottom)); gap: 12px;
     border-radius: 24px 24px 0 0; border-width: 2px 0 0; border-color: rgba(240, 182, 74, 0.35);
     background: linear-gradient(180deg, rgba(30, 44, 40, 0.97), rgba(16, 24, 26, 0.99));
     box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55); animation: sheet-up 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
@@ -580,6 +580,7 @@ body.waking #hud { opacity: 0; pointer-events: none; }
   .lobby-card::before { content: ''; position: absolute; top: 8px; left: 50%; width: 44px; height: 5px; margin-left: -22px; border-radius: 3px; background: var(--line); }
   .lobby-card { position: relative; }
   .card-title { font-size: 22px; text-align: center; }
+  .lobby-card:has(#play:not([hidden])) .card-title { display: none; } /* connecté : les onglets disent déjà où l'on est */
   .invite-badge { align-self: center; }
   .signed-in { flex-wrap: nowrap; justify-content: flex-start; gap: 10px; padding: 8px 10px; border-radius: 14px; }
   .signed-in .who { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; flex: 1; }
@@ -591,16 +592,16 @@ body.waking #hud { opacity: 0; pointer-events: none; }
   .tabs button { height: 40px; font: 700 15px var(--display); letter-spacing: 0.3px; }
   .tabs button[aria-selected="true"] { background: var(--amber); color: var(--amber-ink); box-shadow: 0 2px 0 #8A5E1C; }
   /* les villages : un carrousel de grandes cartes, on glisse de l'une à l'autre */
-  .village-list { flex-direction: row; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 4px 16px 10px; scrollbar-width: none; }
+  .village-list { flex-direction: row; gap: 12px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 6px 16px 10px; scrollbar-width: none; }
   .village-list::-webkit-scrollbar { display: none; }
   .village-pick {
     flex: 0 0 62%; scroll-snap-align: center; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto auto;
-    justify-items: center; text-align: center; gap: 4px; min-height: 0; padding: 14px 10px 12px; border-radius: 18px;
+    justify-items: center; text-align: center; gap: 2px; min-height: 0; padding: 10px 10px 10px; border-radius: 18px;
     background: linear-gradient(180deg, var(--panel-2), var(--night));
   }
   .village-list > .village-pick:only-child { flex-basis: 100%; }
   .village-pick[aria-checked="true"] { background: linear-gradient(180deg, rgba(240, 182, 74, 0.22), var(--night)); box-shadow: 0 0 0 2px rgba(240, 182, 74, 0.25), 0 8px 20px rgba(0, 0, 0, 0.4); transform: translateY(-2px); }
-  .village-pick .crest { grid-row: 1; grid-column: 1; width: 76px; height: 66px; }
+  .village-pick .crest { grid-row: 1; grid-column: 1; width: 62px; height: 54px; }
   .village-pick b { grid-column: 1; grid-row: 2; font-size: 20px; max-width: 100%; }
   .village-pick .vcode { grid-column: 1; grid-row: 3; }
   .village-pick .when { grid-column: 1; grid-row: 4; text-align: center; font-size: 12px; }
