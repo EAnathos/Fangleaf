@@ -189,9 +189,11 @@ async function main() {
   check(!!host.last?.buildings.includes('bridge'), `pont du village réparé (sac : ${host.me()!.wood} bois, ${host.me()!.stone} pierre)`);
   map.setBridge(true);
   await reach(map.store.x, map.store.y + 50, 60);
+  // ce que le sac contient (le bot a pu mourir en chemin et en perdre une part) : tout doit passer dans la réserve
+  const bag = host.me()!.wood, stock0 = host.last?.stock[0] ?? 0;
   host.send({ t: 'deposit' });
   await sleep(150);
-  check((host.last?.stock[0] ?? 0) >= 80 && host.me()!.wood === 0, `sac vidé à l'entrepôt (réserve : ${host.last?.stock.join(' bois, ')} pierre)`);
+  check(bag > 0 && (host.last?.stock[0] ?? 0) >= stock0 + bag && host.me()!.wood === 0, `sac vidé à l'entrepôt (${bag} bois déposés ; réserve : ${host.last?.stock.join(' bois, ')} pierre)`);
   await reach(map.forge.x + 20, map.forge.y + 75, 60);
   host.send({ t: 'build', b: 'plot_forge' }); // le camp d'abord : défricher l'emplacement
   await sleep(150);
