@@ -909,7 +909,7 @@ export class Room {
 
   /** Donner ses parchemins au vieil homme : chacun qu'il n'a pas encore lu lui rend un souvenir (dans l'ordre où on les lui donne). */
   onScrollGive(p: Player) {
-    if (p.dead || !p.scrolls.length || dist2(p.x, p.y, this.map.elder.x, this.map.elder.y) > ELDER_REACH ** 2) return;
+    if (p.dead || !p.scrolls.length || dist2(p.x, p.y, this.elderPos().x, this.elderPos().y) > ELDER_REACH ** 2) return;
     const from = this.told.length;
     for (const s of p.scrolls) if (!this.told.includes(s)) this.told.push(s);
     p.scrolls = [];
@@ -919,10 +919,18 @@ export class Room {
     this.events.push({ e: 'lore', by: p.id, from, to: this.told.length });
   }
 
-  /** Le bateau : tous ses souvenirs retrouvés, le vieil homme en bâtit l'étape suivante contre des ressources (30 minutes). */
+  /** Où est Aubin : au chantier du bateau, au bout de l'île, tant qu'il en bâtit une étape ; sinon près du feu du village. */
+  elderPos() {
+    return this.boatAt ? this.map.elderYard : this.map.elder;
+  }
+
+  /**
+   * Le bateau : tous ses souvenirs retrouvés, le vieil homme en bâtit l'étape suivante contre des ressources (30 minutes).
+   * Il part alors au bateau, et c'est là-bas qu'on le trouve jusqu'à la fin de l'étape.
+   */
   onBoat(p: Player) {
     if (p.dead || this.told.length < this.bossCount() || this.boat >= BOAT_STAGES.length || this.boatAt) return;
-    if (dist2(p.x, p.y, this.map.elder.x, this.map.elder.y) > ELDER_REACH ** 2) return;
+    if (dist2(p.x, p.y, this.elderPos().x, this.elderPos().y) > ELDER_REACH ** 2) return;
     if (!this.pay(p, BOAT_STAGES[this.boat])) return;
     this.boatAt = Date.now() + BOAT_STAGE_MS;
     this.saveVillage();
@@ -940,7 +948,7 @@ export class Room {
   /** L'école : son plan trouvé, Aubin la bâtit au village contre des ressources (comme une étape du bateau). */
   onSchool(p: Player) {
     if (p.dead || !this.plan || this.schoolAt || this.buildings.includes('school') || this.hall < BUILDINGS.school.hall) return;
-    if (dist2(p.x, p.y, this.map.elder.x, this.map.elder.y) > ELDER_REACH ** 2) return;
+    if (dist2(p.x, p.y, this.elderPos().x, this.elderPos().y) > ELDER_REACH ** 2) return;
     if (!this.pay(p, buildingCost('school'))) return;
     this.schoolAt = Date.now() + SCHOOL_BUILD_MS;
     this.saveVillage();
@@ -2089,6 +2097,7 @@ export class Room {
    * (pas besoin de lui parler). S'il n'y a plus personne à bord, il se rendort (clearEmptyCaves).
    */
   private voyageSince = 0;
+  private krakenCalled = false; // un dompteur à bord a fini de voir le Kraken surgir (sa cinématique)
   private updateVoyage() {
     const c = this.map.voyage;
     if (!c || this.tick % 5 !== 0) return;
@@ -2096,14 +2105,22 @@ export class Room {
     const aboard = [...this.players.values()].filter((p) => !p.dead && this.map.caveAt(p.x, p.y) === c);
     if (!aboard.length || !u || !u.dormant) {
       this.voyageSince = 0;
+      this.krakenCalled = false;
       return;
     }
     this.voyageSince ||= this.time;
-    if (this.time - this.voyageSince < KRAKEN_DELAY_S) return;
+    if (this.time - this.voyageSince < KRAKEN_DELAY_S && !this.krakenCalled) return;
+    this.krakenCalled = false;
     const p = aboard[0];
     u.dormant = false;
     u.target = p.id;
     this.events.push({ e: 'challenge', cave: c.id, id: u.id, by: p.id });
+  }
+
+  /** La cinématique du Kraken est finie (ou passée) pour un dompteur à bord : il n'attend pas la fin du délai pour surgir. */
+  onKraken(p: Player) {
+    const c = this.map.voyage;
+    if (c && !p.dead && this.map.caveAt(p.x, p.y) === c) this.krakenCalled = true;
   }
 
   /** Plus aucun dompteur debout dans la grotte (sorti, mort ou parti) : les renforts du boss disparaissent. */

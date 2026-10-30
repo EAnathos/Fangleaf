@@ -1,6 +1,6 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, TORNADO_PULL, TORNADO_PULL_R, riderSpeed, ISLE_CHEST_S } from '../../shared/config.ts';
+import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, TORNADO_PULL, TORNADO_PULL_R, riderSpeed, ISLE_CHEST_S } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
@@ -19,9 +19,11 @@ import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, draw
 import { GLOW, SkyFx } from './sky.ts';
 import { desertMix, jungleMix, lakesMix, World } from './world.ts';
 import { SEASON_NAMES, sky as skyAt, WINTER } from '../../shared/weather.ts';
-import { HALL_ID, WorldMap } from '../../shared/worldmap.ts';
+import { HALL_ID, VILLAGE_GATES, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts';
 import { drawSubmerged, drawVoyage } from './voyage.ts';
+import { drawAubinAtWork, drawBoat, drawBoatLabel } from './boat.ts';
+import { Cinema, type Crew } from './cinematics.ts';
 
 /** Dégâts affichés arrondis à 2 décimales, à la française : 6,4 · 12 · 4,85. */
 /** Nom propre d'un géant (sinon le nom de son espèce). */
@@ -72,6 +74,11 @@ export class Game {
   private gatesOpen: boolean[] | null = null; // état des portes au dernier snapshot (null : pas encore connu)
   private gateToast = -99; // dernier rappel « porte fermée » // arbre → opacité de son feuillage (1 : opaque)
   private sandToast = -99; // dernier avertissement « sables mouvants »
+  private hammerAt = -9; // dernier coup de marteau d'Aubin (bruit)
+  private cinema = new Cinema(); // cinématiques du bateau (embarquement, Kraken)
+  private boarding: { sentAt: number; check: number } | null = null; // embarquement fini : on attend d'être sur le pont
+  /** Aubin qui part au chantier du bateau (back : qui en revient), à pied jusqu'à la porte du village. */
+  private elderTrip: { t0: number; back: boolean; said?: boolean } | null = null;
   private tools = new Map<number, { kind: Tool['kind']; at: number; tx: number; ty: number }>(); // dompteur → dernier coup d'outil (récolte)
   private shotsAt = 0; // réception du dernier snapshot (les projectiles droits sont extrapolés depuis)
   private faces = new Map<number, { x: number; y: number; face: number; movedAt: number }>();
@@ -99,7 +106,7 @@ export class Game {
     this.world = new World(this.map);
     this.fog = new Fog(`fangleaf.fog.v8.${seed}`, (x, y) => !this.map.isForest(x, y)); // v8 : zones agrandies à partir des Ruines moussues
     this.hud = new Hud(code, this.map, this.fog, founder);
-    this.hud.onCave = (id, enter) => net.send({ t: 'cave', id, enter });
+    this.hud.onCave = (id, enter) => this.enterCave(id, enter);
     this.hud.onLegend = (s) => net.send({ t: 'legend', s });
     this.hud.onClass = (cls) => net.send({ t: 'class', cls });
     this.hud.onSpec = (spec) => net.send({ t: 'spec', spec });
@@ -235,8 +242,72 @@ export class Game {
     this.net.send({ t: 'mode', manual: !touchOnly && settings.attack === 'click' });
   }
 
+  /**
+   * Entrer dans une grotte ou en sortir. Prendre la mer (le bateau prêt) passe d'abord par la cinématique de
+   * l'embarquement ; une fois sur le pont, si le Kraken n'est pas encore vaincu, celle de son attaque (voir afterBoarding).
+   */
+  private enterCave(id: number, enter: boolean) {
+    const c = this.map.caves[id], st = this.self();
+    if (!enter || c?.zone !== VOYAGE_ZONE || !st || this.cinema.busy) return this.net.send({ t: 'cave', id, enter });
+    this.hud.setPanel(null);
+    // l'équipage : soi, et les coéquipiers venus prendre la mer avec nous (au bateau, à côté de nous)
+    this.cinema.boarding(this.crewOf((p) => Math.hypot(p.x - this.me.x, p.y - this.me.y) < 500), () => {
+      this.boarding = { sentAt: this.time, check: -1 };
+      this.net.send({ t: 'cave', id, enter: true });
+    });
+  }
+
+  /**
+   * L'équipage d'une cinématique : soi d'abord, puis les autres dompteurs debout qui vérifient with_ ; chacun avec un de
+   * ses Alphas, tiré au hasard (ceux qu'on voit autour de lui ; pour soi, toute sa meute).
+   */
+  private crewOf(with_: (p: PlayerState) => boolean): Crew {
+    const players = this.net.latest?.players ?? [], units = this.net.latest?.units ?? [];
+    const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
+    const me = this.self();
+    const mates = [...(me ? [me] : []), ...players.filter((p) => p.id !== this.myId && !p.dead && with_(p))].slice(0, 4);
+    return mates.map((p) => {
+      let pet: Crew[number]['pet'];
+      if (p.id === this.myId && p.army?.length) {
+        const a = pick(p.army.filter((x) => x.alpha && !x.reviveIn));
+        if (a) pet = { species: a.species, legend: a.legend };
+      } else {
+        const u = pick(units.filter((x) => x[6] === p.id && x[2] & UNIT_FLAG_ALPHA && !(x[2] & UNIT_FLAG_MOUNTED)));
+        if (u) pet = { species: u[1], legend: (u[2] & UNIT_FLAG_LEGEND) !== 0 };
+      }
+      return { color: p.color, armor: p.armor, cls: p.cls, hat: p.hat ?? 0, pet };
+    });
+  }
+
+  /** Après l'embarquement : le rideau noir attend d'être sur le pont, puis le Kraken surgit (s'il le faut) ou le jeu reprend. */
+  private afterBoarding() {
+    const b = this.boarding;
+    if (!b) return;
+    const deck = this.map.caveAt(this.me.x, this.me.y), voyage = this.map.voyage;
+    if (b.check < 0) {
+      if (deck && deck === voyage) b.check = this.time + 0.35; // le temps de recevoir ce qui est à bord
+      else if (this.time - b.sentAt > 3) {
+        // le serveur a refusé (trop loin, mort entre-temps…) : on reste à terre
+        this.boarding = null;
+        this.cinema.lift();
+      }
+      return;
+    }
+    if (this.time < b.check || !voyage) return;
+    this.boarding = null;
+    const boss = voyage.boss, units = this.net.latest?.units ?? [];
+    const awake = units.some((u) => u[1] === boss && !u[6] && !(u[2] & UNIT_FLAG_DORMANT));
+    if (this.hud.beaten.includes(boss) || awake) return this.cinema.lift(); // vaincu, ou déjà en plein combat : rien de plus
+    const [name, sub] = (SPECIES[boss].title ?? SPECIES[boss].name).split(', ');
+    // sur le pont : soi, et ceux qui y sont déjà
+    this.cinema.kraken(name, sub ?? '', this.crewOf((p) => this.map.caveAt(p.x, p.y) === voyage), () => {
+      this.net.send({ t: 'kraken' });
+      this.cinema.lift();
+    });
+  }
+
   private onKey(code: string, key: string) {
-    if (this.hud.capturing) return; // réglages : la touche pressée est en train d'être assignée
+    if (this.hud.capturing || this.cinema.busy) return; // réglages : la touche pressée est en train d'être assignée ; cinématique en cours
     const action = actionOf(code, key);
     if (action === 'interact') {
       const st = this.self();
@@ -250,7 +321,7 @@ export class Game {
       else if (st && !st.dead && b?.heart) this.net.send({ t: 'heart' });
       else if (st && !st.dead && b?.plan) this.net.send({ t: 'plan' });
       else if (st && !st.dead && b?.chest !== undefined) this.net.send({ t: 'chest', id: b.chest });
-      else if (st && !st.dead && b?.cave) this.net.send({ t: 'cave', id: b.cave.id, enter: b.cave.enter });
+      else if (st && !st.dead && b?.cave) this.enterCave(b.cave.id, b.cave.enter);
     } else if (key === 'Escape') {
       // Échap ferme d'abord ce qui est ouvert (carte, forge, Tanière, confirmation) ; sinon, propose de revenir au lobby.
       this.hud.setPanel(this.hud.panel ? null : 'quit');
@@ -940,9 +1011,10 @@ export class Game {
         break;
       case 'boat': {
         const st = BOAT_STAGES[e.stage];
-        if (!e.done) this.hud.toast(`${e.by === this.myId ? 'Tu as' : `${name(e.by)} a`} lancé le bateau : ${st.name} (30 min).`, 'good');
-        else if (e.stage + 1 >= BOAT_STAGES.length) this.hud.toast('Le bateau est prêt ! Une Pierre de passage t\'y attend, au bout de l\'île.', 'good');
-        else this.hud.toast(`Bateau : ${st.name} terminé. Aubin attend la suite.`, 'good');
+        this.elderTrip = { t0: this.time, back: e.done }; // il part au chantier, ou en revient
+        if (!e.done) this.hud.toast(`${e.by === this.myId ? 'Tu as' : `${name(e.by)} a`} lancé le bateau : ${st.name} (30 min). Aubin part au chantier, au bout de l'île.`, 'good');
+        else if (e.stage + 1 >= BOAT_STAGES.length) this.hud.toast('Le bateau est prêt ! Aubin rentre au village. Une Pierre de passage t\'y mène, au bout de l\'île.', 'good');
+        else this.hud.toast(`Bateau : ${st.name} terminé. Aubin rentre au village et attend la suite.`, 'good');
         sound.play('fanfare', e.done ? 1 : 0.5);
         break;
       }
@@ -1251,8 +1323,9 @@ export class Game {
 
     const st = this.self();
     const dead = !!st?.dead;
+    this.afterBoarding();
     // Déplacement local (prédiction) puis envoi au serveur à 20 Hz.
-    const [dx, dy] = dead || this.hud.panel ? [0, 0] : moveDir();
+    const [dx, dy] = dead || this.hud.panel || this.cinema.busy ? [0, 0] : moveDir();
     this.me.moving = dx !== 0 || dy !== 0;
     if (this.me.moving) {
       // Même règle que le serveur : pas d'eau, on glisse le long des berges.
@@ -1635,6 +1708,33 @@ export class Game {
 
   private stormOn = false;
   /** Alerte quand une tempête de sable se lève là où l'on est (et quand elle retombe). */
+  /**
+   * Aubin à pied, entre sa place près du feu et la porte du village qui mène au bout de l'île : il part au chantier du
+   * bateau (une fois qu'on a fini de lui parler) ou en revient. Position, direction et opacité (il s'efface au loin).
+   */
+  private elderWalk() {
+    const trip = this.elderTrip;
+    this.hud.elderLeaving = !!trip && !trip.back && this.hud.panel === 'elder';
+    if (!trip) return null;
+    if (!trip.back && this.hud.panel === 'elder') trip.t0 = this.time; // il attend qu'on ait fini de lui parler
+    const v = this.map.village, sw = this.map.shipwreck, to = Math.atan2(sw.y - v.y, sw.x - v.x);
+    const g = VILLAGE_GATES.reduce((a, b) => (Math.abs(Math.atan2(Math.sin(b - to), Math.cos(b - to))) < Math.abs(Math.atan2(Math.sin(a - to), Math.cos(a - to))) ? b : a));
+    const gate = { x: v.x + Math.cos(g) * (villageEdge(g) + 40), y: v.y + Math.sin(g) * (villageEdge(g) + 40) }, home = this.map.elder;
+    const dist = Math.hypot(gate.x - home.x, gate.y - home.y), dur = dist / 55, k = (this.time - trip.t0) / dur;
+    if (k >= 1) {
+      this.elderTrip = null;
+      return null;
+    }
+    const u = trip.back ? 1 - k : k, [from, dest] = trip.back ? [gate, home] : [home, gate];
+    const x = home.x + (gate.x - home.x) * u, y = home.y + (gate.y - home.y) * u;
+    if (!trip.back && !trip.said && k > 0) {
+      trip.said = true;
+      this.fx.text(home.x, home.y - 58, '« Je file au bateau ! »', '#F0D9A0', 16, 2.4);
+    }
+    const alpha = trip.back ? Math.min(1, k * 4) : Math.min(1, (1 - k) * 4); // il apparaît à la porte, ou s'y efface
+    return { x, y, dx: dest.x - from.x, dy: dest.y - from.y, alpha, back: trip.back };
+  }
+
   /** Saison : le sol et les arbres changent, et on l'annonce quand elle tourne (pas à l'arrivée). */
   private seasonSeen = -1;
   private watchSeason(season: number) {
@@ -1828,8 +1928,17 @@ export class Game {
       const label = k === 0 && !active ? BUILDINGS.stone.name : undefined; // le prix : dans le panneau de construction
       if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
+    // le bateau du bout de l'île : l'épave, puis le bateau qu'Aubin rebâtit, étape par étape (avec son chantier)
+    const sw = this.map.shipwreck, [, boatStage, boatLeft] = this.hud.lore;
+    if (!here && inView(sw.x, sw.y, 360)) {
+      const progress = boatLeft > 0 ? 1 - boatLeft / (BOAT_STAGE_MS / 1000) : -1;
+      list.push({ y: sw.y + 10, draw: () => drawBoat(ctx, this.map, boatStage, progress, this.time) });
+      if (boatLeft > 0 && BOAT_STAGES[boatStage]) {
+        const left = `${Math.floor(boatLeft / 60)}:${String(boatLeft % 60).padStart(2, '0')}`;
+        air.push({ y: sw.y, draw: () => drawBoatLabel(ctx, this.map, BOAT_STAGES[boatStage].name, `Aubin y travaille · encore ${left}`) });
+      }
+    }
     // le cœur volcanique, une fois installé dans le bateau
-    const sw = this.map.shipwreck;
     if (this.hud.heart >= HEART_IN_BOAT && inView(sw.x, sw.y, 200)) list.push({ y: sw.y + 30, draw: () => drawBoatHeart(ctx, sw.x, sw.y, this.time) });
     // Pierre de passage du bateau : à construire dès la Mer de sable ouverte (éteinte et nommée jusque-là)
     const bs = this.map.boatStone, dock = dockStoneOn(this.hud.buildings, this.hud.lore[1]);
@@ -1877,9 +1986,28 @@ export class Game {
         },
       });
     }
-    // le vieil homme, près du feu : il regarde le dompteur qui s'approche, sinon le feu
-    const { elder } = this.map;
-    if (inView(elder.x, elder.y, 60)) {
+    // le vieil homme, près du feu : il regarde le dompteur qui s'approche, sinon le feu ; pendant une étape du bateau,
+    // il est au chantier, le marteau à la main (et on le voit partir du village, puis y revenir)
+    const { elder } = this.map, trip = this.elderWalk();
+    const atYard = boatLeft > 0 && !(trip && !trip.back);
+    if (trip) {
+      const d = Math.hypot(trip.dx, trip.dy) || 1;
+      list.push({ y: trip.y, draw: () => {
+        ctx.save();
+        ctx.globalAlpha = trip.alpha;
+        drawElder(ctx, trip.x, trip.y - Math.abs(Math.sin(this.time * 7)) * 2.5, this.time, trip.dx / d, trip.dy / d, elderName(this.hud.lore[0]));
+        ctx.restore();
+      } });
+    } else if (atYard) {
+      const y0 = this.map.elderYard, look = this.map.boatPoint(60, 0), d = Math.hypot(look.x - y0.x, look.y - y0.y) || 1;
+      if (inView(y0.x, y0.y, 80)) list.push({ y: y0.y, draw: () => {
+        const hit = drawAubinAtWork(ctx, y0.x, y0.y, this.time, (look.x - y0.x) / d, (look.y - y0.y) / d, elderName(this.hud.lore[0]));
+        if (hit && this.time - this.hammerAt > 0.5) {
+          this.hammerAt = this.time;
+          sound.play('hammer', Math.max(0, 1 - Math.hypot(this.me.x - y0.x, this.me.y - y0.y) / 700));
+        }
+      } });
+    } else if (boatLeft <= 0 && inView(elder.x, elder.y, 60)) {
       const near = Math.hypot(this.me.x - elder.x, this.me.y - elder.y) < 220;
       const tx = near ? this.me.x : this.map.village.x, ty = near ? this.me.y : this.map.village.y, d = Math.hypot(tx - elder.x, ty - elder.y) || 1;
       const calls = this.hud.elderCalls;

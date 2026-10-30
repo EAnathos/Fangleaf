@@ -240,6 +240,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'plan') room.onPlan(player);
     else if (msg.t === 'school') room.onSchool(player);
     else if (msg.t === 'heart') room.onHeart(player);
+    else if (msg.t === 'kraken') room.onKraken(player);
     else if (msg.t === 'learn') room.onLearn(player, +msg.kind);
     else if (msg.t === 'pick') room.onPick(player);
     else if (msg.t === 'hold') room.onHold(player, !!msg.on);

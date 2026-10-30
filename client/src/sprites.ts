@@ -55,6 +55,7 @@ export interface UnitLook {
   shell?: boolean; // escargot rentré dans sa coquille : seule la coquille, posée au sol
   shout?: number; // Alpha suricate qui crie, escargot qui dresse sa carapace : avancement de 0 à 1 (0 : rien)
   leap?: Leap; // en plein bond (rempli par drawUnit) : de quoi poser les pattes
+  lids?: number; // Kraken : ouverture des yeux (1 : ouverts ; moins : la paupière couvre l'œil, pour sa cinématique)
 }
 
 /** Pose d'un bond : ext (0 → 1) pattes arrière détendues, reach (0 → 1) pattes avant tendues vers le sol, crouch (0 → 1) ramassé. */
@@ -3862,6 +3863,17 @@ function kraken(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.beginPath();
     ctx.ellipse(ex, ey, es * 0.2, es * 0.75, 0, 0, TAU);
     ctx.fill();
+    const lids = u.lids ?? 1;
+    if (lids < 1) {
+      // l'œil encore fermé (cinématique : il s'ouvre)
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(ex, ey, es * 1.32, es * 1.12, 0, 0, TAU);
+      ctx.clip();
+      ctx.fillStyle = body;
+      ctx.fillRect(ex - es * 1.4, ey - es * 1.2, es * 2.8, es * 2.3 * (1 - lids));
+      ctx.restore();
+    }
     ctx.fillStyle = body; // paupière
     ctx.beginPath();
     ctx.ellipse(ex, ey - es * 0.55, es * 1.1, es * 0.45, sd * 0.25, Math.PI, 0);
@@ -3888,6 +3900,16 @@ function kraken(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.setLineDash([]);
   }
 }
+
+/** Le Kraken tel qu'en jeu (sans anneau ni couronne), centré en (x, y), pour sa cinématique : lids ouvre ses yeux. */
+export function drawKraken(ctx: Ctx, x: number, y: number, r: number, t: number, lids = 1) {
+  const s = SPECIES.findIndex((sp) => sp.key === 'kraken');
+  ctx.save();
+  ctx.translate(x, y);
+  kraken(ctx, r, SPECIES[s].color, { x, y, r, species: s, alpha: false, wild: true, face: 1, t, seed: 0, flash: false, lids });
+  ctx.restore();
+}
+export { KRAKEN as KRAKEN_COLORS };
 
 /** Tentacule du Kraken accroché au pont : il sort de la mer par-dessus le bastingage et se balance, ventouses en dedans. */
 function krakenTentacle(ctx: Ctx, r: number, fill: string, u: UnitLook) {

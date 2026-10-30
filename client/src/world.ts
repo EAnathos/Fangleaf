@@ -400,15 +400,7 @@ export class World {
       ctx.stroke();
     }
 
-    // Épave du bout de l'île, couchée sur le sable (dessinée avec le sol : elle ne bouge pas).
-    const sw = map.shipwreck;
-    if (sw.x > ox - 220 && sw.x < ox + CHUNK + 220 && sw.y > oy - 220 && sw.y < oy + CHUNK + 220) {
-      ctx.save();
-      ctx.translate(sw.x, sw.y);
-      ctx.rotate(sw.a);
-      drawShipwreck(ctx);
-      ctx.restore();
-    }
+    // (l'épave du bout de l'île, puis le bateau qu'Aubin y rebâtit : dessinés à chaque image, voir boat.ts)
 
     // Tanières de suricates : butte de sable percée de trous.
     for (const d of map.dens) {
@@ -2652,9 +2644,9 @@ function stallLantern(ctx: CanvasRenderingContext2D, x: number, y: number) {
 }
 
 // ── Épave coupée en deux (bout de l'île) : poupe à gauche, proue à droite, en coordonnées locales ──
-const SHIP_WOOD = '#6B4A33', SHIP_DARK = '#4A3322', SHIP_LIGHT = '#8A6446', SHIP_DECK = '#9A7448', SHIP_HOLE = '#24180F';
+export const SHIP_WOOD = '#6B4A33', SHIP_DARK = '#4A3322', SHIP_LIGHT = '#8A6446', SHIP_DECK = '#9A7448', SHIP_HOLE = '#24180F';
 
-function shipPlank(ctx: CanvasRenderingContext2D, x: number, y: number, a: number, l: number) {
+export function shipPlank(ctx: CanvasRenderingContext2D, x: number, y: number, a: number, l: number) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(a);
@@ -2665,7 +2657,7 @@ function shipPlank(ctx: CanvasRenderingContext2D, x: number, y: number, a: numbe
   ctx.restore();
 }
 
-function shipBarrel(ctx: CanvasRenderingContext2D, x: number, y: number) {
+export function shipBarrel(ctx: CanvasRenderingContext2D, x: number, y: number) {
   ctx.fillStyle = 'rgba(8,14,12,0.25)';
   ctx.beginPath();
   ctx.ellipse(x + 3, y + 5, 10, 5, 0, 0, TAU);
@@ -2806,7 +2798,7 @@ export function drawBridge(ctx: CanvasRenderingContext2D, a: { x: number; y: num
   ctx.restore();
 }
 
-function drawShipwreck(ctx: CanvasRenderingContext2D) {
+export function drawShipwreck(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = 'rgba(8,14,12,0.28)';
   ctx.beginPath();
   ctx.ellipse(8, 14, 140, 32, 0, 0, TAU);

@@ -51,6 +51,18 @@ describe('Haute mer : le Kraken', () => {
     check(k.dormant, 'pas tout de suite…');
     for (let i = 0; i < TICK_HZ * 2; i++) r.step();
     check(!k.dormant, `… mais au bout de ${KRAKEN_DELAY_S} s à bord, il surgit et attaque, sans qu'on lui parle`);
+    // sa cinématique finie (ou passée), un dompteur à bord le fait surgir sans attendre la fin du délai
+    const r2 = lateRoom(), c2 = r2.map.voyage;
+    r2.boat = BOAT_STAGES.length;
+    r2.heart = HEART_IN_BOAT;
+    const p2 = r2.addPlayer('mousse', noop);
+    [p2.x, p2.y] = [c2.entrance.x, c2.entrance.y];
+    r2.onCave(p2, c2.id, true);
+    const k2 = r2.units.get(r2.caveBoss[c2.id]);
+    for (let i = 0; i < TICK_HZ; i++) r2.step();
+    r2.onKraken(p2);
+    for (let i = 0; i < 6; i++) r2.step();
+    check(!k2.dormant, 'cinématique finie : le Kraken surgit tout de suite');
     const x0 = k.x, y0 = k.y;
     for (let i = 0; i < TICK_HZ * 3; i++) {
       p.hp = 1e9;

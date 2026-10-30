@@ -57,6 +57,7 @@ export type ClientMsg =
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, -2 = bateau, sinon index du camp
   | { t: 'scroll'; cave: number } // ramasser le parchemin laissé par le géant de cette grotte
   | { t: 'scrollGive' } // donner ses parchemins au vieil homme : il retrouve des souvenirs
+  | { t: 'kraken' } // à bord, la cinématique du Kraken finie (ou passée) : il surgit tout de suite
   | { t: 'heart' } // cœur volcanique : le prendre sur son autel (géants du volcan vaincus), ou l'installer dans le bateau rebâti
   | { t: 'learn'; kind: number } // École des dompteurs : commencer la leçon suivante de cette discipline (index dans LESSON_KINDS)
   | { t: 'boat' } // donner au vieil homme les ressources de l'étape suivante du bateau

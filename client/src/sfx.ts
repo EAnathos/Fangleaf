@@ -21,7 +21,8 @@ export interface Synth {
 
 export type Sfx =
   | 'hurt' | 'swing' | 'arrow' | 'orb' | 'pick' | 'chop' | 'chest'
-  | 'roar' | 'boom' | 'death' | 'fanfare' | 'blip' | 'pop' | 'thunk' | 'chime' | 'shout' | 'shell';
+  | 'roar' | 'boom' | 'death' | 'fanfare' | 'blip' | 'pop' | 'thunk' | 'chime' | 'shout' | 'shell'
+  | 'hammer' | 'shiphorn' | 'waves' | 'kraken' | 'splash';
 
 export interface SfxDef {
   label: string;
@@ -111,6 +112,37 @@ export const SFX: Record<Sfx, SfxDef> = {
   shell: {
     label: 'Carapace de l\'escargot', when: 'Un Alpha escargot dresse sa carapace : les alliés autour de lui encaissent moins.',
     play: (s) => { s.thump(160, 70, 0.18, 0.35); s.bell(880, 0.7, 0.08, 1.41, 1.5, 0.05); s.bell(1320, 0.6, 0.05, 1.41, 1.2, 0.12); },
+  },
+  hammer: {
+    label: 'Marteau d\'Aubin', when: 'Aubin bâtit le bateau, au bout de l\'île.',
+    play: (s) => { s.thump(420, 180, 0.05, 0.3); s.bell(1250, 0.1, 0.05, 1.7, 1.2); s.hiss('bandpass', 2400, 0.05, 0.15, 1500, 0, 2); },
+  },
+  shiphorn: {
+    label: 'Corne du bateau', when: 'Le bateau largue les amarres.',
+    play: (s) => {
+      // une corne de brume, longue et grave, deux notes
+      s.horn(73.4, 2.4, 0.2, 200, 900);
+      s.horn(110, 2.4, 0.12, 200, 1100);
+      s.horn(65.4, 2.2, 0.18, 200, 900, 2.5);
+      s.horn(98, 2.2, 0.1, 200, 1000, 2.5);
+    },
+  },
+  waves: {
+    label: 'Vagues', when: 'Le bateau prend la mer.',
+    play: (s) => { for (let k = 0; k < 3; k++) s.hiss('lowpass', 700, 1.6, 0.18, 220, k * 1.3, 0.7); },
+  },
+  kraken: {
+    label: 'Le Kraken surgit', when: 'Le Kraken jaillit des flots et s\'attaque au bateau.',
+    play: (s) => {
+      s.thump(60, 22, 1.6, 0.8);
+      for (const [f, v] of [[41, 0.18], [61.7, 0.14], [46.2, 0.12], [82.4, 0.08]] as const) s.horn(f, 3.4, v, 90, 900);
+      s.hiss('lowpass', 900, 2.8, 0.35, 60);
+      s.tone(180, 40, 2.2, 0.12, 'sawtooth', 0.4);
+    },
+  },
+  splash: {
+    label: 'Gerbe d\'eau', when: 'Un tentacule du Kraken s\'abat sur le pont.',
+    play: (s) => { s.thump(110, 40, 0.4, 0.5); s.hiss('lowpass', 3200, 0.7, 0.4, 300); s.hiss('highpass', 4000, 0.4, 0.15, 1500, 0.05); },
   },
   chime: {
     label: 'Relevé, Alpha éveillé', when: 'Un coéquipier te relève, un Alpha s\'éveille.',

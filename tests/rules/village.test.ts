@@ -50,9 +50,19 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     check(r.boatAt > Date.now() && p.gold === 1e6 - BOAT_STAGES[0].gold && r.stock.wood === 1e5 - BOAT_STAGES[0].wood, `bateau : étape 1 (${BOAT_STAGES[0].name}) payée une fois, en chantier`);
     for (let i = 0; i < 25; i++) r.step();
     check(r.boat === 0, 'étape en cours : pas encore finie');
+    const yard = r.elderPos();
+    check(yard === m.elderYard && Math.hypot(yard.x - m.shipwreck.x, yard.y - m.shipwreck.y) < 250 && !m.blocked(yard.x, yard.y), 'pendant l\'étape, Aubin est au chantier, à côté du bateau');
+    p.scrolls = [m.caves[0].id];
+    r.onScrollGive(p);
+    check(p.scrolls.length === 1, 'au village, plus personne à qui parler…');
+    [p.x, p.y] = [yard.x + 30, yard.y];
+    r.onScrollGive(p);
+    check(p.scrolls.length === 0, '… c\'est au chantier qu\'on le trouve');
+    [p.x, p.y] = [m.elder.x + 50, m.elder.y + 20];
     for (let k = 0; k < BOAT_STAGES.length; k++) {
       r.boatAt = Date.now() - 1;
       for (let i = 0; i < 25; i++) r.step();
+      if (!k) check(r.elderPos() === m.elder, 'étape finie : Aubin rentre au village');
       if (k < BOAT_STAGES.length - 1) r.onBoat(p);
     }
     check(r.boat === BOAT_STAGES.length && saved.boat === BOAT_STAGES.length, `bateau terminé en ${BOAT_STAGES.length} étapes`);

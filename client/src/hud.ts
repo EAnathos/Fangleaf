@@ -59,6 +59,7 @@ export interface VillageView {
   beaten: number[]; // géants vaincus par le village
   heart: number; // cœur volcanique : 0 sur son autel, HEART_TAKEN pris, HEART_IN_BOAT installé dans le bateau
   school: [number, number]; // École des dompteurs : plan trouvé (0/1), secondes avant la fin du chantier d'Aubin
+  elderLeaving?: boolean; // Aubin vient de partir au chantier du bateau : il est encore au village (on finit de lui parler)
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 const ROMAN = ['I', 'II', 'III'];
@@ -105,7 +106,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     return v.buildings.includes(b) ? open : offer(b, pos, 'Construire');
   };
   const spots: Spot[] = [
-    { panel: 'elder', pos: map.elder, reach: 55, label: `E — Parler ${v.lore[0] ? 'à Aubin' : 'au vieil homme'}` },
+    { panel: 'elder', pos: v.lore[2] > 0 && !v.elderLeaving ? map.elderYard : map.elder, reach: 55, label: `E — Parler ${v.lore[0] ? 'à Aubin' : 'au vieil homme'}` },
     // les nouveau-nés des œufs du village (at : lequel)
     ...HATCHLINGS.slice(0, eggsOf(v.lore[0]).hatched).map((h, i): Spot => ({ panel: 'npc', at: i, pos: { x: map.village.x + h.x, y: map.village.y + h.y }, reach: 60, label: `E — Parler à ${h.name}` })),
     ...v.scrollCaves.map((id): Spot => ({ scroll: id, pos: map.scrollPos(map.caves[id]), reach: SCROLL_REACH, label: 'E — Ramasser le parchemin' })),
@@ -303,6 +304,7 @@ export class Hud {
   get elderCalls() {
     return !this.elderMet || this.myScrolls > 0;
   }
+  elderLeaving = false; // Aubin part au chantier du bateau, mais on lui parle encore (voir Game.elderWalk)
   lore: [number, number, number] = [0, 0, 0]; // souvenirs retrouvés, étapes du bateau, secondes avant la fin de l'étape en cours
   scrollCaves: number[] = []; // grottes dont le parchemin m'attend // portrait du géant à qui l'on parle
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
@@ -523,7 +525,7 @@ export class Hud {
       } catch { /* stockage indisponible */ }
       // des parchemins à lui donner : il les réclame ; sinon il salue (et reprend depuis le début)
       this.elderView = 'talk';
-      this.elderSay(this.myScrolls ? ['Oh ! Ce que tu tiens là… ce sont des parchemins ? Fais voir, fais voir !'] : elderGreeting(this.lore[0], this.islandCaves(), this.lore[1], BOAT_STAGES.length, this.heart));
+      this.elderSay(this.myScrolls ? ['Oh ! Ce que tu tiens là… ce sont des parchemins ? Fais voir, fais voir !'] : elderGreeting(this.lore[0], this.islandCaves(), this.lore[1], BOAT_STAGES.length, this.heart, this.lore[2]));
     }
     $('hall').hidden = panel !== 'hall';
     $('settings').hidden = panel !== 'settings';
@@ -940,7 +942,7 @@ export class Hud {
       );
       actions.push(button('Retour', 'btn', () => {
         this.elderView = 'talk';
-        this.elderSay(elderGreeting(told, total, boat, BOAT_STAGES.length, this.heart));
+        this.elderSay(elderGreeting(told, total, boat, BOAT_STAGES.length, this.heart, left));
       }));
     } else if (this.elderView === 'school') {
       // l'école : son plan rapporté du Camp avancé, il la bâtit au village contre des ressources
@@ -967,7 +969,7 @@ export class Hud {
       }
       actions.push(button('Retour', 'btn', () => {
         this.elderView = 'talk';
-        this.elderSay(elderGreeting(told, total, boat, BOAT_STAGES.length, this.heart));
+        this.elderSay(elderGreeting(told, total, boat, BOAT_STAGES.length, this.heart, left));
       }));
     } else if (this.elderView === 'boat') {
       // le bateau : les étapes faites, celle en chantier, ou celle à payer
@@ -990,13 +992,22 @@ export class Hud {
       );
       if (boat < BOAT_STAGES.length && !left) {
         this.costChips('elder-cost', funds, BOAT_STAGES[boat]);
-        const pay = button(canPay(funds, BOAT_STAGES[boat]) ? 'Donner les ressources' : 'Il manque des ressources', 'cta', () => this.onBoat());
+        const pay = button(canPay(funds, BOAT_STAGES[boat]) ? 'Donner les ressources' : 'Il manque des ressources', 'cta', () => {
+          this.onBoat();
+          // il annonce qu'il part au chantier (on le verra partir une fois la conversation finie)
+          this.elderView = 'talk';
+          this.elderSay([
+            `Merci ! Avec tout ça, ${BOAT_STAGES[boat].name.toLowerCase()} ne va pas traîner.`,
+            'Bon ! Je file au bateau, au bout de l\'île. Il y a du travail, et ces vieilles jambes ne vont pas vite.',
+            'Si tu me cherches, je serai là-bas, le marteau à la main. Viens voir comme il prend forme !',
+          ]);
+        });
         pay.disabled = !canPay(funds, BOAT_STAGES[boat]);
         actions.push(pay);
       }
       actions.push(button('Retour', 'btn', () => {
         this.elderView = 'talk';
-        this.elderSay(elderGreeting(told, total, boat, BOAT_STAGES.length, this.heart));
+        this.elderSay(elderGreeting(told, total, boat, BOAT_STAGES.length, this.heart, left));
       }));
     } else {
       $('elder-line').textContent = `« ${this.elderLines[this.elderAt] ?? ''} »`;

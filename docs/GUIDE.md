@@ -225,9 +225,12 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Chaque **parchemin de zone** rapporté lui rend les souvenirs de cette zone, d'un trait. On peut les lui faire
   raconter de nouveau, zone par zone (« Les anciens parchemins »).
 - Tous ses souvenirs retrouvés, il reconstruit le **bateau** échoué au bout de l'île, en plusieurs étapes payées en
-  or et avec la réserve du village. Sa **Pierre de passage** se construit dès que la Mer de sable est ouverte.
+  or et avec la réserve du village (la quille, la coque, le pont et les mâts, les voiles). Pendant chaque étape, il
+  part au chantier : c'est là-bas qu'on le trouve, le marteau à la main, et on voit le bateau prendre forme. Il rentre
+  au village une fois l'étape finie. Sa **Pierre de passage** se construit dès que la Mer de sable est ouverte.
 - Il lui manque encore son **cœur** : celui du volcan. On le pose dans la coque (**E** devant le bateau), et le
-  bateau est prêt à prendre la mer, cap sur le Colisée.
+  bateau est prêt à prendre la mer, cap sur le Colisée. Prendre la mer joue une cinématique (le départ de l'île), et
+  tant que le Kraken n'est pas vaincu, une autre quand il surgit au large (un toucher ou une touche pour passer).
 
 ## La haute mer et le Kraken
 

@@ -511,6 +511,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* Premier réveil sur l'île (intro.ts) : l'animation par-dessus le jeu, le HUD attend qu'on ait ouvert les yeux. */
 .intro { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; }
+.cinema { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 60; touch-action: none; } /* cinématiques du bateau : elles prennent les touchers (pour passer) */
 #hud { transition: opacity 1.2s; }
 body.waking #hud { opacity: 0; pointer-events: none; }
 

@@ -120,13 +120,21 @@ export const zoneChapters = () => {
 export const elderName = (told: number) => (told > 0 ? 'Aubin' : 'Vieil homme');
 
 /** Ce qu'il dit quand on vient le voir (sans nouveau parchemin à lui donner). */
-export function elderGreeting(told: number, total: number, boat: number, stages: number, heart = 0): string[] {
+export function elderGreeting(told: number, total: number, boat: number, stages: number, heart = 0, left = 0): string[] {
   if (told === 0) return ELDER_INTRO;
   if (told < total) {
     const left = zoneChapters().filter((z) => z.to > told).length;
     return [
       'Ah, te revoilà ! Ça me fait plaisir.',
       `Les parchemins des géants me rendent la mémoire, une zone après l'autre. Il en reste ${left <= 1 ? 'un' : left} quelque part… je le sens.`,
+    ];
+  }
+  if (boat < stages && left > 0) {
+    // au chantier, le marteau à la main
+    const min = Math.max(1, Math.ceil(left / 60));
+    return [
+      'Toc, toc, toc… Oh ! C\'est toi ? Tu m\'as fait peur, j\'ai failli me taper sur les doigts.',
+      `Regarde-le, ce bateau : il prend forme ! Encore ${min} minute${min > 1 ? 's' : ''} et cette étape sera finie. Ensuite, je rentrerai au village.`,
     ];
   }
   if (boat < stages) return ['Alors, on s\'y remet, à ce bateau ?'];

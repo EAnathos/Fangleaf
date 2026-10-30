@@ -1753,6 +1753,22 @@ export class WorldMap {
     return out;
   }
 
+  /** Point du chantier du bateau, en coordonnées de la coque (lx le long de la coque vers la proue, ly vers la terre). */
+  boatPoint(lx: number, ly: number): Pt {
+    const { x, y, a } = this.shipwreck, c = Math.cos(a), s = Math.sin(a);
+    return { x: x + lx * c - ly * s, y: y + lx * s + ly * c };
+  }
+
+  /** Où se tient Aubin pendant qu'il bâtit une étape du bateau : à terre, à côté de la proue (pas devant l'embarquement). */
+  private yard?: Pt;
+  get elderYard(): Pt {
+    if (!this.yard) {
+      const p = this.boatPoint(100, 80);
+      this.yard = this.freeNear(p.x, p.y);
+    }
+    return this.yard;
+  }
+
   /** Point libre (hors de l'eau) le plus proche autour de (x, y), en spirale. */
   freeNear(x: number, y: number) {
     if (!this.blocked(x, y)) return { x, y };
