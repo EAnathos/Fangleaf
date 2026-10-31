@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  alphaEquipMax, BOSS_HP_BONUS, LEGEND_SKIPS, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
+  alphaEquipMax, BOSS_HP_BONUS, LEGEND_SKIPS, DRILL_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
@@ -12,7 +12,7 @@ import { CHAPTER_TITLES, ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCH
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { moveSkill, type Skill, type SkillIcon, traitSkills } from './moveInfo.ts';
 import { sound } from './audio.ts';
-import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
+import { ACTIONS, type Action, applyUi, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
 import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 
@@ -401,6 +401,7 @@ export class Hud {
     $('talk-later').onclick = () => this.setPanel(null);
     // un nouveau-né : on se parle à tour de rôle, une réplique après l'autre
     $('victory-ok').onclick = () => this.setPanel(null);
+    $('drill-stop').onclick = () => this.onDrill(-1, 0);
     $('npc-next').onclick = () => {
       const h = HATCHLINGS[this.npcWho];
       if (!h || this.npcAt >= h.lines.length - 1) return this.setPanel(null);
@@ -514,6 +515,16 @@ export class Hud {
       return t >= 0 && (me.tomes?.[bookIndex(k, t)] ?? 0) > 0;
     });
   }
+  /** Entraînement en cours : une pastille avec l'attaque, les esquives et les coups reçus, et de quoi arrêter. */
+  private updateDrill(me: PlayerState) {
+    const d = me.drill, el = $('drill');
+    setHidden(el, !d);
+    if (!d) return;
+    const m = BOSS_MOVES[SPECIES[d[0]]?.key]?.[d[1]];
+    setText($('drill-what'), `Entraînement · ${m ? MOVE_NAMES[m.kind] : ''}`);
+    setText($('drill-score'), `${d[3]} esquivée${d[3] > 1 ? 's' : ''} · ${d[2]} touché${d[2] > 1 ? 's' : ''}`);
+  }
+
   private updateSchoolHint(me: PlayerState) {
     const book = this.buildings.includes('school') && this.readableBook(me);
     if (book && !this.bookWas) this.toast('Un livre de ton sac peut être lu à l\'École des dompteurs, au village.', 'alpha');
@@ -642,8 +653,10 @@ export class Hud {
     if (panel === 'chat') {
       this.unread = 0;
       $('chat-unread').hidden = true;
-      this.renderChat();
-      setTimeout(() => $<HTMLInputElement>('chat-input').focus()); // après la touche d'ouverture : pas de « c » tapé dans le champ
+      this.setChatTab(this.chatTab);
+      // après la touche d'ouverture : pas de « c » tapé dans le champ ; au doigt, pas de clavier qui surgit tout seul
+      if (!touchOnly) setTimeout(() => $<HTMLInputElement>('chat-input').focus());
+      setTimeout(() => this.fitChat());
     }
     this.capturing = null;
     this.last.members = '';
@@ -752,6 +765,10 @@ export class Hud {
   }
 
     toast(text: string, kind: '' | 'alpha' | 'good' = '') {
+    // gardé au journal du chat, pour le relire une fois effacé
+    this.journal.push({ at: new Date(), text, kind });
+    if (this.journal.length > 100) this.journal.shift();
+    if (this.panel === 'chat' && this.chatTab === 'journal') this.renderJournal();
     const el = document.createElement('div');
     el.className = `toast ${kind}`;
     el.textContent = text;
@@ -838,6 +855,7 @@ export class Hud {
       this.updateSchool(me);
     }
     this.updateSchoolHint(me);
+    this.updateDrill(me);
     if (this.panel === 'buy') this.updateBuy(me);
     if (this.panel === 'talk') this.updateTalk();
     if (this.panel === 'hall') this.updateHall(me);
@@ -1188,6 +1206,15 @@ export class Hud {
     $('profile-open').onclick = () => this.setPanel('profile');
     onTap($('menu-open'), () => this.setPanel(this.panel === 'quit' ? null : 'quit'));
     onTap($('chat-open'), () => this.setPanel(this.panel === 'chat' ? null : 'chat'));
+    $('chat-tab-talk').onclick = () => this.setChatTab('talk');
+    $('chat-tab-journal').onclick = () => this.setChatTab('journal');
+    // un clic à côté du chat le referme
+    document.addEventListener('pointerdown', (e) => {
+      const t = e.target as Node;
+      if (this.panel === 'chat' && !$('chat').contains(t) && !$('chat-open').contains(t)) this.setPanel(null);
+    }, true);
+    window.visualViewport?.addEventListener('resize', () => this.fitChat());
+    window.visualViewport?.addEventListener('scroll', () => this.fitChat());
     $('chat-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const input = $<HTMLInputElement>('chat-input');
@@ -1212,7 +1239,7 @@ export class Hud {
       };
     }
     // Affichage : qualité, chiffres des dégâts, secousses, latence (appliqués tout de suite).
-    const seg = (name: 'quality' | 'damage') => {
+    const seg = (name: 'quality' | 'damage' | 'ui' | 'text') => {
       const group = document.querySelector<HTMLElement>(`[data-setting="${name}"]`)!;
       const paint = () => group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === settings.display[name])));
       group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => {
@@ -1220,11 +1247,15 @@ export class Hud {
         saveSettings();
         paint();
         if (name === 'quality') this.onQuality();
+        if (name === 'ui') applyUi();
       }));
       paint();
     };
     seg('quality');
     seg('damage');
+    seg('ui');
+    seg('text');
+    applyUi();
     for (const k of ['shake', 'ping', 'weather'] as const) {
       const box = $<HTMLInputElement>(`set-${k}`);
       box.checked = settings.display[k];
@@ -1472,7 +1503,7 @@ export class Hud {
   chat(name: string, color: string, text: string, mine: boolean) {
     this.chatLog.push({ name, color, text });
     if (this.chatLog.length > 60) this.chatLog.shift();
-    if (this.panel === 'chat') return this.renderChat();
+    if (this.panel === 'chat' && this.chatTab === 'talk') return this.renderChat();
     if (mine) return;
     this.unread++;
     $('chat-unread').hidden = false;
@@ -1496,8 +1527,49 @@ export class Hud {
     log.scrollTop = log.scrollHeight;
   }
   private chatLog: { name: string; color: string; text: string }[] = [];
+  private journal: { at: Date; text: string; kind: string }[] = []; // messages passés en haut de l'écran
+  private chatTab: 'talk' | 'journal' = 'talk';
+
+  private renderJournal() {
+    const log = $('chat-journal');
+    log.replaceChildren(...(this.journal.length
+      ? this.journal.map((m) => {
+        const p = document.createElement('p'), time = document.createElement('time'), span = document.createElement('span');
+        time.textContent = m.at.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        span.textContent = m.text;
+        if (m.kind) span.className = m.kind;
+        p.append(time, span);
+        return p;
+      })
+      : [Object.assign(document.createElement('p'), { className: 'empty', textContent: 'Rien pour l\'instant.' })]));
+    log.scrollTop = log.scrollHeight;
+  }
+
+  /** Onglet du chat : la discussion du village, ou le journal des messages passés en haut de l'écran. */
+  private setChatTab(tab: 'talk' | 'journal') {
+    this.chatTab = tab;
+    $('chat-tab-talk').setAttribute('aria-selected', String(tab === 'talk'));
+    $('chat-tab-journal').setAttribute('aria-selected', String(tab === 'journal'));
+    $('chat-log').hidden = tab !== 'talk';
+    $('chat-journal').hidden = tab !== 'journal';
+    if (tab === 'journal') this.renderJournal();
+    else this.renderChat();
+  }
+
+  /**
+   * Clavier du téléphone ouvert : le chat remonte juste au-dessus (le navigateur ne rétrécit pas toujours la page),
+   * et son historique se raccourcit pour que le champ reste visible.
+   */
+  private fitChat() {
+    const vv = window.visualViewport, chat = $('chat');
+    if (!vv || chat.hidden) return;
+    const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop), k = Number(getComputedStyle(document.documentElement).getPropertyValue('--ui')) || 1;
+    chat.style.bottom = kb > 40 ? `${(kb + 8) / k}px` : '';
+    for (const id of ['chat-log', 'chat-journal']) $(id).style.maxHeight = kb > 40 ? `${Math.max(90, vv.height * 0.35) / k}px` : '';
+  }
   private unread = 0;
   onChat = (_text: string) => {};
+  onDrill = (_s: number, _move: number) => {};
 
   /** Zone ouverte pour le village : la zone 1, puis chaque zone dont la porte est ouverte. */
   private zoneOpen(z: number) {
@@ -1778,7 +1850,9 @@ export class Hud {
               el.querySelector('b')!.textContent = known ? card.name : '???';
               el.querySelector('.tag')!.textContent = known ? card.tag : form === 'boss' ? 'Pas encore vaincu' : 'Pas encore croisé';
               if (known) {
-                el.querySelector('.beast-mini')!.innerHTML = `<i class="hp">${ICONS.hp}${card.chips[0][1]}</i><i class="dmg">${ICONS.dmg}${card.chips[1][1]}</i><i class="more">${card.skills.length} compétence${card.skills.length > 1 ? 's' : ''} ›</i>`;
+                const chip = (k: string) => card.chips.find((c) => c[2] === k)?.[1] ?? '';
+                const el0 = card.chips[0];
+                el.querySelector('.beast-mini')!.innerHTML = `<i class="${el0[2]}" title="${el0[1]}">${CHIP_ICONS[el0[2]]}</i><i class="hp">${ICONS.hp}${chip('hp')}</i><i class="dmg">${ICONS.dmg}${chip('dmg')}</i><i class="more">${card.skills.length} compétence${card.skills.length > 1 ? 's' : ''} ›</i>`;
                 el.onclick = () => {
                   this.beastOpen = s;
                   this.last.bestiary = '';
@@ -1833,6 +1907,18 @@ export class Hud {
       c.innerHTML = `<i class="skill-icon">${SKILL_ICONS[sk.icon]}</i><div class="col"><b></b><span></span></div>`;
       c.querySelector('b')!.textContent = sk.name;
       c.querySelector('span')!.textContent = sk.desc;
+      // un géant vaincu : on peut s'entraîner contre son fantôme, sur cette attaque-là
+      if (form === 'boss' && sk.move !== undefined) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn small skill-train';
+        b.textContent = 'S\'entraîner';
+        b.onclick = () => {
+          this.onDrill(s, sk.move!);
+          this.setPanel(null);
+        };
+        c.querySelector('.col')!.append(b);
+      }
       skills.append(c);
     });
     if (card.note) {
@@ -2249,12 +2335,23 @@ export class Hud {
 type BestiaryForm = 'wild' | 'alpha' | 'legend' | 'boss';
 
 /** Pastille de statistique : libellé, valeur, et sa sorte (son pictogramme, sa couleur). */
-type Chip = [string, string, 'hp' | 'dmg' | 'speed' | 'rate' | 'range' | 'gold' | 'essence' | 'time' | 'zone'];
+type Chip = [string, string, 'hp' | 'dmg' | 'speed' | 'rate' | 'range' | 'gold' | 'essence' | 'time' | 'zone' | 'feu' | 'plante' | 'terre' | 'eau' | 'neutre'];
 
 /** Carte du bestiaire : nom, traits, statistiques, compétences, et une note (conseil, ou réplique du géant). */
 function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; chips: Chip[]; skills: Skill[]; note: string } {
+  const card = beastCardBase(s, form), el = elementOf(s);
+  // l'élément en tête des pastilles, et ses affinités en tête des compétences
+  card.chips.unshift(['Élément', el ? ELEMENT_NAMES[el] : 'Neutre', el ?? 'neutre']);
+  if (el) {
+    const weak = ELEMENTS[(ELEMENTS.indexOf(el) + ELEMENTS.length - 1) % ELEMENTS.length];
+    card.skills.unshift({ name: `Affinités · ${ELEMENT_NAMES[el]}`, icon: 'trait', desc: `Contre une créature ${ELEMENT_NAMES[beats(el)]}, ses coups font +${Math.round((AFFINITY_STRONG - 1) * 100)} % ; une créature ${ELEMENT_NAMES[weak]} lui en fait autant. À l'inverse, les deux font ${Math.round((AFFINITY_WEAK - 1) * 100)} %.` });
+  }
+  return card;
+}
+
+function beastCardBase(s: number, form: BestiaryForm): { name: string; tag: string; chips: Chip[]; skills: Skill[]; note: string } {
   const sp = SPECIES[s], num = (n: number) => n.toLocaleString('fr-FR'), dec = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
-  const moveCards = (key: string) => (BOSS_MOVES[key] ?? []).map((m) => moveSkill(m, MOVE_NAMES[m.kind]));
+  const moveCards = (key: string) => (BOSS_MOVES[key] ?? []).map((m, i) => ({ ...moveSkill(m, MOVE_NAMES[m.kind]), ...('cd' in m && !DRILL_SKIPS.has(m.kind) ? { move: i } : {}) }));
   if (form === 'boss') {
     return {
       name: sp.name, tag: `Géant · ${ZONE_NAMES[sp.zone - 1]}${sp.optional ? ' · facultatif' : ''}`,
@@ -2294,6 +2391,11 @@ function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; 
 
 /** Pictogrammes des pastilles de statistiques. */
 const CHIP_ICONS: Record<string, string> = {
+  feu: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1c.8 3 4.5 4.6 4.5 9a4.5 4.5 0 0 1-9 0c0-2.4 1.2-3.8 2.3-4.6 0 1.6.7 2.4 1.5 2.4C7.3 5.6 7 3.4 8 1z"/></svg>',
+  plante: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M3 13C3 6 7 3 14 2c-.5 7-4 11-9.5 11.2L3 15l-.8-.8z"/></svg>',
+  terre: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M1.5 13 6 4l3 5 1.8-2.5L14.5 13z"/></svg>',
+  eau: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5c2.6 3.4 4.5 5.8 4.5 8.4a4.5 4.5 0 0 1-9 0C3.5 7.3 5.4 4.9 8 1.5z"/></svg>',
+  neutre: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>',
   hp: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 14.2S1.8 10.4 1.8 6a3.2 3.2 0 0 1 6.2-1.2A3.2 3.2 0 0 1 14.2 6c0 4.4-6.2 8.2-6.2 8.2z"/></svg>',
   dmg: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M14 2 6.5 9.5M4 7.5l4.5 4.5M5.5 10.5 2 14"/></svg>',
   speed: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M2 5h7M1 8h10M2 11h7M11 4l4 4-4 4"/></svg>',

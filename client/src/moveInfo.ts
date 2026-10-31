@@ -11,6 +11,7 @@ export interface Skill {
   desc: string;
   icon: SkillIcon;
   boss?: boolean; // attaque spéciale (cadre rouge) plutôt que trait de l'espèce
+  move?: number; // attaque d'un géant qu'on peut répéter à l'entraînement (index dans BOSS_MOVES)
 }
 
 /** Ce que fait chaque attaque spéciale, et comment l'esquiver. */

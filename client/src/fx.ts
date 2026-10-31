@@ -1,6 +1,6 @@
 // Effets visuels éphémères : particules, textes flottants, coups, anneaux.
 
-import { particleRate } from './settings.ts';
+import { particleRate, textScale } from './settings.ts';
 
 const TAU = Math.PI * 2;
 const MAX_FLOATERS = 140; // grosse mêlée : les plus anciens chiffres s'effacent
@@ -424,7 +424,7 @@ export class Fx {
     let size = 0;
     for (const f of this.floaters) {
       ctx.globalAlpha = Math.min(1, (f.life / f.max) * 2);
-      if (f.size !== size) ctx.font = `700 ${(size = f.size)}px "Pixelify Sans", sans-serif`; // changer de police coûte cher
+      if (f.size !== size) ctx.font = `700 ${Math.round((size = f.size) * textScale())}px "Pixelify Sans", sans-serif`; // changer de police coûte cher (taille : réglage)
       ctx.strokeText(f.text, f.x, f.y);
       ctx.fillStyle = f.color;
       ctx.fillText(f.text, f.x, f.y);

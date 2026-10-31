@@ -37,6 +37,7 @@ export const SEA_SHALLOW = 1300; // mer peu profonde le long de la côte (le ser
 const SEA_ROOM = 520; // mer gardée autour de l'île pour placer l'île, l'îlot du village et les îlots du large (indépendante de SEA_SHALLOW : la carte ne bouge pas)
 export const BEACH = 190; // largeur de la plage, côté terre
 const DENS = 7; // tanières de suricates
+const ICE_ZONES = 4; // l'hiver, les mares gèlent jusqu'aux Ruines moussues (pas les Lacs brumeux)
 const ZONE_BLEND = 900; // largeur de la transition (affichage) entre deux zones
 const STAMP_R = 5100; // au-delà, mer profonde : on ne calcule plus la distance à la colonne
 const LANE = 280; // voie centrale jamais inondée (bord bruité)
@@ -1277,8 +1278,37 @@ export class WorldMap {
   }
 
   /** Case infranchissable (un filon épuisé ou un arbre abattu ne l'est plus). */
+  /**
+   * Hiver : les mares et les lacs des quatre premières zones gèlent (pas la mer, ni les Lacs brumeux et plus loin) ; on
+   * marche dessus. Le serveur et le client le règlent selon la saison.
+   */
+  frozen = false;
+  private ice?: Uint8Array; // cases qui gèlent l'hiver (calculées la première fois)
+  /** Case d'eau qui gèle l'hiver. */
+  private iceCell(k: number) {
+    if (!this.ice) {
+      this.ice = new Uint8Array(N * N);
+      for (let k2 = 0; k2 < N * N; k2++) {
+        if (this.water[k2] !== 1 || this.shore[k2] > 0) continue;
+        const x = -WORLD_HALF + ((k2 % N) + 0.5) * MAP_CELL, y = -WORLD_HALF + (Math.floor(k2 / N) + 0.5) * MAP_CELL;
+        if (this.zoneAt(x, y) <= ICE_ZONES) this.ice[k2] = 1;
+      }
+    }
+    return this.ice[k] === 1;
+  }
+  /** Eau qui gèle l'hiver en ce point (gelée ou non). */
+  freezes(x: number, y: number) {
+    if (x <= -WORLD_HALF || y <= -WORLD_HALF || x >= WORLD_HALF || y >= WORLD_HALF) return false;
+    return this.iceCell(Math.floor((y + WORLD_HALF) / MAP_CELL) * N + Math.floor((x + WORLD_HALF) / MAP_CELL));
+  }
+  /** Glace en ce point (mare gelée, l'hiver) : on y marche. */
+  isIce(x: number, y: number) {
+    return this.frozen && this.freezes(x, y);
+  }
+
   private solid(k: number) {
     const v = this.water[k];
+    if (v === 1 && this.frozen && this.iceCell(k)) return false; // mare gelée : on marche dessus
     return v !== 0 && !(v === 4 && this.oreDown.has(this.oreCell.get(k)!)) && !(v === 5 && this.treeDown.has(this.treeCell.get(k)!));
   }
 
@@ -1789,6 +1819,6 @@ export class WorldMap {
   passable(x: number, y: number, swimming: boolean, flying = false) {
     // en vol : tout sauf la forêt du bord… et le volcan, trop haut (et son panache, trop chaud) pour le survoler
     if (flying) return this.caveAt(x, y) ? !this.blocked(x, y) : !this.isForest(x, y) && !this.inVolcano(x, y);
-    return swimming ? this.isWater(x, y) : !this.blocked(x, y);
+    return swimming ? this.isWater(x, y) && !this.isIce(x, y) : !this.blocked(x, y);
   }
 }

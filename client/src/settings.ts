@@ -13,12 +13,15 @@ export interface Binding {
 }
 export type Quality = 'low' | 'medium' | 'high';
 export type DamageNumbers = 'all' | 'mine' | 'off';
+export type Size = 'small' | 'normal' | 'large' | 'xl';
 export interface Display {
   quality: Quality; // basse : image moins fine et moins de particules (machines modestes)
   damage: DamageNumbers; // chiffres des dégâts : tous (meute, coéquipiers), les siens (soi et sa meute), aucun
   shake: boolean; // secousses de l'écran
   ping: boolean; // latence affichée sous la minicarte
   weather: boolean; // pluie (la nuit reste : elle fait partie du monde)
+  ui: Size; // taille de l'interface (barres, boutons, panneaux)
+  text: Size; // taille des textes dans le monde (noms, dégâts, gains)
 }
 export interface Settings {
   keys: Record<Action, Binding>;
@@ -53,7 +56,7 @@ const DEFAULTS: Settings = {
     chat: { key: 'c', label: 'C' },
   },
   attack: 'auto',
-  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true },
+  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal' },
 };
 
 /** Netteté maximale de l'image (pixels par point d'écran) selon la qualité. */
@@ -62,6 +65,14 @@ export const maxDpr = () => ({ low: 1, medium: 1.5, high: 2 })[settings.display.
 export const particleRate = () => ({ low: 0.35, medium: 0.7, high: 1 })[settings.display.quality];
 
 const STORE = 'fangleaf.settings.v1';
+const SIZES = ['small', 'normal', 'large', 'xl'] as const;
+const SCALE: Record<Size, number> = { small: 0.85, normal: 1, large: 1.18, xl: 1.36 };
+/** Facteur de taille de l'interface. */
+export const uiScale = () => SCALE[settings.display.ui];
+/** Facteur de taille des textes dans le monde. */
+export const textScale = () => SCALE[settings.display.text];
+/** Applique la taille de l'interface (une variable CSS que le HUD suit). */
+export const applyUi = () => document.documentElement.style.setProperty('--ui', String(uiScale()));
 
 /** Écran tactile sans souris : pas de touches ni d'attaque au clic. */
 export const touchOnly = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches;
@@ -78,6 +89,8 @@ function load(): Settings {
       shake: typeof d.shake === 'boolean' ? d.shake : D.shake,
       ping: typeof d.ping === 'boolean' ? d.ping : D.ping,
       weather: typeof d.weather === 'boolean' ? d.weather : D.weather,
+      ui: SIZES.find((q) => q === d.ui) ?? D.ui,
+      text: SIZES.find((q) => q === d.text) ?? D.text,
     };
     return { keys, attack: saved?.attack === 'click' ? 'click' : 'auto', display };
   } catch {

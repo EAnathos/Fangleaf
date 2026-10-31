@@ -111,6 +111,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* ───── HUD ───── */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+/* taille de l'interface (réglage) : chaque élément du HUD est agrandi ou réduit depuis son coin */
+#hud > * { zoom: var(--ui, 1); }
 #hud button, #hud .overlay { pointer-events: auto; }
 .hud-tl { position: absolute; left: 16px; top: 16px; width: 270px; display: flex; flex-direction: column; gap: 8px; }
 .self { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -705,3 +707,28 @@ body.waking #hud { opacity: 0; pointer-events: none; }
 .school-hint { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; margin-top: 2px; padding: 2px 10px 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--alpha); background: rgba(180, 140, 255, 0.14); border: 1px solid rgba(180, 140, 255, 0.5); animation: hint-pulse 2s ease-in-out infinite; }
 .school-hint::before { content: ''; width: 12px; height: 10px; background: currentColor; clip-path: polygon(0 10%, 45% 0, 50% 12%, 55% 0, 100% 10%, 100% 100%, 55% 90%, 50% 100%, 45% 90%, 0 100%); }
 @keyframes hint-pulse { 50% { box-shadow: 0 0 0 4px rgba(180, 140, 255, 0.12); } }
+
+/* Chat : onglets Discussion / Journal (les messages passés en haut de l'écran). */
+.chat-tabs { display: flex; gap: 4px; padding: 2px; border-radius: 10px; background: var(--night); }
+.chat-tabs button { flex: 1; height: 30px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-weight: 600; font-size: 13px; }
+.chat-tabs button[aria-selected="true"] { background: var(--panel-2); color: var(--text); }
+.chat-log.journal p { display: flex; gap: 8px; font-size: 13px; color: var(--text-2); }
+.chat-log.journal time { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chat-log.journal .good { color: var(--ally); }
+.chat-log.journal .alpha { color: var(--alpha); }
+.beast-chip.feu svg { color: #FF8A3D; }
+.beast-chip.plante svg { color: #7FCB5B; }
+.beast-chip.terre svg { color: #C9A86A; }
+.beast-chip.eau svg { color: #6FB7E0; }
+.beast-chip.neutre svg { color: var(--muted); }
+.beast-mini .feu svg { color: #FF8A3D; }
+.beast-mini .plante svg { color: #7FCB5B; }
+.beast-mini .terre svg { color: #C9A86A; }
+.beast-mini .eau svg { color: #6FB7E0; }
+.beast-mini .neutre svg { color: var(--muted); }
+
+/* Entraînement : l'attaque répétée, le compte des esquives, et Arrêter. */
+.drill-chip { display: flex; align-items: center; gap: 10px; margin-top: 4px; padding: 6px 8px 6px 12px; border-radius: 12px; background: rgba(111, 183, 255, 0.12); border: 1px solid rgba(111, 183, 255, 0.55); pointer-events: auto; }
+.drill-chip b { font: 700 13px var(--display); color: #A8D4FF; }
+.drill-chip span span { font-size: 12px; color: var(--text-2); }
+.skill-train { align-self: flex-start; margin-top: 6px; }

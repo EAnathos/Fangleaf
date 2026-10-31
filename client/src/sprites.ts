@@ -4,6 +4,7 @@ import { DESERT_ZONE, DRUM_GAP, LOG_SPEED, PINCER_HALF, RING_SPEED, RING_W, SPEC
 import { HAZARD_STYLES, UNIT_FLAG_CURSE, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
 import { hash2 } from '../../shared/math.ts';
 import type { Wings } from './anim.ts';
+import { textScale } from './settings.ts';
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -560,7 +561,7 @@ export function drawPlayer(
   // nom (au-dessus du chapeau)
   if (!name) return;
   const ny = cy - r - 10 - (HAT_H[hat] ?? 0);
-  ctx.font = '600 13px Outfit, sans-serif';
+  ctx.font = `600 ${Math.round(13 * textScale())}px Outfit, sans-serif`; // (taille : réglage)
   ctx.textAlign = 'center';
   ctx.lineWidth = 4;
   ctx.strokeStyle = 'rgba(16,24,26,0.85)';
@@ -846,7 +847,7 @@ export function drawElder(ctx: Ctx, x: number, y: number, t: number, lx = 1, ly 
     ctx.fill();
   }
   if (!name) return;
-  ctx.font = '600 13px Outfit, sans-serif';
+  ctx.font = `600 ${Math.round(13 * textScale())}px Outfit, sans-serif`; // (taille : réglage)
   ctx.textAlign = 'center';
   ctx.lineWidth = 4;
   ctx.strokeStyle = 'rgba(16,24,26,0.85)';
@@ -5921,7 +5922,7 @@ export function drawHatchling(ctx: Ctx, x: number, y: number, color: string, t: 
   ctx.fill();
   ctx.restore();
   if (!name) return;
-  ctx.font = '600 13px Outfit, sans-serif';
+  ctx.font = `600 ${Math.round(13 * textScale())}px Outfit, sans-serif`; // (taille : réglage)
   ctx.textAlign = 'center';
   ctx.lineWidth = 4;
   ctx.strokeStyle = 'rgba(16,24,26,0.85)';

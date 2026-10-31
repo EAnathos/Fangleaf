@@ -629,6 +629,8 @@ export const MOVE_NAMES: Record<BossMove['kind'], string> = {
 };
 /** Attaques que n'hérite pas un Alpha légendaire : elles appellent des renforts ou ne valent que contre les dompteurs. */
 export const LEGEND_SKIPS = new Set<BossMove['kind']>(['summon', 'decoys', 'totem', 'roost', 'eclipse']);
+/** Attaques qu'on ne répète pas à l'entraînement (elles appellent des renforts). */
+export const DRILL_SKIPS = LEGEND_SKIPS;
 // Réglages des nouvelles attaques des géants
 export const HUG_S = 2.2; // étreinte de l'ours : la cible ne bouge plus pendant ce temps (il la broie)
 export const ROLL_S = 1.8; // roulade du crocodile : pareil, en tournoyant
@@ -819,6 +821,36 @@ export const SPECIES: Species[] = [
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);
+
+/**
+ * Affinités : quatre éléments en cycle, chacun fort contre le suivant (feu > plante > terre > eau > feu). Entre monstres
+ * (la meute et les sauvages, géants compris), un coup fort fait AFFINITY_STRONG fois ses dégâts, un coup contre plus fort
+ * que soi AFFINITY_WEAK. Les dompteurs n'ont pas d'élément : c'est la composition de la meute qui compte.
+ */
+export type Element = 'feu' | 'plante' | 'terre' | 'eau';
+export const ELEMENTS: Element[] = ['feu', 'plante', 'terre', 'eau'];
+export const ELEMENT_NAMES: Record<Element, string> = { feu: 'Feu', plante: 'Plante', terre: 'Terre', eau: 'Eau' };
+export const AFFINITY_STRONG = 1.25;
+export const AFFINITY_WEAK = 0.8;
+const ELEMENT_OF: Record<string, Element> = {
+  slime: 'plante', sporelin: 'plante', golem: 'plante', treant: 'plante', snail: 'plante', masked: 'plante', mask_totem: 'plante',
+  wisp: 'feu', salamander: 'feu', ash_bat: 'feu', lava_tortoise: 'feu', dragon: 'feu', flame_decoy: 'feu', salamander_tail: 'feu',
+  boar: 'terre', watcher: 'terre', meerkat: 'terre', sandworm: 'terre', scorpion: 'terre',
+  toad: 'eau', serpent: 'eau', crab: 'eau', croc: 'eau', drake: 'eau', kraken: 'eau', kraken_tentacle: 'eau',
+};
+/** Élément d'une espèce (un géant a celui de son espèce), ou undefined : neutre. */
+export const elementOf = (s: number): Element | undefined => {
+  const sp = SPECIES[s];
+  return sp ? ELEMENT_OF[sp.key] ?? (sp.base ? ELEMENT_OF[sp.base] : undefined) : undefined;
+};
+/** Élément contre lequel celui-ci est fort. */
+export const beats = (e: Element) => ELEMENTS[(ELEMENTS.indexOf(e) + 1) % ELEMENTS.length];
+/** Multiplicateur des dégâts de l'espèce a sur l'espèce b. */
+export const affinity = (a: number, b: number) => {
+  const ea = elementOf(a), eb = elementOf(b);
+  if (!ea || !eb) return 1;
+  return beats(ea) === eb ? AFFINITY_STRONG : beats(eb) === ea ? AFFINITY_WEAK : 1;
+};
 
 /** Espèces triées par zone (pour l'affichage : Tanière, bestiaire). */
 export const SPECIES_BY_ZONE = SPECIES.map((_, i) => i).filter((i) => !SPECIES[i].minion).sort((a, b) => SPECIES[a].zone - SPECIES[b].zone || a - b);

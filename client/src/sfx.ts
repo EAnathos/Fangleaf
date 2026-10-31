@@ -22,7 +22,7 @@ export interface Synth {
 export type Sfx =
   | 'hurt' | 'swing' | 'arrow' | 'orb' | 'pick' | 'chop' | 'chest'
   | 'roar' | 'boom' | 'death' | 'fanfare' | 'blip' | 'pop' | 'thunk' | 'chime' | 'shout' | 'shell'
-  | 'hammer' | 'shiphorn' | 'waves' | 'kraken' | 'splash' | 'zap' | 'howl' | 'drum' | 'screech' | 'chomp';
+  | 'hammer' | 'shiphorn' | 'waves' | 'kraken' | 'splash' | 'zap' | 'howl' | 'drum' | 'screech' | 'chomp' | 'thunder';
 
 export interface SfxDef {
   label: string;
@@ -139,6 +139,10 @@ export const SFX: Record<Sfx, SfxDef> = {
       s.hiss('lowpass', 900, 2.8, 0.35, 60);
       s.tone(180, 40, 2.2, 0.12, 'sawtooth', 0.4);
     },
+  },
+  thunder: {
+    label: 'Tonnerre', when: 'La foudre tombe pendant un orage (et gronde au loin).',
+    play: (s) => { s.hiss('highpass', 4000, 0.15, 0.4, 1500); s.thump(60, 25, 1.4, 0.8, 0.05); s.hiss('lowpass', 500, 2.2, 0.5, 60, 0.05, 0.6); s.hiss('lowpass', 300, 1.6, 0.3, 50, 0.6, 0.5); },
   },
   howl: {
     label: 'Hurlement', when: 'Croc-d\'Ombre hurle à la mort (ou le Chacal lunaire appelle l\'éclipse).',

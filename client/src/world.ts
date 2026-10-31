@@ -212,6 +212,45 @@ export class World {
 
   /** Saison affichée (0 printemps … 3 hiver) : le sol et les arbres en changent. */
   season = SUMMER;
+  /**
+   * Mare gelée : un rebord enneigé, la glace d'un bleu pâle (plus sombre là où c'était profond), des fissures blanches
+   * et quelques reflets qui brillent.
+   */
+  private drawIce(ctx: CanvasRenderingContext2D, ice: [number, number, boolean, number][]) {
+    if (!ice.length) return;
+    for (const [col, rad, onlyDeep] of [['#DCE6EA', 17, false], ['#B8D4E0', 13.5, false], ['#9DC0D2', 13, true]] as const) {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      for (const [px, py, deep] of ice) {
+        if (onlyDeep && !deep) continue;
+        const jx = (hash2(px, py, this.seed + 31) - 0.5) * 6, jy = (hash2(py, px, this.seed + 32) - 0.5) * 6, r = rad + (hash2(px, py, this.seed + 33) - 0.5) * 5;
+        ctx.moveTo(px + jx + r, py + jy);
+        ctx.arc(px + jx, py + jy, r, 0, TAU);
+      }
+      ctx.fill();
+    }
+    // fissures et reflets, ici et là
+    ctx.lineCap = 'round';
+    for (const [px, py, deep] of ice) {
+      const h = hash2(px, py, this.seed + 71);
+      if (deep && h < 0.18) {
+        ctx.strokeStyle = 'rgba(245,250,255,0.75)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        const a = h * 40;
+        ctx.moveTo(px - Math.cos(a) * 14, py - Math.sin(a) * 9);
+        ctx.lineTo(px + Math.cos(a + 0.6) * 4, py + Math.sin(a + 0.6) * 3);
+        ctx.lineTo(px + Math.cos(a) * 15, py + Math.sin(a) * 10);
+        ctx.stroke();
+      } else if (h > 0.93) {
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.beginPath();
+        ctx.ellipse(px, py, 6, 1.6, -0.5, 0, TAU);
+        ctx.fill();
+      }
+    }
+  }
+
   setSeason(season: number) {
     if (season === this.season) return;
     this.season = season;
@@ -355,6 +394,13 @@ export class World {
         water.push([px, py, deep, Math.round(Math.max(mouthMix(map, px, py), lakesMix(map, px, py)) * STEPS)]);
       }
     }
+    // l'hiver, les mares des premières zones gèlent : on les peint en glace, à part
+    const winter = this.season === WINTER, ice = winter ? water.filter(([px, py]) => map.freezes(px, py)) : [];
+    if (ice.length) {
+      const frozen = new Set(ice);
+      for (let i = water.length - 1; i >= 0; i--) if (frozen.has(water[i])) water.splice(i, 1);
+      if (!water.length) this.drawIce(ctx, ice);
+    }
     if (water.length) {
       for (const [base, rad, onlyDeep] of [[LAKE_BANK, 17, false], [LAKE_WATER, 13.5, false], [LAKE_DEEP, 14, true]] as const) {
         for (let step = 0; step < STEPS; step++) {
@@ -374,6 +420,7 @@ export class World {
         }
       }
       ctx.globalAlpha = 1;
+      this.drawIce(ctx, ice);
       // marigots de la jungle : une eau verte et trouble, par paliers selon la part de jungle
       const swamp: [number, number, number][] = [];
       for (const [px, py] of water) {

@@ -3,7 +3,7 @@
 import { SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
-import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED } from '../../shared/protocol.ts';
+import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_DRILL } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
 import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST, wingPose } from './anim.ts';
 import { type Ambience, sound } from './audio.ts';
@@ -13,10 +13,11 @@ import { playWakeUp } from './intro.ts';
 import { eggsOf, elderName, HATCHLINGS } from './elder.ts';
 import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
-import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
+import { actionOf, keyLabel, matches, maxDpr, settings, textScale, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
 import { drawShadowRun, drawLurkEyes, drawStinger, drawDizzy, drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, drawTornado, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawZap, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
+import { Ambient } from './ambient.ts';
 import { desertMix, drawQuicksand, jungleMix, lakesMix, World } from './world.ts';
 import { SEASON_NAMES, sky as skyAt, WINTER } from '../../shared/weather.ts';
 import { HALL_ID, VILLAGE_GATES, villageEdge, WorldMap } from '../../shared/worldmap.ts';
@@ -41,7 +42,7 @@ const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits:
 const FLY_HEIGHT = 2.2; // hauteur de vol à dos de vautour (en rayons de l'oiseau)
 
 // En local seulement : ?ciel=nuit, ?ciel=pluie, ?ciel=orage (nuit et pluie) ou ?ciel=tempete (dans la Mer de sable) pour voir le ciel sans attendre.
-const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1 }, tempete: { storm: 1 }, printemps: { season: 0 }, automne: { season: 2 }, hiver: { season: 3 }, neige: { season: 3, rain: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
+const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1, thunder: 1 }, brouillard: { fog: 1 }, tempete: { storm: 1 }, printemps: { season: 0 }, automne: { season: 2 }, hiver: { season: 3 }, neige: { season: 3, rain: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
 
 /** Rayon runique suivi par le client : angle et vitesse de rotation (extrapolés entre deux snapshots), dernier passage, sol brûlé. */
 interface LaserState {
@@ -62,6 +63,7 @@ export class Game {
   private map: WorldMap;
   private hud: Hud;
   private fx = new Fx();
+  private ambient?: Ambient; // oiseaux, poissons, papillons, mouettes (rien que pour le décor)
   private skyFx = new SkyFx(); // nuit et pluie
   private dt = 0;
   private palisadeUp = false;
@@ -73,6 +75,7 @@ export class Game {
   private chestOpen = new Map<number, number>(); // coffre → moment où on l'a ouvert (animation du couvercle)
   private sandSeen = new Map<number, { born: number; until: number }>(); // sables mouvants : quand ils se sont ouverts et quand ils se referment (horloge locale)
   private movesSaid = new Map<number, Set<string>>(); // géant → attaques déjà annoncées par leur nom dans ce combat
+  private strikes: { x: number; y: number; at: number; seed: number }[] = []; // éclairs qui viennent de tomber
   private beams: { from: number; to: number; at: number }[] = []; // soins des totems : un rayon vert du totem à l'allié
   private zaps: { pts: number[]; at: number; color?: string }[] = []; // décharges du Grand Drake qui rebondissent (éclairs à dessiner)
   private chestSeen = new Map<number, number>(); // coffre → première apparition (il tombe en rebondissant)
@@ -126,6 +129,7 @@ export class Game {
     this.hud.onBuy = (s) => net.send({ t: 'buy', s });
     this.hud.onChallenge = (cave) => net.send({ t: 'challenge', cave });
     this.hud.onChest = (id) => net.send({ t: 'chest', id });
+    this.hud.onDrill = (s, move) => net.send({ t: 'drill', s, move });
     this.hud.onHall = (name) => net.send({ t: 'hall', name });
     this.hud.onRename = (name) => net.send({ t: 'rename', name });
     this.hud.onDeposit = () => net.send({ t: 'deposit' });
@@ -1225,6 +1229,27 @@ export class Game {
       case 'victory':
         this.hud.showVictory(e, this.myId);
         break;
+      case 'thunder': {
+        // la foudre tombe : un éclair du ciel jusqu'à l'arbre, qui s'embrase ; l'écran blanchit, le tonnerre gronde
+        const near = Math.hypot(this.me.x - e.x, this.me.y - e.y);
+        this.strikes.push({ x: e.x, y: e.y, at: this.time, seed: Math.random() * 100 });
+        this.fx.fireWave(e.x, e.y, 110, ['255,200,90', '255,240,180', '255,255,240']);
+        this.fx.burst(e.x, e.y - 60, '#FFB347', 30, 220);
+        this.fx.debris(e.x, e.y, ['#3A2A1E', '#5A3E28', '#FF8A3D'], 16, 240, 7);
+        this.fx.crack(e.x, e.y, 90, 2.4);
+        if (near < 900) this.flashScreen(0.55 * (1 - near / 900));
+        if (near < 500) this.shake = Math.max(this.shake, 0.45);
+        sound.play('thunder', Math.max(0.25, 1 - near / 1400));
+        break;
+      }
+      case 'drill':
+        // entraînement : l'attaque du fantôme a été esquivée (ou non)
+        if (e.to === this.myId) {
+          this.fx.text(this.me.x, this.me.y - 70, e.hit ? 'Touché !' : 'Esquivé !', e.hit ? '#E8693F' : '#7FCB5B', 20, 1.3);
+          if (!e.hit) this.fx.ring(this.me.x, this.me.y, '#7FCB5B', 10, 60, 0.5);
+          sound.play(e.hit ? 'hurt' : 'chime', 0.6);
+        }
+        break;
       case 'mend': {
         // un rayon vert va du totem à celui qu'il soigne
         const a = this.posOf(e.from, players), b = this.posOf(e.to, players);
@@ -2015,6 +2040,87 @@ export class Game {
     }
   }
 
+  /**
+   * Brouillard des Lacs brumeux : une brume épaisse qui ne laisse voir qu'autour de soi (elle respire et dérive),
+   * en fondu à la frontière de la zone.
+   */
+  private drawFog(ctx: CanvasRenderingContext2D, fog: number, camX: number, camY: number, hw: number, hh: number) {
+    const k = fog * lakesMix(this.map, this.me.x, this.me.y);
+    if (k <= 0.02) return;
+    const breathe = 1 + Math.sin(this.time * 0.4) * 0.06, x = this.me.x + Math.sin(this.time * 0.11) * 30, y = this.me.y - 20;
+    const g = ctx.createRadialGradient(x, y, 150 * breathe, x, y, 470 * breathe);
+    g.addColorStop(0, 'rgba(205,220,222,0)');
+    g.addColorStop(0.55, `rgba(205,220,222,${0.6 * k})`);
+    g.addColorStop(1, `rgba(214,226,228,${0.9 * k})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(camX - hw - 60, camY - hh - 60, hw * 2 + 120, hh * 2 + 120);
+  }
+
+  /** Éclairs qui viennent de tomber : une ligne brisée du haut de l'écran jusqu'à l'arbre, qui s'efface vite. */
+  private drawStrikes(ctx: CanvasRenderingContext2D) {
+    this.strikes = this.strikes.filter((s) => this.time - s.at < 0.4);
+    for (const s of this.strikes) {
+      const k = 1 - (this.time - s.at) / 0.4, top = s.y - 900, pts: [number, number][] = [];
+      for (let i = 0; i <= 12; i++) {
+        const f = i / 12;
+        pts.push([s.x + (i && i < 12 ? (hash2(i, Math.floor(s.seed), 7) - 0.5) * 70 : 0), top + (s.y - 40 - top) * f]);
+      }
+      for (const [w, col] of [[14, `rgba(180,200,255,${0.3 * k})`], [6, `rgba(220,230,255,${0.7 * k})`], [2.5, `rgba(255,255,255,${k})`]] as const) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+        ctx.stroke();
+      }
+    }
+  }
+
+  /** Coups de foudre annoncés : le sol crépite autour de l'arbre visé, des étincelles grimpent le long du tronc. */
+  private drawBolts(ctx: CanvasRenderingContext2D) {
+    for (const [, x, y, left] of this.net.latest?.bolts ?? []) {
+      const k = 1 - Math.min(1, left / 16), pulse = 0.5 + 0.5 * Math.sin(this.time * (10 + 20 * k));
+      ctx.strokeStyle = `rgba(255,240,150,${0.35 + 0.5 * k * pulse})`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 8]);
+      ctx.lineDashOffset = -this.time * 40;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 110, 82, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = `rgba(255,240,150,${0.08 + 0.18 * k})`;
+      ctx.fill();
+      for (let i = 0; i < 4; i++) {
+        const a = this.time * 7 + i * 1.6, h = ((this.time * 2 + i / 4) % 1) * 90;
+        ctx.fillStyle = `rgba(230,245,255,${0.9 * k})`;
+        ctx.fillRect(x + Math.cos(a) * 10 - 1.5, y - 10 - h, 3, 3);
+      }
+    }
+  }
+
+  private flash = 0; // éclair de l'orage : l'écran s'illumine un instant
+  private nextFlash = 0;
+  /** Orage : l'écran s'illumine de temps en temps (un éclair au loin, son tonnerre un peu après). */
+  private drawThunder(thunder: number) {
+    if (thunder > 0.5 && settings.display.weather && this.time > this.nextFlash) {
+      this.nextFlash = this.time + 6 + Math.random() * 10;
+      this.flash = 0.35;
+      setTimeout(() => sound.play('thunder', 0.35), 600 + Math.random() * 1500);
+    }
+    this.flashScreen(0);
+  }
+  private flashScreen(add: number) {
+    this.flash = Math.max(this.flash, add);
+    if (this.flash <= 0.01) return;
+    const { ctx, canvas } = this;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = `rgba(235,240,255,${this.flash})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    this.flash = Math.max(0, this.flash - this.dt * 1.8);
+  }
+
   /** Mue : la vieille peau de la Salamandre-Mère, pâle, se fendille de lave et tremble de plus en plus avant d'exploser. */
   private drawHusks(ctx: CanvasRenderingContext2D, hazards: HazardTuple[], units: UnitTuple[]) {
     for (const h of hazards) {
@@ -2219,6 +2325,7 @@ export class Game {
   private seasonSeen = -1;
   private watchSeason(season: number) {
     this.world.setSeason(season);
+    this.map.frozen = season === WINTER; // l'hiver, les mares gèlent (même règle que le serveur)
     if (season === this.seasonSeen) return;
     if (this.seasonSeen >= 0) {
       const say = ['Le printemps est là : les arbres fleurissent.', 'L\'été arrive.', 'L\'automne arrive : les feuilles roussissent.', 'L\'hiver tombe sur l\'île : la neige recouvre tout, et des Bigfoots rôdent dans les Bois profonds…'][season];
@@ -2282,7 +2389,7 @@ export class Game {
     let best = 0, bd = 1100 ** 2, hp = 0, s = 0, flags = 0;
     if (!touchOnly) {
       for (const [id, sp, fl, x, y, h, owner] of units) {
-        if (owner || !SPECIES[sp].boss || fl & UNIT_FLAG_DORMANT || h <= 0) continue;
+        if (owner || !SPECIES[sp].boss || fl & (UNIT_FLAG_DORMANT | UNIT_FLAG_DRILL) || h <= 0) continue; // (pas un fantôme d'entraînement)
         const d = (x - this.me.x) ** 2 + (y - this.me.y) ** 2;
         if (d < bd) [best, bd, hp, s, flags] = [id, d, h, sp, fl];
       }
@@ -2393,6 +2500,12 @@ export class Game {
     for (const h of hazards) if (inView(h[1], h[2], 700) && HAZARD_STYLES[h[8]] !== 'laser') drawHazard(ctx, h, this.time, colorOf.get(h[7]), this.sinceOf(h));
     this.drawHusks(ctx, hazards, units);
     this.fx.drawGround(ctx); // fissures et sillons au sol
+    if (!here) {
+      // la faune d'ambiance : les oiseaux s'envolent devant les dompteurs ; les poissons, sous la surface
+      this.ambient ??= new Ambient(this.map, this.map.seed);
+      this.ambient.update(this.dt, camX, camY, hw, hh, [this.me, ...players.filter((p) => !p.dead)], sky.light, sky.season);
+      if (settings.display.quality !== 'low') this.ambient.drawGround(ctx, inView);
+    }
     const air: { y: number; draw: () => void }[] = []; // ce qui passe au-dessus de tout : géant en plein bond, rochers lancés
     this.drawLasers(ctx, hazards, units, late, colorOf, air);
     this.drawTornados(ctx, hazards, colorOf, air);
@@ -2579,7 +2692,7 @@ export class Game {
       const alpha = (flags & UNIT_FLAG_ALPHA) !== 0;
       const legend = (flags & UNIT_FLAG_LEGEND) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
-      const boss = SPECIES[s].boss && owner === 0;
+      const boss = SPECIES[s].boss && owner === 0 && !(flags & UNIT_FLAG_DRILL); // (un fantôme d'entraînement : ni nom ni barre)
       if (SPECIES[s].anchored && boss && flags & (UNIT_FLAG_HIDDEN | UNIT_FLAG_DORMANT)) {
         // le Kraken sous l'eau (avant de surgir, ou entre deux phases) : remous et bulles, rien d'autre
         list.push({ y: y - 400, draw: () => drawSubmerged(ctx, x, y, r, this.time, (flags & UNIT_FLAG_HIDDEN) !== 0) });
@@ -2672,12 +2785,25 @@ export class Game {
       list.push({
         y,
         draw: () => {
-          this.drawUnitCached(ctx, id, look(), pose);
+          if (flags & UNIT_FLAG_DRILL) {
+            // fantôme d'entraînement : translucide, dans un halo bleu qui ondule
+            ctx.save();
+            const g = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 1.5);
+            g.addColorStop(0, `rgba(111,183,255,${0.28 + 0.08 * Math.sin(this.time * 3)})`);
+            g.addColorStop(1, 'rgba(111,183,255,0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.ellipse(x, y, r * 1.5, r * 0.9, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 0.5 + 0.08 * Math.sin(this.time * 4 + id);
+            this.drawUnitCached(ctx, id, look(), pose);
+            ctx.restore();
+          } else this.drawUnitCached(ctx, id, look(), pose);
           if (boss && flags & UNIT_FLAG_DORMANT) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
           if (flags & UNIT_FLAG_ASLEEP) this.snore(x + r * 0.6, y - r * 1.2, 12, id); // lièvre qui dort la nuit, ours le jour
           if (boss && (SPECIES[s0].mimic ? !topBoss : id !== topBoss)) { // (un leurre : comme son géant)
             // Mini-boss : nom et grande barre de vie, toujours visibles (en combat sur ordinateur : en haut de l'écran).
-            ctx.font = '700 15px "Pixelify Sans", sans-serif';
+            ctx.font = `700 ${Math.round(15 * textScale())}px "Pixelify Sans", sans-serif`;
             ctx.textAlign = 'center';
             ctx.lineWidth = 4;
             ctx.strokeStyle = 'rgba(16,24,26,0.85)';
@@ -2796,6 +2922,7 @@ export class Game {
     this.drawThrown(ctx, hazards, units, late);
     air.sort((a, b) => a.y - b.y);
     for (const d of air) d.draw();
+    if (!here && this.ambient && settings.display.quality !== 'low') this.ambient.drawAir(ctx, inView, sky.light);
     if (!here) this.drawMist(camX, camY, hw, hh);
     this.drawBubbles(players);
     for (const [, kind, x, y, a, b, c, owner] of shots) {
@@ -2803,9 +2930,12 @@ export class Game {
       else drawShot(ctx, kind, x + a * late, y + b * late, a, b, 0, this.time, colorOf.get(owner));
     }
     this.drawBeams(ctx, units);
+    this.drawStrikes(ctx);
     this.zaps = this.zaps.filter((z) => this.time - z.at < ZAP_S);
     for (const z of this.zaps) drawZap(ctx, z.pts, 1 - (this.time - z.at) / ZAP_S, Math.floor(this.time * 30) + z.at, z.color);
     if (!here) this.drawLakeMist(camX, camY, hw, hh);
+    if (!here) this.drawFog(ctx, sky.fog, camX, camY, hw, hh);
+    this.drawBolts(ctx);
     this.drawEclipse(ctx, hazards, units, camX, camY, hw, hh);
     this.fog.draw(ctx, -WORLD_HALF, -WORLD_HALF, WORLD_HALF * 2, WORLD_HALF * 2, 0.88);
     this.fx.draw(ctx);
@@ -2816,6 +2946,7 @@ export class Game {
       this.skyFx.rain(ctx, scale, camX, camY, sky, this.dt, this.dpr);
       this.skyFx.sandstorm(ctx, scale, camX, camY, storm, this.dt, this.dpr, sky.light);
       this.drawCanopy(camX, camY);
+      this.drawThunder(sky.thunder * (1 - desert));
     }
     sound.rain(here || !settings.display.weather || sky.season === WINTER ? 0 : sky.rain); // la neige tombe sans bruit
     sound.storm(here ? 0 : storm);

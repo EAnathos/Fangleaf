@@ -18,6 +18,13 @@ const STORM_SLOT = 5 * 60_000;
 const STORM_CHANCE = 0.14; // environ une toutes les 35 min
 const STORM_FADE = 40_000; // elle se lève et retombe en 40 s
 
+// Brouillard (Lacs brumeux seulement) : tiré au sort à part ; épais, il ne laisse voir qu'autour de soi.
+const FOG_SLOT = 7 * 60_000;
+const FOG_CHANCE = 0.3;
+const FOG_FADE = 60_000;
+// Orage : une partie des averses (pas l'hiver, il neige) ; la foudre tombe sur les arbres isolés.
+const THUNDER_CHANCE = 0.4;
+
 // Saisons : printemps, été, automne, hiver, trois jours chacune (une heure), chaque village à son propre moment de l'année.
 export const SEASON_MS = 3 * DAY_MS;
 export const SEASON_NAMES = ['Printemps', 'Été', 'Automne', 'Hiver'] as const;
@@ -41,12 +48,24 @@ export interface Sky {
   dusk: number; // 0 à 1 : teinte chaude du crépuscule et de l'aube (au milieu de la transition)
   rain: number; // 0 = sec, 1 = grosse averse
   storm: number; // tempête de sable (Mer de sable seulement) : 0 = calme, 1 = en plein dedans
+  fog: number; // brouillard (Lacs brumeux seulement) : 0 = clair, 1 = on n'y voit plus qu'autour de soi
+  thunder: number; // orage (avec la pluie, pas l'hiver) : 0 = non, 1 = la foudre tombe
   season: number; // 0 printemps, 1 été, 2 automne, 3 hiver (l'hiver, la pluie tombe en neige)
 }
 
 /** Force de la pluie d'une tranche (0 si elle est sèche). */
 function slotRain(seed: number, k: number) {
   return hash2(k, 7, seed + 91) < RAIN_CHANCE ? 0.6 + hash2(k, 8, seed + 92) * 0.4 : 0;
+}
+
+/** Brouillard d'une tranche (0 : clair). */
+function slotFog(seed: number, k: number) {
+  return hash2(k, 14, seed + 97) < FOG_CHANCE ? 0.6 + hash2(k, 15, seed + 98) * 0.4 : 0;
+}
+
+/** Une averse d'orage (dans cette tranche de pluie) : 1, sinon 0. */
+function slotThunder(seed: number, k: number) {
+  return slotRain(seed, k) && hash2(k, 13, seed + 96) < THUNDER_CHANCE ? 1 : 0;
 }
 
 /** Force d'une tempête de sable dans une tranche (0 : calme). */
@@ -73,5 +92,7 @@ export function sky(seed: number, now: number): Sky {
 
   const rain = slotted(now, RAIN_SLOT, RAIN_FADE, (k) => slotRain(seed, k));
   const storm = slotted(now, STORM_SLOT, STORM_FADE, (k) => slotStorm(seed, k));
-  return { light, dusk, rain: clamp(rain, 0, 1), storm: clamp(storm, 0, 1), season: season(seed, now) };
+  const fog = slotted(now, FOG_SLOT, FOG_FADE, (k) => slotFog(seed, k)), sea = season(seed, now);
+  const thunder = sea === WINTER ? 0 : slotted(now, RAIN_SLOT, RAIN_FADE, (k) => slotThunder(seed, k));
+  return { light, dusk, rain: clamp(rain, 0, 1), storm: clamp(storm, 0, 1), fog: clamp(fog, 0, 1), thunder: clamp(thunder, 0, 1), season: sea };
 }
