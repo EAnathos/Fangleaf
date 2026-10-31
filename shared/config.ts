@@ -103,18 +103,18 @@ export const BUILDING_IDS = Object.keys(BUILDINGS) as BuildingId[];
 export const monsterBuyPrice = (species: number) => SPECIES[species].gold * 12;
 export const monsterSellPrice = (species: number) => SPECIES[species].gold * 4;
 // Grottes : fermées au départ, débloquées pour tout le village contre de l'or, bien plus cher dans les dernières zones.
-const CAVE_UNLOCK = [150, 300, 450, 1500, 3000, 4500, 6000, 6000]; // par zone (la Jungle : ses temples)
+const CAVE_UNLOCK = [150, 300, 450, 1500, 3000, 4500, 6000, 12000]; // par zone (la Jungle : ses temples ; le volcan : ses antres)
 export const caveUnlockCost = (zone: number) => CAVE_UNLOCK[zone - 1] ?? 150 * zone;
 // Camps : un emplacement au bout de la zone 4, établi par n'importe quel membre du village contre de l'or.
 export const CAMP_COST = 2000;
 export const CAMP_R = 260; // feu qui soigne, monstres tenus à l'écart
-// Le bateau du vieil homme : une fois tous ses souvenirs retrouvés, il le reconstruit en 4 étapes (or des dompteurs,
-// bois et pierre de la réserve du village), chacune prenant 30 minutes (temps réel).
+// Le bateau du vieil homme : une fois tous ses souvenirs retrouvés, il part au bateau (et y reste) et le reconstruit en
+// 4 étapes (or des dompteurs, bois et pierre de la réserve du village), chacune prenant 30 minutes (temps réel).
 export const BOAT_STAGES: (Cost & { name: string })[] = [
-  { name: 'La quille', gold: 3000, wood: 300, stone: 150 },
-  { name: 'La coque', gold: 5000, wood: 500, stone: 250 },
-  { name: 'Le pont et les mâts', gold: 8000, wood: 700, stone: 400 },
-  { name: 'Les voiles', gold: 12000, wood: 900, stone: 600 },
+  { name: 'La quille', gold: 3000, wood: 900, stone: 450 },
+  { name: 'La coque', gold: 5000, wood: 1500, stone: 750 },
+  { name: 'Le pont et les mâts', gold: 8000, wood: 2100, stone: 1200 },
+  { name: 'Les voiles', gold: 12000, wood: 2700, stone: 1800 },
 ];
 export const BOAT_STAGE_MS = 30 * 60 * 1000;
 /** Pierre de passage du bateau active : construite (dès la Mer de sable ouverte), ou bateau déjà reconstruit. */
@@ -629,8 +629,6 @@ export const MOVE_NAMES: Record<BossMove['kind'], string> = {
 };
 /** Attaques que n'hérite pas un Alpha légendaire : elles appellent des renforts ou ne valent que contre les dompteurs. */
 export const LEGEND_SKIPS = new Set<BossMove['kind']>(['summon', 'decoys', 'totem', 'roost', 'eclipse']);
-/** Attaques qu'on ne répète pas à l'entraînement (elles appellent des renforts). */
-export const DRILL_SKIPS = LEGEND_SKIPS;
 // Réglages des nouvelles attaques des géants
 export const HUG_S = 2.2; // étreinte de l'ours : la cible ne bouge plus pendant ce temps (il la broie)
 export const ROLL_S = 1.8; // roulade du crocodile : pareil, en tournoyant
@@ -661,6 +659,9 @@ export const TORNADO_PULL_R = 230;
 export const SPARK_JUMPS = 2;
 export const SPARK_R = 190;
 export const SPARK_FALLOFF = 0.7;
+/** Brûlure (feu) : part des dégâts du coup perdue chaque seconde, pendant BURN_S ; l'eau l'éteint. */
+export const BURN_DPS = 0.15;
+export const BURN_S = 3;
 export const POISON_DPS = 0.18;
 export const POISON_S = 4;
 // Les géants poursuivent : quand leur cible s'éloigne, ils accélèrent (impossible de les tuer en reculant).
@@ -723,16 +724,16 @@ export interface Species {
  * arc : tir en cloche qui retombe là où était la cible (cercle annoncé au sol), dégâts de zone.
  */
 export interface Ranged {
-  kind: 'bolt' | 'arc' | 'jet' | 'banana' | 'dart' | 'fire' | 'spark'; // banana : lancée en cloche (comme arc) ; dart : fléchette de sarbacane (comme jet) ;
+  kind: 'bolt' | 'arc' | 'jet' | 'banana' | 'dart' | 'fire' | 'spark' | 'magma'; // magma : roche en fusion lancée en cloche (les tortues du volcan) // banana : lancée en cloche (comme arc) ; dart : fléchette de sarbacane (comme jet) ;
   // fire : boule de feu en ligne droite (dragonnet) ; spark : décharge électrique qui rebondit sur les ennemis proches (Grand Drake)
   range: number;
   windup: number; // s d'immobilité à charger le tir (lisible : on voit venir le coup)
   speed: number; // px/s (bolt, jet) ; arc : durée de vol fixe
   splash?: number; // arc : rayon des dégâts à l'impact
 }
-export const SHOT_KINDS = ['bolt', 'arc', 'jet', 'banana', 'dart', 'fire', 'spark'] as const; // n'ajouter qu'à la fin
+export const SHOT_KINDS = ['bolt', 'arc', 'jet', 'banana', 'dart', 'fire', 'spark', 'magma'] as const; // n'ajouter qu'à la fin
 /** Tir en cloche (il retombe là où était la cible, cercle annoncé au sol) : arc, banane du gorille. */
-export const lobbedShot = (kind: number | Ranged['kind']) => { const k = typeof kind === 'number' ? SHOT_KINDS[kind] : kind; return k === 'arc' || k === 'banana'; };
+export const lobbedShot = (kind: number | Ranged['kind']) => { const k = typeof kind === 'number' ? SHOT_KINDS[kind] : kind; return k === 'arc' || k === 'banana' || k === 'magma'; };
 export const ARC_FLIGHT_S = 0.9;
 
 // Deux à trois espèces par zone, progression marquée d'une zone à l'autre (PV et dégâts ×2,5 à ×3).
@@ -786,7 +787,7 @@ export const SPECIES: Species[] = [
   // (un antre chacun dans la salle).
   { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 3600, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 8, population: 16, pack: [2, 4] },
   { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 2800, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 8, population: 14, pack: [3, 5] },
-  { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 9000, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 8, population: 10, pack: [1, 1], ranged: { kind: 'arc', range: 360, windup: 0.7, speed: 0, splash: 60 } },
+  { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 9000, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 8, population: 10, pack: [1, 1], ranged: { kind: 'magma', range: 360, windup: 0.7, speed: 0, splash: 60 } },
   { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'salamander', base: 'salamander' },
   { key: 'ash_lord', name: 'Seigneur des cendres', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'ash_bat', base: 'ash_bat' },
   { key: 'mountain_tortoise', name: 'Tortue-Montagne', color: '#40342E', r: 70, hp: 170000, dmg: 520, speed: 185, atkCd: 1.5, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'lava_tortoise', base: 'lava_tortoise' },
@@ -872,6 +873,8 @@ export const populationOf = (s: number) => Math.round(SPECIES[s].population * (Z
 // Sous le volcan de la Mer de sable : une zone de plus, souterraine (une grande salle hors de l'île), ses monstres et
 // trois antres de géants. Les trois vaincus, le cœur volcanique se libère au centre de la salle.
 export const VOLCANO_ZONE = ZONES + 1;
+/** Noms des îles des dragons, au large (par géant qui y règne) : annoncés quand on y aborde, sur la carte aussi. */
+export const ISLE_NAMES: Record<string, string> = { drake_king: 'Île des Marées', wyvern_king: 'Pic des Wyvernes', dragon_king: 'Île de Braise' };
 export const ZONE_NAMES = ['Lisière', 'Bois profonds', 'Landes', 'Ruines moussues', 'Lacs brumeux', 'Jungle', 'Mer de sable', 'Entrailles du volcan', 'Haute mer'];
 // En haute mer : une fois le bateau prêt, on prend la mer vers le Colisée ; le Kraken attaque le bateau en chemin.
 // Le pont du bateau est une « grotte » hors de l'île (son entrée : le bateau, au bout de l'île).

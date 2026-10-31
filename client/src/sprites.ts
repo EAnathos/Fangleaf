@@ -1,7 +1,7 @@
 // Sprites procéduraux (Canvas 2D) : aucune image à charger.
 
 import { DESERT_ZONE, DRUM_GAP, LOG_SPEED, PINCER_HALF, RING_SPEED, RING_W, SPECIES, type Resource } from '../../shared/config.ts';
-import { HAZARD_STYLES, UNIT_FLAG_CURSE, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
+import { HAZARD_STYLES, UNIT_FLAG_BURN, UNIT_FLAG_CURSE, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
 import { hash2 } from '../../shared/math.ts';
 import type { Wings } from './anim.ts';
 import { textScale } from './settings.ts';
@@ -2284,8 +2284,8 @@ export function drawZap(ctx: Ctx, pts: number[], k: number, seed: number, owner?
 
 export function drawShot(ctx: Ctx, kind: number, x: number, y: number, a: number, b: number, prog: number, t: number, owner?: string) {
   const col = owner ? rgbOf(owner) : '232,105,63';
-  if (kind === 1 || kind === 3) {
-    const p = prog / 100, splash = kind === 3 ? 46 : 52;
+  if (kind === 1 || kind === 3 || kind === 7) {
+    const p = prog / 100, splash = kind === 3 ? 46 : kind === 7 ? 60 : 52;
     ctx.fillStyle = `rgba(${col},${0.12 + p * 0.22})`;
     ctx.strokeStyle = `rgba(${col},0.85)`;
     ctx.lineWidth = 2;
@@ -2299,6 +2299,7 @@ export function drawShot(ctx: Ctx, kind: number, x: number, y: number, a: number
     ctx.ellipse(x + (a - x) * p, y + (b - y) * p, 8, 4, 0, 0, TAU);
     ctx.fill();
     if (kind === 3) return drawBanana(ctx, bx, by, t); // banane du gorille
+    if (kind === 7) return drawMagma(ctx, bx, by, t, x + (a - x) * p, y + (b - y) * p, p); // roche en fusion des tortues
     ctx.fillStyle = '#B9D86A';
     ctx.strokeStyle = 'rgba(12,18,16,0.6)';
     ctx.beginPath();
@@ -6831,7 +6832,7 @@ export function drawTornado(ctx: Ctx, x: number, y: number, r: number, t: number
 }
 
 export function drawBuffs(ctx: Ctx, x: number, y: number, flags: number, t: number, seed: number) {
-  const icons = [flags & UNIT_FLAG_RALLY ? 'rally' : '', flags & UNIT_FLAG_GUARD ? 'guard' : '', flags & UNIT_FLAG_POISON ? 'poison' : '', flags & UNIT_FLAG_CURSE ? 'curse' : ''].filter(Boolean);
+  const icons = [flags & UNIT_FLAG_RALLY ? 'rally' : '', flags & UNIT_FLAG_GUARD ? 'guard' : '', flags & UNIT_FLAG_POISON ? 'poison' : '', flags & UNIT_FLAG_CURSE ? 'curse' : '', flags & UNIT_FLAG_BURN ? 'burn' : ''].filter(Boolean);
   const bob = Math.sin(t * 4 + seed) * 1.5;
   icons.forEach((kind, i) => {
     const cx = x + (i - (icons.length - 1) / 2) * 20, cy = y + bob;
@@ -6842,6 +6843,26 @@ export function drawBuffs(ctx: Ctx, x: number, y: number, flags: number, t: numb
     ctx.arc(0, 0, 9, 0, TAU);
     ctx.fill();
     const col = kind === 'rally' ? '#F0B64A' : kind === 'poison' ? '#8FD14A' : kind === 'curse' ? '#C890F0' : '#7FC8E8';
+    if (kind === 'burn') {
+      // il brûle : une flamme qui danse
+      const f = Math.sin(t * 14 + seed) * 0.8;
+      ctx.fillStyle = '#FF6A2A';
+      ctx.beginPath();
+      ctx.moveTo(0, -7 + f);
+      ctx.quadraticCurveTo(5.5, -1, 3.5, 4);
+      ctx.quadraticCurveTo(0, 6.5, -3.5, 4);
+      ctx.quadraticCurveTo(-5.5, -1, 0, -7 + f);
+      ctx.fill();
+      ctx.fillStyle = '#FFD27A';
+      ctx.beginPath();
+      ctx.moveTo(0, -2 + f * 0.5);
+      ctx.quadraticCurveTo(2.5, 1.5, 1.5, 3.8);
+      ctx.quadraticCurveTo(0, 4.8, -1.5, 3.8);
+      ctx.quadraticCurveTo(-2.5, 1.5, 0, -2 + f * 0.5);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
     if (kind === 'curse') {
       // maudit : un petit masque violet qui palpite
       drawCurseMask(ctx, 0, 0.5, 5.5 + Math.sin(t * 6 + seed) * 0.6, col);
@@ -7865,5 +7886,53 @@ export function drawLurkEyes(ctx: Ctx, x: number, y: number, r: number, t: numbe
     ctx.fill();
     ctx.fillStyle = '#10181A';
     ctx.fillRect(ex - 0.6, ey - 4, 1.2, 4);
+  }
+}
+
+/**
+ * Roche en fusion lancée par une tortue du volcan : un bloc de basalte sombre fendu de lave qui luit, qui tourne sur
+ * lui-même et laisse une traînée de fumée et d'étincelles.
+ */
+function drawMagma(ctx: Ctx, x: number, y: number, t: number, gx: number, gy: number, p: number) {
+  for (let i = 1; i <= 4; i++) {
+    const k = i / 4, sx = x - (x - gx) * 0 + Math.sin(t * 5 + i) * 3, sy = y + i * 9 * (1 - p);
+    ctx.fillStyle = `rgba(80,70,66,${0.35 * (1 - k)})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 5 + i * 2.5, 0, TAU);
+    ctx.fill();
+  }
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(t * 6);
+  const glow = ctx.createRadialGradient(0, 0, 3, 0, 0, 26);
+  glow.addColorStop(0, 'rgba(255,170,70,0.55)');
+  glow.addColorStop(1, 'rgba(255,90,30,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, 26, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#2E2420';
+  ctx.beginPath();
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * TAU, d = 14 * (0.8 + 0.25 * Math.sin(i * 2.7));
+    if (i) ctx.lineTo(Math.cos(a) * d, Math.sin(a) * d);
+    else ctx.moveTo(Math.cos(a) * d, Math.sin(a) * d);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = `rgba(255,${150 + Math.round(60 * Math.sin(t * 9))},60,0.95)`;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(-8, -4);
+  ctx.lineTo(0, 1);
+  ctx.lineTo(7, -6);
+  ctx.moveTo(0, 1);
+  ctx.lineTo(3, 9);
+  ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,210,120,0.9)';
+  for (let i = 0; i < 3; i++) {
+    const k = (t * 3 + i / 3) % 1;
+    ctx.fillRect(x + Math.sin(i * 4 + t * 3) * 8, y + k * 18, 2, 2);
   }
 }

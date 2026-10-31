@@ -1,9 +1,9 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
+import { ISLE_NAMES, SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
-import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_DRILL } from '../../shared/protocol.ts';
+import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_BURN } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
 import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST, wingPose } from './anim.ts';
 import { type Ambience, sound } from './audio.ts';
@@ -129,7 +129,7 @@ export class Game {
     this.hud.onBuy = (s) => net.send({ t: 'buy', s });
     this.hud.onChallenge = (cave) => net.send({ t: 'challenge', cave });
     this.hud.onChest = (id) => net.send({ t: 'chest', id });
-    this.hud.onDrill = (s, move) => net.send({ t: 'drill', s, move });
+    this.hud.onSail = () => this.map.voyage && net.send({ t: 'cave', id: this.map.voyage.id, enter: true }); // Aubin : on prend la mer
     this.hud.onHall = (name) => net.send({ t: 'hall', name });
     this.hud.onRename = (name) => net.send({ t: 'rename', name });
     this.hud.onDeposit = () => net.send({ t: 'deposit' });
@@ -182,6 +182,11 @@ export class Game {
     this.sendMode();
     addEventListener('resize', () => this.resize());
     this.resize();
+    // Retour sur le jeu (appli rouverte, onglet revenu, page reprise du cache) : sur téléphone, le navigateur a pu vider
+    // les images gardées en mémoire et le canvas lui-même ; on repeint tout (sinon, un monde noir).
+    document.addEventListener('visibilitychange', () => !document.hidden && this.flushGraphics());
+    addEventListener('pageshow', () => this.flushGraphics());
+    canvas.addEventListener('contextrestored', () => this.flushGraphics());
     net.onMessage = (m) => this.onMessage(m);
     requestAnimationFrame(() => this.frame());
   }
@@ -189,6 +194,17 @@ export class Game {
   /** Pixels par point d'écran : ceux de l'appareil, plafonnés selon la qualité choisie. */
   private get dpr() {
     return Math.min(maxDpr(), devicePixelRatio || 1);
+  }
+
+  private flushGraphics() {
+    this.world.flushCaches();
+    this.skyFx.flushCaches();
+    this.fog.repaint();
+    this.hud.flushCaches();
+    this.sprites.clear();
+    this.puff = undefined;
+    this.canopy = undefined;
+    this.resize();
   }
 
   private resize() {
@@ -369,7 +385,7 @@ export class Game {
     if (!st || st.dead) return;
     if (st.mount) {
       if (swimMount(st.mount.species) && this.map.isWater(this.me.x, this.me.y) && !this.map.landNear(this.me.x, this.me.y, SHORE_R)) {
-        return this.hud.toast('Trop loin de la rive : rapproche-toi de la terre pour descendre du serpent.');
+        return this.hud.toast(`Trop loin de la rive : rapproche-toi de la terre pour descendre de ton ${SPECIES[st.mount.species].name.toLowerCase()}.`);
       }
       return this.net.send({ t: 'mount', id: 0 });
     }
@@ -389,7 +405,10 @@ export class Game {
     const usable = sorted.filter((u) => nearWater || !swimMount(u[1]));
     const facingWater = nearWater && [30, 60, 90, 120, SHORE_R].some((d) => this.map.isWater(this.me.x + this.me.fx * d, this.me.y + this.me.fy * d));
     const pick = usable.find((u) => swimMount(u[1]) === facingWater) ?? usable[0];
-    if (!pick) return this.hud.toast('Approche-toi de l\'eau pour monter ton serpent : il ne nage qu\'en eau.');
+    if (!pick) {
+      const swim = sorted.find((u) => swimMount(u[1]))!; // (sa monture la plus proche ne va qu'en eau)
+      return this.hud.toast(`Approche-toi de l'eau pour monter ton ${SPECIES[swim[1]].name.toLowerCase()} : il ne va qu'en eau.`);
+    }
     this.net.send({ t: 'mount', id: pick[0] });
   }
 
@@ -402,7 +421,9 @@ export class Game {
     const { x, y } = this.me, { spawn } = this.map;
     const cave = this.map.caveAt(x, y);
     const site = this.map.siteAt(x, y, CAMP_R);
+    const isle = cave ? -1 : this.map.islets.findIndex((t) => this.map.isletAt(x, y, 40) === t);
     const area = cave ? `cave${cave.id}` : this.map.inVillage(x, y) ? 'village'
+      : isle >= 0 ? `isle${isle}`
       : Math.hypot(x - spawn.x, y - spawn.y) < 260 ? 'camp'
       : site >= 0 ? `site${site}${this.hud.camps.includes(site) ? '+' : ''}`
       : `zone${this.map.zoneAt(x, y)}`;
@@ -415,6 +436,11 @@ export class Game {
     this.area = area;
     if (area === 'camp') this.hud.banner(first && this.hud.sword < SWORD_PULLS ? 'Une plage inconnue' : 'Plage du naufrage', first ? (this.hud.sword < SWORD_PULLS ? 'Quelque chose brille dans le sable' : 'Suis le chemin de cailloux jusqu\'au pont') : 'De retour sur la plage');
     else if (area === 'village') this.hud.banner('Village', '');
+    else if (area.startsWith('isle')) {
+      // une île des dragons : son nom, et qui y règne
+      const t = this.map.islets[isle];
+      this.hud.banner(ISLE_NAMES[SPECIES[t.boss]?.key] ?? 'Îlot du large', `Îlot du large · ${SPECIES[t.boss]?.name ?? ''}`, true);
+    }
     else if (area.startsWith('site')) {
       this.hud.banner(campName(site), ''); // juste le nom du camp, établi ou non
     }
@@ -1024,16 +1050,20 @@ export class Game {
       }
       case 'lore':
         this.hud.elderRemembers(e.from, e.to, e.by === this.myId);
+        if (e.to >= this.hud.islandCaves() && e.from < e.to) {
+          // toute sa mémoire retrouvée : il part pour de bon au bateau (on le voit s'en aller une fois la conversation finie)
+          this.elderTrip = { t0: this.time, back: false };
+          this.hud.toast('Aubin part au bateau, au bout de l\'île : c\'est là-bas qu\'il le rebâtira. Une Pierre de passage y mène.', 'good');
+        }
         if (e.by !== this.myId) this.hud.toast(`${name(e.by)} a rapporté un parchemin : Aubin retrouve la mémoire.`, 'good');
         for (let i = eggsOf(e.from).hatched; i < eggsOf(e.to).hatched; i++) this.hud.toast(`Un œuf vient d'éclore près du feu : ${HATCHLINGS[i].name} !`, 'good');
         sound.play('chime', 0.5);
         break;
       case 'boat': {
         const st = BOAT_STAGES[e.stage];
-        this.elderTrip = { t0: this.time, back: e.done }; // il part au chantier, ou en revient
-        if (!e.done) this.hud.toast(`${e.by === this.myId ? 'Tu as' : `${name(e.by)} a`} lancé le bateau : ${st.name} (30 min). Aubin part au chantier, au bout de l'île.`, 'good');
-        else if (e.stage + 1 >= BOAT_STAGES.length) this.hud.toast('Le bateau est prêt ! Aubin rentre au village. Une Pierre de passage t\'y mène, au bout de l\'île.', 'good');
-        else this.hud.toast(`Bateau : ${st.name} terminé. Aubin rentre au village et attend la suite.`, 'good');
+        if (!e.done) this.hud.toast(`${e.by === this.myId ? 'Tu as' : `${name(e.by)} a`} lancé le bateau : ${st.name} (30 min). Aubin s'y met.`, 'good');
+        else if (e.stage + 1 >= BOAT_STAGES.length) this.hud.toast('Le bateau est rebâti ! Il ne lui manque plus que son cœur. Aubin t\'attend au bateau.', 'good');
+        else this.hud.toast(`Bateau : ${st.name} terminé. Aubin attend la suite, au bateau.`, 'good');
         sound.play('fanfare', e.done ? 1 : 0.5);
         break;
       }
@@ -1242,14 +1272,6 @@ export class Game {
         sound.play('thunder', Math.max(0.25, 1 - near / 1400));
         break;
       }
-      case 'drill':
-        // entraînement : l'attaque du fantôme a été esquivée (ou non)
-        if (e.to === this.myId) {
-          this.fx.text(this.me.x, this.me.y - 70, e.hit ? 'Touché !' : 'Esquivé !', e.hit ? '#E8693F' : '#7FCB5B', 20, 1.3);
-          if (!e.hit) this.fx.ring(this.me.x, this.me.y, '#7FCB5B', 10, 60, 0.5);
-          sound.play(e.hit ? 'hurt' : 'chime', 0.6);
-        }
-        break;
       case 'mend': {
         // un rayon vert va du totem à celui qu'il soigne
         const a = this.posOf(e.from, players), b = this.posOf(e.to, players);
@@ -1391,6 +1413,8 @@ export class Game {
   }
 
   private frame() {
+    // (relancée d'abord : une erreur dans une image ne doit pas figer le jeu sur un écran noir)
+    requestAnimationFrame(() => this.frame());
     const now = performance.now();
     const dt = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
@@ -1530,7 +1554,6 @@ export class Game {
       this.render(view.units, view.players);
       this.hud.update(st, view.players, view.units, this.me, this.net.ping);
     }
-    requestAnimationFrame(() => this.frame());
   }
 
   /**
@@ -1777,6 +1800,13 @@ export class Game {
         this.fx.crack(x, y, r * 0.5, 1);
         this.fx.dust(x, y, r * 0.6, 6, 'rgba(80,70,66,0.5)');
         sound.play('thunk', at(0.8));
+        return true;
+      case 'magma': // la roche en fusion s'écrase : le sol éclate, des flammes jaillissent
+        this.fx.fireWave(x, y, r, [mine ? rgbOf(mine) : '255,120,40', '255,190,80', '255,240,190']);
+        this.fx.debris(x, y, ['#2E2420', '#4A3A30', '#FF8A3D'], 12, 220, 7);
+        this.fx.crack(x, y, r * 0.7, 1.6);
+        shake(0.2);
+        sound.play('boom', at(0.7));
         return true;
       case 'bonk': // la carapace rebondit sur un mur : étincelles et lave
         this.fx.burst(x, y - 10, '#FFD08A', 14, 260);
@@ -2389,7 +2419,7 @@ export class Game {
     let best = 0, bd = 1100 ** 2, hp = 0, s = 0, flags = 0;
     if (!touchOnly) {
       for (const [id, sp, fl, x, y, h, owner] of units) {
-        if (owner || !SPECIES[sp].boss || fl & (UNIT_FLAG_DORMANT | UNIT_FLAG_DRILL) || h <= 0) continue; // (pas un fantôme d'entraînement)
+        if (owner || !SPECIES[sp].boss || fl & UNIT_FLAG_DORMANT || h <= 0) continue;
         const d = (x - this.me.x) ** 2 + (y - this.me.y) ** 2;
         if (d < bd) [best, bd, hp, s, flags] = [id, d, h, sp, fl];
       }
@@ -2600,7 +2630,7 @@ export class Game {
     // le vieil homme, près du feu : il regarde le dompteur qui s'approche, sinon le feu ; pendant une étape du bateau,
     // il est au chantier, le marteau à la main (et on le voit partir du village, puis y revenir)
     const { elder } = this.map, trip = this.elderWalk();
-    const atYard = boatLeft > 0 && !(trip && !trip.back);
+    const atYard = this.hud.elderAway && !trip; // il vit au bateau, une fois sa mémoire retrouvée
     if (trip) {
       const d = Math.hypot(trip.dx, trip.dy) || 1;
       list.push({ y: trip.y, draw: () => {
@@ -2608,6 +2638,14 @@ export class Game {
         ctx.globalAlpha = trip.alpha;
         drawElder(ctx, trip.x, trip.y - Math.abs(Math.sin(this.time * 7)) * 2.5, this.time, trip.dx / d, trip.dy / d, elderName(this.hud.lore[0]));
         ctx.restore();
+      } });
+    } else if (atYard && boatLeft <= 0) {
+      // au bateau, entre deux étapes : il attend, et regarde le dompteur qui approche
+      const y0 = this.map.elderYard, near = Math.hypot(this.me.x - y0.x, this.me.y - y0.y) < 220, look = near ? this.me : this.map.boatPoint(60, 0);
+      const d = Math.hypot(look.x - y0.x, look.y - y0.y) || 1, calls = this.hud.elderCalls;
+      if (inView(y0.x, y0.y, 80)) list.push({ y: y0.y, draw: () => {
+        drawElder(ctx, y0.x, y0.y, this.time, (look.x - y0.x) / d, (look.y - y0.y) / d, elderName(this.hud.lore[0]));
+        if (calls) drawQuestMark(ctx, y0.x, y0.y - 62, this.time);
       } });
     } else if (atYard) {
       const y0 = this.map.elderYard, look = this.map.boatPoint(60, 0), d = Math.hypot(look.x - y0.x, look.y - y0.y) || 1;
@@ -2618,7 +2656,7 @@ export class Game {
           sound.play('hammer', Math.max(0, 1 - Math.hypot(this.me.x - y0.x, this.me.y - y0.y) / 700));
         }
       } });
-    } else if (boatLeft <= 0 && inView(elder.x, elder.y, 60)) {
+    } else if (!this.hud.elderAway && inView(elder.x, elder.y, 60)) {
       const near = Math.hypot(this.me.x - elder.x, this.me.y - elder.y) < 220;
       const tx = near ? this.me.x : this.map.village.x, ty = near ? this.me.y : this.map.village.y, d = Math.hypot(tx - elder.x, ty - elder.y) || 1;
       const calls = this.hud.elderCalls;
@@ -2692,7 +2730,7 @@ export class Game {
       const alpha = (flags & UNIT_FLAG_ALPHA) !== 0;
       const legend = (flags & UNIT_FLAG_LEGEND) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
-      const boss = SPECIES[s].boss && owner === 0 && !(flags & UNIT_FLAG_DRILL); // (un fantôme d'entraînement : ni nom ni barre)
+      const boss = SPECIES[s].boss && owner === 0;
       if (SPECIES[s].anchored && boss && flags & (UNIT_FLAG_HIDDEN | UNIT_FLAG_DORMANT)) {
         // le Kraken sous l'eau (avant de surgir, ou entre deux phases) : remous et bulles, rien d'autre
         list.push({ y: y - 400, draw: () => drawSubmerged(ctx, x, y, r, this.time, (flags & UNIT_FLAG_HIDDEN) !== 0) });
@@ -2785,20 +2823,7 @@ export class Game {
       list.push({
         y,
         draw: () => {
-          if (flags & UNIT_FLAG_DRILL) {
-            // fantôme d'entraînement : translucide, dans un halo bleu qui ondule
-            ctx.save();
-            const g = ctx.createRadialGradient(x, y, r * 0.2, x, y, r * 1.5);
-            g.addColorStop(0, `rgba(111,183,255,${0.28 + 0.08 * Math.sin(this.time * 3)})`);
-            g.addColorStop(1, 'rgba(111,183,255,0)');
-            ctx.fillStyle = g;
-            ctx.beginPath();
-            ctx.ellipse(x, y, r * 1.5, r * 0.9, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalAlpha = 0.5 + 0.08 * Math.sin(this.time * 4 + id);
-            this.drawUnitCached(ctx, id, look(), pose);
-            ctx.restore();
-          } else this.drawUnitCached(ctx, id, look(), pose);
+          this.drawUnitCached(ctx, id, look(), pose);
           if (boss && flags & UNIT_FLAG_DORMANT) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
           if (flags & UNIT_FLAG_ASLEEP) this.snore(x + r * 0.6, y - r * 1.2, 12, id); // lièvre qui dort la nuit, ours le jour
           if (boss && (SPECIES[s0].mimic ? !topBoss : id !== topBoss)) { // (un leurre : comme son géant)
@@ -2820,7 +2845,8 @@ export class Game {
               ctx.fillText(`Phase ${ph}/${SPECIES[s].phases}`, x, y - r * 1.6 + 12);
             }
           } else if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
-          if (flags & (UNIT_FLAG_RALLY | UNIT_FLAG_GUARD | UNIT_FLAG_POISON)) drawBuffs(ctx, x, y - r * (alpha ? 1.7 : 1.3) - (hp < 100 ? 18 : 10), flags, this.time, id);
+          if (flags & UNIT_FLAG_BURN && Math.random() < this.dt * 10) this.fx.burst(x + (Math.random() - 0.5) * r, y - r * 0.6, Math.random() < 0.5 ? '#FFB347' : '#FF6A2A', 2, 60); // il brûle
+          if (flags & (UNIT_FLAG_RALLY | UNIT_FLAG_GUARD | UNIT_FLAG_POISON | UNIT_FLAG_BURN)) drawBuffs(ctx, x, y - r * (alpha ? 1.7 : 1.3) - (hp < 100 ? 18 : 10), flags, this.time, id);
         },
       });
     }
@@ -2913,6 +2939,7 @@ export class Game {
           if (p.slowed) drawWebbed(ctx, x, y - lift, this.time);
           if (p.held) drawDizzy(ctx, x, y - lift - 58, this.time); // saisi, étourdi
           if (p.buffs) drawBuffs(ctx, x, y - lift - 64, p.buffs, this.time, p.id);
+          if (p.buffs & UNIT_FLAG_BURN && Math.random() < this.dt * 12) this.fx.burst(x + (Math.random() - 0.5) * 22, y - lift - 18, Math.random() < 0.5 ? '#FFB347' : '#FF6A2A', 2, 60); // il brûle
           if (!isMe && p.hp < p.maxHp) hpBar(ctx, x, y + 26, 34, (100 * p.hp) / p.maxHp, '#7FCB5B');
         },
       });
@@ -2926,7 +2953,7 @@ export class Game {
     if (!here) this.drawMist(camX, camY, hw, hh);
     this.drawBubbles(players);
     for (const [, kind, x, y, a, b, c, owner] of shots) {
-      if (kind === 1 || kind === 3) drawShot(ctx, kind, x, y, a, b, Math.min(100, c + (late * 100) / ARC_FLIGHT_S), this.time, colorOf.get(owner));
+      if (kind === 1 || kind === 3 || kind === 7) drawShot(ctx, kind, x, y, a, b, Math.min(100, c + (late * 100) / ARC_FLIGHT_S), this.time, colorOf.get(owner));
       else drawShot(ctx, kind, x + a * late, y + b * late, a, b, 0, this.time, colorOf.get(owner));
     }
     this.drawBeams(ctx, units);

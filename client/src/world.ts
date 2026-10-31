@@ -162,9 +162,9 @@ const rgb = (c: number[], k: number) => `rgb(${(c[0] * k) | 0},${(c[1] * k) | 0}
 
 export class World {
   private chunks = new Map<string, HTMLCanvasElement>();
-  readonly village: HTMLCanvasElement;
+  village: HTMLCanvasElement;
   readonly villageSize = (VILLAGE_R * 1.3 + 120) * 2;
-  readonly camp: HTMLCanvasElement;
+  camp: HTMLCanvasElement;
   readonly campSize = 420;
   readonly seed: number;
 
@@ -249,6 +249,19 @@ export class World {
         ctx.fill();
       }
     }
+  }
+
+  /**
+   * Repeint tout ce qui est gardé en images (le navigateur d'un téléphone les vide quand le jeu passe en arrière-plan :
+   * sans ça, on revient sur un monde noir) : le sol, les arbres, le village, la plage, les grottes.
+   */
+  flushCaches() {
+    this.chunks.clear();
+    this.treeSprites.clear();
+    this.caveCanvas.clear();
+    this.ground = undefined;
+    this.village = this.drawVillage();
+    this.camp = this.drawCamp();
   }
 
   setSeason(season: number) {

@@ -63,6 +63,23 @@ export class Fog {
     } catch { /* stockage indisponible : on repart d'une carte vierge */ }
   }
 
+  /** Repeint le brouillard d'après les cases explorées (son image a pu être vidée, voir World.flushCaches). */
+  repaint() {
+    const k = FOG_CELL / PX;
+    this.ctx.globalCompositeOperation = 'source-over';
+    this.ctx.filter = 'none';
+    this.ctx.fillStyle = '#0B1210';
+    this.ctx.fillRect(0, 0, M, M);
+    for (let i = 0; i < N * N; i++) if (this.explored[i]) this.ctx.clearRect((i % N) * k - 0.5, Math.floor(i / N) * k - 0.5, k + 1, k + 1);
+    const copy = document.createElement('canvas');
+    copy.width = copy.height = M;
+    copy.getContext('2d')!.drawImage(this.canvas, 0, 0);
+    this.ctx.clearRect(0, 0, M, M);
+    this.ctx.filter = 'blur(2px)';
+    this.ctx.drawImage(copy, 0, 0);
+    this.ctx.filter = 'none';
+  }
+
   /** Gomme un disque à bord fondu dans le canvas d'affichage. */
   private erase(x: number, y: number, r: number) {
     const cx = (x + WORLD_HALF) / PX, cy = (y + WORLD_HALF) / PX, cr = r / PX;

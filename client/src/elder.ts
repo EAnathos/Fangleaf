@@ -120,6 +120,13 @@ export const zoneChapters = () => {
 export const elderName = (told: number) => (told > 0 ? 'Aubin' : 'Vieil homme');
 
 /** Ce qu'il dit quand on vient le voir (sans nouveau parchemin à lui donner). */
+/** Toute sa mémoire retrouvée, il part au bateau : il y vivra désormais (on le trouve là-bas pour le rebâtir, puis prendre la mer). */
+export const ELDER_LEAVES = [
+  'Je me souviens de tout, maintenant. Et ce bateau, là-bas, au bout de l\'île… c\'était le mien. Le nôtre.',
+  'Ma place n\'est plus près de ce feu : je file au bateau, et je n\'en bougerai plus. C\'est là-bas que tu me trouveras.',
+  'Apporte-moi de quoi le rebâtir, étape par étape. Et le jour où il sera prêt, c\'est à moi que tu demanderas de prendre la mer.',
+];
+
 export function elderGreeting(told: number, total: number, boat: number, stages: number, heart = 0, left = 0): string[] {
   if (told === 0) return ELDER_INTRO;
   if (told < total) {
@@ -134,13 +141,13 @@ export function elderGreeting(told: number, total: number, boat: number, stages:
     const min = Math.max(1, Math.ceil(left / 60));
     return [
       'Toc, toc, toc… Oh ! C\'est toi ? Tu m\'as fait peur, j\'ai failli me taper sur les doigts.',
-      `Regarde-le, ce bateau : il prend forme ! Encore ${min} minute${min > 1 ? 's' : ''} et cette étape sera finie. Ensuite, je rentrerai au village.`,
+      `Regarde-le, ce bateau : il prend forme ! Encore ${min} minute${min > 1 ? 's' : ''} et cette étape sera finie.`,
     ];
   }
-  if (boat < stages) return ['Alors, on s\'y remet, à ce bateau ?'];
+  if (boat < stages) return boat ? ['Alors, on s\'y remet, à ce bateau ?'] : ['Le voilà, mon vieux bateau. Il a besoin de tout : quille, coque, pont, voiles.', 'Apporte-moi de quoi commencer, et je m\'y mets.'];
   // le cœur volcanique : la dernière étape (1 : pris sur son autel, 2 : installé dans le bateau)
-  if (heart >= 2) return ['Le cœur bat dans la coque : le bateau est prêt à prendre la mer, cap sur le Colisée.', 'Mais méfie-toi, au large. Les vieux marins parlaient d\'une bête énorme, toute en tentacules, qui garde le passage.'];
-  if (heart === 1) return ['Tu l\'as trouvé ! Je le sens d\'ici, ce cœur, il chauffe comme une forge.', 'Va le poser dans le bateau, au bout de l\'île. Une Pierre de passage t\'y mène.'];
+  if (heart >= 2) return ['Le cœur bat dans la coque : le bateau est prêt à prendre la mer, cap sur le Colisée. Dis-moi quand tu veux partir !', 'Mais méfie-toi, au large. Les vieux marins parlaient d\'une bête énorme, toute en tentacules, qui garde le passage.'];
+  if (heart === 1) return ['Tu l\'as trouvé ! Je le sens d\'ici, ce cœur, il chauffe comme une forge.', 'Pose-le dans la coque, juste là.'];
   return [
     'La coque est finie. Mais un bateau sans cœur ne va nulle part : il lui faut de quoi fendre la mer.',
     'On raconte qu\'il en bat un sous le volcan de la Mer de sable, gardé par trois géants de feu.',

@@ -1460,6 +1460,11 @@ export class WorldMap {
   }
 
   /** Dans la salle du volcan : mares de lave, autel du cœur et buttes des antres (les seuls obstacles). */
+  /** Au-dessus d'une mare de lave de la salle sous le volcan (on la survole à dos de vautour). */
+  overLava(x: number, y: number) {
+    return this.caveAt(x, y) === this.depths && this.lavaPools.some((p) => dist2(x, y, p.x, p.y) < p.r * p.r);
+  }
+
   private hallSolid(x: number, y: number) {
     const h = this.depths.inside;
     if (dist2(x, y, h.x, h.y) < 34 ** 2) return true; // l'autel
@@ -1818,7 +1823,8 @@ export class WorldMap {
   /** Où l'on peut aller : à pied, tout sauf l'eau et les obstacles ; sur une monture nageuse, seulement l'eau. */
   passable(x: number, y: number, swimming: boolean, flying = false) {
     // en vol : tout sauf la forêt du bord… et le volcan, trop haut (et son panache, trop chaud) pour le survoler
-    if (flying) return this.caveAt(x, y) ? !this.blocked(x, y) : !this.isForest(x, y) && !this.inVolcano(x, y);
+    // (sous le volcan, on survole les mares de lave ; pas les murs, ni l'autel, ni les antres)
+    if (flying) return this.caveAt(x, y) ? !this.blocked(x, y) || this.overLava(x, y) : !this.isForest(x, y) && !this.inVolcano(x, y);
     return swimming ? this.isWater(x, y) && !this.isIce(x, y) : !this.blocked(x, y);
   }
 }

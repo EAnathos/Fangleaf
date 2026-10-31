@@ -58,7 +58,7 @@ s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois 
    retournent ; ils se montent, dans l'eau) et Petits Masqués à la sarbacane (leurs fléchettes **empoisonnent** : on
    perd des PV quelques secondes, une goutte verte au-dessus de la tête). Leurs géants dorment au fond de **temples** à degrés.
 7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable, sables mouvants qui s'ouvrent sous les pasges. Un grand volcan s'y dresse.
-8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles crachent de la lave en cloche) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
+8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles lancent des roches en fusion en cloche, qui mettent le feu) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
 la zone suivante, il faut à la fois l'**Hôtel de ville** au bon niveau et avoir vaincu **tous les géants** de la
@@ -223,7 +223,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Le **Roi-Vautour** lâche des **tornades** qui poursuivent leur cible : elles blessent et aspirent ce qui les approche.
 - Le **Scorpion Empereur**, 4e géant de la Mer de sable, est **facultatif** : ni porte, ni parchemin, ni volcan n'en
   dépendent.
-- **Îlots du large** : trois petites îles au large de la côte (zones 3, 5 et 6), qu'on rejoint **à dos de serpent**
+- **Îlots du large** : trois petites îles au large de la côte (zones 3, 5 et 6) — l'**Île des Marées**, le **Pic des
+  Wyvernes** et l'**Île de Braise**, annoncées quand on y aborde — qu'on rejoint **à dos de serpent**
   ou de vautour (la meute débarque avec son dompteur). Chacune est gardée par un géant facultatif, **à l'air libre** sur
   son îlot (on lui parle pour le défier ; le combat continue au-dessus de l'eau toute proche, et il se rendort quand
   plus personne n'est là), avec ses créatures autour, du plus facile au plus dur : le **Grand Drake** (zone 3 ; Drakes
@@ -241,8 +242,11 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Un grand volcan se dresse dans la Mer de sable. Sa bouche, à son pied, reste scellée par une croûte d'obsidienne
   tant que le village n'a pas vaincu les trois géants de la Mer de sable ; ensuite, **E** pour y descendre, de jour
   comme de nuit et par tous les temps.
-- Les **entrailles du volcan** sont une grande salle souterraine (zone 7) : mares de lave infranchissables,
-  créatures de lave, et trois antres de géants à débloquer comme les autres grottes.
+- Les **entrailles du volcan** sont une grande salle souterraine (zone 7) : mares de lave infranchissables à pied (à
+  dos de vautour, on les survole), créatures de lave, et trois antres de géants à débloquer (deux fois plus cher que
+  les grottes de la Mer de sable).
+- **Le feu brûle** : flammes, lave, cratères, boules de feu, roches en fusion et coups des créatures de feu mettent
+  le feu ; on brûle quelques secondes (une flamme au-dessus de la tête). Plonger dans l'eau l'éteint.
 - Au centre, l'**autel du cœur** : une flamme brûle par géant du volcan encore debout. Les trois vaincus, le cœur
   se libère : **E** sur l'autel pour le prendre, une fois pour tout le village. C'est la dernière étape du bateau
   (voir plus bas).
@@ -253,17 +257,18 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Près du feu du village, un vieil homme qui ne se souvient plus de rien (**E** pour lui parler).
 - Chaque **parchemin de zone** rapporté lui rend les souvenirs de cette zone, d'un trait. On peut les lui faire
   raconter de nouveau, zone par zone (« Les anciens parchemins »).
-- Tous ses souvenirs retrouvés, il reconstruit le **bateau** échoué au bout de l'île, en plusieurs étapes payées en
-  or et avec la réserve du village (la quille, la coque, le pont et les mâts, les voiles). Pendant chaque étape, il
-  part au chantier : c'est là-bas qu'on le trouve, le marteau à la main, et on voit le bateau prendre forme. Il rentre
-  au village une fois l'étape finie. Sa **Pierre de passage** se construit dès que la Mer de sable est ouverte.
+- Tous ses souvenirs retrouvés, il part au **bateau** échoué au bout de l'île, et n'en bouge plus : c'est là-bas qu'on
+  lui parle désormais. Il le reconstruit en plusieurs étapes payées en or et avec la réserve du village (la quille, la
+  coque, le pont et les mâts, les voiles, beaucoup de bois et de pierre) ; pendant chaque étape, on le trouve le
+  marteau à la main, et on voit le bateau prendre forme. Sa **Pierre de passage** se construit dès que la Mer de sable
+  est ouverte.
 - Il lui manque encore son **cœur** : celui du volcan. On le pose dans la coque (**E** devant le bateau), et le
   bateau est prêt à prendre la mer, cap sur le Colisée. Prendre la mer joue une cinématique (le départ de l'île), et
   tant que le Kraken n'est pas vaincu, une autre quand il surgit au large (un toucher ou une touche pour passer).
 
 ## La haute mer et le Kraken
 
-- **E** devant le bateau prêt : on prend la mer avec sa meute, et on se retrouve sur le pont, au large. À la poupe,
+- On parle à Aubin, au bateau prêt, et on lui demande de **prendre la mer** : on part avec sa meute, et on se retrouve sur le pont, au large. À la poupe,
   **E** pour faire demi-tour et rentrer au port.
 - Quelques secondes après qu'on est monté à bord, le **Kraken** surgit contre le flanc du bateau. Il ne quitte pas
   l'eau, mais ses coups de tentacule s'abattent sur tout le pont (couloirs annoncés), et ses tentacules s'agrippent

@@ -8,12 +8,12 @@ import {
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost,
   treeHp, treeWood, TREE_RESPAWN_S, TREE_STILL_S, TREANT_CHANCE, TREANT_ZONE,
-  populationOf, PINCER_HALF, PINCER_R, TORNADO_PULL, TORNADO_PULL_R, TORNADO_R, TORNADO_SPEED, POISON_DPS, DRILL_SKIPS, affinity, JUNGLE_ZONE, LAKES_ZONE, LEGEND_SKIPS, HUG_S, ROLL_S, RING_SPEED, RING_W, DRUM_R, ECHO_R, DRUM_GAP, ECHO_STUN_S, LOG_SPEED, RAMPAGE_SPEED, MAW_PULL, MAW_R, CURSE_S, CURSE_BONUS, SHELL_SPEED, DECOY_S, SPARK_JUMPS, SPARK_R, SPARK_FALLOFF, POISON_S,
+  populationOf, PINCER_HALF, PINCER_R, TORNADO_PULL, TORNADO_PULL_R, TORNADO_R, TORNADO_SPEED, POISON_DPS, BURN_DPS, BURN_S, elementOf, affinity, JUNGLE_ZONE, LAKES_ZONE, LEGEND_SKIPS, HUG_S, ROLL_S, RING_SPEED, RING_W, DRUM_R, ECHO_R, DRUM_GAP, ECHO_STUN_S, LOG_SPEED, RAMPAGE_SPEED, MAW_PULL, MAW_R, CURSE_S, CURSE_BONUS, SHELL_SPEED, DECOY_S, SPARK_JUMPS, SPARK_R, SPARK_FALLOFF, POISON_S,
   armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, ALPHA_SHOUT_AGGRO, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, mineDmg, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
 import type { ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
-import { STAT_KEYS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_DRILL, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
+import { STAT_KEYS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { HALL_ID, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky, WINTER } from '../shared/weather.ts';
@@ -83,14 +83,14 @@ interface Unit {
   tailsDone?: number; // Salamandre-Mère : queues déjà tombées pendant ce combat
   decoyUntil?: number; // leurre du Feu Ancien : il explose à ce moment-là
   shellUntil?: number; // Tortue-Montagne en toupie : rentrée dans sa carapace (elle encaisse moins) jusque-là
-  fight?: { at: number; by: Map<number, FightStats> };
-  drill?: number; // fantôme d'entraînement : le dompteur qui s'entraîne contre lui (il ne blesse personne, on ne le frappe pas) // géant en combat : son début, et ce qu'a fait chaque dompteur (écran de victoire)
+  fight?: { at: number; by: Map<number, FightStats> }; // géant en combat : son début, et ce qu'a fait chaque dompteur (écran de victoire)
   idle: boolean; // sauvage loin de tout dompteur : ni réflexion ni bousculade ce tick
   hitters: Set<number>; // géant : dompteurs qui l'ont frappé (eux ou leur meute) pendant ce combat, seuls ayants droit au coffre
   shoutAt?: number; // Alpha suricate ou escargot : sa compétence est rechargée à ce temps-là
   rally?: Buff; // encouragé par un cri de suricate
   guard?: Buff; // abrité par la carapace d'un escargot
   poison?: Poison; // fléchette de sarbacane
+  burn?: Poison; // brûlure (flammes, lave, boules de feu, créatures de feu) : l'eau l'éteint
 }
 
 /** Ce qu'un dompteur a fait pendant le combat contre un géant (écran de victoire). */
@@ -172,19 +172,6 @@ interface Hazard {
   done?: boolean; // gueule refermée, nuée finie, cible relâchée : sa fin a eu lieu
 }
 
-/** Entraînement : le fantôme, l'attaque répétée, et le compte des esquives. */
-interface Drill {
-  ghost: number;
-  s: number; // géant
-  move: number; // index dans BOSS_MOVES
-  next: number; // prochain lancer
-  castAt: number; // dernier lancer (0 : aucun en cours)
-  hit: boolean; // touché depuis le dernier lancer
-  hits: number;
-  dodges: number;
-  until: number; // il s'arrête de lui-même à ce moment
-}
-
 export interface Player {
   kind: 'p';
   id: number;
@@ -221,7 +208,6 @@ export interface Player {
   sinkSince?: number; // entré dans des sables mouvants à ce moment-là (undefined : au sec)
   rootUntil?: number; // saisi (étreinte, roulade) ou étourdi : il ne bouge plus jusque-là
   curseUntil?: number; // maudit par le Grand Masque : il subit plus de dégâts jusque-là
-  drill?: Drill; // il s'entraîne contre le fantôme d'un géant
   dead: boolean;
   respawnAt: number;
   helping: boolean; // R maintenu : relève le coéquipier à terre le plus proche
@@ -254,6 +240,7 @@ export interface Player {
   guard?: Buff; // abrité par la carapace d'un escargot
   legendAt?: number; // dernière attaque spéciale lancée par l'un de ses Alphas légendaires
   poison?: Poison; // fléchette de sarbacane
+  burn?: Poison; // brûlure (flammes, lave, boules de feu, créatures de feu) : l'eau l'éteint
 }
 
 type Ent = Unit | Player;
@@ -372,8 +359,9 @@ const speciesOf = (key: string) => SPECIES.findIndex((sp) => sp.key === key);
 const BOLT_R = 110; // la foudre touche ce qui se tient à cette distance de l'arbre…
 const BOLT_DMG = 0.15; // … une part de ses PV max
 const BOLT_WARN_S = 1.6; // annoncée ce temps-là (le sol crépite)
-/** Entraînement : il dure au plus ce temps (les attaques qui appellent des renforts n'y sont pas : DRILL_SKIPS). */
-const DRILL_S = 180;
+/** Ce qui met le feu : les attaques de flammes et de lave, les tirs de feu (boules du dragonnet, magma des tortues). */
+const FIRE_STYLES = new Set(['lava', 'flame', 'fireslam', 'crater', 'husk', 'cinder']);
+const FIRE_SHOTS = new Set(['fire', 'magma']);
 const ISLE_FIGHT_R = 900; // géant d'un îlot : le combat continue tant qu'un dompteur reste à cette distance du bord de l'îlot
 const SHY_R = 260; // suricates : distance d'alerte de la sentinelle
 const VULTURE_SCARE_R = 420; // un vautour à cette distance fait fuir la colonie
@@ -793,13 +781,11 @@ export class Room {
     if (!p) return;
     const prof = this.profileOf(p);
     for (const uid of p.army) this.units.delete(uid);
-    this.stopDrill(p);
     this.players.delete(id);
     this.diffs.delete(id);
     // Il s'endort au village avec sa meute (sauf s'il a été expulsé ou a tout effacé).
     if (!this.deleted && !p.wiped && !this.isBanned(p.userId)) this.addSleeper(p.userId ?? `invité:${p.id}`, prof);
     this.scaleBosses();
-    this.events.push({ e: 'info', text: `${p.name} a quitté le village` });
   }
 
   /** Position envoyée par le client, bornée par la vitesse max (anti-téléportation). */
@@ -982,14 +968,14 @@ export class Room {
     this.events.push({ e: 'lore', by: p.id, from, to: this.told.length });
   }
 
-  /** Où est Aubin : au chantier du bateau, au bout de l'île, tant qu'il en bâtit une étape ; sinon près du feu du village. */
+  /** Où est Aubin : près du feu du village tant qu'il retrouve la mémoire ; ensuite au bateau, au bout de l'île, pour de bon. */
   elderPos() {
-    return this.boatAt ? this.map.elderYard : this.map.elder;
+    return this.told.length >= this.bossCount() ? this.map.elderYard : this.map.elder;
   }
 
   /**
-   * Le bateau : tous ses souvenirs retrouvés, le vieil homme en bâtit l'étape suivante contre des ressources (30 minutes).
-   * Il part alors au bateau, et c'est là-bas qu'on le trouve jusqu'à la fin de l'étape.
+   * Le bateau : tous ses souvenirs retrouvés, le vieil homme part au bateau, au bout de l'île, et y reste ; c'est là-bas
+   * qu'on lui donne les ressources de chaque étape (30 minutes chacune), et qu'on lui demande de prendre la mer.
    */
   onBoat(p: Player) {
     if (p.dead || this.told.length < this.bossCount() || this.boat >= BOAT_STAGES.length || this.boatAt) return;
@@ -1344,7 +1330,7 @@ export class Room {
     if (dist2(u.x, u.y, p.x, p.y) > MOUNT_REACH ** 2) return;
     if (!p.saddle) return p.send({ t: 'error', msg: 'Il te faut une selle pour monter ton Alpha.' });
     const water = swimMount(u.s) ? this.map.waterNear(p.x, p.y, SHORE_R) : null;
-    if (swimMount(u.s) && !water) return p.send({ t: 'error', msg: 'Approche-toi de l\'eau pour monter ton serpent : il ne nage qu\'en eau.' });
+    if (swimMount(u.s) && !water) return p.send({ t: 'error', msg: `Approche-toi de l'eau pour monter ton ${SPECIES[u.s].name.toLowerCase()} : il ne va qu'en eau.` });
     if (p.mount && !this.dismount(p)) return; // sur l'eau, loin de la rive : on garde le serpent
     if (water) this.moveTo(p, water.x, water.y); // il embarque : posé sur l'eau
     p.mount = u.id;
@@ -1362,7 +1348,7 @@ export class Room {
     if (u && swimMount(u.s) && this.map.isWater(p.x, p.y)) {
       const land = this.map.landNear(p.x, p.y, force ? 600 : SHORE_R) ?? (force ? this.map.freeNear(p.x, p.y) : null);
       if (!land) {
-        p.send({ t: 'error', msg: 'Trop loin de la rive : rapproche-toi de la terre pour descendre du serpent.' });
+        p.send({ t: 'error', msg: `Trop loin de la rive : rapproche-toi de la terre pour descendre de ton ${SPECIES[u.s].name.toLowerCase()}.` });
         return false;
       }
       this.moveTo(p, land.x, land.y);
@@ -1434,7 +1420,6 @@ export class Room {
     this.stormDamage();
     this.cactusDamage();
     this.updateSands();
-    this.updateDrills();
     this.updateBolts();
     this.quicksandDamage();
     this.updateSeen();
@@ -1988,7 +1973,7 @@ export class Room {
   }
 
   /** Monstre sauvage qu'on combat : ni géant endormi, ni gibier passif (lui ne s'apprivoise qu'aux fruits). */
-  private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !e.hidden && !SPECIES[e.s].passive && !e.drill;
+  private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !e.hidden && !SPECIES[e.s].passive;
   /** Tempête de sable sur ce point de la Mer de sable (hors des grottes) : les vautours y sont cloués au sol. */
   private grounded(x: number, y: number) {
     return this.storm >= STORM_HARM && !this.map.caveAt(x, y) && this.map.zoneAt(x, y) === DESERT_ZONE;
@@ -2136,13 +2121,13 @@ export class Room {
     const t = this.nearest(p.x, p.y, PLAYER_R + 80, (e) => this.isFeedable(e) && !isBoss((e as Unit).s) && !(e as Unit).summoner) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (PLAYER_R + t.r + 26) ** 2) return;
     p.atkCd = FEED_CD;
-    if (this.armySize(p) >= armyCap(p.learned)) {
-      this.events.push({ e: 'full', to: p.id });
-      return;
-    }
+    // meute pleine : on peut encore le nourrir (il laisse parfois une essence), mais il ne rejoint pas la meute
+    const full = this.armySize(p) >= armyCap(p.learned);
+    if (full && !SPECIES[t.s].passive) return void this.events.push({ e: 'full', to: p.id });
     p.fruits--;
     p.dirty = true;
-    if (Math.random() < fruitTameChance(t.s) + lessonBonus(p.learned, 'tame')) {
+    if (full) this.events.push({ e: 'full', to: p.id });
+    if (!full && Math.random() < fruitTameChance(t.s) + lessonBonus(p.learned, 'tame')) {
       this.makeTamed(t, p);
       this.events.push({ e: 'tame', id: t.id, by: p.id, s: t.s });
       p.stats.tamed++;
@@ -2252,10 +2237,6 @@ export class Room {
 
   /** Qui une attaque spéciale peut toucher : les dompteurs et leurs meutes (géant), ou les sauvages (Alpha légendaire). */
   private targetsNear(caster: Unit, x: number, y: number, r: number) {
-    if (caster.drill) {
-      const p = this.players.get(caster.drill); // fantôme d'entraînement : seulement celui qui s'entraîne
-      return p && this.alive(p) && dist2(x, y, p.x, p.y) <= (r + p.r) ** 2 ? [p as Ent] : [];
-    }
     return caster.owner ? this.wildNear(x, y, r) : this.alliesNear(x, y, r);
   }
 
@@ -2590,9 +2571,11 @@ export class Room {
       }
       case 'mortar': {
         // Pluie de tirs en cloche : le premier sur la cible, les autres autour ; chaque impact est annoncé au sol.
+        // (ce que lance chacun : du magma pour la Tortue-Montagne, des bananes pour le Roi Gorille)
+        const look = SPECIES[u.s].sprite ?? SPECIES[u.s].key, shot = look === 'lava_tortoise' ? 'magma' : look === 'gorilla' ? 'banana' : 'arc';
         for (let k = 0; k < m.n; k++) {
           const a = Math.random() * Math.PI * 2, off = k ? 70 + Math.random() * 110 : 0;
-          this.launch(u, 'arc', t.x + Math.cos(a) * off, t.y + Math.sin(a) * off, d * 0.9, 0, 600, 60);
+          this.launch(u, shot, t.x + Math.cos(a) * off, t.y + Math.sin(a) * off, d * 0.9, 0, 600, 60);
         }
         break;
       }
@@ -2994,24 +2977,24 @@ export class Room {
         if (h.kind === 2 || h.ring || h.run?.hurt || h.dmg <= 0) continue; // nuages, anneaux, ruées et tronc : ils frappent dans la durée
         const hit = h.kind === 1 ? this.alliesOnLine(h) : h.kind === 4 ? this.inArc(h) : this.targetsNear(h.boss, h.x, h.y, h.r);
         for (const e of hit) {
-          if (h.boss.drill) {
-            this.damage(e, 0, h.boss); // entraînement : touché, sans rien de plus
-            continue;
-          }
           if ((h.kind === 3 || h.style === 'bubble') && e.kind === 'p') e.slowUntil = this.time + WEB_SLOW_S; // toile, écume : ça colle
           if (h.style === 'howl' && e.kind === 'p') e.slowUntil = this.time + 2.5; // le hurlement glace : on traîne les pieds
           if (h.style === 'curse') e.curseUntil = this.time + CURSE_S;
           this.damage(e, h.dmg, h.boss);
           if (h.style === 'tongue') this.yank(e, h.boss);
           if (h.style === 'impale') this.poisonOf(e, h.dmg * 1.5, h.boss);
+          if (FIRE_STYLES.has(h.style ?? '')) this.burnOf(e, h.dmg, h.boss);
           if (h.style === 'tail') this.knock(e, h.x, h.y, 80);
         }
-        if (h.grab && !h.boss.drill) this.grab(h, hit);
+        if (h.grab) this.grab(h, hit);
         this.countDodges(h, hit);
       }
       if (h.fired && h.spin && this.time < h.spin.end && this.time >= h.nextTick) {
         h.nextTick = this.time + 0.25;
-        for (const e of this.alliesOnLine(h)) this.damage(e, h.dmg, h.boss);
+        for (const e of this.alliesOnLine(h)) {
+          this.damage(e, h.dmg, h.boss);
+          if (FIRE_STYLES.has(h.style ?? '')) this.burnOf(e, h.dmg, h.boss); // le tourbillon de flammes
+        }
       }
       if (h.fired && h.ring) this.spreadRing(h);
       if (h.fired && h.mine) this.fuseMine(h);
@@ -3031,68 +3014,13 @@ export class Room {
         h.nextTick = this.time + 0.5;
         for (const e of this.targetsNear(h.boss, h.x, h.y, h.r)) {
           this.damage(e, h.dmg * 0.5, h.boss);
-          if (h.boss.drill) continue;
           if ((h.style === 'ink' || h.style === 'mud') && e.kind === 'p') e.slowUntil = this.time + 0.7; // l'encre, la boue collent
           if (h.style === 'venom') this.poisonOf(e, h.dmg, h.boss);
+          if (FIRE_STYLES.has(h.style ?? '')) this.burnOf(e, h.dmg, h.boss); // lave, cratère
         }
       }
     }
     this.hazards = this.hazards.filter((h) => this.units.has(h.boss.id) && (!h.fired || ((h.kind === 2 || !!h.ring || !!h.mine) && this.time < h.until) || (!!h.spin && this.time < h.spin.end) || (!!h.run && this.time < h.run.t1 + 0.1) || this.time < h.at + 0.3));
-  }
-
-  /**
-   * Entraînement (depuis le bestiaire) : le fantôme d'un géant que le village a vaincu apparaît près du dompteur et lui
-   * lance une de ses attaques, encore et encore, sans le blesser ; chaque fois, il sait s'il l'a esquivée. Pas dans une
-   * grotte ni en plein combat.
-   */
-  onDrill(p: Player, s: number, move: number) {
-    this.stopDrill(p);
-    const m = BOSS_MOVES[SPECIES[s]?.key ?? '']?.[move];
-    if (s < 0 || !m || !('cd' in m) || DRILL_SKIPS.has(m.kind) || !this.beaten.includes(s) || p.dead || this.map.caveAt(p.x, p.y) || this.bossFight(p)) return;
-    const a = Math.random() * Math.PI * 2, at = this.map.freeNear(p.x + Math.cos(a) * 240, p.y + Math.sin(a) * 180);
-    const g = this.createUnit(s as SpeciesId, false, at.x, at.y);
-    Object.assign(g, { drill: p.id, maxHp: 1e9, hp: 1e9, homeX: at.x, homeY: at.y, phase: 1 });
-    p.drill = { ghost: g.id, s, move, next: this.time + 1.2, castAt: 0, hit: false, hits: 0, dodges: 0, until: this.time + DRILL_S };
-  }
-
-  private stopDrill(p: Player) {
-    if (!p.drill) return;
-    const g = this.units.get(p.drill.ghost);
-    if (g) {
-      this.units.delete(g.id);
-      this.hazards = this.hazards.filter((h) => h.boss !== g);
-      this.events.push({ e: 'boom', x: Math.round(g.x), y: Math.round(g.y), r: g.r, kind: 'wisps' }); // il s'évapore
-    }
-    p.drill = undefined;
-  }
-
-  /** Le fantôme relance son attaque ; le lancer précédent fini, l'esquive (ou le coup) est annoncée au dompteur. */
-  private updateDrills() {
-    for (const p of this.players.values()) {
-      const d = p.drill;
-      if (!d) continue;
-      const g = this.units.get(d.ghost);
-      if (!g || p.dead || this.time > d.until || this.map.caveAt(p.x, p.y) || dist2(p.x, p.y, g.x, g.y) > 1400 ** 2) {
-        this.stopDrill(p);
-        continue;
-      }
-      // le lancer précédent est joué : touché ou esquivé ?
-      if (d.castAt && this.time > Math.max(d.castAt + 2.2, g.castUntil + 0.6) && !this.hazards.some((h) => h.boss === g)) {
-        if (d.hit) d.hits++;
-        else d.dodges++;
-        this.events.push({ e: 'drill', to: p.id, hit: d.hit });
-        d.castAt = 0;
-        d.next = this.time + 1.4;
-      }
-      if (d.castAt || this.time < d.next) continue;
-      const m = BOSS_MOVES[SPECIES[g.s].key][d.move] as Extract<BossMove, { cd: number }>;
-      g.hidden = false;
-      g.castUntil = 0;
-      this.castMove(g, m, p);
-      this.events.push({ e: 'move', id: g.id, kind: m.kind });
-      d.castAt = this.time;
-      d.hit = false;
-    }
   }
 
   /** Ce qu'a fait ce dompteur dans le combat de ce géant. */
@@ -3174,7 +3102,7 @@ export class Room {
       }
       h.hit!.add(e.id);
       this.damage(e, h.dmg, h.boss);
-      if (ring.stun && !h.boss.drill) this.root(e, ring.stun);
+      if (ring.stun) this.root(e, ring.stun);
     }
   }
 
@@ -3189,7 +3117,6 @@ export class Room {
       if (h.hit!.has(e.id)) continue;
       h.hit!.add(e.id);
       this.damage(e, h.dmg, h.boss);
-      if (h.boss.drill) continue;
       // la ruée et le tronc bousculent sur le côté
       const side = (e.x - x) * -(r.y1 - r.y0) + (e.y - y) * (r.x1 - r.x0) > 0 ? 1 : -1, l = Math.hypot(r.x1 - r.x0, r.y1 - r.y0) || 1;
       this.knock(e, e.x + (side * (r.y1 - r.y0)) / l, e.y - (side * (r.x1 - r.x0)) / l, 70);
@@ -3282,7 +3209,7 @@ export class Room {
       if (this.time < (h.lastHit!.get(e.id) ?? 0)) continue;
       h.lastHit!.set(e.id, this.time + 0.6);
       this.damage(e, h.dmg, u);
-      if (!u.drill) this.knock(e, u.x, u.y, 90);
+      this.knock(e, u.x, u.y, 90);
     }
   }
 
@@ -3410,7 +3337,9 @@ export class Room {
     const open = id === HALL_ID ? volcanoOpen(this.beaten) : c.zone === VOYAGE_ZONE ? boatReady(this.boat, this.heart) : this.unlocked.includes(id);
     if (enter && !open) return;
     const from = enter ? c.entrance : c.exit;
-    if (dist2(p.x, p.y, from.x, from.y) > (BUILDING_REACH + 40) ** 2) return;
+    // le large : on embarque en parlant à Aubin, à côté du bateau
+    const yard = enter && c.zone === VOYAGE_ZONE ? this.elderPos() : from;
+    if (dist2(p.x, p.y, from.x, from.y) > (BUILDING_REACH + 40) ** 2 && dist2(p.x, p.y, yard.x, yard.y) > (ELDER_REACH + 60) ** 2) return;
     if (this.time - (this.caveAt.get(p) ?? -Infinity) < CAVE_CD) return;
     this.caveAt.set(p, this.time);
     const to = enter ? { x: c.exit.x, y: c.exit.y - 50 } : { x: c.entrance.x, y: c.entrance.y + 70 };
@@ -3519,7 +3448,7 @@ export class Room {
 
   private blockedFor(u: Unit, x: number, y: number) {
     if (this.swims(u)) return !this.map.isWater(x, y);
-    if (!u.owner && !u.drill && this.map.onIsle(x, y)) return true; // l'îlot du village et son pont : pas pour les sauvages
+    if (!u.owner && this.map.onIsle(x, y)) return true; // l'îlot du village et son pont : pas pour les sauvages
     return this.map.blocked(x, y) && !((this.amphibious(u) || this.lurks(u)) && this.map.isWater(x, y));
   }
 
@@ -3622,17 +3551,29 @@ export class Room {
 
   /** Fléchette de sarbacane, dard du scorpion : la cible est empoisonnée (le poison le plus fort l'emporte, et repart pour POISON_S). */
   private poisonOf(e: Ent, dmg: number, by: Unit) {
-    if (by.drill) return;
     if (!this.alive(e) || (e.kind === 'u' && isBoss(e.s))) return; // un géant n'en sent rien
     const dps = dmg * POISON_DPS;
     if (e.poison && e.poison.until > this.time && e.poison.dps > dps) return void (e.poison.until = this.time + POISON_S);
     e.poison = { dps, until: this.time + POISON_S, by };
   }
 
+  /** Brûlure : la cible prend feu (la plus forte l'emporte, et repart pour BURN_S). Un géant, une créature de feu n'en sentent rien. */
+  private burnOf(e: Ent, dmg: number, by: Unit) {
+    if (!this.alive(e) || (e.kind === 'u' && (isBoss(e.s) || elementOf(e.s) === 'feu')) || this.map.isWater(e.x, e.y)) return;
+    const dps = dmg * BURN_DPS;
+    if (e.burn && e.burn.until > this.time && e.burn.dps > dps) return void (e.burn.until = this.time + BURN_S);
+    e.burn = { dps, until: this.time + BURN_S, by };
+  }
+
   /** Le poison ronge : deux fois par seconde, sa part des PV. */
   private updatePoison() {
     if (this.tick % (TICK_HZ / 2) !== 0) return;
     for (const e of [...this.players.values(), ...this.units.values()]) {
+      if (e.burn) {
+        // la brûlure ronge aussi ; plonger dans l'eau l'éteint
+        if (e.burn.until <= this.time || !this.alive(e) || (e.kind === 'p' && this.safe(e.x, e.y)) || this.map.isWater(e.x, e.y)) e.burn = undefined;
+        else this.damage(e, e.burn.dps / 2, e.burn.by);
+      }
       if (!e.poison) continue;
       if (e.poison.until <= this.time || !this.alive(e) || (e.kind === 'p' && this.safe(e.x, e.y))) {
         e.poison = undefined;
@@ -3656,8 +3597,12 @@ export class Room {
     this.shots = this.shots.filter((s) => {
       if (lobbedShot(s.kind)) {
         if (this.time - s.start < ARC_FLIGHT_S) return true;
-        for (const e of this.shotTargets(s, s.tx, s.ty, s.splash)) this.damage(e, s.dmg, s.by);
-        this.events.push({ e: 'boom', x: Math.round(s.tx), y: Math.round(s.ty), r: s.splash, kind: 'splash', ...(s.by.owner ? { by: s.by.owner } : {}) });
+        const magma = SHOT_KINDS[s.kind] === 'magma';
+        for (const e of this.shotTargets(s, s.tx, s.ty, s.splash)) {
+          this.damage(e, s.dmg, s.by);
+          if (magma) this.burnOf(e, s.dmg, s.by); // la roche en fusion met le feu
+        }
+        this.events.push({ e: 'boom', x: Math.round(s.tx), y: Math.round(s.ty), r: s.splash, kind: magma ? 'magma' : 'splash', ...(s.by.owner ? { by: s.by.owner } : {}) });
         return false;
       }
       // trait, jet : avance par petits pas pour ne traverser personne ; passe au-dessus de l'eau, pas des obstacles
@@ -3673,6 +3618,7 @@ export class Room {
             s.pierced.add(e.id);
             this.damage(e, s.dmg, s.by);
             if (s.poison) this.poisonOf(e, s.dmg, s.by);
+            if (FIRE_SHOTS.has(SHOT_KINDS[s.kind])) this.burnOf(e, s.dmg, s.by);
             if (e.kind === 'p') return false;
           }
         } else {
@@ -3680,6 +3626,7 @@ export class Room {
           if (hit) {
             this.damage(hit, s.dmg, s.by);
             if (s.poison) this.poisonOf(hit, s.dmg, s.by);
+            if (FIRE_SHOTS.has(SHOT_KINDS[s.kind])) this.burnOf(hit, s.dmg, s.by);
             if (s.chain) this.chainSpark(s, hit);
             return false;
           }
@@ -3725,6 +3672,7 @@ export class Room {
       u.atkCd = u.atkCdBase;
       this.damage(t, u.dmg, u, true);
       if (sp.venom) this.poisonOf(t, u.dmg, u); // le dard du scorpion
+      if (elementOf(u.s) === 'feu') this.burnOf(t, u.dmg, u); // les créatures de feu brûlent
     }
   }
 
@@ -3746,7 +3694,7 @@ export class Room {
   }
 
   private wildAI(u: Unit) {
-    if (u.dormant || u.drill) return; // géant qui attend qu'on lui parle ; fantôme d'entraînement (il ne fait que son attaque)
+    if (u.dormant) return; // géant qui attend qu'on lui parle
     if (SPECIES[u.s].inert) return this.totemAI(u);
     if (u.decoyUntil && this.time >= u.decoyUntil - 0.8) return this.popDecoy(u);
     if (u.resurface) {
@@ -4205,12 +4153,6 @@ export class Room {
 
   /** melee : coup au corps à corps (le client anime l'attaquant qui se fend vers sa cible). */
   private damage(t: Ent, amount: number, by: Ent, melee = false) {
-    // entraînement : le fantôme ne blesse personne (on note seulement qu'il a touché), et on ne le frappe pas
-    if (by.kind === 'u' && by.drill) {
-      if (t.kind === 'p' && t.drill && t.drill.ghost === by.id) t.drill.hit = true;
-      return;
-    }
-    if (t.kind === 'u' && t.drill) return;
     // à dos de vautour, hors d'atteinte des coups de griffe et de crocs : seuls les tirs et les géants le touchent
     if (melee && (t.kind === 'p' || this.isMount(t)) && this.airborne(t) && !(by.kind === 'u' && isBoss(by.s))) return;
     // sous le sable, dans sa tanière ou haut dans le ciel : rien ne l'atteint (sauf, dans le ciel, depuis le dos d'un vautour)
@@ -4339,7 +4281,7 @@ export class Room {
 
   /** Compétences d'Alpha en cours sur cet allié, en drapeaux (UNIT_FLAG_RALLY, UNIT_FLAG_GUARD). */
   private buffFlags(e: Ent) {
-    return ((e.curseUntil ?? 0) > this.time ? UNIT_FLAG_CURSE : 0) | (this.buffOf(e, 'rally') ? UNIT_FLAG_RALLY : 0) | (this.buffOf(e, 'guard') ? UNIT_FLAG_GUARD : 0) | (e.poison && e.poison.until > this.time ? UNIT_FLAG_POISON : 0);
+    return ((e.curseUntil ?? 0) > this.time ? UNIT_FLAG_CURSE : 0) | (e.burn && e.burn.until > this.time ? UNIT_FLAG_BURN : 0) | (this.buffOf(e, 'rally') ? UNIT_FLAG_RALLY : 0) | (this.buffOf(e, 'guard') ? UNIT_FLAG_GUARD : 0) | (e.poison && e.poison.until > this.time ? UNIT_FLAG_POISON : 0);
   }
 
   /** Alpha lièvre sur le terrain : de temps en temps, il soigne un peu son dompteur et la meute autour de lui. */
@@ -4408,6 +4350,8 @@ export class Room {
     u.returning = false;
     u.summoner = 0;
     u.poison = undefined; // apprivoisé, il est soigné de son poison
+    u.burn = undefined;
+    u.asleep = false; // un lièvre apprivoisé dans son sommeil se réveille (sinon il dormirait pour toujours)
     p.army.push(u.id);
   }
 
@@ -4649,7 +4593,6 @@ export class Room {
       case 'die': case 'shot': case 'boom': return e;
       case 'zap': return { x: e.pts[0], y: e.pts[1] };
       case 'mend': return ent(e.to) ?? null;
-      case 'drill': return e.to;
       case 'move': case 'charge': case 'feed': case 'revive': case 'heal': case 'shout': return ent(e.id) ?? null;
       case 'mine': return this.map.ores[e.id] ?? null;
       case 'munch': return this.map.ores[e.ore] ?? null;
@@ -4676,7 +4619,6 @@ export class Room {
         mount: this.mountState(p),
         slowed: p.slowUntil > this.time,
         held: this.rooted(p),
-        drill: p.drill ? [p.drill.s, p.drill.move, p.drill.hits, p.drill.dodges] : null,
         buffs: this.buffFlags(p),
         resting: p.resting.map((r) => ({ species: r.s, level: r.lvl, legend: r.legend })),
         seen: [...p.seen],
@@ -4695,7 +4637,7 @@ export class Room {
       for (const u of this.units.values()) {
         if (u.reviveAt || dist2(u.x, u.y, viewer.x, viewer.y) > vr2) continue;
         units.push([
-          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep || u.hibernate ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0) | ((u.phase ?? 1) === 2 ? UNIT_FLAG_PHASE2 : (u.phase ?? 1) >= 3 ? UNIT_FLAG_PHASE3 : 0) | (u.owner && SPECIES[u.s].flies && !this.airborne(u) ? UNIT_FLAG_LANDED : 0) | (u.drill ? UNIT_FLAG_DRILL : 0) | this.buffFlags(u), Math.round(u.x), Math.round(u.y),
+          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep || u.hibernate ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0) | ((u.phase ?? 1) === 2 ? UNIT_FLAG_PHASE2 : (u.phase ?? 1) >= 3 ? UNIT_FLAG_PHASE3 : 0) | (u.owner && SPECIES[u.s].flies && !this.airborne(u) ? UNIT_FLAG_LANDED : 0) | this.buffFlags(u), Math.round(u.x), Math.round(u.y),
           Math.round((100 * Math.max(0, u.hp)) / u.maxHp), u.owner,
         ]);
       }

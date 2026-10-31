@@ -1,6 +1,6 @@
 // Compétences affichées au bestiaire de la Tanière : attaques des géants (et de quelques monstres), traits des espèces.
 
-import { type BossMove, type Ranged, type Species, CURSE_BONUS, HUG_S, POISON_S, SPARK_JUMPS } from '../../shared/config.ts';
+import { type BossMove, type Ranged, type Species, CURSE_BONUS, elementOf, HUG_S, POISON_S, SPARK_JUMPS, SPECIES } from '../../shared/config.ts';
 
 /** Famille d'une compétence : son pictogramme sur sa carte. */
 export type SkillIcon = 'zone' | 'line' | 'arc' | 'cloud' | 'ring' | 'summon' | 'rage' | 'hidden' | 'shot' | 'grab' | 'heal' | 'trait' | 'mount' | 'night';
@@ -11,7 +11,6 @@ export interface Skill {
   desc: string;
   icon: SkillIcon;
   boss?: boolean; // attaque spéciale (cadre rouge) plutôt que trait de l'espèce
-  move?: number; // attaque d'un géant qu'on peut répéter à l'entraînement (index dans BOSS_MOVES)
 }
 
 /** Ce que fait chaque attaque spéciale, et comment l'esquiver. */
@@ -78,6 +77,7 @@ const SHOT: Record<Ranged['kind'], string> = {
   dart: `Fléchettes de sarbacane : elles empoisonnent (${POISON_S} s).`,
   fire: 'Boules de feu en ligne droite : esquive de côté.',
   spark: `Décharge électrique qui rebondit sur ${SPARK_JUMPS} ennemis proches.`,
+  magma: 'Roches en fusion lancées en cloche, sur un cercle annoncé : elles mettent le feu.',
 };
 
 /** Traits d'une espèce, en cartes (forme sauvage ; tame : apprivoisée, ses habitudes de sauvage ne comptent plus). */
@@ -87,6 +87,7 @@ export function traitSkills(sp: Species, tame: boolean): Skill[] {
   if (sp.ranged) add('Tireur', `${SHOT[sp.ranged.kind]} Portée ${sp.ranged.range} px, ${String(sp.ranged.windup).replace('.', ',')} s pour viser.`, 'shot');
   if (sp.brawler) add('Bagarreur', 'Collé à sa cible, il cogne au corps à corps au lieu de tirer.');
   if (sp.venom) add('Venin', `Ses coups empoisonnent (${POISON_S} s) : ne reste pas collé à lui.`);
+  if (elementOf(SPECIES.indexOf(sp)) === 'feu') add('Brûlure', 'Ses coups mettent le feu : on brûle quelques secondes (plonger dans l\'eau l\'éteint).');
   if (sp.reach) add('Allonge', 'Il se jette hors de l\'eau sur ce qui passe au bord.');
   if (!tame) {
     if (sp.passive) add('Passif', 'Il ne se bat pas : il broute les buissons et fuit qui le frappe. Tends-lui une baie (T).', 'heal');

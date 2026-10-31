@@ -81,7 +81,6 @@ export type ClientMsg =
   | { t: 'buy'; s: number } // Marché : acheter un monstre d'une espèce déjà croisée
   | { t: 'help'; on: boolean } // R maintenu (on) ou relâché : relever un dompteur à terre
   | { t: 'reset' } // fondateur : supprimer le village ; autre membre : effacer sa progression ici
-  | { t: 'drill'; s: number; move: number } // entraînement contre le fantôme d'un géant vaincu (s -1 : arrêter)
   | { t: 'cheat' } // dev uniquement : +300 or, +30 essences
   | { t: 'ping'; ts: number };
 
@@ -116,7 +115,6 @@ export interface PlayerState {
   mount: { id: number; species: number; hp: number; legend: boolean } | null; // monture chevauchée (pv en %)
   slowed: boolean; // pris dans une toile
   held: boolean; // saisi par un géant (étreinte, roulade) ou étourdi : il ne peut plus bouger
-  drill: [number, number, number, number] | null; // entraînement en cours : [géant, attaque (index dans BOSS_MOVES), touché, esquivé]
   buffs: number; // compétences d'Alpha en cours sur lui : UNIT_FLAG_RALLY (cri du suricate), UNIT_FLAG_GUARD (carapace de l'escargot) ; UNIT_FLAG_POISON : empoisonné
   awakening: { species: number; left: number; total: number }[]; // Alphas en cours d'éveil (secondes)
   resting: { species: number; level: number; legend: boolean }[]; // Alphas rangés à la Tanière
@@ -197,7 +195,7 @@ export const UNIT_FLAG_PHASE3 = 128; // … troisième phase
 export const UNIT_FLAG_RALLY = 256; // allié encouragé par le cri d'un Alpha suricate (il frappe plus fort)
 export const UNIT_FLAG_GUARD = 512; // allié abrité par la carapace d'un Alpha escargot (il encaisse moins)
 export const UNIT_FLAG_POISON = 1024; // empoisonné (fléchette de sarbacane) : il perd des PV un moment
-export const UNIT_FLAG_DRILL = 8192; // fantôme d'entraînement (un géant déjà vaincu) : translucide, il ne blesse personne
+export const UNIT_FLAG_BURN = 8192; // il brûle (flammes, lave, boule de feu) : il perd des PV un moment, l'eau l'éteint
 export const UNIT_FLAG_CURSE = 4096; // maudit par le Grand Masque : il subit plus de dégâts
 export const UNIT_FLAG_LANDED = 2048; // vautour de la meute (ou monture) posé : il a piqué sur sa proie, ou la tempête de sable le cloue au sol
 
@@ -226,7 +224,6 @@ export type GameEvent =
   | { e: 'boom'; x: number; y: number; r: number; kind: string; by?: number } // une attaque spéciale frappe (by : dompteur de l'Alpha qui l'a lancée)
   | { e: 'victory'; s: number; dur: number; first: boolean; rows: { id: number; name: string; color: string; dealt: number; taken: number; dodges: number; best: number }[] } // géant vaincu : ce qu'a fait chacun (dur : durée du combat, en s)
   | { e: 'thunder'; x: number; y: number; tree: number } // la foudre tombe (sur cet arbre, qui brûle et tombe ; -1 : aucun)
-  | { e: 'drill'; to: number; hit: boolean } // entraînement : l'attaque du fantôme a touché ou a été esquivée
   | { e: 'mend'; from: number; to: number; n: number } // un totem soigne un allié du Grand Masque (n : PV rendus)
   | { e: 'zap'; pts: number[]; by?: number } // la décharge du Grand Drake rebondit : x, y de chaque cible touchée, dans l'ordre (by : dompteur de son Alpha légendaire)
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire

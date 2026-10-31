@@ -60,6 +60,11 @@ export class SkyFx {
   }
 
   /** Halo pré-dessiné d'une couleur : plein au centre, qui s'efface doucement. */
+  /** Oublie les halos de lumière gardés en images (à repeindre, voir World.flushCaches). */
+  flushCaches() {
+    this.halos.clear();
+  }
+
   private halo(color: string) {
     let c = this.halos.get(color);
     if (c) return c;

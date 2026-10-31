@@ -1,14 +1,14 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  alphaEquipMax, BOSS_HP_BONUS, LEGEND_SKIPS, DRILL_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
+  alphaEquipMax, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
 import { type BoardRow, type Holdings, type PlayerState, type Stats, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
 import { armorColor, drawElder, drawHatchling, drawPlayer, drawUnit } from './sprites.ts';
-import { CHAPTER_TITLES, ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD, zoneChapters } from './elder.ts';
+import { CHAPTER_TITLES, ELDER_CHAPTERS, ELDER_LEAVES, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD, zoneChapters } from './elder.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { moveSkill, type Skill, type SkillIcon, traitSkills } from './moveInfo.ts';
 import { sound } from './audio.ts';
@@ -60,7 +60,8 @@ export interface VillageView {
   beaten: number[]; // géants vaincus par le village
   heart: number; // cœur volcanique : 0 sur son autel, HEART_TAKEN pris, HEART_IN_BOAT installé dans le bateau
   school: [number, number]; // École des dompteurs : plan trouvé (0/1), secondes avant la fin du chantier d'Aubin
-  elderLeaving?: boolean; // Aubin vient de partir au chantier du bateau : il est encore au village (on finit de lui parler)
+  elderLeaving?: boolean; // Aubin vient de partir pour le bateau : il est encore au village (on finit de lui parler)
+  elderAway?: boolean; // Aubin vit au bateau (sa mémoire retrouvée)
 }
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 const ROMAN = ['I', 'II', 'III'];
@@ -105,7 +106,8 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     return v.buildings.includes(b) ? open : offer(b, pos, 'Construire');
   };
   const spots: Spot[] = [
-    { panel: 'elder', pos: v.lore[2] > 0 && !v.elderLeaving ? map.elderYard : map.elder, reach: 55, label: `E — Parler ${v.lore[0] ? 'à Aubin' : 'au vieil homme'}` },
+    // Aubin : près du feu, puis, sa mémoire retrouvée, au bateau pour de bon (on finit de lui parler avant qu'il parte)
+    { panel: 'elder', pos: v.elderAway && !v.elderLeaving ? map.elderYard : map.elder, reach: 55, label: `E — Parler ${v.lore[0] ? 'à Aubin' : 'au vieil homme'}` },
     // les nouveau-nés des œufs du village (at : lequel)
     ...HATCHLINGS.slice(0, eggsOf(v.lore[0]).hatched).map((h, i): Spot => ({ panel: 'npc', at: i, pos: { x: map.village.x + h.x, y: map.village.y + h.y }, reach: 60, label: `E — Parler à ${h.name}` })),
     ...v.scrollCaves.map((id): Spot => ({ scroll: id, pos: map.scrollPos(map.caves[id]), reach: SCROLL_REACH, label: 'E — Ramasser le parchemin' })),
@@ -144,9 +146,6 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
       if (!c) return [];
       const free = v.beaten.includes(c.boss);
       return [
-        ...(v.lore[1] >= BOAT_STAGES.length && v.heart >= HEART_IN_BOAT
-          ? [{ cave: { id: c.id, enter: true }, pos: c.entrance, reach: BOAT_REACH, label: free ? 'E — Prendre la mer (cap sur le Colisée)' : 'E — Prendre la mer' }]
-          : []),
         { cave: { id: c.id, enter: false }, pos: c.exit, label: 'E — Faire demi-tour (retour au port)' },
         ...(free ? [{ pos: { x: c.inside.x + DECK_RX - 130, y: c.inside.y }, reach: 150, label: 'Cap sur le Colisée : la suite arrive bientôt' }] : []),
       ];
@@ -270,7 +269,7 @@ export class Hud {
   heart = 0; // cœur volcanique (0, HEART_TAKEN, HEART_IN_BOAT)
   school: [number, number] = [0, 0]; // École des dompteurs : plan trouvé (0/1), secondes avant la fin du chantier d'Aubin
   /** Géants dont le vieil homme attend le parchemin : ceux de l'île (ceux du volcan n'en laissent pas). */
-  private islandCaves() {
+  islandCaves() {
     return this.map.caves.filter((c) => c.zone < VOLCANO_ZONE && !SPECIES[c.boss].optional).length;
   }
   onScrollGive = () => {};
@@ -304,13 +303,22 @@ export class Hud {
   get elderCalls() {
     return !this.elderMet || this.myScrolls > 0;
   }
-  elderLeaving = false; // Aubin part au chantier du bateau, mais on lui parle encore (voir Game.elderWalk)
+  elderLeaving = false; // Aubin part pour le bateau, mais on lui parle encore (voir Game.elderWalk)
+  /** Aubin vit au bateau, au bout de l'île : sa mémoire est retrouvée. */
+  get elderAway() {
+    return this.lore[0] >= this.islandCaves();
+  }
   lore: [number, number, number] = [0, 0, 0]; // souvenirs retrouvés, étapes du bateau, secondes avant la fin de l'étape en cours
   night = false; // il fait nuit (le gibier qui dort ne viendra pas manger)
   scrollCaves: number[] = []; // grottes dont le parchemin m'attend // portrait du géant à qui l'on parle
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
   private spotAt = 0; // Pierre ou emplacement devant lequel on se tient (panneaux voyage et camp)
   private bigBg?: HTMLCanvasElement;
+  /** Repeint le fond des cartes (voir World.flushCaches). */
+  flushCaches() {
+    this.miniBg = this.renderMapBackground(180);
+    this.bigBg = undefined;
+  }
   private miniAt = 0; // dernier dessin de la minicarte
   private bigAt = 0; // et de la grande carte
 
@@ -401,7 +409,6 @@ export class Hud {
     $('talk-later').onclick = () => this.setPanel(null);
     // un nouveau-né : on se parle à tour de rôle, une réplique après l'autre
     $('victory-ok').onclick = () => this.setPanel(null);
-    $('drill-stop').onclick = () => this.onDrill(-1, 0);
     $('npc-next').onclick = () => {
       const h = HATCHLINGS[this.npcWho];
       if (!h || this.npcAt >= h.lines.length - 1) return this.setPanel(null);
@@ -515,16 +522,6 @@ export class Hud {
       return t >= 0 && (me.tomes?.[bookIndex(k, t)] ?? 0) > 0;
     });
   }
-  /** Entraînement en cours : une pastille avec l'attaque, les esquives et les coups reçus, et de quoi arrêter. */
-  private updateDrill(me: PlayerState) {
-    const d = me.drill, el = $('drill');
-    setHidden(el, !d);
-    if (!d) return;
-    const m = BOSS_MOVES[SPECIES[d[0]]?.key]?.[d[1]];
-    setText($('drill-what'), `Entraînement · ${m ? MOVE_NAMES[m.kind] : ''}`);
-    setText($('drill-score'), `${d[3]} esquivée${d[3] > 1 ? 's' : ''} · ${d[2]} touché${d[2] > 1 ? 's' : ''}`);
-  }
-
   private updateSchoolHint(me: PlayerState) {
     const book = this.buildings.includes('school') && this.readableBook(me);
     if (book && !this.bookWas) this.toast('Un livre de ton sac peut être lu à l\'École des dompteurs, au village.', 'alpha');
@@ -855,7 +852,6 @@ export class Hud {
       this.updateSchool(me);
     }
     this.updateSchoolHint(me);
-    this.updateDrill(me);
     if (this.panel === 'buy') this.updateBuy(me);
     if (this.panel === 'talk') this.updateTalk();
     if (this.panel === 'hall') this.updateHall(me);
@@ -1023,6 +1019,8 @@ export class Hud {
   /** Il vient de retrouver les souvenirs from à to - 1 : il les raconte (si on est avec lui), sinon on l'annonce. */
   elderRemembers(from: number, to: number, mine: boolean) {
     const lines = ELDER_CHAPTERS.slice(from, to).flat();
+    // toute sa mémoire retrouvée : il part au bateau, et y restera
+    if (to >= this.islandCaves()) lines.push(...ELDER_LEAVES);
     if (mine && this.panel === 'elder') {
       this.elderView = 'talk';
       this.elderSay(lines);
@@ -1119,12 +1117,10 @@ export class Hud {
         this.costChips('elder-cost', funds, BOAT_STAGES[boat]);
         const pay = button(canPay(funds, BOAT_STAGES[boat]) ? 'Donner les ressources' : 'Il manque des ressources', 'cta', () => {
           this.onBoat();
-          // il annonce qu'il part au chantier (on le verra partir une fois la conversation finie)
           this.elderView = 'talk';
           this.elderSay([
             `Merci ! Avec tout ça, ${BOAT_STAGES[boat].name.toLowerCase()} ne va pas traîner.`,
-            'Bon ! Je file au bateau, au bout de l\'île. Il y a du travail, et ces vieilles jambes ne vont pas vite.',
-            'Si tu me cherches, je serai là-bas, le marteau à la main. Viens voir comme il prend forme !',
+            'Allez, au travail ! Reviens voir comme il prend forme.',
           ]);
         });
         pay.disabled = !canPay(funds, BOAT_STAGES[boat]);
@@ -1146,7 +1142,12 @@ export class Hud {
           this.elderView = 'school';
           this.last.elder = '';
         }));
-        if (told >= total) actions.push(button('Le bateau', me.scrolls ? 'btn' : 'cta', () => {
+        const sail = boat >= BOAT_STAGES.length && this.heart >= HEART_IN_BOAT && !this.elderLeaving;
+        if (sail) actions.push(button('Prendre la mer', 'cta', () => {
+          this.setPanel(null);
+          this.onSail();
+        }));
+        if (told >= total) actions.push(button('Le bateau', me.scrolls || sail ? 'btn' : 'cta', () => {
           this.elderView = 'boat';
           this.last.elder = '';
         }));
@@ -1569,7 +1570,7 @@ export class Hud {
   }
   private unread = 0;
   onChat = (_text: string) => {};
-  onDrill = (_s: number, _move: number) => {};
+  onSail = () => {};
 
   /** Zone ouverte pour le village : la zone 1, puis chaque zone dont la porte est ouverte. */
   private zoneOpen(z: number) {
@@ -1907,18 +1908,6 @@ export class Hud {
       c.innerHTML = `<i class="skill-icon">${SKILL_ICONS[sk.icon]}</i><div class="col"><b></b><span></span></div>`;
       c.querySelector('b')!.textContent = sk.name;
       c.querySelector('span')!.textContent = sk.desc;
-      // un géant vaincu : on peut s'entraîner contre son fantôme, sur cette attaque-là
-      if (form === 'boss' && sk.move !== undefined) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'btn small skill-train';
-        b.textContent = 'S\'entraîner';
-        b.onclick = () => {
-          this.onDrill(s, sk.move!);
-          this.setPanel(null);
-        };
-        c.querySelector('.col')!.append(b);
-      }
       skills.append(c);
     });
     if (card.note) {
@@ -2135,7 +2124,7 @@ export class Hud {
     const hover = this.mapHover && this.caveUnder(m, this.mapHover.x * dpr, this.mapHover.y * dpr, 14 * dpr);
     if (hover) {
       const back = this.caves[hover.id] ?? 0;
-      const x = m(hover.entrance.x), y = m(hover.entrance.y) - 16 * dpr, text = `${SPECIES[hover.boss]?.name ?? ''}${back ? ` · revient dans ${back >= 60 ? `${Math.ceil(back / 60)} min` : `${back} s`}` : ''}`;
+      const x = m(hover.entrance.x), y = m(hover.entrance.y) - 16 * dpr, text = `${hover.open !== undefined ? `${ISLE_NAMES[SPECIES[hover.boss]?.key] ?? ''} · ` : ''}${SPECIES[hover.boss]?.name ?? ''}${back ? ` · revient dans ${back >= 60 ? `${Math.ceil(back / 60)} min` : `${back} s`}` : ''}`;
       ctx.font = `700 ${14 * dpr}px Outfit, sans-serif`;
       const w = ctx.measureText(text).width + 14 * dpr, h = 22 * dpr;
       ctx.fillStyle = 'rgba(16,24,26,0.92)';
@@ -2351,7 +2340,7 @@ function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; 
 
 function beastCardBase(s: number, form: BestiaryForm): { name: string; tag: string; chips: Chip[]; skills: Skill[]; note: string } {
   const sp = SPECIES[s], num = (n: number) => n.toLocaleString('fr-FR'), dec = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
-  const moveCards = (key: string) => (BOSS_MOVES[key] ?? []).map((m, i) => ({ ...moveSkill(m, MOVE_NAMES[m.kind]), ...('cd' in m && !DRILL_SKIPS.has(m.kind) ? { move: i } : {}) }));
+  const moveCards = (key: string) => (BOSS_MOVES[key] ?? []).map((m) => moveSkill(m, MOVE_NAMES[m.kind]));
   if (form === 'boss') {
     return {
       name: sp.name, tag: `Géant · ${ZONE_NAMES[sp.zone - 1]}${sp.optional ? ' · facultatif' : ''}`,
