@@ -117,9 +117,12 @@ export function seaColor(map: WorldMap, x: number, y: number, surf = true) {
   return foam ? lerp3(col, FOAM, foam * foam * 0.75) : col;
 }
 
-/** Eau d'un lac (profonde ou non), qui passe au bleu de la mer près d'une embouchure. */
+/**
+ * Eau d'un lac (profonde ou non), qui passe au bleu de la mer près d'une embouchure. Dans les Lacs brumeux, les lacs ont
+ * le bleu de la mer : leur eau s'y jette de partout, sans frontière entre les deux.
+ */
 export function lakeColor(map: WorldMap, x: number, y: number, deep: boolean, base = deep ? LAKE_DEEP : LAKE_WATER) {
-  const k = mouthMix(map, x, y);
+  const k = Math.max(mouthMix(map, x, y), lakesMix(map, x, y));
   return k ? lerp3(base, SEA_SHALLOW_COL, k) : base;
 }
 
@@ -257,7 +260,7 @@ export class World {
         const meadow = fbm(px / 420, py / 420, this.seed + 3, 2);
         const v = sea ? 0.97 + meadow * 0.06 : 0.93 + meadow * 0.12;
         let col = sea ? seaColor(map, px, py) : landColor(map, px, py, this.season);
-        // Près d'une embouchure, l'eau du lac est peinte avec le sol (les disques s'y effacent, voir plus bas) ; son bord
+        // Près d'une embouchure (et dans les Lacs brumeux), l'eau du lac est peinte avec le sol (les disques s'y effacent, voir plus bas) ; son bord
         // est adouci comme celui de la côte : part d'eau parmi les cases voisines (pondérées), pas de marches.
         let wet = 0, mouth = false;
         const water = [0, 0, 0];
@@ -265,7 +268,7 @@ export class World {
           for (let dj = -1; dj <= 1; dj++) {
             for (let di = -1; di <= 1; di++) {
               const qx = px + di * TILE, qy = py + dj * TILE, inSea = map.isSea(qx, qy);
-              if (!inSea && (!map.isWater(qx, qy) || map.mouthAt(qx, qy) >= MOUTH_FADE)) continue;
+              if (!inSea && (!map.isWater(qx, qy) || (map.mouthAt(qx, qy) >= MOUTH_FADE && lakesMix(map, qx, qy) <= 0))) continue;
               mouth ||= !inSea;
               const wt = (di ? 1 : 2) * (dj ? 1 : 2), deep = [1, -1].every((d) => map.isWater(qx + d * 2 * TILE, qy) && map.isWater(qx, qy + d * 2 * TILE)); // comme les disques des lacs
               const c = inSea ? seaColor(map, qx, qy, false) : lakeColor(map, qx, qy, deep);
@@ -340,7 +343,8 @@ export class World {
       }
     }
     // Lacs (pas la mer) : disques par case pour des berges arrondies (berge, puis eau, puis eau profonde).
-    // Près d'une embouchure, ils passent par paliers au bleu de la mer et s'effacent : l'eau peinte avec le sol prend le relais.
+    // Près d'une embouchure, et dans les Lacs brumeux, ils passent par paliers au bleu de la mer et s'effacent : l'eau
+    // peinte avec le sol prend le relais (pas de frontière marquée entre les lacs et la mer).
     const STEPS = 12;
     const water: [number, number, boolean, number][] = []; // x, y, profonde, palier vers la mer (0 : lac)
     for (let ty = oy - TILE; ty < oy + CHUNK + TILE; ty += TILE) {
@@ -348,7 +352,7 @@ export class World {
         const px = tx + TILE / 2, py = ty + TILE / 2;
         if (!map.isWater(px, py) || map.isSea(px, py)) continue;
         const deep = map.isWater(px + 2 * TILE, py) && map.isWater(px - 2 * TILE, py) && map.isWater(px, py + 2 * TILE) && map.isWater(px, py - 2 * TILE);
-        water.push([px, py, deep, Math.round(mouthMix(map, px, py) * STEPS)]);
+        water.push([px, py, deep, Math.round(Math.max(mouthMix(map, px, py), lakesMix(map, px, py)) * STEPS)]);
       }
     }
     if (water.length) {
@@ -426,64 +430,6 @@ export class World {
         ctx.beginPath();
         ctx.ellipse(d.x + hx, d.y + hy + 1, hr, hr * 0.5, 0, 0, TAU);
         ctx.fill();
-      }
-    }
-
-    // Sables mouvants (plages de la Mer de sable) : une mare de sable mouillé, plus sombre, aux remous en spirale.
-    for (const q of map.quicksands) {
-      if (q.x < ox - q.r - 20 || q.x > ox + CHUNK + q.r + 20 || q.y < oy - q.r - 20 || q.y > oy + CHUNK + q.r + 20) continue;
-      const ry = q.r * 0.6, wob = (a: number, k: number) => 1 + Math.sin(a * 5 + q.x * 0.01) * 0.05 * k + Math.sin(a * 3 + q.y * 0.01) * 0.04 * k;
-      const blobAt = (k: number, grow: number) => {
-        ctx.beginPath();
-        for (let i = 0; i <= 40; i++) {
-          const a = (i / 40) * TAU, w = wob(a, 1);
-          const px = q.x + Math.cos(a) * (q.r * k + grow) * w, py = q.y + Math.sin(a) * (ry * k + grow * 0.6) * w;
-          if (i) ctx.lineTo(px, py);
-          else ctx.moveTo(px, py);
-        }
-        ctx.closePath();
-      };
-      ctx.fillStyle = 'rgba(214,186,128,0.8)'; // bourrelet de sable sec autour
-      blobAt(1, 8);
-      ctx.fill();
-      ctx.fillStyle = '#A88A58';
-      blobAt(1, 0);
-      ctx.fill();
-      ctx.fillStyle = '#937648';
-      blobAt(0.72, 0);
-      ctx.fill();
-      ctx.fillStyle = '#7E6439';
-      blobAt(0.38, 0);
-      ctx.fill();
-      // remous : une spirale vers le centre
-      ctx.strokeStyle = 'rgba(70,54,30,0.45)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let i = 0; i <= 80; i++) {
-        const u = i / 80, a = u * TAU * 2.6 + q.x, k = 0.92 - u * 0.85;
-        const px = q.x + Math.cos(a) * q.r * k, py = q.y + Math.sin(a) * ry * k;
-        if (i) ctx.lineTo(px, py);
-        else ctx.moveTo(px, py);
-      }
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(232,206,150,0.35)';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      for (let i = 0; i <= 80; i++) {
-        const u = i / 80, a = u * TAU * 2.6 + q.x + 0.5, k = 0.9 - u * 0.85;
-        const px = q.x + Math.cos(a) * q.r * k, py = q.y - 1.5 + Math.sin(a) * ry * k;
-        if (i) ctx.lineTo(px, py);
-        else ctx.moveTo(px, py);
-      }
-      ctx.stroke();
-      // quelques bulles crevées
-      for (let i = 0; i < 4; i++) {
-        const a = hash2(i, q.x | 0, 31) * TAU, k = 0.2 + hash2(i, q.y | 0, 32) * 0.6;
-        ctx.strokeStyle = 'rgba(60,46,26,0.5)';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.ellipse(q.x + Math.cos(a) * q.r * k, q.y + Math.sin(a) * ry * k, 3, 1.6, 0, 0, TAU);
-        ctx.stroke();
       }
     }
 
@@ -2073,7 +2019,7 @@ export class World {
     ctx.textAlign = 'center';
     ctx.lineWidth = 4;
     ctx.strokeStyle = 'rgba(16,24,26,0.85)';
-    const label = SPECIES[c.boss].title ?? SPECIES[c.boss].name; // le nom du géant qui l'habite
+    const label = SPECIES[c.boss].name; // le nom du géant qui l'habite
     ctx.strokeText(label, x, y - 128);
     ctx.fillStyle = bossHere ? '#FF9B78' : '#C9CFC2';
     ctx.fillText(label, x, y - 128);
@@ -2920,5 +2866,70 @@ export function drawShipwreck(ctx: CanvasRenderingContext2D) {
   ctx.beginPath();
   ctx.ellipse(18, 9, 4.5, 2.7, 0.4, 0, TAU);
   ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Sables mouvants (Mer de sable) : une mare de sable mouillé, plus sombre, aux remous en spirale. open (0 → 1) : il
+ * s'ouvre depuis son centre, puis se referme (le sable sec reprend le dessus) ; t : secondes, les remous tournent.
+ */
+export function drawQuicksand(ctx: CanvasRenderingContext2D, q: { x: number; y: number; r: number }, open: number, t: number) {
+  if (open <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, open * 1.5);
+  q = { x: q.x, y: q.y, r: q.r * (0.25 + 0.75 * open) };
+  const ry = q.r * 0.6, wob = (a: number, k: number) => 1 + Math.sin(a * 5 + q.x * 0.01) * 0.05 * k + Math.sin(a * 3 + q.y * 0.01) * 0.04 * k;
+  const blobAt = (k: number, grow: number) => {
+    ctx.beginPath();
+    for (let i = 0; i <= 40; i++) {
+      const a = (i / 40) * TAU, w = wob(a, 1);
+      const px = q.x + Math.cos(a) * (q.r * k + grow) * w, py = q.y + Math.sin(a) * (ry * k + grow * 0.6) * w;
+      if (i) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+  };
+  ctx.fillStyle = 'rgba(214,186,128,0.8)'; // bourrelet de sable sec autour
+  blobAt(1, 8);
+  ctx.fill();
+  ctx.fillStyle = '#A88A58';
+  blobAt(1, 0);
+  ctx.fill();
+  ctx.fillStyle = '#937648';
+  blobAt(0.72, 0);
+  ctx.fill();
+  ctx.fillStyle = '#7E6439';
+  blobAt(0.38, 0);
+  ctx.fill();
+  // remous : une spirale vers le centre
+  ctx.strokeStyle = 'rgba(70,54,30,0.45)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i <= 80; i++) {
+    const u = i / 80, a = u * TAU * 2.6 + q.x + t * 1.4, k = 0.92 - u * 0.85; // il tourne et aspire
+    const px = q.x + Math.cos(a) * q.r * k, py = q.y + Math.sin(a) * ry * k;
+    if (i) ctx.lineTo(px, py);
+    else ctx.moveTo(px, py);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(232,206,150,0.35)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let i = 0; i <= 80; i++) {
+    const u = i / 80, a = u * TAU * 2.6 + q.x + 0.5 + t * 1.4, k = 0.9 - u * 0.85;
+    const px = q.x + Math.cos(a) * q.r * k, py = q.y - 1.5 + Math.sin(a) * ry * k;
+    if (i) ctx.lineTo(px, py);
+    else ctx.moveTo(px, py);
+  }
+  ctx.stroke();
+  // quelques bulles crevées
+  for (let i = 0; i < 4; i++) {
+    const a = hash2(i, q.x | 0, 31) * TAU, k = 0.2 + hash2(i, q.y | 0, 32) * 0.6;
+    ctx.strokeStyle = 'rgba(60,46,26,0.5)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.ellipse(q.x + Math.cos(a) * q.r * k, q.y + Math.sin(a) * ry * k, 3, 1.6, 0, 0, TAU);
+    ctx.stroke();
+  }
   ctx.restore();
 }

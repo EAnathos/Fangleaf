@@ -2,10 +2,10 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { DESERT_ZONE, JUNGLE_ZONE, ZONES, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, QUICKSAND_SINK, TICK_HZ, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
+import { DESERT_ZONE, JUNGLE_ZONE, ZONES, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, QUICKSAND_LIFE_S, QUICKSAND_OPEN_S, quicksandSink, TICK_HZ, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
 import { BEACH, SEA_SHALLOW, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { sky } from '../../shared/weather.ts';
-import { Room } from '../../server/room.ts';
+import { maxHpOf, Room } from '../../server/room.ts';
 
 describe('Le monde : carte, obstacles, brume, météo', () => {
   rule('Les 8 espèces apparaissent sur la carte, deux par zone.', () => {
@@ -201,7 +201,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
   });
 
   rule('Ordre des espèces figé : leur index sert dans les sauvegardes (essences, Alphas). On n\'ajoute qu\'à la fin.', () => {
-    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise kraken_tentacle kraken gorilla croc masked gorilla_king croc_king mask_lord scorpion scorpion_king drake wyvern dragon drake_king wyvern_king dragon_king bigfoot';
+    const order = 'slime wolf boar golem sporelin spider bear wisp slime_queen shadow_fang old_tusk moss_heart spore_giant weaver colossus old_flame watcher toad serpent crab rune_eye toad_king mist_hydra titan_crab hare snail firefly meerkat sandworm vulture jackal sand_queen vulture_king moon_jackal treant salamander ash_bat lava_tortoise salamander_queen ash_lord mountain_tortoise kraken_tentacle kraken gorilla croc masked gorilla_king croc_king mask_lord scorpion scorpion_king drake wyvern dragon drake_king wyvern_king dragon_king bigfoot flame_decoy mask_totem salamander_tail';
     check(SPECIES.map((sp) => sp.key).join(' ') === order, `ordre des ${SPECIES.length} espèces inchangé (sauvegardes intactes)`);
   });
 
@@ -284,7 +284,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
       `zone 2 sous la brume : ${wild.length} monstres, tous de la zone 1 et en deçà de la brume`);
   });
 
-  rule('Tempête de sable : elle blesse dehors dans la Mer de sable ; vers sous le sable, vautours très haut, suricates cachés.', () => {
+  rule('Tempête de sable : elle blesse dehors dans la Mer de sable ; vers sous le sable, vautours cloués au sol, suricates cachés.', () => {
     const r = room();
     for (const u of [...r.units.values()]) if (!u.owner) r.units.delete(u.id);
     const realNow = Date.now, t0 = realNow();
@@ -315,7 +315,8 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
       r.wildAI(worm), r.wildAI(vul), r.wildAI(cat);
       r.time += 0.25;
     }
-    check(worm.hidden && !worm.emerging && vul.hidden && !vul.emerging && !r.hazards.length, 'en pleine tempête, le ver reste sous le sable et le vautour très haut : aucun ne frappe');
+    check(worm.hidden && !worm.emerging && !r.hazards.length, 'en pleine tempête, le ver reste sous le sable : il ne surgit pas');
+    check(!vul.hidden && !vul.emerging, 'le vautour, cloué au sol par le vent, se pose (on peut le frapper)');
     check(cat.hidden, 'les suricates se cachent dans leur tanière');
     Date.now = realNow;
 
@@ -340,23 +341,47 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     const other = r.map.treesNear(p.x, p.y, p.r + 10).some((i: number) => r.map.isCactus(r.map.decor[i]));
     check(other || p.hp === 1000, 'à distance, rien');
 
-    // sables mouvants : sur les plages du désert, on s'y enlise passé un moment
-    check(r.map.quicksands.length >= 6 && r.map.quicksands.every((q: { x: number; y: number }) => r.map.zoneAt(q.x, q.y) === DESERT_ZONE && !r.map.isWater(q.x, q.y) && r.map.shoreAt(q.x, q.y) > -BEACH - 120),
-      `${r.map.quicksands.length} sables mouvants, tous sur les plages de la Mer de sable`);
-    const qs = r.map.quicksands[0];
-    check(r.map.quicksandAt(qs.x, qs.y) === 0 && r.map.quicksandAt(qs.x + qs.r * 1.2, qs.y) < 0, 'on est dedans au centre, pas à côté');
-    [p.x, p.y, p.hp] = [qs.x, qs.y, 1000];
+    // sables mouvants : ils s'ouvrent au hasard sous les pas d'un dompteur qui marche dans le désert, et l'on s'y enlise
+    // de plus en plus vite
+    Date.now = realNow;
+    r.storm = 0;
+    check(!r.map.quicksands.length, 'pas de sables mouvants posés sur la carte');
+    [p.x, p.y, p.fx, p.fy, p.movedAt] = [q.x, q.y, 1, 0, r.time];
+    p.hp = maxHpOf(p);
+    const random = Math.random;
+    Math.random = () => 0; // il s'en ouvre un à coup sûr
     r.tick = 0;
+    r.updateSands();
+    Math.random = random;
+    check(r.sands.length === 1 && Math.hypot(r.sands[0].x - p.x, r.sands[0].y - p.y) < 40, 'il s\'en ouvre un sous ses pas');
+    r.time += QUICKSAND_OPEN_S;
+    r.tick = 1;
+    r.updateSands();
+    const qs = r.map.quicksands[0];
+    check(r.map.quicksandAt(p.x, p.y) === 0 && r.map.quicksandAt(qs.x + qs.r * 1.2, qs.y) < 0, 'grand ouvert : on est dedans (pas à côté)');
+    const hp0 = p.hp;
     r.quicksandDamage();
-    check(p.hp === 1000, 'à peine entré : rien encore');
+    check(p.hp === hp0, 'à peine entré : rien encore');
     r.time += QUICKSAND_GRACE_S;
     r.tick = TICK_HZ;
     r.quicksandDamage();
-    check(p.hp < 1000 && 1000 - p.hp <= Math.ceil(2000 * QUICKSAND_SINK), `resté dedans : il s'enlise (${1000 - p.hp} PV)`);
-    [p.x, p.y, p.hp] = [qs.x + qs.r * 3, qs.y, 1000];
-    r.time += 5;
+    const first = hp0 - p.hp;
+    check(first > 0 && first <= Math.ceil(maxHpOf(p) * quicksandSink(0)), `resté dedans : il s'enlise (${first} PV)`);
+    r.time += 1;
     r.quicksandDamage();
-    check(p.hp === 1000 && p.sinkSince === undefined, 'sorti : plus rien');
+    const second = hp0 - first - p.hp;
+    r.time += 1;
+    r.quicksandDamage();
+    const third = hp0 - first - second - p.hp;
+    check(second > first * 1.5 && third > second * 1.5, `de plus en plus vite : ${first}, ${second}, ${third} PV`);
+    [p.x, p.y, p.hp] = [qs.x + qs.r * 3, qs.y, hp0];
+    r.time += 1;
+    r.quicksandDamage();
+    check(p.hp === hp0 && p.sinkSince === undefined, 'sorti : plus rien');
+    r.time += QUICKSAND_LIFE_S;
+    r.tick = 1;
+    r.updateSands();
+    check(!r.sands.length && !r.map.quicksands.length, 'puis il se referme');
 
     // Vautour : il se chevauche et vole, par-dessus l'eau ; on se pose sur la terre ferme.
     const r3 = room();
@@ -378,6 +403,12 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
       r3.onPos(p3, p3.x + (wx - p3.x) * k, p3.y + (wy - p3.y) * k, 1, 0);
     }
     check(r3.map.isWater(p3.x, p3.y), 'il survole l\'eau');
+    // en vol, les coups de crocs et de griffes ne l'atteignent pas (seuls les tirs, et les géants)
+    const hp3 = p3.hp, wolf = r3.createUnit(key('wolf'), false, p3.x + 30, p3.y);
+    r3.damage(p3, 100, wolf, true);
+    check(p3.hp === hp3 && bird.hp === bird.maxHp, 'à dos de vautour : pas de coup au corps à corps');
+    r3.damage(p3, 100, wolf);
+    check(bird.hp < bird.maxHp, 'un tir, si');
     r3.onMount(p3, 0);
     check(!p3.mount && !r3.map.blocked(p3.x, p3.y), 'en descendant au-dessus de l\'eau, on se pose sur la terre ferme');
   });

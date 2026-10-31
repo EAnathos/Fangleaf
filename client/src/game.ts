@@ -1,11 +1,11 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
-import { alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, SPECS, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, TORNADO_PULL, TORNADO_PULL_R, riderSpeed, ISLE_CHEST_S } from '../../shared/config.ts';
+import { SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
-import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED } from '../../shared/protocol.ts';
+import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED } from '../../shared/protocol.ts';
 import { BOSS_LINES } from './speciesInfo.ts';
-import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST } from './anim.ts';
+import { type Cast, castPose, drawRock, drawWebGlob, ghostOf, impactOf, lobbed, lungePose, type Pose, REST, wingPose } from './anim.ts';
 import { type Ambience, sound } from './audio.ts';
 import { Fog } from './fog.ts';
 import { Fx } from './fx.ts';
@@ -15,9 +15,9 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, drawTornado, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawShadowRun, drawLurkEyes, drawStinger, drawDizzy, drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, drawTornado, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawZap, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
-import { desertMix, jungleMix, lakesMix, World } from './world.ts';
+import { desertMix, drawQuicksand, jungleMix, lakesMix, World } from './world.ts';
 import { SEASON_NAMES, sky as skyAt, WINTER } from '../../shared/weather.ts';
 import { HALL_ID, VILLAGE_GATES, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts';
@@ -26,16 +26,19 @@ import { drawAubinAtWork, drawBoat, drawBoatLabel } from './boat.ts';
 import { Cinema, type Crew } from './cinematics.ts';
 
 /** Dégâts affichés arrondis à 2 décimales, à la française : 6,4 · 12 · 4,85. */
-/** Nom propre d'un géant (sinon le nom de son espèce). */
-const bossName = (s: number) => SPECIES[s].title ?? SPECIES[s].name;
+/** Nom d'un géant. */
+const bossName = (s: number) => SPECIES[s].name;
 const MIST_FADE_S = 2.5; // une brume qui se lève met ce temps à se dissiper
 const SPRITE_FPS = 20; // animation des monstres (images par seconde)
+/** Attaques au sol qui partent de leur lanceur : dessinées depuis sa position à l'écran. */
+const ANCHORED = new Set<string>(['tongue', 'pincer', 'breath', 'laser', 'flame', 'tail', 'impale']);
+/** Attaques pendant lesquelles le géant est caché (sous terre, au plafond, dans l'ombre) : il a sa propre façon d'être dessiné. */
+const HIDDEN_CASTS = new Set<string>(['stalk', 'wisps', 'venomdive', 'ambush', 'roost', 'leap']);
+const ZAP_S = 0.35; // éclair d'une décharge du Grand Drake : il reste à l'écran ce temps-là
 const SHOUT_ANIM_S = 1.1; // un Alpha suricate se dresse et crie (un escargot dresse sa carapace) pendant ce temps-là
 const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
 
 const FLY_HEIGHT = 2.2; // hauteur de vol à dos de vautour (en rayons de l'oiseau)
-
-const GEAR_NAMES = { weapon: 'Arme améliorée', armor: 'Armure améliorée', torch: 'Torche améliorée', boots: 'Bottes améliorées', saddle: 'Selle améliorée' };
 
 // En local seulement : ?ciel=nuit, ?ciel=pluie, ?ciel=orage (nuit et pluie) ou ?ciel=tempete (dans la Mer de sable) pour voir le ciel sans attendre.
 const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1 }, tempete: { storm: 1 }, printemps: { season: 0 }, automne: { season: 2 }, hiver: { season: 3 }, neige: { season: 3, rain: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
@@ -68,6 +71,10 @@ export class Game {
   private charges = new Map<number, number>(); // tireur → début de la charge de son tir
   private wings = new Map<number, { k: number; at: number; x: number; y: number; ang: number }>(); // vautours de la meute : 0 posé, 1 en vol
   private chestOpen = new Map<number, number>(); // coffre → moment où on l'a ouvert (animation du couvercle)
+  private sandSeen = new Map<number, { born: number; until: number }>(); // sables mouvants : quand ils se sont ouverts et quand ils se referment (horloge locale)
+  private movesSaid = new Map<number, Set<string>>(); // géant → attaques déjà annoncées par leur nom dans ce combat
+  private beams: { from: number; to: number; at: number }[] = []; // soins des totems : un rayon vert du totem à l'allié
+  private zaps: { pts: number[]; at: number; color?: string }[] = []; // décharges du Grand Drake qui rebondissent (éclairs à dessiner)
   private chestSeen = new Map<number, number>(); // coffre → première apparition (il tombe en rebondissant)
   private fades = new Map<object, number>();
   private chopAt = new Map<number, number>(); // arbre → dernier coup de hache (il tremble)
@@ -298,9 +305,9 @@ export class Game {
     const boss = voyage.boss, units = this.net.latest?.units ?? [];
     const awake = units.some((u) => u[1] === boss && !u[6] && !(u[2] & UNIT_FLAG_DORMANT));
     if (this.hud.beaten.includes(boss) || awake) return this.cinema.lift(); // vaincu, ou déjà en plein combat : rien de plus
-    const [name, sub] = (SPECIES[boss].title ?? SPECIES[boss].name).split(', ');
+    const name = SPECIES[boss].name;
     // sur le pont : soi, et ceux qui y sont déjà
-    this.cinema.kraken(name, sub ?? '', this.crewOf((p) => this.map.caveAt(p.x, p.y) === voyage), () => {
+    this.cinema.kraken(name, '', this.crewOf((p) => this.map.caveAt(p.x, p.y) === voyage), () => {
       this.net.send({ t: 'kraken' });
       this.cinema.lift();
     });
@@ -409,10 +416,7 @@ export class Game {
     }
     else if (cave?.id === HALL_ID) this.hud.banner(ZONE_NAMES[VOLCANO_ZONE - 1], '', true);
     else if (cave?.zone === VOYAGE_ZONE) this.hud.banner(ZONE_NAMES[VOYAGE_ZONE - 1], this.hud.beaten.includes(cave.boss) ? 'La route du Colisée est libre' : 'Cap sur le Colisée', true);
-    else if (cave) {
-      const boss = SPECIES[cave.boss];
-      this.hud.banner(boss.title ?? boss.name, '', true); // le nom du géant qui habite la grotte
-    }
+    else if (cave) this.hud.banner(SPECIES[cave.boss].name, '', true); // le nom du géant qui habite la grotte
     else {
       const z = Number(area.slice(4));
       if (!first) this.hud.banner(ZONE_NAMES[z - 1], '', z >= 3); // juste le nom de la zone
@@ -788,6 +792,9 @@ export class Game {
       case 'boom':
         sound.play('boom', near(e.x, e.y));
         break;
+      case 'zap':
+        sound.play('zap', near(e.pts[0], e.pts[1]));
+        break;
       case 'pdie':
         if (e.id === me) sound.play('death');
         break;
@@ -848,9 +855,8 @@ export class Game {
         break;
       case 'tame': {
         const u = this.posOf(e.id, players);
-        const label = SPECIES[e.s].name;
         if (e.by === this.myId) {
-          this.hud.toast(`${label} apprivoisé !`, 'good');
+          // (le « Apprivoisé ! » au-dessus de lui suffit)
           if (u) {
             this.fx.text(u.x, u.y - 30, 'Apprivoisé !', '#5CC8B8', 18, 1.4);
             this.fx.ring(u.x, u.y, '#5CC8B8', 10, 70);
@@ -859,10 +865,13 @@ export class Game {
         break;
       }
       case 'gold':
-        if (e.to === this.myId) this.fx.text(e.x, e.y - 12, `+${e.n} or`, '#F0B64A', 14, 1.0);
+        if (e.to === this.myId) this.hud.gain('gold', e.n); // regroupé sur la ligne des gains, sous le sac
         break;
       case 'essence':
-        if (e.to === this.myId) this.fx.essence(e.x, e.y - 30, SPECIES[e.s].color);
+        if (e.to === this.myId) {
+          this.fx.essence(e.x, e.y - 30, SPECIES[e.s].color);
+          this.hud.gain('essence', 1);
+        }
         break;
       case 'soul':
         if (e.to === this.myId) {
@@ -872,10 +881,15 @@ export class Game {
         break;
       case 'move': {
         const b = this.posOf(e.id, players);
-        if (b) this.fx.text(b.x, b.y - 70, `${MOVE_NAMES[e.kind as keyof typeof MOVE_NAMES] ?? e.kind} !`, '#FF9B78', 18, 1.3);
+        // le nom de l'attaque, la première fois qu'il la lance dans ce combat (ensuite, la zone au sol suffit)
+        const said = this.movesSaid.get(e.id) ?? this.movesSaid.set(e.id, new Set()).get(e.id)!;
+        if (b && (e.kind === 'wake' || e.kind === 'hibernate' || !said.has(e.kind))) this.fx.text(b.x, b.y - 70, e.kind === 'wake' ? 'Il se réveille !' : `${MOVE_NAMES[e.kind as keyof typeof MOVE_NAMES] ?? e.kind} !`, '#FF9B78', 18, 1.3);
+        said.add(e.kind);
+        if (b && e.kind === 'hibernate') this.fx.text(b.x, b.y - 100, 'Z z z', '#BFD8FF', 20, 2);
         break;
       }
       case 'challenge': {
+        this.movesSaid.delete(e.id); // nouveau combat : il annoncera de nouveau ses attaques
         const b = this.posOf(e.id, players), boss = SPECIES[this.map.caves[e.cave]?.boss ?? 0];
         this.hud.setPanel(this.hud.panel === 'talk' ? null : this.hud.panel);
         if (b) {
@@ -905,7 +919,6 @@ export class Game {
           this.fx.burst(e.x, e.y - 30, '#F0B64A', 40, 220);
           this.fx.ring(e.x, e.y - 10, '#F0B64A', 10, 110, 0.9);
           this.fx.text(e.x, e.y - 70, `+${e.gold} or`, '#F0B64A', 26, 2);
-          this.hud.toast(e.id < 0 ? `Coffre du naufragé : +${e.gold} or ! Il se remplira dans ${ISLE_CHEST_S / 60} minutes.` : `Coffre ouvert : +${e.gold} or !`, 'good');
           if (e.book !== undefined) {
             this.fx.text(e.x, e.y - 100, bookName(e.book), '#B48CFF', 18, 2.4);
             this.hud.toast(`Un livre au fond du coffre : ${bookName(e.book)} ! À lire à l'École des dompteurs, au Camp avancé.`, 'alpha');
@@ -922,13 +935,15 @@ export class Game {
         if (e.by === this.myId) {
           sound.play(e.done ? 'fanfare' : 'chime');
           const d = DISCIPLINES[LESSON_KINDS[e.kind]];
-          this.hud.toast(e.done ? `Leçon de ${d.name.toLowerCase()} apprise : ${d.desc} !` : 'Tu ouvres le livre… La leçon prendra un moment, même si tu t\'en vas.', e.done ? 'good' : '');
-        } else if (e.done) this.hud.toast(`${name(e.by)} a appris une leçon à l'École des dompteurs`);
+          if (e.done) this.hud.lessonDone = true;
+          if (e.done) this.hud.toast(`Leçon de ${d.name.toLowerCase()} apprise : ${d.desc} !`, 'good');
+          else this.once('book', 'Tu ouvres le livre… La leçon prendra un moment, même si tu t\'en vas.');
+        }
         break;
       case 'res':
         if (e.to !== this.myId) break;
-        if (e.wood) this.fx.text(e.x, e.y - 12, `+${e.wood} bois`, '#D2A06A', 14, 1.1);
-        if (e.stone) this.fx.text(e.x, e.y - (e.wood ? 30 : 12), `+${e.stone} pierre`, '#B9C2BC', 14, 1.1);
+        if (e.wood) this.hud.gain('wood', e.wood);
+        if (e.stone) this.hud.gain('stone', e.stone);
         break;
       case 'hall': {
         const h = this.map.hall;
@@ -1037,6 +1052,10 @@ export class Game {
       case 'charge':
         this.charges.set(e.id, this.time);
         break;
+      case 'zap':
+        this.zaps.push({ pts: e.pts, at: this.time, color: e.by ? players.find((p) => p.id === e.by)?.color : undefined });
+        for (let i = 2; i < e.pts.length; i += 2) this.fx.burst(e.pts[i], e.pts[i + 1] - 14, '#CFEFFF', 8, 90);
+        break;
       case 'boom': {
         // une attaque d'Alpha légendaire (ou d'un tireur de la meute) éclate à la couleur de son dompteur
         const mine = e.by ? players.find((p) => p.id === e.by)?.color : undefined;
@@ -1105,6 +1124,7 @@ export class Game {
           if (near) this.shake = Math.max(this.shake, 0.35);
           break;
         }
+        if (this.bossBoom(e.kind, e.x, e.y, e.r, mine, near)) break;
         if (e.kind === 'leap' || e.kind === 'slam') {
           // le géant retombe de tout son poids : sol fissuré, onde de poussière, mottes de terre
           this.fx.crack(e.x, e.y, e.r * (e.kind === 'slam' ? 0.95 : 0.75), 2);
@@ -1143,14 +1163,12 @@ export class Game {
         break;
       case 'spec':
         if (e.id === this.myId) {
-          this.hud.toast(`Spécialisation : ${SPECS[e.spec].name} !`, 'good');
           this.fx.ring(this.me.x, this.me.y, '#F0B64A', 10, 70);
           sound.play('fanfare');
         }
         break;
       case 'class':
         if (e.id === this.myId) {
-          this.hud.toast(`Tu es désormais ${CLASSES[e.cls].name.toLowerCase()} !`, 'good');
           this.fx.ring(this.me.x, this.me.y, '#F0B64A', 10, 70);
         }
         break;
@@ -1184,7 +1202,6 @@ export class Game {
         const c = this.map.caves[e.cave];
         const near = c && (this.map.arenaAt(this.me.x, this.me.y)?.id === c.id || Math.hypot(this.me.x - c.entrance.x, this.me.y - c.entrance.y) < 1500);
         if (e.down) this.hud.toast(`${bossName(e.s)} est vaincu !`, 'good');
-        else if (near) this.hud.toast(`${bossName(e.s)} est de retour ${c.open !== undefined ? 'sur son îlot' : 'dans sa grotte'}…`);
         if (!e.down && c && this.map.arenaAt(this.me.x, this.me.y)?.id === c.id) {
           // il réapparaît sous nos yeux : le cercle d'invocation éclate
           const x = c.inside.x, y = c.inside.y - 60, col = SPECIES[e.s].color;
@@ -1205,9 +1222,21 @@ export class Game {
         if (u) this.fx.ring(u.x, u.y, '#B48CFF', 20, 110, 1.0);
         break;
       }
+      case 'victory':
+        this.hud.showVictory(e, this.myId);
+        break;
+      case 'mend': {
+        // un rayon vert va du totem à celui qu'il soigne
+        const a = this.posOf(e.from, players), b = this.posOf(e.to, players);
+        if (a && b) {
+          this.beams.push({ from: e.from, to: e.to, at: this.time });
+          this.fx.burst(b.x, b.y - 20, '#9CF08A', 6, 70);
+        }
+        break;
+      }
       case 'heal': {
         const p = this.posOf(e.id, players);
-        if (p) this.fx.text(p.x, p.y - 34, `+${e.n}`, '#7FCB5B', e.id === this.myId ? 15 : 12, 0.9);
+        if (p && e.id === this.myId) this.fx.text(p.x, p.y - 34, `+${e.n}`, '#7FCB5B', 15, 0.9); // (seulement les siens)
         break;
       }
       case 'pet': {
@@ -1239,32 +1268,31 @@ export class Game {
       case 'previve': {
         if (e.id === this.myId) this.hud.toast(`${name(e.by)} t'a relevé !`, 'good');
         else if (e.by === this.myId) this.hud.toast(`Tu as relevé ${name(e.id)} !`, 'good');
-        else this.hud.toast(`${name(e.by)} a relevé ${name(e.id)}`);
         const p = this.posOf(e.id, players);
         if (p) this.fx.ring(p.x, p.y, '#7FCB5B', 10, 70, 0.8);
         break;
       }
       case 'upgrade':
         if (e.id === this.myId) {
-          this.hud.toast(e.what === 'torch' && e.lvl === 1 ? 'Torche achetée : tu y verras plus clair la nuit' : e.what === 'saddle' && e.lvl === 1 ? `Selle achetée : tu peux monter tes Alphas (${keyLabel('mount')})` : `${GEAR_NAMES[e.what]} — niveau ${e.lvl}`, 'good');
+          // (la forge montre le nouveau niveau ; seuls la première torche et la première selle s'expliquent)
+          if (e.what === 'torch' && e.lvl === 1) this.hud.toast('Torche achetée : tu y verras plus clair la nuit', 'good');
+          if (e.what === 'saddle' && e.lvl === 1) this.hud.toast(`Selle achetée : tu peux monter tes Alphas (${keyLabel('mount')})`, 'good');
           this.fx.ring(this.me.x, this.me.y, '#F0B64A', 10, 60);
         }
         break;
       case 'alphaUp': {
-        if (e.by === this.myId) this.hud.toast(`Alpha ${SPECIES[e.s].name} renforcé — niveau ${e.lvl}`, 'alpha');
         const u = this.posOf(e.id, players);
         if (u) this.fx.ring(u.x, u.y, '#B48CFF', 10, 70);
         break;
       }
       case 'scatter':
         if (e.id === this.myId) this.hud.toast(`Ta meute s'est dispersée (${e.n} perdus)… seuls tes Alphas restent.`);
-        else this.hud.toast(`La meute de ${name(e.id)} s'est dispersée`);
         break;
       case 'mount':
         if (e.by === this.myId && e.on) {
           const swim = swimMount(this.net.latest?.units.find((u) => u[0] === e.id)?.[1] ?? this.self()?.mount?.species ?? -1);
-          if (swim) this.hud.toast('À l\'eau sur ton serpent ! Il ne va qu\'en eau : on en descend au bord d\'une rive.', 'good');
-        } else if (e.by === this.myId) this.hud.toast('Tu as mis pied à terre.');
+          if (swim) this.once('serpent', 'À l\'eau sur ton serpent ! Il ne va qu\'en eau : on en descend au bord d\'une rive.', 'good');
+        }
         break;
       case 'full':
         if (e.to === this.myId) this.fx.text(this.me.x, this.me.y - 40, `Meute pleine`, '#A9B3A6', 14);
@@ -1302,7 +1330,7 @@ export class Game {
         break;
       }
       case 'trade':
-        if (e.to === this.myId) this.hud.toast(e.sold ? `${SPECIES[e.s].name} vendu · +${e.gold} or` : `${SPECIES[e.s].name} acheté · −${e.gold} or`, 'good');
+        // (le marché se met à jour : pas de message)
         break;
       case 'travel':
         for (const [x, y] of [[e.x, e.y], [e.tx, e.ty]]) {
@@ -1312,6 +1340,29 @@ export class Game {
         if (e.id === this.myId) this.hud.setPanel(null);
         break;
     }
+  }
+
+  /**
+   * Sables mouvants ouverts autour de soi : leurs heures d'ouverture et de fermeture sur l'horloge locale (animation
+   * fluide), et leur taille du moment dans la carte (même règle que le serveur pour s'y enliser).
+   */
+  /** À dos de vautour, en vol : pas s'il est posé (la tempête de sable le cloue au sol), ce que dit le serveur. */
+  private aloft(p: PlayerState) {
+    if (!p.mount || !flyMount(p.mount.species)) return false;
+    const m = this.net.latest?.units.find((u) => u[0] === p.mount!.id);
+    return !m || !(m[2] & UNIT_FLAG_LANDED);
+  }
+
+  private trackSands() {
+    const sands = this.net.latest?.sands ?? [], ids = new Set<number>();
+    this.map.quicksands = [];
+    for (const [id, x, y, r, age, left] of sands) {
+      ids.add(id);
+      let q = this.sandSeen.get(id);
+      if (!q) this.sandSeen.set(id, (q = { born: this.time - age / 10, until: this.time + left / 10 }));
+      if (this.time < q.until) this.map.quicksands.push({ x, y, r: r * Math.min(1, (this.time - q.born) / QUICKSAND_OPEN_S) });
+    }
+    for (const id of this.sandSeen.keys()) if (!ids.has(id)) this.sandSeen.delete(id);
   }
 
   private frame() {
@@ -1324,15 +1375,16 @@ export class Game {
     const st = this.self();
     const dead = !!st?.dead;
     this.afterBoarding();
+    this.trackSands();
     // Déplacement local (prédiction) puis envoi au serveur à 20 Hz.
-    const [dx, dy] = dead || this.hud.panel || this.cinema.busy ? [0, 0] : moveDir();
+    const [dx, dy] = dead || st?.held || this.hud.panel || this.cinema.busy ? [0, 0] : moveDir(); // (saisi par un géant, étourdi : il ne bouge plus)
     this.me.moving = dx !== 0 || dy !== 0;
     if (this.me.moving) {
       // Même règle que le serveur : pas d'eau, on glisse le long des berges.
       const swimming = !!st?.mount && swimMount(st.mount.species); // sur le serpent : seulement l'eau
-      const flying = !!st?.mount && flyMount(st.mount.species); // à dos de vautour : par-dessus l'eau et les obstacles
+      const flying = !!st && this.aloft(st); // à dos de vautour : par-dessus l'eau et les obstacles (pas dans la tempête de sable)
       const sand = !flying && this.map.quicksandAt(this.me.x, this.me.y) >= 0; // sables mouvants : on s'y enlise
-      const speed = PLAYER_SPEED * (st?.mount ? riderSpeed(st.mount.species, st.saddle ?? 1, st.learned ?? []) : bootsSpeed(st?.boots ?? 0)) * (st?.slowed ? WEB_SLOW : 1) * (sand ? QUICKSAND_SLOW : 1);
+      const speed = PLAYER_SPEED * (st?.mount ? rideSpeed(st.mount.species, st.saddle ?? 1) : bootsSpeed(st?.boots ?? 0)) * (st?.slowed ? WEB_SLOW : 1) * (sand ? QUICKSAND_SLOW : 1);
       if (sand && this.time - this.sandToast > 8) {
         this.sandToast = this.time;
         this.hud.toast('Sables mouvants ! Tu t\'enlises : sors-en vite.');
@@ -1364,17 +1416,25 @@ export class Game {
     // Tempête de sable : le vent pousse le dompteur vers l'est (même règle de passage qu'un pas ordinaire).
     const gust = dead || this.map.caveAt(this.me.x, this.me.y) || !this.gateOpen(DESERT_ZONE - 1) ? 0 : skyAt(this.map.seed, this.net.serverNow()).storm * desertMix(this.map, this.me.x, this.me.y);
     if (gust > 0.05) {
-      const swim = !!st?.mount && swimMount(st.mount.species), fly = !!st?.mount && flyMount(st.mount.species);
+      const swim = !!st?.mount && swimMount(st.mount.species), fly = !!st && this.aloft(st);
       const nx = this.me.x + STORM_WIND.x * STORM_PUSH * gust * dt, ny = this.me.y + STORM_WIND.y * STORM_PUSH * gust * dt;
       if (this.map.passable(nx, ny, swim, fly) && this.map.gateCrossed(this.me.x, this.me.y, nx, ny) < 0) [this.me.x, this.me.y] = [nx, ny];
     }
     // Tornades du Roi-Vautour : elles aspirent le dompteur vers leur cœur (le serveur fait de même pour les monstres).
-    if (!dead && !(st?.mount && (swimMount(st.mount.species) || flyMount(st.mount.species)))) {
+    if (!dead && !(st?.mount && (swimMount(st.mount.species) || this.aloft(st)))) {
       for (const h of this.net.latest?.hazards ?? []) {
         if (HAZARD_STYLES[h[8]] !== 'tornado' || h[6] < 100 || h[7]) continue;
         const ddx = h[1] - this.me.x, ddy = h[2] - this.me.y, d = Math.hypot(ddx, ddy);
         if (d < 8 || d > TORNADO_PULL_R) continue;
         const step = Math.min(d, TORNADO_PULL * (1 - (0.5 * d) / TORNADO_PULL_R) * dt), nx = this.me.x + (ddx / d) * step, ny = this.me.y + (ddy / d) * step;
+        if (this.map.passable(nx, ny, false, false) && this.map.gateCrossed(this.me.x, this.me.y, nx, ny) < 0) [this.me.x, this.me.y] = [nx, ny];
+      }
+      // gueules des dunes : le sable aspire vers leur centre (même règle que le serveur pour les monstres)
+      for (const h of this.net.latest?.hazards ?? []) {
+        if (HAZARD_STYLES[h[8]] !== 'maw' || h[6] < 100 || h[7]) continue;
+        const ddx = h[1] - this.me.x, ddy = h[2] - this.me.y, d = Math.hypot(ddx, ddy);
+        if (d < 6 || d > h[3] * 1.6) continue;
+        const step = Math.min(d, MAW_PULL * dt), nx = this.me.x + (ddx / d) * step, ny = this.me.y + (ddy / d) * step;
         if (this.map.passable(nx, ny, false, false) && this.map.gateCrossed(this.me.x, this.me.y, nx, ny) < 0) [this.me.x, this.me.y] = [nx, ny];
       }
     }
@@ -1528,9 +1588,10 @@ export class Game {
   private drawUnitCached(ctx: CanvasRenderingContext2D, id: number, look: UnitLook, pose: Pose = REST) {
     const r = look.r, res = this.scale;
     const l = r * 2.6, t = r * 2.9, w = r * 5.2, h = r * 4.8; // de quoi contenir aura, couronne, pattes et bond
-    const key = `${look.species}|${look.alpha}|${look.legend}|${look.wild}|${look.ownerColor}|${look.face}|${look.flash}|${r}|${look.inWater}|${Math.round((look.charge ?? 0) * 8)}|${look.moving}|${Math.ceil((look.shout ?? 0) * 12)}|${res}`;
+    const wg = look.wings, wkey = wg ? `${wg.spread.toFixed(2)},${wg.down.toFixed(2)},${wg.beat.toFixed(2)}` : '';
+    const key = `${look.species}|${look.alpha}|${look.legend}|${look.wild}|${look.ownerColor}|${look.face}|${look.flash}|${r}|${look.inWater}|${Math.round((look.charge ?? 0) * 8)}|${look.moving}|${Math.ceil((look.shout ?? 0) * 12)}|${wkey}|${res}`;
     const sprite = SPECIES[look.species].sprite ?? SPECIES[look.species].key;
-    const fps = (look.moving && hops(sprite)) || look.shout ? 60 : settings.display.quality === 'low' ? 12 : SPRITE_FPS; // un bond, un cri se dessinent à pleine cadence
+    const fps = (look.moving && hops(sprite)) || look.shout || wg ? 60 : settings.display.quality === 'low' ? 12 : SPRITE_FPS; // un bond, un cri, des ailes qui battent se dessinent à pleine cadence
     const frame = Math.floor(look.t * fps + (id % 7) / 7);
     let e = this.sprites.get(id);
     if (!e || e.key !== key || e.frame !== frame) {
@@ -1553,6 +1614,7 @@ export class Game {
     const fx = look.x + pose.dx, fy = look.y + pose.dy + r * 0.75;
     ctx.translate(fx, fy - pose.air);
     ctx.scale(1 / Math.sqrt(pose.squash), pose.squash);
+    if (pose.turn) ctx.scale(Math.cos(pose.turn) || 0.05, 1 - 0.15 * Math.abs(Math.sin(pose.turn))); // il roule : l'image se retourne
     ctx.drawImage(e.c, -l, -t - r * 0.75, w, h);
     ctx.restore();
   }
@@ -1565,25 +1627,179 @@ export class Game {
    * Attaques spéciales en cours, par lanceur : leur avancement est extrapolé entre deux snapshots (animation fluide),
    * et l'impact de chacune est daté ici, pour l'écrasement à l'arrivée et le sillon d'une charge.
    */
+  /** Impacts des nouvelles attaques des géants : vrai si celle-ci en est une (et a été jouée). */
+  private bossBoom(kind: string, x: number, y: number, r: number, mine: string | undefined, near: boolean) {
+    const shake = (k: number) => near && (this.shake = Math.max(this.shake, k));
+    const at = (k: number) => Math.max(0, 1 - Math.hypot(x - this.me.x, y - this.me.y) / 900) * k;
+    switch (kind) {
+      case 'stalk': // il jaillit de l'ombre
+        this.fx.burst(x, y - 20, '#2A1A3A', 22, 220);
+        this.fx.ring(x, y, mine ?? 'rgba(120,70,160,0.9)', r * 0.2, r, 0.45);
+        this.fx.crack(x, y, r * 0.6, 1.2);
+        this.fx.slash(x, y - 30, Math.random() * Math.PI);
+        shake(0.3);
+        sound.play('boom', at(0.8));
+        return true;
+      case 'howl':
+        for (let i = 0; i < 3; i++) this.fx.ring(x, y, i ? 'rgba(200,225,255,0.6)' : 'rgba(230,240,255,0.9)', 20 + i * 30, r * (0.7 + i * 0.15), 0.6 + i * 0.2);
+        sound.play('howl', at(1));
+        return true;
+      case 'rampage': case 'log': case 'squeeze': case 'venom': case 'eclipse': case 'roost': case 'shellspin':
+        if (kind === 'squeeze') sound.play('chomp', at(0.7));
+        if (kind === 'eclipse') sound.play('howl', at(1));
+        if (kind === 'log') this.fx.dust(x, y, 40, 8);
+        return true;
+      case 'hug':
+        this.fx.dust(x, y, r, 10);
+        this.fx.ring(x, y, 'rgba(240,220,180,0.9)', r * 0.2, r, 0.4);
+        shake(0.3);
+        sound.play('boom', at(0.7));
+        return true;
+      case 'roll': // il happe : une gerbe d'eau et de boue
+        this.fx.burst(x, y - 10, '#CFEFFF', 18, 230);
+        this.fx.burst(x, y, '#6A5A3A', 10, 160);
+        sound.play('chomp', at(1));
+        return true;
+      case 'mud':
+        this.fx.burst(x, y - 6, '#5A3E24', 16, 180);
+        this.fx.debris(x, y, ['#5A3E24', '#7A5634', '#3E2A18'], 10, 170, 6);
+        sound.play('thunk', at(0.6));
+        return true;
+      case 'shroom': // le champignon éclate : un nuage de spores rouge et vert
+        this.fx.burst(x, y - 20, '#C8402E', 18, 240);
+        this.fx.burst(x, y - 20, '#B8D86A', 22, 200);
+        this.fx.ring(x, y, mine ?? 'rgba(200,230,140,0.9)', 10, r, 0.5);
+        this.fx.dust(x, y, r * 0.8, 12, 'rgba(180,210,120,0.45)');
+        shake(0.25);
+        sound.play('pop', at(1));
+        sound.play('boom', at(0.6));
+        return true;
+      case 'wisps': // un feu follet paraît, dans un éclair bleu
+        this.fx.burst(x, y - 30, mine ?? '#6FB7FF', 22, 200);
+        this.fx.ring(x, y, mine ?? 'rgba(160,210,255,0.9)', 10, r * 1.2, 0.5);
+        sound.play('orb', at(0.8));
+        return true;
+      case 'venomdive': // elle s'écrase : le sol craque, le venin gicle
+        this.fx.crack(x, y, r * 0.9, 2);
+        this.fx.burst(x, y - 10, '#9FE84A', 24, 260);
+        this.fx.dust(x, y, r, 14);
+        this.fx.ring(x, y, mine ?? 'rgba(180,240,110,0.9)', r * 0.2, r * 1.1, 0.5);
+        shake(0.45);
+        sound.play('boom', at(1));
+        return true;
+      case 'drum': case 'echo':
+        if (kind === 'drum') {
+          this.fx.dust(x, y, 70, 8);
+          this.fx.ring(x, y, 'rgba(240,220,180,0.8)', 20, 90, 0.35);
+          shake(0.15);
+          sound.play('drum', at(1));
+        } else {
+          this.fx.ring(x, y, mine ?? 'rgba(190,140,255,0.8)', 20, 80, 0.3);
+          sound.play('screech', at(1));
+        }
+        return true;
+      case 'tail':
+        this.fx.dust(x, y, r * 0.5, 10);
+        shake(0.25);
+        sound.play('swing', at(1));
+        return true;
+      case 'ambush': // il surgit : le sol (ou l'eau) explose
+        this.fx.crack(x, y, r * 0.95, 2.2);
+        this.fx.debris(x, y, ['#7A6248', '#5E4A36', '#C9A86A'], 18, 280, 9);
+        this.fx.burst(x, y - 10, '#CFEFFF', 14, 220);
+        this.fx.dust(x, y, r, 16);
+        this.fx.ring(x, y, mine ?? 'rgba(240,220,180,0.9)', r * 0.2, r * 1.1, 0.5);
+        shake(0.45);
+        sound.play('boom', at(1));
+        sound.play('chomp', at(0.8));
+        return true;
+      case 'curse': // la marque se referme : une fumée violette et le masque qui s'envole
+        this.fx.burst(x, y - 20, '#9A5AD0', 20, 160);
+        this.fx.dust(x, y, r * 0.7, 10, 'rgba(120,60,170,0.5)');
+        sound.play('chime', at(0.6));
+        return true;
+      case 'maw': // le sable s'ouvre
+        this.fx.dust(x, y, r, 14, 'rgba(210,180,120,0.55)');
+        this.fx.debris(x, y, ['#C9A86A', '#A88A58'], 12, 200, 6);
+        shake(0.2);
+        return true;
+      case 'mawbite': // la gueule se referme
+        this.fx.burst(x, y - 10, '#EFE4CC', 14, 220);
+        this.fx.debris(x, y, ['#C9A86A', '#A88A58', '#EFE4CC'], 14, 240, 7);
+        shake(0.35);
+        sound.play('chomp', at(1));
+        return true;
+      case 'mirage':
+        this.fx.burst(x, y - 20, '#CFE0FF', 16, 200);
+        this.fx.ring(x, y, 'rgba(200,220,255,0.8)', 10, 60, 0.35);
+        sound.play('swing', at(0.8));
+        return true;
+      case 'impale':
+        this.fx.burst(x, y - 10, '#9FE84A', 16, 200);
+        this.fx.impact('pinch', x, y - 10, 0, 30, '#9FE84A');
+        shake(0.2);
+        sound.play('thunk', at(1));
+        return true;
+      case 'husk': // la vieille peau explose
+        this.fx.fireWave(x, y, r, ['255,138,61', '255,200,90', '255,245,210']);
+        this.fx.debris(x, y, ['#E8DCC8', '#C9B8A0', '#FF8A3D'], 20, 300, 8);
+        this.fx.crack(x, y, r * 0.8, 2);
+        shake(0.45);
+        sound.play('boom', at(1));
+        return true;
+      case 'cinder':
+        this.fx.burst(x, y - 6, '#FFB347', 14, 180);
+        this.fx.crack(x, y, r * 0.5, 1);
+        this.fx.dust(x, y, r * 0.6, 6, 'rgba(80,70,66,0.5)');
+        sound.play('thunk', at(0.8));
+        return true;
+      case 'bonk': // la carapace rebondit sur un mur : étincelles et lave
+        this.fx.burst(x, y - 10, '#FFD08A', 14, 260);
+        this.fx.debris(x, y, ['#3A2E2A', '#FF8A3D'], 8, 200, 6);
+        shake(0.2);
+        sound.play('thunk', at(1));
+        return true;
+    }
+    return false;
+  }
+
+  /** Un conseil qu'on ne montre qu'une fois (retenu dans le navigateur). */
+  private once(key: string, text: string, kind: '' | 'good' | 'alpha' = '') {
+    try {
+      if (localStorage.getItem(`fangleaf:once:${key}`)) return;
+      localStorage.setItem(`fangleaf:once:${key}`, '1');
+    } catch { /* stockage indisponible : on le montre */ }
+    this.hud.toast(text, kind);
+  }
+
+  /** Depuis quand une attaque au sol a frappé (0 : pas encore). */
+  private sinceOf(h: HazardTuple) {
+    const at = this.fired.get(String(h[12]));
+    return at === undefined ? 0 : Math.max(0.001, this.time - at);
+  }
+
   private trackCasts(hazards: HazardTuple[], late: number) {
     const casts = new Map<number, Cast>(), seen = new Set<string>();
     for (const h of hazards) {
       const style = HAZARD_STYLES[h[8]];
       if (!style || style === 'lava') continue; // une flaque de traînée : le géant court, il ne prend pas de pose
-      const key = `${h[0]}|${h[1]}|${h[2]}|${h[9]}`;
+      const key = String(h[12]);
       seen.add(key);
       let since = 0;
       if (h[6] >= 100) {
         let at = this.fired.get(key);
         if (at === undefined) {
           this.fired.set(key, (at = this.time));
-          if (style === 'charge') this.chargeTrail(h[1], h[2], h[4], h[5], h[3]);
+          if (style === 'charge' || style === 'rampage') this.chargeTrail(h[1], h[2], h[4], h[5], h[3]);
         }
         since = Math.max(0.001, this.time - at);
       }
       const k = since ? 1 : Math.min(0.999, h[6] / 100 + late / Math.max(0.05, h[10] / 100));
-      // un géant qui lance plusieurs rochers à la fois : une seule pose
-      if (!casts.has(h[9]) || style !== 'rock') casts.set(h[9], { style, k, since, x: h[1], y: h[2], x2: h[4], y2: h[5] });
+      // plusieurs attaques à la fois (rochers, anneaux, ruée en plusieurs charges) : une seule pose, celle qui vient de
+      // partir, sinon la première annoncée ; les attaques qui suivent leur cible (champignon, mare) n'en donnent pas
+      if (style === 'shroom' || style === 'venom' || style === 'mud' || style === 'cinder' || style === 'spores' || style === 'fireslam') continue;
+      const cur = casts.get(h[9]), fresh = since > 0 && since < 0.6;
+      if (!cur || (style !== 'rock' && fresh && !(cur.since > 0 && cur.since < 0.6)) || (style === 'squeeze' && since > 0)) casts.set(h[9], { style, k, since, x: h[1], y: h[2], x2: h[4], y2: h[5] });
     }
     for (const key of this.fired.keys()) if (!seen.has(key)) this.fired.delete(key);
     return casts;
@@ -1686,10 +1902,201 @@ export class Game {
     this.fx.debris(x2, y2, ['#7A6248', '#5E4A36'], 8, 140, 5);
   }
 
+
+  /**
+   * Géant caché pendant une attaque : il se fond dans l'ombre et file au ras du sol (traque), s'efface en feux follets
+   * (lueurs trompeuses), monte hors de vue (piqué venimeux), plonge sous terre et file sous sa cible (embuscade), se
+   * pend au plafond puis fond sur sa proie (suspendu).
+   */
+  private drawHiddenCast(ctx: CanvasRenderingContext2D, list: { y: number; draw: () => void }[], air: { y: number; draw: () => void }[],
+    id: number, s: number, x: number, y: number, r: number, owner: number, c: Cast) {
+    const face = this.faces.get(id)?.face ?? 1, sprite = SPECIES[s].sprite ?? SPECIES[s].key;
+    const look = (o: Partial<UnitLook> = {}): UnitLook => ({ x, y, r, species: s, alpha: false, wild: owner === 0, face, t: this.time, seed: id * 1.7, flash: false, ...o });
+    const ease = (k: number) => k * k * (3 - 2 * k);
+    switch (c.style) {
+      case 'stalk': {
+        if (c.k < 0.25) {
+          const f = c.k / 0.25; // il fond dans son ombre
+          list.push({ y, draw: () => {
+            drawShadowRun(ctx, x, y, r * (0.4 + 0.6 * f), Math.atan2(c.y - y, c.x - x), this.time);
+            this.drawUnitCached(ctx, id, look(), { ...REST, alpha: 1 - f, squash: 1 - 0.6 * f, dy: r * 0.25 * f });
+          } });
+          return;
+        }
+        const e = ease(Math.min(1, (c.k - 0.25) / 0.6)), px = x + (c.x - x) * e, py = y + (c.y - y) * e;
+        if (Math.random() < this.dt * 20) this.fx.dust(px, py, r * 0.5, 2, 'rgba(30,18,44,0.5)');
+        list.push({ y: py, draw: () => drawShadowRun(ctx, px, py, r, Math.atan2(c.y - y, c.x - x), this.time) });
+        return;
+      }
+      case 'wisps': {
+        if (c.k >= 0.35) return; // il s'est dissous : les feux follets se rassemblent (au sol)
+        const f = c.k / 0.35;
+        if (Math.random() < this.dt * 30) this.fx.burst(x, y - r, '#6FB7FF', 3, 120);
+        list.push({ y, draw: () => this.drawUnitCached(ctx, id, look(), { ...REST, alpha: 1 - f, squash: 1 + 0.4 * f, air: r * 0.4 * f }) });
+        return;
+      }
+      case 'venomdive': {
+        const pose = castPose(c, r, x, y, this.time), w = wingPose(c, this.time) ?? undefined;
+        air.push({ y: y + pose.dy, draw: () => {
+          ctx.save();
+          ctx.globalAlpha *= pose.alpha;
+          drawUnit(ctx, { ...look({ wings: w }), x: x + pose.dx, y: y + pose.dy, air: pose.air, squash: pose.squash });
+          ctx.restore();
+        } });
+        return;
+      }
+      case 'ambush': {
+        if (c.k < 0.18) {
+          const f = c.k / 0.18; // il s'enfonce
+          if (Math.random() < this.dt * 25) this.fx.burst(x, y, sprite === 'croc' ? '#CFEFFF' : '#C9A86A', 4, 150);
+          list.push({ y, draw: () => this.drawUnitCached(ctx, id, look(), { ...REST, alpha: 1 - f, squash: 1 - 0.35 * f, dy: r * 0.45 * f }) });
+          return;
+        }
+        if (Math.random() < this.dt * 12) this.fx.dust(x, y, r * 0.4, 2, sprite === 'croc' ? 'rgba(170,210,220,0.45)' : undefined);
+        list.push({ y, draw: () => (sprite === 'croc' ? drawLurkEyes(ctx, x, y, r, this.time, id) : drawBurrow(ctx, x, y, r, true, this.time, id)) });
+        return;
+      }
+      case 'roost': {
+        // il monte au plafond, puis y pend la tête en bas en se balançant ; seule son ombre reste au sol
+        const up = c.since > 0 ? 1 : ease(c.k), H = 300 * up;
+        list.push({ y: y - 1000, draw: () => drawSoaringShadow(ctx, x, y, r * (1 - 0.4 * up)) });
+        air.push({ y, draw: () => {
+          ctx.save();
+          ctx.globalAlpha *= 1 - 0.2 * up;
+          ctx.translate(x + Math.sin(this.time * 1.4 + id) * 8 * up, y - H);
+          if (up > 0.6) ctx.scale(1, -1); // la tête en bas
+          drawUnit(ctx, look({ x: 0, y: 0, t: up > 0.95 ? this.time * 0.25 : this.time * 2 }));
+          ctx.restore();
+        } });
+        return;
+      }
+      case 'leap': {
+        // du plafond, il fond sur sa proie : il se retourne en tombant
+        const f = c.since > 0 ? 1 : ease(c.k), H = 300 * (1 - f), px = x + (c.x - x) * f, py = y + (c.y - y) * f;
+        list.push({ y: y - 1000, draw: () => drawSoaringShadow(ctx, px, py, r * (0.6 + 0.4 * f)) });
+        air.push({ y: py, draw: () => {
+          ctx.save();
+          ctx.translate(px, py - H);
+          if (f < 0.4) ctx.scale(1, -1);
+          drawUnit(ctx, look({ x: 0, y: 0, t: this.time * 2.5 }));
+          ctx.restore();
+        } });
+        return;
+      }
+    }
+  }
+
+  /** Soins des totems : un rayon vert ondulant monte du totem et retombe sur l'allié, des étincelles le parcourent. */
+  private drawBeams(ctx: CanvasRenderingContext2D, units: UnitTuple[]) {
+    this.beams = this.beams.filter((b) => this.time - b.at < 0.6);
+    for (const b of this.beams) {
+      const a = units.find((u) => u[0] === b.from), c = units.find((u) => u[0] === b.to);
+      if (!a || !c) continue;
+      const k = (this.time - b.at) / 0.6, ax = a[3], ay = a[4] - SPECIES[a[1]].r * 2.4, cx = c[3], cy = c[4] - SPECIES[c[1]].r * 0.6;
+      const mx = (ax + cx) / 2, my = Math.min(ay, cy) - 60;
+      ctx.save();
+      ctx.lineCap = 'round';
+      for (const [w, col] of [[9, `rgba(120,230,110,${0.25 * (1 - k)})`], [3, `rgba(210,255,190,${0.9 * (1 - k)})`]] as const) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(ax, ay);
+        ctx.quadraticCurveTo(mx + Math.sin(this.time * 12) * 8, my, cx, cy);
+        ctx.stroke();
+      }
+      for (let i = 0; i < 3; i++) {
+        const f = (k * 1.6 + i / 3) % 1, px = (1 - f) * (1 - f) * ax + 2 * (1 - f) * f * mx + f * f * cx, py = (1 - f) * (1 - f) * ay + 2 * (1 - f) * f * my + f * f * cy;
+        ctx.fillStyle = `rgba(240,255,220,${1 - k})`;
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  /** Mue : la vieille peau de la Salamandre-Mère, pâle, se fendille de lave et tremble de plus en plus avant d'exploser. */
+  private drawHusks(ctx: CanvasRenderingContext2D, hazards: HazardTuple[], units: UnitTuple[]) {
+    for (const h of hazards) {
+      if (HAZARD_STYLES[h[8]] !== 'husk' || h[6] >= 100) continue;
+      const caster = units.find((u) => u[0] === h[9]), sp = caster ? caster[1] : SPECIES_KEYS.indexOf('salamander_queen'), r = SPECIES[sp].r;
+      const k = h[6] / 100, shake = Math.sin(this.time * 45) * k * 4, x = h[1] + shake, y = h[2];
+      ctx.save();
+      ctx.globalAlpha = 0.78;
+      drawUnit(ctx, { x, y, r, species: sp, alpha: false, wild: true, face: 1, t: 0, seed: h[12], flash: true });
+      ctx.restore();
+      ctx.save();
+      ctx.lineCap = 'round';
+      const glow = 0.35 + 0.65 * k * (0.7 + 0.3 * Math.sin(this.time * (8 + 20 * k)));
+      for (let i = 0; i < 7; i++) {
+        const a = hash2(i, h[12], 3) * Math.PI * 2, l = r * (0.3 + 0.5 * hash2(i, h[12], 4)) * (0.4 + 0.6 * k), bx = x + Math.cos(a) * r * 0.15, by = y - r * 0.2;
+        ctx.strokeStyle = `rgba(255,${Math.round(150 + 80 * k)},70,${glow})`;
+        ctx.lineWidth = 2 + 2 * k;
+        ctx.beginPath();
+        ctx.moveTo(bx, by);
+        ctx.lineTo(bx + Math.cos(a) * l * 0.6 + Math.sin(a * 3) * 5, by + Math.sin(a) * l * 0.4);
+        ctx.lineTo(bx + Math.cos(a) * l, by + Math.sin(a) * l * 0.6);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Éclipse du Chacal lunaire : la nuit tombe sur l'arène (on ne voit plus qu'autour de soi), des yeux luisent dans le
+   * noir, et la lune, en haut de l'écran, disparaît derrière une ombre.
+   */
+  private drawEclipse(ctx: CanvasRenderingContext2D, hazards: HazardTuple[], units: UnitTuple[], camX: number, camY: number, hw: number, hh: number) {
+    const h = hazards.find((q) => HAZARD_STYLES[q[8]] === 'eclipse' && q[6] >= 100 && !q[7] && Math.hypot(q[1] - this.me.x, q[2] - this.me.y) < q[3]);
+    if (!h) return;
+    const since = this.sinceOf(h), fade = Math.max(0, Math.min(1, since / 0.8, h[11] / 10 / 0.8));
+    if (fade <= 0) return;
+    ctx.save();
+    const g = ctx.createRadialGradient(this.me.x, this.me.y - 20, 80, this.me.x, this.me.y - 20, 290);
+    g.addColorStop(0, 'rgba(4,6,20,0)');
+    g.addColorStop(1, `rgba(4,6,20,${0.94 * fade})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(camX - hw - 60, camY - hh - 60, hw * 2 + 120, hh * 2 + 120);
+    // dans le noir, les yeux des chacals (et de leur maître)
+    for (const [id, sp, fl, x, y, , owner] of units) {
+      if (owner || fl & UNIT_FLAG_HIDDEN || Math.hypot(x - this.me.x, y - this.me.y) < 150) continue;
+      const r = SPECIES[sp].r, face = this.faces.get(id)?.face ?? 1, ex = x + r * 0.55 * face, ey = y - r * 0.55;
+      for (const sd of [-1, 1]) {
+        ctx.fillStyle = `rgba(255,220,120,${0.22 * fade})`;
+        ctx.beginPath();
+        ctx.arc(ex + sd * r * 0.16, ey, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(255,240,170,${0.95 * fade})`;
+        ctx.beginPath();
+        ctx.ellipse(ex + sd * r * 0.16, ey, 3, 1.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    // la lune s'éteint
+    const mx = camX + hw * 0.55, my = camY - hh + 110, R = 46, cover = Math.min(1, since / 1.4);
+    const corona = ctx.createRadialGradient(mx, my, R * 0.9, mx, my, R * 2.2);
+    corona.addColorStop(0, `rgba(220,230,255,${0.5 * fade * cover})`);
+    corona.addColorStop(1, 'rgba(220,230,255,0)');
+    ctx.fillStyle = corona;
+    ctx.beginPath();
+    ctx.arc(mx, my, R * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(236,240,226,${fade})`;
+    ctx.beginPath();
+    ctx.arc(mx, my, R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(6,8,20,${fade})`;
+    ctx.beginPath();
+    ctx.arc(mx + (1 - cover) * R * 2.1, my - (1 - cover) * R * 0.4, R * 1.02, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   /** Rochers et boules de toile lancés en cloche, du géant jusqu'à leur zone d'impact. */
   private drawThrown(ctx: CanvasRenderingContext2D, hazards: HazardTuple[], units: UnitTuple[], late: number) {
     for (const h of hazards) {
       const style = HAZARD_STYLES[h[8]];
+      if (this.drawThrownBoss(ctx, h, style, units, late)) continue;
       if ((style !== 'rock' && style !== 'web') || h[6] >= 100) continue;
       const src = this.net.latest && this.net.byId(this.net.latest).get(h[9]);
       const from = units.find((u) => u[0] === h[9]) ?? src;
@@ -1704,6 +2111,79 @@ export class Game {
       } else drawWebGlob(ctx, at.x, at.y, at.z, 9, this.time);
     }
   }
+  /** Ce que les nouvelles attaques lancent ou font apparaître au-dessus du sol (vrai : dessiné). */
+  private drawThrownBoss(ctx: CanvasRenderingContext2D, h: HazardTuple, style: string, units: UnitTuple[], late: number) {
+    const from = units.find((u) => u[0] === h[9]), since = this.sinceOf(h), k = Math.min(0.999, h[6] / 100 + late / Math.max(0.05, h[10] / 100));
+    const sr = from ? SPECIES[from[1]].r : 40;
+    switch (style) {
+      case 'mud': {
+        // une motte de boue lancée en cloche, qui laisse goutter
+        if (h[6] >= 100 || !from) return true;
+        const at = lobbed(from[3], from[4] - sr * 0.4, h[1], h[2], k, 180);
+        ctx.fillStyle = 'rgba(8,14,12,0.25)';
+        ctx.beginPath();
+        ctx.ellipse(at.x, at.y + 3, 10, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#5A3E24';
+        ctx.beginPath();
+        ctx.ellipse(at.x, at.y - at.z - 6, 11, 9, k * 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(16,24,26,0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#7A5634';
+        ctx.beginPath();
+        ctx.arc(at.x - 3, at.y - at.z - 9, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        return true;
+      }
+      case 'log': {
+        // avant le lancer : le tronc, à bout de bras au-dessus de sa tête
+        if (h[6] >= 100 || !from) return true;
+        const lift = sr * (1.6 + 0.5 * k), ang = Math.atan2(h[5] - h[2], h[4] - h[1]);
+        ctx.save();
+        ctx.translate(from[3], from[4] - lift);
+        ctx.rotate(ang + Math.PI / 2 + Math.sin(this.time * 6) * 0.05);
+        ctx.fillStyle = '#6B4A30';
+        ctx.beginPath();
+        ctx.roundRect(-sr * 1.4, -sr * 0.42, sr * 2.8, sr * 0.84, sr * 0.4);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(16,24,26,0.8)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.fillStyle = '#C49A68';
+        for (const sd of [-1, 1]) {
+          ctx.beginPath();
+          ctx.ellipse(sd * sr * 1.38, 0, sr * 0.12, sr * 0.38, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+        return true;
+      }
+      case 'mirage': {
+        // un reflet spectral du chacal file le long du couloir, des traînées derrière lui
+        if (!since || since > 0.5) return true;
+        const sp = from ? from[1] : SPECIES_KEYS.indexOf('moon_jackal'), r = SPECIES[sp].r, f = Math.min(1, since / 0.26), face = h[4] > h[1] ? 1 : -1;
+        for (let i = 3; i >= 0; i--) {
+          const g = Math.max(0, f - i * 0.08), px = h[1] + (h[4] - h[1]) * g, py = h[2] + (h[5] - h[2]) * g;
+          ctx.save();
+          ctx.globalAlpha = (i ? 0.18 : 0.6) * (1 - Math.max(0, since - 0.26) / 0.24);
+          drawUnit(ctx, { x: px, y: py, r, species: sp, alpha: false, wild: true, face, t: this.time * 3, seed: i, flash: true, moving: true });
+          ctx.restore();
+        }
+        return true;
+      }
+      case 'impale': {
+        // le dard jaillit jusqu'au bout du couloir, puis revient
+        if (!since || since > 0.45 || !from) return true;
+        const ext = since < 0.1 ? since / 0.1 : 1 - (since - 0.1) / 0.35;
+        drawStinger(ctx, from[3], from[4], h[4], h[5], Math.max(0, ext), !!SPECIES[from[1]].boss);
+        return true;
+      }
+    }
+    return false;
+  }
+
   private sprites = new Map<number, { c: HTMLCanvasElement; key: string; frame: number; used: number }>();
 
   private stormOn = false;
@@ -1823,7 +2303,7 @@ export class Game {
       void lag.offsetWidth;
       lag.style.transition = '';
     }
-    document.getElementById('boss-name')!.textContent = SPECIES[s].title ?? SPECIES[s].name;
+    document.getElementById('boss-name')!.textContent = SPECIES[s].name;
     document.getElementById('boss-fill')!.style.width = pct;
     lag.style.width = pct;
     const phase = document.getElementById('boss-phase')!, phases = SPECIES[s].phases;
@@ -1845,6 +2325,7 @@ export class Game {
     ctx.setTransform(scale, 0, 0, scale, canvas.width / 2 - camX * scale, canvas.height / 2 - camY * scale);
 
     const sky = skyAt(this.map.seed, this.net.serverNow());
+    this.hud.night = sky.light < 0.5;
     if (SKY_TEST) Object.assign(sky, SKY_TEST);
     // Mer de sable : jamais de pluie, mais des tempêtes de sable
     const desert = this.map.caveAt(camX, camY) ? 0 : desertMix(this.map, camX, camY);
@@ -1894,10 +2375,23 @@ export class Game {
     const shots = this.net.latest?.shots ?? [];
     const late = Math.min(0.12, this.time - this.shotsAt);
     // Attaques spéciales des mini-boss, au sol sous les créatures, et ce qu'elles font faire à leur lanceur.
-    const hazards = this.net.latest?.hazards ?? [];
+    // les attaques qui partent du lanceur (langue, pince, souffle, rayon, jets de flammes) restent collées à lui tel
+    // qu'il est dessiné (les créatures sont affichées avec un peu de retard, les attaques non)
+    const shown = new Map(units.map((u) => [u[0], u]));
+    const hazards = (this.net.latest?.hazards ?? []).map((h): HazardTuple => {
+      const c = shown.get(h[9]);
+      if (!c || !ANCHORED.has(HAZARD_STYLES[h[8]])) return h;
+      const dx = c[3] - h[1], dy = c[4] - h[2];
+      return [h[0], h[1] + dx, h[2] + dy, h[3], h[4] + dx, h[5] + dy, h[6], h[7], h[8], h[9], h[10], h[11], h[12]];
+    });
     const casts = this.trackCasts(hazards, late);
     const colorOf = new Map(players.map((p) => [p.id, p.color]));
-    for (const h of hazards) if (inView(h[1], h[2], 500) && HAZARD_STYLES[h[8]] !== 'laser') drawHazard(ctx, h, this.time, colorOf.get(h[7]));
+    for (const [id, x, y, r] of this.net.latest?.sands ?? []) {
+      const q = this.sandSeen.get(id);
+      if (q && inView(x, y, r + 20)) drawQuicksand(ctx, { x, y, r }, Math.min(1, (this.time - q.born) / QUICKSAND_OPEN_S, (q.until - this.time) / 1.2), this.time);
+    }
+    for (const h of hazards) if (inView(h[1], h[2], 700) && HAZARD_STYLES[h[8]] !== 'laser') drawHazard(ctx, h, this.time, colorOf.get(h[7]), this.sinceOf(h));
+    this.drawHusks(ctx, hazards, units);
     this.fx.drawGround(ctx); // fissures et sillons au sol
     const air: { y: number; draw: () => void }[] = []; // ce qui passe au-dessus de tout : géant en plein bond, rochers lancés
     this.drawLasers(ctx, hazards, units, late, colorOf, air);
@@ -1912,7 +2406,11 @@ export class Game {
     }
     const sc = this.map.school, [plan, wait] = this.hud.school;
     const schoolState = this.hud.buildings.includes('school') ? 'built' : wait ? 'building' : plan ? 'plan' : 'none';
-    if (inView(sc.x, sc.y, 140)) list.push({ y: sc.y, draw: () => this.world.drawSchool(ctx, schoolState, wait, this.time) });
+    const me = this.self(), schoolCalls = !!me && this.hud.schoolCalls(me); // une leçon finie, un livre à lire : l'École appelle
+    if (inView(sc.x, sc.y, 140)) list.push({ y: sc.y, draw: () => {
+      this.world.drawSchool(ctx, schoolState, wait, this.time);
+      if (schoolCalls) drawQuestMark(ctx, sc.x, sc.y - 120, this.time);
+    } });
     // le vieux coffre du Camp avancé, avec le plan de l'école, tant que personne ne l'a ouvert
     const pc = this.map.planChest;
     if (camps.includes(SCHOOL_CAMP) && !plan && inView(pc.x, pc.y, 80)) list.push({ y: pc.y, draw: () => {
@@ -2074,7 +2572,8 @@ export class Game {
     const topBoss = this.updateBossBar(units);
     const sleepingDens = new Set<number>(); // tanières où la colonie de suricates dort (la nuit) : des « z » au-dessus
     for (const u of units) {
-      const [id, s, flags, x, y, hp, owner] = u;
+      const [id, s0, flags, x, y, hp, owner] = u;
+      const s = SPECIES[s0].mimic ? SPECIES_KEYS.indexOf(SPECIES[s0].mimic!) : s0; // un leurre a le visage de son géant
       if (flags & UNIT_FLAG_MOUNTED) continue; // dessinée sous son cavalier
       if (!inView(x, y, 220)) continue; // le serveur envoie plus large que l'écran : inutile de dessiner le reste
       const alpha = (flags & UNIT_FLAG_ALPHA) !== 0;
@@ -2086,6 +2585,12 @@ export class Game {
         list.push({ y: y - 400, draw: () => drawSubmerged(ctx, x, y, r, this.time, (flags & UNIT_FLAG_HIDDEN) !== 0) });
         continue;
       }
+      const hiddenCast = flags & UNIT_FLAG_HIDDEN ? casts.get(id) : undefined;
+      if (hiddenCast && HIDDEN_CASTS.has(hiddenCast.style)) {
+        this.drawHiddenCast(ctx, list, air, id, s, x, y, r, owner, hiddenCast);
+        continue;
+      }
+      if (flags & UNIT_FLAG_HIDDEN && SPECIES[s].boss && !SPECIES[s].burrows && SPECIES[s].sprite !== 'sandworm') continue; // un géant caché entre deux attaques : rien
       if (flags & UNIT_FLAG_HIDDEN) {
         // hors d'atteinte : vautour qui plane (au-dessus de tout, son ombre au sol), ver sous le sable, suricate à la tanière,
         // escargot rentré dans sa coquille (sur place)
@@ -2119,6 +2624,12 @@ export class Game {
       const cast = casts.get(id), lunge = this.lunges.get(id);
       if (lunge && this.time - lunge.at < 0.6 && Math.abs(Math.cos(lunge.ang)) > 0.2) f.face = Math.cos(lunge.ang) > 0 ? 1 : -1; // il frappe face à sa cible
       const pose = cast ? castPose(cast, r, x, y, this.time) : (lunge && lungePose(this.time - lunge.at, r, lunge.ang)) || REST;
+      if (cast?.style === 'squeeze' && (SPECIES[s].sprite ?? SPECIES[s].key) === 'croc') {
+        // roulade de la mort : il tournoie sur lui-même, dans des gerbes d'eau
+        pose.turn = this.time * 15;
+        if (Math.random() < this.dt * 14) this.fx.burst(x + (Math.random() - 0.5) * r * 1.6, y - r * 0.2, '#CFEFFF', 4, 160);
+      }
+      if (boss && flags & UNIT_FLAG_ASLEEP && Math.random() < this.dt * 3) this.fx.text(x + (Math.random() - 0.5) * r, y - r * 1.2, '+', '#7FCB5B', 16, 1.4); // il hiberne : il guérit
       const ghost = cast ? ghostOf(cast) : 0;
       const look = (): UnitLook => {
         const ranged = SPECIES[s].ranged, c0 = this.charges.get(id);
@@ -2127,14 +2638,17 @@ export class Game {
           x, y, r, species: s, alpha, wild: owner === 0, ownerColor: owner ? colorOf.get(owner) : undefined,
           face: f.face, t: flags & UNIT_FLAG_ASLEEP ? 0 : this.time, seed: id * 1.7, flash: (this.flashes.get(id) ?? 0) > this.time, legend,
           charge, inWater: !!(SPECIES[s].swim || SPECIES[s].amphibious) && this.map.isWater(x, y), moving: this.time - f.movedAt < 0.2, shout: this.shoutOf(id),
+          wings: cast && (SPECIES[s].sprite ?? SPECIES[s].key) === 'wyvern' ? wingPose(cast, this.time) ?? undefined : undefined,
+          shell: cast?.style === 'shellspin' && (cast.since > 0 || cast.k > 0.35) ? true : undefined, // rentrée dans sa carapace
         };
       };
-      // Vautour de la meute : il décolle dès qu'il bouge et se pose quand il s'arrête (pas sur l'eau ni dans un arbre).
+      // Vautour de la meute : il décolle dès qu'il bouge et se pose quand il s'arrête (pas sur l'eau ni dans un arbre) ;
+      // il pique d'un coup sur sa proie pour se poser à côté (posé : il frappe au sol), et la tempête de sable le cloue au sol.
       if (owner && SPECIES[s].flies && !(flags & UNIT_FLAG_HIDDEN)) {
         const w = this.wings.get(id) ?? { k: 0, at: this.time, x, y, ang: -Math.PI / 2 };
-        const perch = !this.map.blocked(x, y) && !this.map.isWater(x, y);
-        const want = this.time - f.movedAt < 0.5 || !perch ? 1 : 0, dt = Math.min(0.1, this.time - w.at);
-        w.k += Math.sign(want - w.k) * Math.min(Math.abs(want - w.k), dt * (want ? 2.5 : 1.4));
+        const perch = !this.map.blocked(x, y) && !this.map.isWater(x, y), landed = (flags & UNIT_FLAG_LANDED) !== 0;
+        const want = landed ? 0 : this.time - f.movedAt < 0.5 || !perch ? 1 : 0, dt = Math.min(0.1, this.time - w.at);
+        w.k += Math.sign(want - w.k) * Math.min(Math.abs(want - w.k), dt * (want ? 2.5 : landed ? 4 : 1.4));
         if (Math.hypot(x - w.x, y - w.y) > 0.5) w.ang = Math.atan2(y - w.y, x - w.x);
         [w.at, w.x, w.y] = [this.time, x, y];
         this.wings.set(id, w);
@@ -2161,15 +2675,15 @@ export class Game {
           this.drawUnitCached(ctx, id, look(), pose);
           if (boss && flags & UNIT_FLAG_DORMANT) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
           if (flags & UNIT_FLAG_ASLEEP) this.snore(x + r * 0.6, y - r * 1.2, 12, id); // lièvre qui dort la nuit, ours le jour
-          if (boss && id !== topBoss) {
+          if (boss && (SPECIES[s0].mimic ? !topBoss : id !== topBoss)) { // (un leurre : comme son géant)
             // Mini-boss : nom et grande barre de vie, toujours visibles (en combat sur ordinateur : en haut de l'écran).
             ctx.font = '700 15px "Pixelify Sans", sans-serif';
             ctx.textAlign = 'center';
             ctx.lineWidth = 4;
             ctx.strokeStyle = 'rgba(16,24,26,0.85)';
-            ctx.strokeText(SPECIES[s].title ?? SPECIES[s].name, x, y - r * 1.6 - 14);
+            ctx.strokeText(SPECIES[s].name, x, y - r * 1.6 - 14);
             ctx.fillStyle = '#F0B64A';
-            ctx.fillText(SPECIES[s].title ?? SPECIES[s].name, x, y - r * 1.6 - 14);
+            ctx.fillText(SPECIES[s].name, x, y - r * 1.6 - 14);
             hpBar(ctx, x, y - r * 1.6 - 8, 90, hp, '#E8693F');
             if (SPECIES[s].phases) {
               const ph = flags & UNIT_FLAG_PHASE3 ? 3 : flags & UNIT_FLAG_PHASE2 ? 2 : 1;
@@ -2243,7 +2757,8 @@ export class Game {
           if (p.mount) {
             // Monture dessinée sous le cavalier, tournée dans le sens de la marche.
             const mr = alphaStats(p.mount.species, 0, 1, p.mount.legend).r;
-            if (flyMount(p.mount.species)) {
+            const aloft = this.aloft(p);
+            if (aloft) {
               // à dos de vautour : son ombre au sol, l'oiseau ailes ouvertes, le cavalier sur son dos
               drawSoaringShadow(ctx, x, y, mr);
               drawSoaring(ctx, x, y, mr, this.time, p.mount.id, FLY_HEIGHT);
@@ -2254,7 +2769,7 @@ export class Game {
               flash: (this.flashes.get(p.mount.id) ?? 0) > this.time, inWater: swimMount(p.mount.species) && this.map.isWater(x, y), shout: this.shoutOf(p.mount.id),
             });
             const swim = swimMount(p.mount.species); // serpent : assis bas sur ses anneaux, derrière son cou dressé
-            if (!flyMount(p.mount.species)) {
+            if (!aloft) {
               lift = mr * (swim ? 0.3 : 0.8);
               back = mr * (swim ? 0.7 : 0.25) * (fx < -0.1 ? 1 : -1); // assis sur le dos, pas sur la tête
             }
@@ -2270,6 +2785,7 @@ export class Game {
           );
           if (p.torch && sky.light < 0.85) drawTorch(ctx, x + back - (fx < -0.1 ? -15 : 15), y - lift - 2, p.torch, this.time); // de l'autre main
           if (p.slowed) drawWebbed(ctx, x, y - lift, this.time);
+          if (p.held) drawDizzy(ctx, x, y - lift - 58, this.time); // saisi, étourdi
           if (p.buffs) drawBuffs(ctx, x, y - lift - 64, p.buffs, this.time, p.id);
           if (!isMe && p.hp < p.maxHp) hpBar(ctx, x, y + 26, 34, (100 * p.hp) / p.maxHp, '#7FCB5B');
         },
@@ -2286,7 +2802,11 @@ export class Game {
       if (kind === 1 || kind === 3) drawShot(ctx, kind, x, y, a, b, Math.min(100, c + (late * 100) / ARC_FLIGHT_S), this.time, colorOf.get(owner));
       else drawShot(ctx, kind, x + a * late, y + b * late, a, b, 0, this.time, colorOf.get(owner));
     }
+    this.drawBeams(ctx, units);
+    this.zaps = this.zaps.filter((z) => this.time - z.at < ZAP_S);
+    for (const z of this.zaps) drawZap(ctx, z.pts, 1 - (this.time - z.at) / ZAP_S, Math.floor(this.time * 30) + z.at, z.color);
     if (!here) this.drawLakeMist(camX, camY, hw, hh);
+    this.drawEclipse(ctx, hazards, units, camX, camY, hw, hh);
     this.fog.draw(ctx, -WORLD_HALF, -WORLD_HALF, WORLD_HALF * 2, WORLD_HALF * 2, 0.88);
     this.fx.draw(ctx);
     // Nuit et pluie, communes à tout le village (pas sous terre : les grottes ont leur propre pénombre).

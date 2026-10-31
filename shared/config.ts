@@ -134,14 +134,14 @@ export const PLAN_REACH = 80; // pour ouvrir le coffre du plan
 // À part, la Maîtrise des Alphas n'a qu'un tome, que seuls les coffres des géants du volcan renferment.
 // Une leçon lue à l'école prend 30 minutes.
 export const SCHOOL_CAMP = 0; // le plan de l'école attend au premier camp
-export type LessonKind = 'pack' | 'tame' | 'essence' | 'gather' | 'alpha' | 'vigor' | 'swim' | 'treasure';
+export type LessonKind = 'pack' | 'tame' | 'essence' | 'gather' | 'alpha' | 'vigor';
 export interface Discipline {
   name: string;
   tomes: string[]; // nom du livre de chaque tome (I, II, III)
   per: number; // gain par leçon apprise
   desc: string; // ce que rapporte une leçon
   volcano?: boolean; // ses tomes ne se trouvent que dans les coffres des géants du volcan (et nulle part ailleurs)
-  isle?: boolean; // son tome ne se trouve que dans le coffre d'un géant des îlots du large (celui qui le garde : Species.tome)
+  isle?: boolean; // ses tomes ne se trouvent que dans les coffres des géants des îlots du large (chacun le sien : Species.tome)
 }
 export const DISCIPLINES: Record<LessonKind, Discipline> = {
   pack: { name: 'Meute', tomes: ['Traité du jeune dompteur', 'Manuel de la grande meute', 'Codex du maître des bêtes'], per: 1, desc: '+1 place dans la meute' },
@@ -149,10 +149,8 @@ export const DISCIPLINES: Record<LessonKind, Discipline> = {
   essence: { name: 'Essences', tomes: ['Herbier des essences', 'Traité des âmes sauvages', 'Codex de l\'éveil'], per: 0.03, desc: '+3 % de chance de recueillir une essence' },
   gather: { name: 'Récolte', tomes: ['Almanach du bûcheron', 'Manuel du mineur', 'Somme des artisans'], per: 0.1, desc: '+10 % de bois et de pierre récoltés' },
   alpha: { name: 'Maîtrise des Alphas', tomes: ['Livre des braises'], per: 1, desc: '+1 Alpha équipé en même temps', volcano: true },
-  // îlots du large : chacun gardé par un géant
-  vigor: { name: 'Endurance', tomes: ['Traité de la robustesse'], per: 0.1, desc: '+10 % de PV max', isle: true },
-  swim: { name: 'Navigation', tomes: ['Carnet du navigateur'], per: 0.25, desc: '+25 % de vitesse à dos de monture nageuse', isle: true },
-  treasure: { name: 'Trésors', tomes: ['Almanach des trésors'], per: 0.15, desc: '+15 % d\'or (monstres, filons, coffres)', isle: true },
+  // îlots du large : un tome par géant des îlots (Grand Drake, Wyverne-Reine, Dragon ancien)
+  vigor: { name: 'Endurance', tomes: ['Traité de la robustesse', 'Manuel de l\'endurance', 'Codex du colosse'], per: 0.1, desc: '+10 % de PV max', isle: true },
 };
 /** Disciplines dans l'ordre de la sauvegarde (n'ajouter qu'à la fin). */
 export const LESSON_KINDS = Object.keys(DISCIPLINES) as LessonKind[];
@@ -163,10 +161,7 @@ export const LESSONS = TOMES * LESSONS_PER_TOME; // leçons par discipline (au p
 export const lessonsOf = (k: number) => (DISCIPLINES[LESSON_KINDS[k]]?.tomes.length ?? 0) * LESSONS_PER_TOME;
 export const LESSON_MS = 30 * 60 * 1000; // lecture d'une leçon (temps réel : elle continue hors ligne)
 export const TOME_DROP = 0.25; // chance, à l'ouverture d'un coffre de géant, d'y trouver un livre
-export const ISLE_TOME_DROP = 0.5; // pour le tome que garde un géant des îlots du large
-// Îlots du large : les autres ont un coffre de naufragé, qui se remplit de nouveau (chacun l'ouvre de son côté).
-export const ISLE_CHEST_S = 30 * 60; // un coffre de naufragé se remplit en 30 minutes
-export const isleChestGold = (zone: number) => 120 * zone * zone; // or moyen d'un coffre de naufragé (± 30 %)
+export const ISLE_TOME_DROP = 0.5; // pour le tome que garde un géant des îlots du large (Endurance I, II ou III)
 /** Index d'un livre dans le sac : discipline k, tome t. */
 export const bookIndex = (k: number, tome: number) => k * TOMES + tome;
 export const BOOKS = LESSON_KINDS.length * TOMES;
@@ -406,8 +401,6 @@ export const FLY_MOUNTS = new Set(['vulture']);
 export const flyMount = (species: number) => FLY_MOUNTS.has(SPECIES_KEYS[species]);
 export const SHORE_R = 140;
 export const swimMount = (species: number) => SWIM_MOUNTS.has(SPECIES_KEYS[species]);
-/** Vitesse à dos de sa monture (multiplicateur) : la Navigation (tome d'un îlot) accélère les montures nageuses. */
-export const riderSpeed = (species: number, saddle: number, learned: readonly number[]) => rideSpeed(species, saddle) * (swimMount(species) ? 1 + lessonBonus(learned, 'swim') : 1);
 export const MOUNT_SHARE = 0.75; // part des dégâts reçus par la monture
 export const MOUNT_REACH = 240; // distance max pour enfourcher sa monture
 export const mountSpeedOf = (species: number) => MOUNTS[SPECIES_KEYS[species]] ?? 1;
@@ -452,9 +445,23 @@ export const GOLEM_BITE_S = 0.9; // … et le grignote, une bouchée toutes les 
 export const GOLEM_BITES = 4; // … en quatre bouchées : la pierre revient à son dompteur
 export const CACTUS_PRICK = 0.05; // s'y frotter : 5 % des PV max…
 export const CACTUS_CD = 0.8; // … au plus toutes les 0,8 s
-export const QUICKSAND_SLOW = 0.4; // sables mouvants (plages de la Mer de sable) : on y avance à 40 % de sa vitesse…
-export const QUICKSAND_GRACE_S = 1.5; // … et passé 1,5 s dedans, on s'enlise…
-export const QUICKSAND_SINK = 0.04; // … 4 % des PV max par seconde, jusqu'à en sortir (à dos de monture volante : rien)
+/**
+ * Tempête de sable assez forte pour blesser : elle cache vers et suricates, et cloue les vautours au sol (les sauvages,
+ * ceux de la meute et la monture : on ne vole plus dans la Mer de sable tant qu'elle souffle).
+ */
+export const STORM_HARM = 0.4;
+// Sables mouvants : ils s'ouvrent au hasard sous les pas d'un dompteur, n'importe où dans la Mer de sable, puis se referment.
+export const QUICKSAND_CHANCE = 0.04; // chance, chaque seconde, qu'il s'en ouvre sous un dompteur qui marche dans le désert…
+export const QUICKSAND_GAP = 700; // … s'il n'y en a pas déjà à cette distance de lui
+export const QUICKSAND_R: [number, number] = [60, 95]; // rayon (une ellipse : r × 0,6 r)
+export const QUICKSAND_OPEN_S = 0.8; // il s'ouvre en ce temps (il s'élargit depuis un point)…
+export const QUICKSAND_LIFE_S = 20; // … et se referme au bout de ce temps
+export const QUICKSAND_SLOW = 0.4; // on y avance à 40 % de sa vitesse…
+export const QUICKSAND_GRACE_S = 1; // … et passé 1 s dedans, on s'enlise…
+export const QUICKSAND_SINK = 0.03; // … 3 % des PV max la première seconde…
+export const QUICKSAND_GROWTH = 1.8; // … puis × 1,8 chaque seconde (3, 5,4, 9,7, 17,5, 31,5 %…), jusqu'à en sortir (en vol : rien)
+/** Dégâts de la n-ième seconde d'enlisement (n = 0 : la première), en part des PV max. */
+export const quicksandSink = (n: number) => QUICKSAND_SINK * QUICKSAND_GROWTH ** Math.max(0, n);
 export const BOSS_HP_BONUS = 1.2; // PV des géants : +20 % par-dessus le tableau des espèces
 export const BOSS_TALK_R = 140; // distance (depuis le bord du géant) pour lui parler et lancer le combat
 export const BOSS_SOUL_DROP = 0.35;
@@ -525,7 +532,7 @@ export type BossMove = (
   | { kind: 'enrage'; below: number } // s'enrage sous ce seuil de PV
   | { kind: 'rocks'; cd: number } // projette des rochers sur plusieurs cibles
   | { kind: 'blink'; cd: number; fire?: boolean } // disparaît et réapparaît près d'une cible (fire : il laisse un cratère de feu)
-  | { kind: 'volley'; cd: number; n: number; shot: 'bolt' | 'jet' | 'dart'; pierce?: boolean } // salve de projectiles en éventail (esquivable) ; pierce : ils traversent la meute
+  | { kind: 'volley'; cd: number; n: number; shot: 'bolt' | 'jet' | 'dart' | 'fire' | 'spark'; pierce?: boolean } // salve de projectiles en éventail (esquivable) ; pierce : ils traversent la meute
   | { kind: 'mortar'; cd: number; n: number } // pluie de tirs en cloche, cercles annoncés au sol
   | { kind: 'trail'; cd: number; dur: number } // pendant dur secondes, il laisse derrière lui des flaques de lave qui brûlent
   | { kind: 'spin'; cd: number; arms: number; dur: number } // il s'arrête : des jets de flammes tournent autour de lui (annoncés au sol)
@@ -539,34 +546,59 @@ export type BossMove = (
   | { kind: 'geyser'; cd: number; n: number } // geysers qui jaillissent sous les cibles, en chaîne
   | { kind: 'breath'; cd: number; heads: number; dur: number } // souffle de ses têtes : des jets d'eau qui balaient l'avant
   | { kind: 'tornado'; cd: number; n: number; dur: number } // tornades qui poursuivent les cibles : elles blessent et aspirent
+  | { kind: 'stalk'; cd: number } // il se fond dans l'ombre, file au ras du sol et bondit dans le dos de sa cible
+  | { kind: 'howl'; cd: number } // hurlement : les dompteurs autour sont ralentis, ses renforts enragent
+  | { kind: 'rampage'; cd: number; n: number } // ruée folle : n charges d'affilée, il rebondit sur les murs et les rochers
+  | { kind: 'mud'; cd: number; n: number } // il projette de la boue : des flaques qui collent
+  | { kind: 'hug'; cd: number } // étreinte : il saisit le plus proche, qui ne peut plus bouger, et le broie
+  | { kind: 'hibernate'; below: number } // sous ce seuil de PV, il s'endort pour guérir (sauf si on le frappe assez fort)
+  | { kind: 'shrooms'; cd: number; n: number } // des champignons poussent dans l'arène : ils explosent quand on passe à côté
+  | { kind: 'decoys'; cd: number; n: number } // il se divise : n leurres et lui, au même visage ; les leurres explosent
+  | { kind: 'venomdive'; cd: number } // elle s'envole hors de vue, puis fond sur sa cible et laisse une mare de venin
+  | { kind: 'drum'; cd: number; n: number } // tambour de guerre : n anneaux d'onde l'un après l'autre, avec des brèches où passer
+  | { kind: 'log'; cd: number } // il arrache un tronc et le fait rouler droit sur sa cible
+  | { kind: 'tail'; cd: number } // coup de queue : un large balayage, vers ceux qui se croient à l'abri
+  | { kind: 'roll'; cd: number } // roulade de la mort : il happe sa cible et l'entraîne en tournoyant
+  | { kind: 'ambush'; cd: number } // embuscade : il plonge (eau, sable), file sous sa cible et surgit
+  | { kind: 'totem'; cd: number; max: number } // il plante un totem qui soigne les siens (à casser)
+  | { kind: 'curse'; cd: number } // malédiction : la cible marquée subit plus de dégâts
+  | { kind: 'maw'; cd: number } // gueule des dunes : des sables mouvants s'ouvrent sous les dompteurs, aspirent et mordent
+  | { kind: 'eclipse'; cd: number; dur: number } // éclipse : la nuit tombe sur l'arène, on ne voit plus qu'autour de soi
+  | { kind: 'mirage'; cd: number; n: number } // reflets de lune : n copies spectrales foncent sur la cible
+  | { kind: 'impale'; cd: number } // dard empaleur : un long coup de queue en ligne, qui empoisonne fort
+  | { kind: 'molt'; cd: number } // mue : elle laisse sa vieille peau, qui explose, et file
+  | { kind: 'tailcut'; at: number[] } // à ces seuils de PV, sa queue tombe et se bat seule (elle repousse)
+  | { kind: 'echo'; cd: number; n: number } // écholocation : des anneaux sonores qui étourdissent
+  | { kind: 'roost'; cd: number; dur: number } // il s'accroche au plafond, hors d'atteinte : braises et nuée, puis il fond
+  | { kind: 'shellspin'; cd: number; dur: number } // toupie : rentrée dans sa carapace, elle rebondit dans l'arène
 ) & { from?: number }; // from : phase de combat à partir de laquelle il s'en sert (géant à plusieurs phases)
 
 export const BOSS_MOVES: Record<string, BossMove[]> = {
   slime_queen: [{ kind: 'leap', cd: 6 }, { kind: 'split', at: [0.66, 0.33], n: 3 }],
-  spore_giant: [{ kind: 'spores', cd: 5 }, { kind: 'summon', cd: 9, n: 3, max: 6 }],
-  shadow_fang: [{ kind: 'charge', cd: 5 }, { kind: 'summon', cd: 12, n: 2, max: 4 }],
+  spore_giant: [{ kind: 'spores', cd: 5 }, { kind: 'shrooms', cd: 10, n: 5 }, { kind: 'summon', cd: 12, n: 3, max: 6 }],
+  shadow_fang: [{ kind: 'stalk', cd: 6 }, { kind: 'howl', cd: 11 }, { kind: 'summon', cd: 12, n: 2, max: 4 }],
   weaver: [{ kind: 'web', cd: 4 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
-  old_tusk: [{ kind: 'charge', cd: 4 }, { kind: 'enrage', below: 0.35 }],
-  colossus: [{ kind: 'slam', cd: 6, power: 4 }, { kind: 'enrage', below: 0.3 }], // onde de choc de l'ours : plus forte que les autres
+  old_tusk: [{ kind: 'rampage', cd: 7, n: 3 }, { kind: 'mud', cd: 9, n: 3 }],
+  colossus: [{ kind: 'slam', cd: 6, power: 4 }, { kind: 'hug', cd: 9 }, { kind: 'hibernate', below: 0.4 }], // onde de choc de l'ours : plus forte que les autres
   moss_heart: [{ kind: 'rocks', cd: 5 }, { kind: 'slam', cd: 8 }],
-  old_flame: [{ kind: 'blink', cd: 6, fire: true }, { kind: 'slam', cd: 7, fire: true }], // il se téléporte en laissant un cratère de feu ; son onde de choc est une vague de flammes
+  old_flame: [{ kind: 'blink', cd: 6, fire: true }, { kind: 'decoys', cd: 12, n: 2 }], // il se téléporte en laissant un cratère de feu ; il se divise en trois feux follets
   rune_eye: [{ kind: 'volley', cd: 4, n: 5, shot: 'bolt', pierce: true }, { kind: 'laser', cd: 10, dur: 3.5, turn: 0.9 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // ses traits traversent la meute ; son rayon balaie
   // Lacs brumeux : le roi des mares crache sa langue (et ramène sa proie), pilonne de têtards et bondit ; l'hydre
   // souffle de ses trois têtes et fait jaillir les geysers ; le crabe titan découpe dans le tas et noie tout sous l'écume
   toad_king: [{ kind: 'tongue', cd: 5, n: 2 }, { kind: 'mortar', cd: 6, n: 5 }, { kind: 'leap', cd: 8 }],
   mist_hydra: [{ kind: 'breath', cd: 7, heads: 3, dur: 2.6 }, { kind: 'geyser', cd: 6, n: 5 }, { kind: 'volley', cd: 4, n: 3, shot: 'jet' }],
   titan_crab: [{ kind: 'pincer', cd: 4.5 }, { kind: 'bubbles', cd: 7, n: 5 }, { kind: 'enrage', below: 0.3 }],
-  sand_queen: [{ kind: 'blink', cd: 5 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'slam', cd: 8 }], // elle plonge et resurgit sous sa cible
-  vulture_king: [{ kind: 'tornado', cd: 9, n: 2, dur: 6 }, { kind: 'leap', cd: 5 }, { kind: 'mortar', cd: 7, n: 4 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // tornades, piqués, pluie d'ossements, ses vautours
-  drake_king: [{ kind: 'volley', cd: 5, n: 5, shot: 'jet' }, { kind: 'charge', cd: 6 }, { kind: 'slam', cd: 8 }, { kind: 'summon', cd: 12, n: 2, max: 4 }, { kind: 'enrage', below: 0.3 }], // jets d'eau en éventail, il charge, ses petits
-  wyvern_king: [{ kind: 'leap', cd: 6 }, { kind: 'tornado', cd: 10, n: 2, dur: 5 }, { kind: 'volley', cd: 5, n: 6, shot: 'dart' }, { kind: 'charge', cd: 7 }, { kind: 'enrage', below: 0.35 }], // elle fond du ciel, bourrasques de ses ailes, épines de sa queue (poison)
-  dragon_king: [{ kind: 'spin', cd: 9, arms: 3, dur: 3.5 }, { kind: 'mortar', cd: 6, n: 6 }, { kind: 'trail', cd: 11, dur: 4 }, { kind: 'leap', cd: 8 }, { kind: 'slam', cd: 7, power: 2, fire: true }, { kind: 'enrage', below: 0.3 }], // souffle de feu tournoyant, pluie de braises, il embrase le sol
-  scorpion_king: [{ kind: 'pincer', cd: 6 }, { kind: 'volley', cd: 5, n: 5, shot: 'dart' }, { kind: 'charge', cd: 8 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'enrage', below: 0.3 }], // pinces, crachats de venin, ses scorpions
-  moon_jackal: [{ kind: 'charge', cd: 4 }, { kind: 'summon', cd: 9, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
+  sand_queen: [{ kind: 'blink', cd: 5 }, { kind: 'maw', cd: 9 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // elle plonge et resurgit sous sa cible ; le sable s'ouvre en gueules
+  vulture_king: [{ kind: 'tornado', cd: 9, n: 2, dur: 6 }, { kind: 'leap', cd: 5 }, { kind: 'summon', cd: 11, n: 2, max: 4 }], // tornades, piqués, ses vautours
+  drake_king: [{ kind: 'volley', cd: 5, n: 3, shot: 'spark' }, { kind: 'charge', cd: 6 }, { kind: 'slam', cd: 8 }, { kind: 'summon', cd: 12, n: 2, max: 4 }, { kind: 'enrage', below: 0.3 }], // décharges électriques en éventail (elles rebondissent sur ceux qui se tiennent à côté), il charge, ses petits
+  wyvern_king: [{ kind: 'leap', cd: 6 }, { kind: 'venomdive', cd: 10 }, { kind: 'volley', cd: 5, n: 6, shot: 'dart' }, { kind: 'charge', cd: 7 }, { kind: 'enrage', below: 0.35 }], // elle bondit, fond du ciel dans une mare de venin, épines de sa queue (poison)
+  dragon_king: [{ kind: 'spin', cd: 9, arms: 3, dur: 3.5 }, { kind: 'volley', cd: 6, n: 5, shot: 'fire' }, { kind: 'trail', cd: 11, dur: 4 }, { kind: 'leap', cd: 8 }, { kind: 'slam', cd: 7, power: 2, fire: true }, { kind: 'enrage', below: 0.3 }], // souffle de feu tournoyant, boules de feu en éventail, il embrase le sol
+  scorpion_king: [{ kind: 'impale', cd: 6 }, { kind: 'volley', cd: 5, n: 5, shot: 'dart' }, { kind: 'ambush', cd: 10 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'enrage', below: 0.3 }], // dard empaleur, crachats de venin, il s'enfouit, ses scorpions
+  moon_jackal: [{ kind: 'mirage', cd: 6, n: 3 }, { kind: 'eclipse', cd: 16, dur: 7 }, { kind: 'summon', cd: 9, n: 3, max: 6 }],
   // elle fonce en laissant une traînée de lave, appelle ses petits
-  salamander_queen: [{ kind: 'trail', cd: 7, dur: 4 }, { kind: 'charge', cd: 4 }, { kind: 'summon', cd: 10, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
+  salamander_queen: [{ kind: 'trail', cd: 7, dur: 4 }, { kind: 'molt', cd: 11 }, { kind: 'tailcut', at: [0.66, 0.33] }, { kind: 'summon', cd: 10, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
   // piqués, tourbillon de flammes, il disparaît dans la cendre, sa nuée
-  ash_lord: [{ kind: 'leap', cd: 5 }, { kind: 'spin', cd: 9, arms: 3, dur: 3.5 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
+  ash_lord: [{ kind: 'echo', cd: 7, n: 2 }, { kind: 'spin', cd: 9, arms: 3, dur: 3.5 }, { kind: 'roost', cd: 15, dur: 5 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
   // son volcan crache, ses jets de flammes tournent, il sème la lave, il fait trembler le sol
   // Le Kraken, en haute mer : trois phases (chaque fois vaincu, il replonge et revient avec toute sa vie, plus redoutable)
   kraken: [
@@ -576,10 +608,10 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   ],
   // Jungle : le roi gorille fracasse le sol et fait pleuvoir les bananes ; le vieux crocodile charge et fouette de la
   // queue ; le Grand Masque crache ses fléchettes, empoisonne l'air, disparaît et appelle les siens
-  gorilla_king: [{ kind: 'slam', cd: 6, power: 3 }, { kind: 'mortar', cd: 7, n: 6 }, { kind: 'leap', cd: 8 }, { kind: 'enrage', below: 0.3 }],
-  croc_king: [{ kind: 'charge', cd: 4 }, { kind: 'slam', cd: 7, power: 2 }, { kind: 'enrage', below: 0.35 }],
-  mask_lord: [{ kind: 'volley', cd: 4, n: 5, shot: 'dart' }, { kind: 'spores', cd: 6 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
-  mountain_tortoise: [{ kind: 'mortar', cd: 5, n: 6 }, { kind: 'spin', cd: 10, arms: 4, dur: 4 }, { kind: 'trail', cd: 12, dur: 5 }, { kind: 'slam', cd: 7, power: 3 }, { kind: 'enrage', below: 0.3 }],
+  gorilla_king: [{ kind: 'drum', cd: 10, n: 4 }, { kind: 'log', cd: 7 }, { kind: 'mortar', cd: 8, n: 6 }, { kind: 'leap', cd: 9 }, { kind: 'enrage', below: 0.3 }],
+  croc_king: [{ kind: 'tail', cd: 5 }, { kind: 'roll', cd: 9 }, { kind: 'ambush', cd: 11 }, { kind: 'enrage', below: 0.35 }],
+  mask_lord: [{ kind: 'volley', cd: 4, n: 5, shot: 'dart' }, { kind: 'curse', cd: 9 }, { kind: 'totem', cd: 13, max: 2 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
+  mountain_tortoise: [{ kind: 'mortar', cd: 5, n: 6 }, { kind: 'spin', cd: 10, arms: 4, dur: 4 }, { kind: 'trail', cd: 12, dur: 5 }, { kind: 'shellspin', cd: 13, dur: 4.5 }, { kind: 'enrage', below: 0.3 }],
 };
 /** Coup ordinaire d'un géant : une seule cible (deux pour la reine des Gluants et l'ours), dégâts multipliés. */
 const BOSS_MELEE: Record<string, { targets: number; mult: number }> = { slime_queen: { targets: 2, mult: 1.3 }, colossus: { targets: 2, mult: 1.3 } };
@@ -589,7 +621,31 @@ export const MOVE_NAMES: Record<BossMove['kind'], string> = {
   web: 'Toiles', slam: 'Onde de choc', enrage: 'Rage', rocks: 'Pluie de rochers', blink: 'Clignement',
   volley: 'Salve', mortar: 'Pluie de mortiers', trail: 'Traînée de lave', spin: 'Tourbillon de flammes', lash: 'Coup de tentacule', ink: 'Nuage d\'encre', laser: 'Rayon runique',
   pound: 'Fracasse le sol', pincer: 'Grande pince', bubbles: 'Écume', tongue: 'Coup de langue', geyser: 'Geysers', breath: 'Souffle des trois têtes', tornado: 'Tornades',
+  stalk: 'Traque', howl: 'Hurlement', rampage: 'Ruée folle', mud: 'Bauge', hug: 'Étreinte', hibernate: 'Hibernation', shrooms: 'Champignonnière',
+  decoys: 'Lueurs trompeuses', venomdive: 'Piqué venimeux', drum: 'Tambour de guerre', log: 'Lancer de tronc', tail: 'Coup de queue',
+  roll: 'Roulade de la mort', ambush: 'Embuscade', totem: 'Totem', curse: 'Malédiction', maw: 'Gueule des dunes', eclipse: 'Éclipse',
+  mirage: 'Reflets de lune', impale: 'Dard empaleur', molt: 'Mue', tailcut: 'Queue repoussée', echo: 'Écholocation', roost: 'Suspendu',
+  shellspin: 'Toupie de lave',
 };
+/** Attaques que n'hérite pas un Alpha légendaire : elles appellent des renforts ou ne valent que contre les dompteurs. */
+export const LEGEND_SKIPS = new Set<BossMove['kind']>(['summon', 'decoys', 'totem', 'roost', 'eclipse']);
+// Réglages des nouvelles attaques des géants
+export const HUG_S = 2.2; // étreinte de l'ours : la cible ne bouge plus pendant ce temps (il la broie)
+export const ROLL_S = 1.8; // roulade du crocodile : pareil, en tournoyant
+export const RING_SPEED = 300; // tambour de guerre, écholocation : vitesse des anneaux (px/s)…
+export const RING_W = 26; // … leur épaisseur (demi)…
+export const DRUM_R = 540; // … jusqu'où va le tambour du gorille…
+export const ECHO_R = 460; // … et le cri de la chauve-souris
+export const DRUM_GAP = 0.42; // demi-angle de chacune des deux brèches d'un anneau de tambour (on s'y glisse)
+export const ECHO_STUN_S = 0.8; // un anneau d'écholocation étourdit (on ne bouge plus) ce temps-là
+export const LOG_SPEED = 720; // le tronc roule à cette vitesse (px/s)
+export const RAMPAGE_SPEED = 900; // le sanglier fonce à cette vitesse pendant sa ruée
+export const MAW_PULL = 95; // gueule des dunes : elle aspire vers son centre (px/s)…
+export const MAW_R = 125; // … sur ce rayon (et un peu au-delà)
+export const CURSE_S = 7; // malédiction : la cible subit CURSE_BONUS de dégâts en plus pendant ce temps
+export const CURSE_BONUS = 0.35;
+export const SHELL_SPEED = 430; // toupie de lave : vitesse de la carapace qui rebondit
+export const DECOY_S = 8; // leurres du Feu Ancien : ils explosent au bout de ce temps (ou quand on les abat)
 /** Arc de la grande pince (demi-angle, en radians) et sa portée. */
 export const PINCER_HALF = 0.8;
 export const PINCER_R = 210;
@@ -599,6 +655,10 @@ export const TORNADO_SPEED = 120;
 export const TORNADO_PULL = 150;
 export const TORNADO_PULL_R = 230;
 /** Fléchettes des Petits Masqués, dard du scorpion : poison (part des dégâts du coup, chaque seconde, pendant POISON_S). */
+/** Décharge du Grand Drake : elle rebondit de sa cible sur les ennemis proches (bonds, distance, dégâts gardés à chaque bond). */
+export const SPARK_JUMPS = 2;
+export const SPARK_R = 190;
+export const SPARK_FALLOFF = 0.7;
 export const POISON_DPS = 0.18;
 export const POISON_S = 4;
 // Les géants poursuivent : quand leur cible s'éloigne, ils accélèrent (impossible de les tuer en reculant).
@@ -627,7 +687,6 @@ export interface Species {
   anchored?: boolean; // ne se déplace pas (le Kraken dans l'eau, ses tentacules accrochés au bateau)
   minion?: boolean; // renfort d'un géant seulement : ni or, ni essence, ni bestiaire
   base?: string; // boss : espèce dont il est la version géante (son âme rend légendaire l'Alpha de cette espèce)
-  title?: string; // boss : son nom propre (affiché en entrant dans sa grotte et quand on lui parle)
   sprite?: string; // apparence à réutiliser (par défaut : key)
   ranged?: Ranged; // tireur : attaque à distance (projectile esquivable) au lieu du corps à corps
   swim?: boolean; // sauvage, il ne quitte jamais l'eau (apprivoisé, il suit son dompteur sur terre et dans l'eau)
@@ -638,7 +697,7 @@ export interface Species {
   venom?: boolean; // ses coups au corps à corps empoisonnent (le scorpion)
   optional?: boolean; // géant ajouté après coup : ni porte, ni parchemin, ni volcan, ni bateau n'en dépendent
   isle?: boolean; // vit sur un îlot du large (son géant, dans une grotte de l'îlot) : on y va à dos de serpent
-  tome?: LessonKind; // géant d'un îlot : le tome qu'il garde dans son coffre
+  tome?: [LessonKind, number]; // géant d'un îlot : le tome qu'il garde dans son coffre (discipline, tome I, II ou III)
   sleeps?: 'night' | 'day'; // sauvage, il dort la nuit (lièvre) ou le jour (ours) : ni aggro ni errance, jusqu'à ce qu'on le frappe
   shell?: boolean; // sauvage, il rentre dans sa coquille (intouchable) quand un dompteur sans fruit en main approche
   rainSpeed?: number; // sauvage, sa vitesse sous une grosse averse (multiplicateur ; l'escargot aime la pluie)
@@ -651,6 +710,9 @@ export interface Species {
   brawler?: boolean; // tireur qui cogne aussi : une cible collée à lui, il la frappe au corps à corps au lieu de tirer (gorille)
   reach?: number; // portée en plus au corps à corps (le crocodile se jette hors de l'eau sur ce qui passe au bord)
   ambush?: boolean; // sauvage nageur qui sort de l'eau pour attaquer ce qui passe, puis y retourne (le crocodile)
+  mimic?: string; // renfort qui a l'apparence d'un géant (clé d'espèce) : les leurres du Feu Ancien
+  frail?: number; // renfort : il encaisse les coups multipliés par ceci (un leurre tombe en quelques coups)
+  inert?: boolean; // renfort qui ne bouge ni ne frappe (le totem du Grand Masque)
   moves?: BossMove[]; // attaques spéciales d'un monstre ordinaire (le gorille fracasse le sol), sauvage comme apprivoisé
 }
 
@@ -659,13 +721,14 @@ export interface Species {
  * arc : tir en cloche qui retombe là où était la cible (cercle annoncé au sol), dégâts de zone.
  */
 export interface Ranged {
-  kind: 'bolt' | 'arc' | 'jet' | 'banana' | 'dart'; // banana : lancée en cloche (comme arc) ; dart : fléchette de sarbacane (comme jet)
+  kind: 'bolt' | 'arc' | 'jet' | 'banana' | 'dart' | 'fire' | 'spark'; // banana : lancée en cloche (comme arc) ; dart : fléchette de sarbacane (comme jet) ;
+  // fire : boule de feu en ligne droite (dragonnet) ; spark : décharge électrique qui rebondit sur les ennemis proches (Grand Drake)
   range: number;
   windup: number; // s d'immobilité à charger le tir (lisible : on voit venir le coup)
   speed: number; // px/s (bolt, jet) ; arc : durée de vol fixe
   splash?: number; // arc : rayon des dégâts à l'impact
 }
-export const SHOT_KINDS = ['bolt', 'arc', 'jet', 'banana', 'dart'] as const; // n'ajouter qu'à la fin
+export const SHOT_KINDS = ['bolt', 'arc', 'jet', 'banana', 'dart', 'fire', 'spark'] as const; // n'ajouter qu'à la fin
 /** Tir en cloche (il retombe là où était la cible, cercle annoncé au sol) : arc, banane du gorille. */
 export const lobbedShot = (kind: number | Ranged['kind']) => { const k = typeof kind === 'number' ? SHOT_KINDS[kind] : kind; return k === 'arc' || k === 'banana'; };
 export const ARC_FLIGHT_S = 0.9;
@@ -683,24 +746,24 @@ export const SPECIES: Species[] = [
   { key: 'wisp', name: 'Feu follet', color: '#6FB7FF', r: 18, hp: 300, dmg: 40, speed: 110, atkCd: 1.2, gold: 22, zone: 4, population: 21, pack: [1, 2] },
   // Mini-boss des grottes : la version géante de chaque espèce. Leur « essence » est leur âme.
   // (ordre conservé : les index servent dans les sauvegardes)
-  { key: 'slime_queen', name: 'Gluant Géant', color: '#9BE070', r: 60, hp: 720, dmg: 8, speed: 190, atkCd: 1.1, gold: 60, zone: 1, population: 0, pack: [1, 1], boss: true, title: 'Gélatine Ire, reine des Gluants', sprite: 'slime', base: 'slime' },
-  { key: 'shadow_fang', name: "Croc-d'Ombre", color: '#4A4E6A', r: 48, hp: 2140, dmg: 22, speed: 235, atkCd: 0.8, gold: 150, zone: 2, population: 0, pack: [1, 1], boss: true, title: 'Grisecroc le Hurleur', sprite: 'wolf', base: 'wolf' },
-  { key: 'old_tusk', name: 'Vieille-Défense', color: '#6E3F24', r: 54, hp: 5590, dmg: 40, speed: 200, atkCd: 1.1, gold: 300, zone: 3, population: 0, pack: [1, 1], boss: true, title: 'Grognard le Vieux Solitaire', sprite: 'boar', base: 'boar' },
-  { key: 'moss_heart', name: 'Cœur-de-Mousse', color: '#3F5E45', r: 63, hp: 14170, dmg: 65, speed: 185, atkCd: 1.5, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Moussegrave le Millénaire', sprite: 'golem', base: 'golem' },
-  { key: 'spore_giant', name: 'Champignon Géant', color: '#B8432E', r: 57, hp: 610, dmg: 9, speed: 205, atkCd: 1.2, gold: 60, zone: 1, population: 0, pack: [1, 1], boss: true, title: 'Amanite la Vénéneuse', sprite: 'sporelin', base: 'sporelin' },
-  { key: 'weaver', name: 'Mère Tisseuse', color: '#4E3760', r: 51, hp: 1880, dmg: 24, speed: 220, atkCd: 0.9, gold: 150, zone: 2, population: 0, pack: [1, 1], boss: true, title: 'Arachnée la Fileuse', sprite: 'spider', base: 'spider' },
-  { key: 'colossus', name: 'Ours Colosse', color: '#4F3524', r: 63, hp: 5000, dmg: 34, speed: 190, atkCd: 1.3, gold: 300, zone: 3, population: 0, pack: [1, 1], boss: true, title: 'Ursus Mâchefer', sprite: 'bear', base: 'bear' },
-  { key: 'old_flame', name: 'Feu Ancien', color: '#4F8BFF', r: 54, hp: 11380, dmg: 75, speed: 200, atkCd: 1.3, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Lueur, la Flamme Ancienne', sprite: 'wisp', base: 'wisp' },
+  { key: 'slime_queen', name: 'Gluant Géant', color: '#9BE070', r: 60, hp: 720, dmg: 8, speed: 190, atkCd: 1.1, gold: 60, zone: 1, population: 0, pack: [1, 1], boss: true, sprite: 'slime', base: 'slime' },
+  { key: 'shadow_fang', name: "Croc-d'Ombre", color: '#4A4E6A', r: 48, hp: 2140, dmg: 22, speed: 235, atkCd: 0.8, gold: 150, zone: 2, population: 0, pack: [1, 1], boss: true, sprite: 'wolf', base: 'wolf' },
+  { key: 'old_tusk', name: 'Vieille-Défense', color: '#6E3F24', r: 54, hp: 5590, dmg: 40, speed: 200, atkCd: 1.1, gold: 300, zone: 3, population: 0, pack: [1, 1], boss: true, sprite: 'boar', base: 'boar' },
+  { key: 'moss_heart', name: 'Cœur-de-Mousse', color: '#3F5E45', r: 63, hp: 14170, dmg: 65, speed: 185, atkCd: 1.5, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, sprite: 'golem', base: 'golem' },
+  { key: 'spore_giant', name: 'Champignon Géant', color: '#B8432E', r: 57, hp: 610, dmg: 9, speed: 205, atkCd: 1.2, gold: 60, zone: 1, population: 0, pack: [1, 1], boss: true, sprite: 'sporelin', base: 'sporelin' },
+  { key: 'weaver', name: 'Mère Tisseuse', color: '#4E3760', r: 51, hp: 1880, dmg: 24, speed: 220, atkCd: 0.9, gold: 150, zone: 2, population: 0, pack: [1, 1], boss: true, sprite: 'spider', base: 'spider' },
+  { key: 'colossus', name: 'Ours Colosse', color: '#4F3524', r: 63, hp: 5000, dmg: 34, speed: 190, atkCd: 1.3, gold: 300, zone: 3, population: 0, pack: [1, 1], boss: true, sprite: 'bear', base: 'bear' },
+  { key: 'old_flame', name: 'Feu Ancien', color: '#4F8BFF', r: 54, hp: 11380, dmg: 75, speed: 200, atkCd: 1.3, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, sprite: 'wisp', base: 'wisp' },
   // Itération 16 : un tireur dans les Ruines moussues, et la zone 5 (Lacs brumeux) au-delà du Camp avancé.
   { key: 'watcher', name: 'Guetteur runique', color: '#6E7570', r: 22, hp: 320, dmg: 38, speed: 55, atkCd: 2.0, gold: 20, zone: 4, population: 22, pack: [1, 2], ranged: { kind: 'bolt', range: 320, windup: 0.6, speed: 260 } },
   { key: 'toad', name: 'Crapaud-mortier', color: '#6E8F45', r: 24, hp: 900, dmg: 50, speed: 75, atkCd: 2.4, gold: 40, zone: 5, population: 18, pack: [1, 2], ranged: { kind: 'arc', range: 340, windup: 0.55, speed: 0, splash: 52 }, amphibious: true },
   { key: 'serpent', name: 'Serpent des brumes', color: '#4A93A0', r: 22, hp: 700, dmg: 45, speed: 105, atkCd: 1.8, gold: 36, zone: 5, population: 16, pack: [1, 1], ranged: { kind: 'jet', range: 360, windup: 0.45, speed: 560 }, swim: true },
   { key: 'crab', name: 'Crabe des berges', color: '#D46A43', r: 24, hp: 1050, dmg: 55, speed: 70, atkCd: 1.4, gold: 45, zone: 5, population: 16, pack: [1, 2], amphibious: true },
   // Géants des nouvelles espèces : une grotte chacun (zone 4 : Œil des Ruines ; zone 5 : les trois autres).
-  { key: 'rune_eye', name: 'Œil des Ruines', color: '#5E6662', r: 57, hp: 12480, dmg: 70, speed: 185, atkCd: 1.4, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, title: 'Œil-de-Pierre le Veilleur', sprite: 'watcher', base: 'watcher' },
-  { key: 'toad_king', name: 'Crapaud-Roi', color: '#5F8A3A', r: 60, hp: 27170, dmg: 100, speed: 190, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Croâ XIV, roi des Mares', sprite: 'toad', base: 'toad' },
-  { key: 'mist_hydra', name: 'Hydre des brumes', color: '#3E8290', r: 57, hp: 23400, dmg: 95, speed: 205, atkCd: 1.2, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Brumentine aux Trois Têtes', sprite: 'serpent', base: 'serpent' },
-  { key: 'titan_crab', name: 'Crabe Titan', color: '#B9532F', r: 63, hp: 34580, dmg: 110, speed: 185, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, title: 'Pince-d’Acier le Titan', sprite: 'crab', base: 'crab' },
+  { key: 'rune_eye', name: 'Œil des Ruines', color: '#5E6662', r: 57, hp: 12480, dmg: 70, speed: 185, atkCd: 1.4, gold: 600, zone: 4, population: 0, pack: [1, 1], boss: true, sprite: 'watcher', base: 'watcher' },
+  { key: 'toad_king', name: 'Crapaud-Roi', color: '#5F8A3A', r: 60, hp: 27170, dmg: 100, speed: 190, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'toad', base: 'toad' },
+  { key: 'mist_hydra', name: 'Hydre des brumes', color: '#3E8290', r: 57, hp: 23400, dmg: 95, speed: 205, atkCd: 1.2, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'serpent', base: 'serpent' },
+  { key: 'titan_crab', name: 'Crabe Titan', color: '#B9532F', r: 63, hp: 34580, dmg: 110, speed: 185, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'crab', base: 'crab' },
   // Gibier passif : il broute les buissons à fruits et s'enfuit quand on le frappe (pas de géant). S'apprivoise surtout aux baies.
   { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 30, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 3, population: 20, pack: [1, 3], passive: true, sleeps: 'night', skittish: true },
   { key: 'snail', name: 'Escargot des mousses', color: '#C99A5B', r: 12, hp: 22, dmg: 1, speed: 32, atkCd: 1.4, gold: 2, zone: 1, population: 20, pack: [1, 2], passive: true, shell: true, rainSpeed: 1.5 },
@@ -710,11 +773,11 @@ export const SPECIES: Species[] = [
   { key: 'meerkat', name: 'Suricate', color: '#C9A06A', r: 12, hp: 60, dmg: 3, speed: 125, atkCd: 1.2, gold: 8, zone: 7, population: 26, pack: [3, 6], passive: true, shy: true },
   { key: 'sandworm', name: 'Ver des sables', color: '#B98A5A', r: 26, hp: 2600, dmg: 120, speed: 115, atkCd: 1.6, gold: 100, zone: 7, population: 16, pack: [1, 1], burrows: true },
   { key: 'vulture', name: 'Vautour', color: '#4A3A30', r: 21, hp: 1700, dmg: 110, speed: 150, atkCd: 1.1, gold: 90, zone: 7, population: 18, pack: [1, 2], flies: true },
-  { key: 'jackal', name: 'Chacal fantôme', color: '#CDBB98', r: 18, hp: 1400, dmg: 90, speed: 175, atkCd: 0.9, gold: 80, zone: 7, population: 24, pack: [4, 6], night: true },
+  { key: 'jackal', name: 'Chacal fantôme', color: '#CDBB98', r: 21, hp: 1400, dmg: 90, speed: 175, atkCd: 0.9, gold: 80, zone: 7, population: 24, pack: [4, 6], night: true },
   // Géants de la Mer de sable : une grotte chacun.
-  { key: 'sand_queen', name: 'Reine des sables', color: '#A87A4A', r: 66, hp: 86000, dmg: 300, speed: 190, atkCd: 1.3, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Dunebouche, la Reine des Sables', sprite: 'sandworm', base: 'sandworm' },
-  { key: 'vulture_king', name: 'Roi-Vautour', color: '#3A2C24', r: 60, hp: 76000, dmg: 280, speed: 200, atkCd: 1.1, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Charognard, le Roi des Cieux', sprite: 'vulture', base: 'vulture' },
-  { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 70000, dmg: 265, speed: 220, atkCd: 0.85, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, title: 'Anubeth, le Chacal de la Lune', sprite: 'jackal', base: 'jackal' },
+  { key: 'sand_queen', name: 'Reine des sables', color: '#A87A4A', r: 66, hp: 86000, dmg: 300, speed: 190, atkCd: 1.3, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, sprite: 'sandworm', base: 'sandworm' },
+  { key: 'vulture_king', name: 'Roi-Vautour', color: '#3A2C24', r: 60, hp: 76000, dmg: 280, speed: 200, atkCd: 1.1, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, sprite: 'vulture', base: 'vulture' },
+  { key: 'moon_jackal', name: 'Chacal lunaire', color: '#D8CDB0', r: 57, hp: 70000, dmg: 265, speed: 220, atkCd: 0.85, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, sprite: 'jackal', base: 'jackal' },
   // Bois profonds : le Tréant dort dans un arbre ; il en sort parfois quand on l'abat (jamais d'apparition ailleurs).
   { key: 'treant', name: 'Tréant', color: '#6B4E30', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1], awaken: 20 }, // rare : éveil moins cher
   // Entrailles du volcan (zone 7, sous la Mer de sable) : trois espèces qu'on ne voit nulle part ailleurs, et leurs géants
@@ -722,33 +785,37 @@ export const SPECIES: Species[] = [
   { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 3600, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 8, population: 16, pack: [2, 4] },
   { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 2800, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 8, population: 14, pack: [3, 5] },
   { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 9000, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 8, population: 10, pack: [1, 1], ranged: { kind: 'arc', range: 360, windup: 0.7, speed: 0, splash: 60 } },
-  { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, title: 'Pyrrha, la Mère des Braises', sprite: 'salamander', base: 'salamander' },
-  { key: 'ash_lord', name: 'Seigneur des cendres', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, title: 'Noctembre, l\'Aile de Cendre', sprite: 'ash_bat', base: 'ash_bat' },
-  { key: 'mountain_tortoise', name: 'Tortue-Montagne', color: '#40342E', r: 70, hp: 170000, dmg: 520, speed: 185, atkCd: 1.5, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Cratère, la Montagne qui Marche', sprite: 'lava_tortoise', base: 'lava_tortoise' },
+  { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'salamander', base: 'salamander' },
+  { key: 'ash_lord', name: 'Seigneur des cendres', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'ash_bat', base: 'ash_bat' },
+  { key: 'mountain_tortoise', name: 'Tortue-Montagne', color: '#40342E', r: 70, hp: 170000, dmg: 520, speed: 185, atkCd: 1.5, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'lava_tortoise', base: 'lava_tortoise' },
   // Haute mer : le Kraken attaque le bateau sur la route du Colisée ; ses tentacules s'accrochent au pont.
   { key: 'kraken_tentacle', name: 'Tentacule du Kraken', color: '#7A4A8A', r: 32, hp: 9000, dmg: 260, speed: 0, atkCd: 1.3, gold: 0, zone: 9, population: 0, pack: [1, 1], anchored: true, minion: true },
-  { key: 'kraken', name: 'Kraken', color: '#6A3E7E', r: 100, hp: 130000, dmg: 480, speed: 0, atkCd: 1.6, gold: 7000, zone: 9, population: 0, pack: [1, 1], boss: true, title: 'Léviathys, le Kraken des Abysses', anchored: true, phases: 3 },
+  { key: 'kraken', name: 'Kraken', color: '#6A3E7E', r: 100, hp: 130000, dmg: 480, speed: 0, atkCd: 1.6, gold: 7000, zone: 9, population: 0, pack: [1, 1], boss: true, anchored: true, phases: 3 },
   // Jungle (zone 6, entre les Lacs brumeux et le désert) : gorilles (bananes à distance, poings au contact, il fracasse le
   // sol), crocodiles tapis dans l'eau (on ne voit que leur tête), petits hommes masqués à la sarbacane. Leurs géants
   // dorment au fond de temples.
   { key: 'gorilla', name: 'Gorille des cimes', color: '#3E3A38', r: 24, hp: 1500, dmg: 80, speed: 110, atkCd: 1.3, gold: 60, zone: 6, population: 20, pack: [1, 2], ranged: { kind: 'banana', range: 300, windup: 0.5, speed: 0, splash: 46 }, brawler: true, moves: [{ kind: 'pound', cd: 8 }] },
   { key: 'croc', name: 'Crocodile des marais', color: '#56703F', r: 24, hp: 1400, dmg: 95, speed: 100, atkCd: 1.5, gold: 58, zone: 6, population: 16, pack: [1, 1], swim: true, ambush: true, reach: 46 },
   { key: 'masked', name: 'Petit Masqué', color: '#A0603A', r: 17, hp: 800, dmg: 60, speed: 150, atkCd: 1.3, gold: 45, zone: 6, population: 22, pack: [2, 4], ranged: { kind: 'dart', range: 330, windup: 0.4, speed: 620 } },
-  { key: 'gorilla_king', name: 'Roi Gorille', color: '#2E2A28', r: 66, hp: 58000, dmg: 205, speed: 195, atkCd: 1.2, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Mbolo, le Roi des Cimes', sprite: 'gorilla', base: 'gorilla' },
-  { key: 'croc_king', name: 'Crocodile Ancien', color: '#3F5A30', r: 66, hp: 62000, dmg: 215, speed: 185, atkCd: 1.3, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Vieux-Croc, Gardien des Eaux Noires', sprite: 'croc', base: 'croc' },
-  { key: 'mask_lord', name: 'Grand Masque', color: '#8A4A2A', r: 57, hp: 52000, dmg: 195, speed: 205, atkCd: 1.0, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, title: 'Tlaloq, l\'Esprit Masqué', sprite: 'masked', base: 'masked' },
+  { key: 'gorilla_king', name: 'Roi Gorille', color: '#2E2A28', r: 66, hp: 58000, dmg: 205, speed: 195, atkCd: 1.2, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, sprite: 'gorilla', base: 'gorilla' },
+  { key: 'croc_king', name: 'Crocodile Ancien', color: '#3F5A30', r: 66, hp: 62000, dmg: 215, speed: 185, atkCd: 1.3, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, sprite: 'croc', base: 'croc' },
+  { key: 'mask_lord', name: 'Grand Masque', color: '#8A4A2A', r: 57, hp: 52000, dmg: 195, speed: 205, atkCd: 1.0, gold: 1800, zone: 6, population: 0, pack: [1, 1], boss: true, sprite: 'masked', base: 'masked' },
   // Mer de sable, de jour seulement (il s'enfouit au coucher du soleil, quand sortent les chacals) : son dard empoisonne.
   { key: 'scorpion', name: 'Scorpion des dunes', color: '#C8913E', r: 20, hp: 1900, dmg: 100, speed: 135, atkCd: 1.2, gold: 85, zone: 7, population: 18, pack: [1, 3], day: true, venom: true },
-  { key: 'scorpion_king', name: 'Scorpion Empereur', color: '#7A2E22', r: 63, hp: 80000, dmg: 290, speed: 200, atkCd: 1.1, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, optional: true, venom: true, title: 'Seth-Akrab, l\'Empereur des Dunes', sprite: 'scorpion', base: 'scorpion' },
+  { key: 'scorpion_king', name: 'Scorpion Empereur', color: '#7A2E22', r: 63, hp: 80000, dmg: 290, speed: 200, atkCd: 1.1, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, optional: true, venom: true, sprite: 'scorpion', base: 'scorpion' },
   // Îlots du large (on y va à dos de serpent) : chacun a sa créature, et son géant au fond d'une grotte, qui garde un tome.
-  { key: 'drake', name: 'Drake des marées', color: '#2E7A80', r: 22, hp: 450, dmg: 22, speed: 100, atkCd: 1.3, gold: 20, zone: 3, population: 3, pack: [1, 2], isle: true, ranged: { kind: 'jet', range: 280, windup: 0.55, speed: 480 }, brawler: true },
-  { key: 'wyvern', name: 'Wyverne des falaises', color: '#5A6A3A', r: 24, hp: 1600, dmg: 65, speed: 125, atkCd: 1.3, gold: 58, zone: 5, population: 3, pack: [1, 2], isle: true, venom: true },
-  { key: 'dragon', name: 'Dragonnet de braise', color: '#A8402E', r: 26, hp: 1900, dmg: 90, speed: 105, atkCd: 1.4, gold: 66, zone: 6, population: 3, pack: [1, 2], isle: true, ranged: { kind: 'arc', range: 340, windup: 0.6, speed: 0, splash: 50 }, brawler: true },
-  { key: 'drake_king', name: 'Grand Drake', color: '#1E5A66', r: 63, hp: 8500, dmg: 50, speed: 180, atkCd: 1.3, gold: 450, zone: 3, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, tome: 'vigor', title: 'Marégrave, le Drake des Marées', sprite: 'drake', base: 'drake' },
-  { key: 'wyvern_king', name: 'Wyverne-Reine', color: '#3E4A2A', r: 66, hp: 42000, dmg: 125, speed: 200, atkCd: 1.2, gold: 1800, zone: 5, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, venom: true, tome: 'swim', title: 'Vipéra, la Reine des Falaises', sprite: 'wyvern', base: 'wyvern' },
-  { key: 'dragon_king', name: 'Dragon ancien', color: '#7A2418', r: 70, hp: 80000, dmg: 230, speed: 190, atkCd: 1.2, gold: 2600, zone: 6, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, tome: 'treasure', title: 'Pyrakhan, le Dragon Ancien', sprite: 'dragon', base: 'dragon' },
+  { key: 'drake', name: 'Drake des marées', color: '#2E7A80', r: 22, hp: 450, dmg: 22, speed: 100, atkCd: 1.3, gold: 20, zone: 3, population: 3, pack: [1, 2], isle: true, ranged: { kind: 'jet', range: 280, windup: 0.55, speed: 480 }, brawler: true, awaken: 15 },
+  { key: 'wyvern', name: 'Wyverne des falaises', color: '#5A6A3A', r: 24, hp: 1600, dmg: 65, speed: 125, atkCd: 1.3, gold: 58, zone: 5, population: 3, pack: [1, 2], isle: true, venom: true, awaken: 20 },
+  { key: 'dragon', name: 'Dragonnet de braise', color: '#A8402E', r: 26, hp: 1900, dmg: 90, speed: 105, atkCd: 1.4, gold: 66, zone: 6, population: 3, pack: [1, 2], isle: true, ranged: { kind: 'fire', range: 340, windup: 0.6, speed: 400 }, brawler: true, awaken: 25 },
+  { key: 'drake_king', name: 'Grand Drake', color: '#1E5A66', r: 63, hp: 8500, dmg: 50, speed: 180, atkCd: 1.3, gold: 450, zone: 3, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, tome: ['vigor', 0], sprite: 'drake', base: 'drake' },
+  { key: 'wyvern_king', name: 'Wyverne-Reine', color: '#3E4A2A', r: 66, hp: 42000, dmg: 125, speed: 200, atkCd: 1.2, gold: 1800, zone: 5, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, venom: true, tome: ['vigor', 1], sprite: 'wyvern', base: 'wyvern' },
+  { key: 'dragon_king', name: 'Dragon ancien', color: '#7A2418', r: 70, hp: 80000, dmg: 230, speed: 190, atkCd: 1.2, gold: 2600, zone: 6, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, tome: ['vigor', 2], sprite: 'dragon', base: 'dragon' },
   // Bois profonds, l'hiver seulement : le Bigfoot sort des sapins enneigés (il repart à la fonte des neiges). Rare, solide, il frappe fort.
   { key: 'bigfoot', name: 'Bigfoot', color: '#7A5A44', r: 27, hp: 420, dmg: 22, speed: 105, atkCd: 1.4, gold: 24, zone: 2, population: 7, pack: [1, 1], season: 3, awaken: 25 },
+  // Renforts des géants (n'apparaissent qu'appelés par eux) : leurres du Feu Ancien, totem du Grand Masque, queue de la Salamandre-Mère
+  { key: 'flame_decoy', name: 'Feu Ancien', color: '#4F8BFF', r: 54, hp: 11380, dmg: 1, speed: 200, atkCd: 99, gold: 0, zone: 4, population: 0, pack: [1, 1], minion: true, mimic: 'old_flame', frail: 30 },
+  { key: 'mask_totem', name: 'Totem masqué', color: '#7A5030', r: 24, hp: 2600, dmg: 0, speed: 0, atkCd: 99, gold: 0, zone: 6, population: 0, pack: [1, 1], minion: true, anchored: true, inert: true },
+  { key: 'salamander_tail', name: 'Queue de salamandre', color: '#5A4038', r: 18, hp: 8000, dmg: 240, speed: 175, atkCd: 0.8, gold: 0, zone: 8, population: 0, pack: [1, 1], minion: true },
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);

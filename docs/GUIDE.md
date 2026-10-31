@@ -57,7 +57,7 @@ s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois 
    (tapis dans l'eau, on ne voit que leurs yeux ; ils en sortent pour attaquer ce qui passe près de la rive, puis y
    retournent ; ils se montent, dans l'eau) et Petits Masqués à la sarbacane (leurs fléchettes **empoisonnent** : on
    perd des PV quelques secondes, une goutte verte au-dessus de la tête). Leurs géants dorment au fond de **temples** à degrés.
-7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable, sables mouvants sur les plages. Un grand volcan s'y dresse.
+7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable, sables mouvants qui s'ouvrent sous les pasges. Un grand volcan s'y dresse.
 8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles crachent de la lave en cloche) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
@@ -100,8 +100,10 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
     s'il tombe en pleine eau, on se noie.
   - Au bord de l'eau, avec une monture nageuse et une terrestre : **F** en regardant l'eau monte la nageuse, en
     regardant la terre, la terrestre.
-  - Le **Vautour** vole : il passe au-dessus de l'eau, des rochers et des arbres. Dans la meute aussi, il suit son
-    dompteur en volant et se pose quand il s'arrête.
+  - Le **Vautour** vole : il passe au-dessus de l'eau, des rochers et des arbres. En vol, les monstres ne l'atteignent
+    pas au corps à corps (seuls leurs tirs et les géants), mais on ne récolte ni bois ni pierre de là-haut. Dans la meute
+    aussi, il suit son dompteur en volant, se pose quand il s'arrête, et pique sur sa proie pour se poser à côté et la
+    frapper. Pendant une tempête de sable, le vent le cloue au sol (monture comprise) : on ne vole plus dans le désert.
   - L'**Escargot** se monte… mais ralentit.
 
 ## Alphas et Tanière
@@ -182,6 +184,34 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
   (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact.
 - Sur ordinateur, en combat, sa barre de vie et son nom s'affichent en haut de l'écran.
+- Chaque géant a ses attaques à lui, liées à son espèce :
+  - **Champignon Géant** : des **champignons** poussent dans l'arène ; on s'en approche, leur chapeau gonfle et ils
+    éclatent (en laissant leurs spores).
+  - **Croc-d'Ombre** : il **traque** (il se fond dans l'ombre, file au ras du sol et ressort dans ton dos) et **hurle**
+    (on est ralenti, ses louveteaux enragent).
+  - **Vieille-Défense** : **ruée folle** (trois charges d'affilée, il rebondit sur les murs) et **bauge** (des flaques
+    de boue qui collent).
+  - **Ours Colosse** : **étreinte** (il saisit le plus proche, qui ne peut plus bouger, et le broie) ; à bout de forces,
+    il **hiberne** pour guérir : frappe-le fort pour le réveiller.
+  - **Feu Ancien** : **lueurs trompeuses** (il se divise en trois feux follets à son visage ; les deux leurres tombent
+    en quelques coups, puis explosent).
+  - **Wyverne-Reine** : **piqué venimeux** (elle disparaît dans le ciel, fond sur sa cible et laisse une mare de venin).
+  - **Roi Gorille** : **tambour de guerre** (des anneaux d'onde l'un après l'autre : glisse-toi dans leurs deux
+    brèches) et **lancer de tronc** (il roule droit devant lui).
+  - **Crocodile Ancien** : **coup de queue** (vers là où il y a le plus de monde, même dans son dos), **roulade de la
+    mort** (il happe et tournoie) et **embuscade** (il plonge, file sous sa cible et surgit).
+  - **Grand Masque** : **totems** (ils soignent ses Petits Masqués : casse-les) et **malédiction** (sors de la marque,
+    sinon tu subis plus de dégâts).
+  - **Reine des sables** : **gueules des dunes** (le sable s'ouvre sous les dompteurs, aspire, puis se referme en mordant).
+  - **Chacal lunaire** : **éclipse** (la nuit tombe sur l'arène, on ne voit plus qu'autour de soi, ses chacals sortent
+    de l'ombre) et **reflets de lune** (des copies de lui foncent sur sa cible, de trois côtés).
+  - **Scorpion Empereur** : **dard empaleur** (en ligne, il empoisonne fort) et **fouissage** (il s'enfouit et surgit
+    sous sa cible).
+  - **Salamandre-Mère** : **mue** (sa vieille peau reste et explose, elle file) ; sa **queue** tombe deux fois et se bat
+    seule.
+  - **Seigneur des cendres** : **écholocation** (des anneaux qui étourdissent) et **suspendu** (il s'accroche au plafond,
+    hors d'atteinte ; braises et nuée, puis il fond sur quelqu'un).
+  - **Tortue-Montagne** : **toupie de lave** (rentrée dans sa carapace, elle rebondit dans l'arène en semant la lave).
 - L'**Œil des Ruines** tire des salves qui traversent la meute, et maintient un **rayon runique** qui tourne
   lentement autour de lui, vers là où il traverse le plus de monde : on le contourne dans le sens opposé, et on évite
   de s'aligner avec sa meute.
@@ -192,16 +222,15 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   d'**écume** qui éclatent et collent.
 - Le **Roi-Vautour** lâche des **tornades** qui poursuivent leur cible : elles blessent et aspirent ce qui les approche.
 - Le **Scorpion Empereur**, 4e géant de la Mer de sable, est **facultatif** : ni porte, ni parchemin, ni volcan n'en
-  dépendent. Ses pinces et son dard empoisonnent, il crache son venin en éventail et appelle ses scorpions.
-- **Îlots du large** : cinq petites îles au large de la côte (zones 2 à 6), qu'on rejoint **à dos de serpent** (la
-  meute débarque avec son dompteur). Trois sont gardées par un géant facultatif, **à l'air libre** sur son îlot (on lui
-  parle pour le défier ; il se rendort quand plus personne n'est sur l'îlot), avec ses créatures autour, du plus
-  facile au plus dur : le **Grand Drake** (zone 3 ; Drakes des marées, qui crachent de l'eau), la **Wyverne-Reine**
-  (zone 5 ; Wyvernes des falaises, au dard empoisonné) et le **Dragon ancien** (zone 6 ; Dragonnets de braise, qui
-  crachent des boules de feu). Chacun garde dans son coffre un **tome qu'on
-  ne trouve que là** : **Endurance** (+10 % de PV max), **Navigation** (+25 % de vitesse à dos de serpent) et
-  **Trésors** (+15 % d'or des monstres, filons et coffres). Les deux autres îlots ont un **coffre de naufragé** plein
-  d'or, qui se remplit de nouveau au bout de 30 minutes (chacun le sien).
+  dépendent.
+- **Îlots du large** : trois petites îles au large de la côte (zones 3, 5 et 6), qu'on rejoint **à dos de serpent**
+  ou de vautour (la meute débarque avec son dompteur). Chacune est gardée par un géant facultatif, **à l'air libre** sur
+  son îlot (on lui parle pour le défier ; le combat continue au-dessus de l'eau toute proche, et il se rendort quand
+  plus personne n'est là), avec ses créatures autour, du plus facile au plus dur : le **Grand Drake** (zone 3 ; Drakes
+  des marées, qui crachent de l'eau ; lui lance des décharges électriques qui rebondissent sur ceux qui se tiennent à côté), la **Wyverne-Reine** (zone 5 ; Wyvernes
+  des falaises, au dard empoisonné) et le **Dragon ancien** (zone 6 ; Dragonnets de braise, qui crachent des boules de
+  feu en ligne droite). Chacun garde dans son coffre un tome d'**Endurance** (+10 % de PV max par tome), qu'on ne trouve
+  que là : le tome I chez le Grand Drake, le II chez la Wyverne-Reine, le III chez le Dragon ancien.
 - Vaincu, il laisse un **coffre** (chacun l'ouvre une fois, pour un montant d'or aléatoire) et parfois son **âme**.
   Le dernier géant d'une zone que le village bat (une fois tous vaincus) laisse le **parchemin de la zone** pour le
   vieil homme. Il revient après un délai. Si tout le monde sort, il se
@@ -256,10 +285,11 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   profonds (rares et costauds, ils repartent à la fin de l'hiver).
 - **Pluie** : l'Escargot l'adore, il va plus vite.
 - **Tempête de sable** (Mer de sable) : elle blesse ceux qui restent dehors ; les vers restent sous le sable, les
-  vautours très haut, les suricates cachés.
+  suricates cachés, et les vautours sont cloués au sol (sauvages, de la meute, et la monture).
 - **Cactus** (Mer de sable) : s'y frotter pique. Les palmiers de la lisière verte, eux, ne piquent pas.
-- **Sables mouvants** (plages de la Mer de sable) : on y avance au ralenti, et à y rester on s'enlise (on perd des PV).
-  À dos de monture volante, on passe au-dessus.
+- **Sables mouvants** (Mer de sable) : ils s'ouvrent au hasard sous les pas, n'importe où dans le désert, puis se
+  referment. On y avance au ralenti, et à y rester on s'enlise de plus en plus vite (les dégâts grimpent chaque
+  seconde) : il faut en sortir tout de suite. À dos de vautour, on passe au-dessus.
 
 ## Jouer à plusieurs
 

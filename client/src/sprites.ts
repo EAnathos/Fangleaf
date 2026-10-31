@@ -1,8 +1,9 @@
 // Sprites procéduraux (Canvas 2D) : aucune image à charger.
 
-import { DESERT_ZONE, PINCER_HALF, SPECIES, type Resource } from '../../shared/config.ts';
-import { HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
+import { DESERT_ZONE, DRUM_GAP, LOG_SPEED, PINCER_HALF, RING_SPEED, RING_W, SPECIES, type Resource } from '../../shared/config.ts';
+import { HAZARD_STYLES, UNIT_FLAG_CURSE, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
 import { hash2 } from '../../shared/math.ts';
+import type { Wings } from './anim.ts';
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -56,6 +57,7 @@ export interface UnitLook {
   shout?: number; // Alpha suricate qui crie, escargot qui dresse sa carapace : avancement de 0 à 1 (0 : rien)
   leap?: Leap; // en plein bond (rempli par drawUnit) : de quoi poser les pattes
   lids?: number; // Kraken : ouverture des yeux (1 : ouverts ; moins : la paupière couvre l'œil, pour sa cinématique)
+  wings?: Wings; // wyverne en pleine attaque (bond, charge) : ailes déployées, rabattues, battantes
 }
 
 /** Pose d'un bond : ext (0 → 1) pattes arrière détendues, reach (0 → 1) pattes avant tendues vers le sol, crouch (0 → 1) ramassé. */
@@ -2253,10 +2255,32 @@ function crab(ctx: Ctx, r: number, fill: string, u: UnitLook) {
 }
 
 /**
- * Projectile de tireur. Trait runique : orbe turquoise ; jet : trait d'eau ; cloche : boule qui monte puis
- * retombe sur un cercle annoncé au sol (dessiné dès le départ pour pouvoir l'esquiver).
+ * Projectile de tireur. Trait runique : orbe turquoise ; jet : trait d'eau ; boule de feu ; décharge électrique ;
+ * cloche : boule qui monte puis retombe sur un cercle annoncé au sol (dessiné dès le départ pour pouvoir l'esquiver).
  */
 /** owner : couleur du dompteur d'un tireur de la meute (ou d'un légendaire) ; absente : un sauvage, en rouge. */
+/** Éclair d'une décharge qui rebondit d'une cible à l'autre (pts : x, y de chacune) ; k : 1 au départ, 0 quand il s'éteint. */
+export function drawZap(ctx: Ctx, pts: number[], k: number, seed: number, owner?: string) {
+  const glow = owner ? `rgba(${rgbOf(owner)},${0.45 * k})` : `rgba(140,210,255,${0.5 * k})`;
+  for (const [col, w] of [[glow, 7], [`rgba(235,248,255,${k})`, 2]] as const) {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 2; i < pts.length; i += 2) {
+      const x0 = pts[i - 2], y0 = pts[i - 1] - 14, x1 = pts[i], y1 = pts[i + 1] - 14, n = 6;
+      const nx = -(y1 - y0), ny = x1 - x0, l = Math.hypot(nx, ny) || 1;
+      ctx.moveTo(x0, y0);
+      for (let j = 1; j < n; j++) {
+        const f = j / n, off = (Math.sin(seed * 13.7 + i * 5.1 + j * 2.9) * 0.5 + Math.sin(seed * 7.3 + j * 11.3) * 0.5) * 14;
+        ctx.lineTo(x0 + (x1 - x0) * f + (nx / l) * off, y0 + (y1 - y0) * f + (ny / l) * off);
+      }
+      ctx.lineTo(x1, y1);
+    }
+    ctx.stroke();
+  }
+}
+
 export function drawShot(ctx: Ctx, kind: number, x: number, y: number, a: number, b: number, prog: number, t: number, owner?: string) {
   const col = owner ? rgbOf(owner) : '232,105,63';
   if (kind === 1 || kind === 3) {
@@ -2319,6 +2343,40 @@ export function drawShot(ctx: Ctx, kind: number, x: number, y: number, a: number
     ctx.arc(-11, 0, 1.6, 0, TAU);
     ctx.fill();
     ctx.restore();
+  } else if (kind === 5) {
+    // boule de feu du dragonnet, en ligne droite : cœur jaune, flammes qui traînent derrière elle
+    const bx = -Math.cos(ang), by = -Math.sin(ang);
+    for (let k = 4; k >= 0; k--) {
+      const d = k * 7, fl = Math.sin(t * 30 + k * 1.7) * 2;
+      ctx.fillStyle = k > 2 ? `rgba(200,60,30,${0.5 - k * 0.08})` : k > 0 ? 'rgba(240,120,40,0.75)' : '#FFB347';
+      ctx.beginPath();
+      ctx.arc(x + bx * d - by * fl, y + by * d + bx * fl, 10 - k * 1.4, 0, TAU);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#FFF2B0';
+    ctx.beginPath();
+    ctx.arc(x, y, 4.5, 0, TAU);
+    ctx.fill();
+  } else if (kind === 6) {
+    // décharge du Grand Drake : une boule d'électricité qui crépite, des arcs autour
+    ctx.fillStyle = 'rgba(140,210,255,0.35)';
+    ctx.beginPath();
+    ctx.arc(x, y, 14 + Math.sin(t * 40) * 2, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#DDF4FF';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let k = 0; k < 3; k++) {
+      const a0 = t * 23 + k * 2.1 + Math.sin(t * 57 + k) * 0.8;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a0) * 9, y + Math.sin(a0) * 9);
+      ctx.lineTo(x + Math.cos(a0 + 0.5) * 15, y + Math.sin(a0 + 0.5) * 15);
+    }
+    ctx.stroke();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, TAU);
+    ctx.fill();
   } else if (kind === 0) {
     ctx.fillStyle = 'rgba(143,227,214,0.35)';
     ctx.beginPath();
@@ -3598,10 +3656,21 @@ function lavaTortoise(ctx: Ctx, r: number, fill: string, u: UnitLook) {
       ctx.fill();
     }
   };
-  leg(0.55 * r + g[3].a * 0.05 * r, 0.26 * r - g[3].lift * 0.06 * r, skinDark);
-  leg(-0.6 * r + g[2].a * 0.05 * r, 0.26 * r - g[2].lift * 0.06 * r, skinDark);
+  // en toupie (rentrée dans sa carapace) : ni pattes ni tête, la carapace tourne sur elle-même, des traînées autour
+  const spin = !!u.shell;
+  if (spin) {
+    ctx.save();
+    ctx.translate(0, 0.3 * r);
+    ctx.rotate(Math.sin(u.t * 9) * 0.12);
+    ctx.scale(0.86 + 0.14 * Math.cos(u.t * 18), 1);
+    ctx.translate(0, -0.3 * r);
+  } else {
+    leg(0.55 * r + g[3].a * 0.05 * r, 0.26 * r - g[3].lift * 0.06 * r, skinDark);
+    leg(-0.6 * r + g[2].a * 0.05 * r, 0.26 * r - g[2].lift * 0.06 * r, skinDark);
+  }
   // cou ridé et tête à bec
   const hy = 0.12 * r + step * 0.5;
+  if (!spin) {
   ctx.fillStyle = skin;
   ctx.beginPath();
   ctx.moveTo(0.7 * r, -0.02 * r);
@@ -3629,6 +3698,7 @@ function lavaTortoise(ctx: Ctx, r: number, fill: string, u: UnitLook) {
     ctx.fill();
   }
   lavaEye(ctx, u, 1.18 * r, hy - 0.06 * r, 0.06 * r, '#FF8A3D', false);
+  }
   // rebord de la carapace : écailles marginales
   ctx.fillStyle = rim;
   ctx.beginPath();
@@ -3752,6 +3822,22 @@ function lavaTortoise(ctx: Ctx, r: number, fill: string, u: UnitLook) {
       ctx.arc(Math.cos(a) * g * 0.6 * r, vy - 0.5 * r + Math.sin(a) * g * 0.6 * r, 0.04 * r, 0, TAU);
       ctx.fill();
     }
+  }
+  if (spin) {
+    ctx.restore();
+    if (!f) {
+      // traînées de vitesse et étincelles de lave qui gicle
+      ctx.lineCap = 'round';
+      for (let k = 0; k < 4; k++) {
+        const a = u.t * 14 + (k * TAU) / 4;
+        ctx.strokeStyle = `rgba(255,${150 + k * 20},80,0.55)`;
+        ctx.lineWidth = Math.max(1.5, 0.06 * r);
+        ctx.beginPath();
+        ctx.ellipse(0, 0.1 * r, 1.15 * r, 0.75 * r, 0, a, a + 0.9);
+        ctx.stroke();
+      }
+    }
+    return;
   }
   // pattes de devant
   leg(0.65 * r, 0.34 * r + step, skin);
@@ -4804,6 +4890,7 @@ function scorpion(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
 // de profil, tournés vers la droite, en unités de r ; silhouettes d'un seul tenant, membres effilés.
 
 type P2 = [number, number];
+const lerpP = (a: P2, b: P2, k: number): P2 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
 /** Points d'une courbe de Bézier quadratique (en unités de r). */
 const bez = (a: P2, c: P2, b: P2, n = 10): P2[] => Array.from({ length: n + 1 }, (_, i) => {
   const t = i / n, u = 1 - t;
@@ -5108,8 +5195,27 @@ function wyvern(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
   const skin = W(boss ? '#4A1E4E' : '#7A5A7E'), skinBack = W(boss ? '#341436' : '#5A425E'), vein = W(boss ? '#7A3A7E' : '#A88AA8');
   const bone = W(boss ? '#3A4430' : '#6A7A48'), horn = W('#D8D0B8'), venom = boss ? '#9FE84A' : '#C8E86A';
   const g = gait(u, 8), t = u.t + u.seed, flap = Math.sin(t * (u.moving ? 5 : 1.5)) * (u.moving ? 0.06 : 0.03);
+  // ailes : repliées en voile au repos ; en attaque, déployées, rabattues vers le sol, ou qui battent (vers l'avant : la charge)
+  const wing = (fold: P2[], open: P2[], low: P2[]): P2[] => {
+    const w = u.wings;
+    if (!w) return fold;
+    return fold.map((p, i) => {
+      const mid = lerpP(p, open[i], w.spread), at = lerpP(mid, low[i], w.down), reach = i ? 1 : 0.4; // le poignet bouge moins que les bouts
+      return [at[0] + w.beat * w.fwd * 0.3 * reach, at[1] + w.beat * 0.38 * reach * (1 - w.down)];
+    });
+  };
+  const [bw, ...bt] = wing(
+    [[0.32 + flap, -0.95], [-0.15, -1.28 - flap], [-0.55, -1.08 - flap], [-0.75, -0.62], [-0.55, -0.3]],
+    [[0.05, -1.35], [-0.25, -2.2], [-0.95, -2.1], [-1.6, -1.5], [-1.15, -0.5]],
+    [[0.62, -0.42], [0.98, 0.42], [0.52, 0.72], [0.02, 0.64], [-0.25, 0.22]],
+  );
+  const [fw, ...ft] = wing(
+    [[0.42 + flap, -0.82], [0.0, -1.18 - flap], [-0.42, -1.0 - flap], [-0.62, -0.58], [-0.42, -0.22]],
+    [[0.85, -1.2], [1.35, -1.95], [0.75, -2.2], [0.05, -1.95], [-0.3, -0.7]],
+    [[0.78, -0.36], [1.18, 0.46], [0.72, 0.78], [0.16, 0.72], [-0.15, 0.26]],
+  );
   // aile du fond (repliée, un peu plus haute), puis sa patte de poignet
-  dragonWing(ctx, r, [0.1, -0.32], [0.32 + flap, -0.95], [[-0.15, -1.28 - flap], [-0.55, -1.08 - flap], [-0.75, -0.62], [-0.55, -0.3]], bone, skinBack, vein);
+  dragonWing(ctx, r, [0.1, -0.32], bw, bt, bone, skinBack, vein);
   // queue fine et longue, qui fouette ; le dard
   const sw = Math.sin(t * 2.4) * 0.12;
   const tail = bez([-0.3, -0.02], [-1.0, 0.25 + sw], [-1.45, -0.3 + sw], 14);
@@ -5156,7 +5262,12 @@ function wyvern(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
   band(ctx, r, bez([0.25, -0.25], [0.35, -0.75], [hx - 0.1, hy + 0.04], 10), 0.3, 0.15, col, shade);
   dragonHead(ctx, r, hx, hy, 0.75, { col, shade, horn, eye: u.alpha ? '#B48CFF' : boss ? venom : '#F0B64A', gape: u.wild ? Math.max(0, Math.sin(t * 1.4)) * 0.5 : 0, horns: boss ? 1.1 : 0.8 });
   // aile du devant, repliée le long du flanc (ses ailes sont ses bras : la griffe du poignet pointe vers l'avant)
-  dragonWing(ctx, r, [0.02, -0.28], [0.42 + flap, -0.82], [[0.0, -1.18 - flap], [-0.42, -1.0 - flap], [-0.62, -0.58], [-0.42, -0.22]], bone, skin, vein);
+  dragonWing(ctx, r, [0.02, -0.28], fw, ft, bone, skin, vein);
+  if (u.wings && u.wings.down > 0.85 && !u.flash) {
+    // les ailes fracassent le sol : de la poussière jaillit sous leurs bouts
+    const dust = `rgba(200,190,160,${(u.wings.down - 0.85) * 3})`;
+    for (const [x, y] of [...bt.slice(0, 2), ...ft.slice(0, 2)]) blot(ctx, x * r, (y + 0.06) * r, 0.18 * r, 0.06 * r, dust);
+  }
 }
 
 /**
@@ -5390,6 +5501,7 @@ const DRAWERS: Record<string, (ctx: Ctx, r: number, fill: string, u: UnitLook) =
   gorilla, croc, masked,
   scorpion, drake, wyvern, dragon,
   bigfoot,
+  mask_totem: maskTotem, salamander_tail: salamanderTail,
 };
 
 // ───────────────────────── Buissons à fruits ─────────────────────────
@@ -6056,13 +6168,14 @@ function drawDeadwood(ctx: Ctx, x: number, y: number, zone: number, hpPct: numbe
 export const rgbOf = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) || 0).join(',');
 
 /** owner : couleur du dompteur dont l'Alpha légendaire a lancé l'attaque (absente : un sauvage). */
-export function drawHazard(ctx: Ctx, h: number[], t: number, owner?: string) {
+export function drawHazard(ctx: Ctx, h: number[], t: number, owner?: string, since = 0) {
   const [kind, x, y, r, x2, y2, prog, ally] = h;
   // rouge : attaque d'un géant (à esquiver) ; couleur du dompteur : attaque de son Alpha légendaire (elle ne touche que les sauvages)
   const ember = ally ? rgbOf(owner ?? '#F0B64A') : '232,105,63';
   const k = prog / 100;
   const active = prog >= 100;
   const style = HAZARD_STYLES[h[8]];
+  if (style && drawBossHazard(ctx, style, h, t, k, active, since, ember)) return;
   if (style === 'lava') return drawLavaPool(ctx, x, y, r, active, t, ember, !!ally);
   if (style === 'flame') return drawFlameJet(ctx, x, y, x2, y2, r, k, active, t, ember, !!ally);
   if (style === 'breath') return drawFlameJet(ctx, x, y, x2, y2, r, k, active, t, ally ? ember : '80,170,220', !!ally, WATER_JET);
@@ -6717,7 +6830,7 @@ export function drawTornado(ctx: Ctx, x: number, y: number, r: number, t: number
 }
 
 export function drawBuffs(ctx: Ctx, x: number, y: number, flags: number, t: number, seed: number) {
-  const icons = [flags & UNIT_FLAG_RALLY ? 'rally' : '', flags & UNIT_FLAG_GUARD ? 'guard' : '', flags & UNIT_FLAG_POISON ? 'poison' : ''].filter(Boolean);
+  const icons = [flags & UNIT_FLAG_RALLY ? 'rally' : '', flags & UNIT_FLAG_GUARD ? 'guard' : '', flags & UNIT_FLAG_POISON ? 'poison' : '', flags & UNIT_FLAG_CURSE ? 'curse' : ''].filter(Boolean);
   const bob = Math.sin(t * 4 + seed) * 1.5;
   icons.forEach((kind, i) => {
     const cx = x + (i - (icons.length - 1) / 2) * 20, cy = y + bob;
@@ -6727,7 +6840,13 @@ export function drawBuffs(ctx: Ctx, x: number, y: number, flags: number, t: numb
     ctx.beginPath();
     ctx.arc(0, 0, 9, 0, TAU);
     ctx.fill();
-    const col = kind === 'rally' ? '#F0B64A' : kind === 'poison' ? '#8FD14A' : '#7FC8E8';
+    const col = kind === 'rally' ? '#F0B64A' : kind === 'poison' ? '#8FD14A' : kind === 'curse' ? '#C890F0' : '#7FC8E8';
+    if (kind === 'curse') {
+      // maudit : un petit masque violet qui palpite
+      drawCurseMask(ctx, 0, 0.5, 5.5 + Math.sin(t * 6 + seed) * 0.6, col);
+      ctx.restore();
+      return;
+    }
     ctx.strokeStyle = col;
     ctx.fillStyle = col;
     ctx.lineWidth = 1.6;
@@ -6865,5 +6984,885 @@ export function drawStump(ctx: Ctx, x: number, y: number, r: number) {
     ctx.beginPath();
     ctx.ellipse(x, y - w * 0.55, w * k, w * 0.4 * k, 0, 0, TAU);
     ctx.stroke();
+  }
+}
+
+// ───────────────────────── Nouvelles attaques des géants ─────────────────────────
+
+const easeIO = (k: number) => k * k * (3 - 2 * k);
+/** Contour d'une annonce au sol (ellipse) : bord net et remplissage qui grossit, comme les autres. */
+function warnRing(ctx: Ctx, x: number, y: number, r: number, k: number, col: string, dash = false) {
+  ctx.fillStyle = `rgba(${col},0.12)`;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r * 0.75, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = `rgba(${col},0.3)`;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r * k, r * k * 0.75, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = `rgba(${col},0.95)`;
+  ctx.lineWidth = 3;
+  if (dash) ctx.setLineDash([12, 9]);
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r * 0.75, 0, 0, TAU);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+/** Couloir annoncé (ligne), avec des chevrons qui filent vers son bout. */
+function warnLane(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, k: number, col: string, t: number, chevrons = true) {
+  const ang = Math.atan2(y2 - y, x2 - x), len = Math.hypot(x2 - x, y2 - y);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  ctx.fillStyle = `rgba(${col},0.14)`;
+  ctx.fillRect(0, -r, len, r * 2);
+  ctx.fillStyle = `rgba(${col},0.32)`;
+  ctx.fillRect(0, -r, len * k, r * 2);
+  ctx.strokeStyle = `rgba(${col},0.9)`;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(0, -r, len, r * 2);
+  if (chevrons) {
+    ctx.strokeStyle = `rgba(255,240,220,${0.25 + 0.35 * k})`;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const gap = 46, off = (t * 160) % gap;
+    for (let d = off; d < len - 10; d += gap) {
+      ctx.beginPath();
+      ctx.moveTo(d - r * 0.35, -r * 0.5);
+      ctx.lineTo(d, 0);
+      ctx.lineTo(d - r * 0.35, r * 0.5);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+/** Traque : une flaque d'ombre se creuse là où il va ressortir ; deux yeux rouges s'y ouvrent. */
+function drawShadowPool(ctx: Ctx, x: number, y: number, r: number, k: number, t: number, ember: string) {
+  warnRing(ctx, x, y, r, k, ember, true);
+  const g = ctx.createRadialGradient(x, y, 2, x, y, r * (0.4 + 0.6 * k));
+  g.addColorStop(0, 'rgba(8,4,16,0.9)');
+  g.addColorStop(0.6, 'rgba(30,16,46,0.55)');
+  g.addColorStop(1, 'rgba(30,16,46,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r * (0.4 + 0.6 * k), r * (0.3 + 0.45 * k), 0, 0, TAU);
+  ctx.fill();
+  // fumerolles d'ombre qui montent en tournant
+  for (let i = 0; i < 6; i++) {
+    const f = (t * 0.8 + i / 6) % 1, a = i * 1.7 + t * 0.6;
+    ctx.fillStyle = `rgba(24,12,38,${0.45 * (1 - f) * k})`;
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * r * 0.45, y + Math.sin(a) * r * 0.25 - f * 46, 8 + f * 10, 0, TAU);
+    ctx.fill();
+  }
+  if (k > 0.55) {
+    const open = Math.min(1, (k - 0.55) / 0.2), blink = Math.sin(t * 3) > 0.92 ? 0.15 : 1;
+    for (const sd of [-1, 1]) {
+      ctx.fillStyle = `rgba(255,70,50,${0.9 * open})`;
+      ctx.beginPath();
+      ctx.ellipse(x + sd * 11, y - 6, 5, 2.6 * open * blink, sd * 0.25, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = `rgba(255,140,110,${0.3 * open})`;
+      ctx.beginPath();
+      ctx.arc(x + sd * 11, y - 6, 10, 0, TAU);
+      ctx.fill();
+    }
+  }
+}
+
+/** Ombre qui file au ras du sol (le géant qui traque), avec ses yeux. */
+export function drawShadowRun(ctx: Ctx, x: number, y: number, r: number, ang: number, t: number) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  for (let i = 4; i >= 0; i--) {
+    ctx.fillStyle = `rgba(14,8,24,${0.18 + 0.12 * (4 - i)})`;
+    ctx.beginPath();
+    ctx.ellipse(-i * r * 0.32, Math.sin(t * 12 + i) * 3, r * (0.9 - i * 0.12), r * 0.32, 0, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+  for (const sd of [-1, 1]) {
+    ctx.fillStyle = 'rgba(255,70,50,0.95)';
+    ctx.beginPath();
+    ctx.ellipse(x + Math.cos(ang) * r * 0.5 + sd * 8, y + Math.sin(ang) * r * 0.25 - 6, 4, 2, 0, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/** Hurlement : des ondes sonores pâles qui partent du loup, jusqu'au bord de la zone. */
+function drawHowl(ctx: Ctx, x: number, y: number, r: number, k: number, t: number, ember: string) {
+  warnRing(ctx, x, y, r, k * 0.4, ember, true);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    const f = (t * 1.6 + i / 4) % 1, rr = r * f;
+    ctx.strokeStyle = `rgba(200,225,255,${0.55 * (1 - f) * (0.4 + 0.6 * k)})`;
+    ctx.lineWidth = 3 + 4 * (1 - f);
+    for (let a = 0; a < 6; a++) {
+      const a0 = (a / 6) * TAU + i * 0.4;
+      ctx.beginPath();
+      ctx.ellipse(x, y, rr, rr * 0.75, 0, a0, a0 + 0.6);
+      ctx.stroke();
+    }
+  }
+}
+
+/** Flaque de boue : brune, luisante, des bulles qui crèvent. */
+function drawMud(ctx: Ctx, x: number, y: number, r: number, active: boolean, k: number, t: number, ember: string) {
+  if (!active) {
+    warnRing(ctx, x, y, r, k, ember);
+    return;
+  }
+  const seed = (x * 3 + y * 7) % 11;
+  ctx.fillStyle = 'rgba(70,48,28,0.9)';
+  ctx.beginPath();
+  for (let i = 0; i <= 40; i++) {
+    const a = (i / 40) * TAU, d = r * (0.92 + 0.1 * Math.sin(a * 3 + seed) + 0.05 * Math.sin(a * 5 + seed * 2));
+    const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.7;
+    if (i) ctx.lineTo(px, py);
+    else ctx.moveTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  // des éclaboussures autour
+  for (let i = 0; i < 6; i++) {
+    const a = i * 1.1 + seed, d = r * (1.05 + 0.12 * ((i * 5) % 3));
+    ctx.beginPath();
+    ctx.ellipse(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, 4 + (i % 3) * 2, 3 + (i % 2), a, 0, TAU);
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(104,76,46,0.9)';
+  ctx.beginPath();
+  ctx.ellipse(x - r * 0.1, y - r * 0.05, r * 0.65, r * 0.42, 0.2, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,240,210,0.22)'; // reflet
+  ctx.beginPath();
+  ctx.ellipse(x - r * 0.3, y - r * 0.22, r * 0.28, r * 0.08, -0.3, 0, TAU);
+  ctx.fill();
+  for (let b = 0; b < 4; b++) {
+    const f = (t * 0.9 + b / 4 + seed * 0.07) % 1, bx = x + Math.cos(b * 2.1 + seed) * r * 0.5, by = y + Math.sin(b * 2.1 + seed) * r * 0.3;
+    ctx.strokeStyle = `rgba(40,26,14,${0.7 * (1 - f)})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(bx, by, 2 + f * 7, 1 + f * 4, 0, 0, TAU);
+    ctx.stroke();
+  }
+}
+
+/** Étreinte annoncée : des griffes qui se referment sur la zone. */
+function drawHugWarn(ctx: Ctx, x: number, y: number, r: number, k: number, ember: string) {
+  warnRing(ctx, x, y, r, k, ember);
+  ctx.strokeStyle = `rgba(${ember},0.95)`;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * TAU + Math.PI / 4, d = r * (1.35 - 0.45 * easeIO(k));
+    ctx.beginPath();
+    ctx.ellipse(x, y, d, d * 0.75, 0, a - 0.35, a + 0.35);
+    ctx.stroke();
+  }
+}
+
+/** Proie saisie : des anneaux qui serrent, et des étoiles qui tournent. */
+function drawSqueeze(ctx: Ctx, x: number, y: number, r: number, t: number, ember: string) {
+  for (let i = 0; i < 2; i++) {
+    const p = 0.75 + 0.18 * Math.sin(t * 12 + i * Math.PI);
+    ctx.strokeStyle = `rgba(${ember},${0.75 - i * 0.25})`;
+    ctx.lineWidth = 4 - i;
+    ctx.beginPath();
+    ctx.ellipse(x, y - 8, r * p, r * p * 0.55, 0, 0, TAU);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 3; i++) {
+    const a = t * 4 + (i * TAU) / 3, sx = x + Math.cos(a) * r * 0.7, sy = y - 44 + Math.sin(a) * 8;
+    star(ctx, sx, sy, 5, '#FFE7A0');
+  }
+}
+function star(ctx: Ctx, x: number, y: number, s: number, col: string) {
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? s * 0.42 : s;
+    if (i) ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    else ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+/** Étourdi : des étoiles qui tournent au-dessus de sa tête. */
+export function drawDizzy(ctx: Ctx, x: number, y: number, t: number) {
+  for (let i = 0; i < 3; i++) {
+    const a = t * 5 + (i * TAU) / 3;
+    star(ctx, x + Math.cos(a) * 14, y + Math.sin(a) * 4, 4.5, '#FFE7A0');
+  }
+}
+
+/**
+ * Champignon de la champignonnière : il sort de terre (k), se balance, puis, sa mèche allumée (fuse), gonfle en
+ * clignotant ; un halo de spores montre jusqu'où il éclatera.
+ */
+function drawShroom(ctx: Ctx, x: number, y: number, r: number, k: number, active: boolean, fuse: number, t: number, ember: string) {
+  const grow = active ? 1 : easeIO(Math.min(1, k * 1.2)), f = fuse / 100;
+  // la terre se fend sous lui
+  ctx.strokeStyle = 'rgba(60,40,24,0.6)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = i * 1.3 + x * 0.01;
+    ctx.moveTo(x, y + 2);
+    ctx.lineTo(x + Math.cos(a) * r * 0.55 * grow, y + 2 + Math.sin(a) * r * 0.3 * grow);
+  }
+  ctx.stroke();
+  if (active) {
+    ctx.strokeStyle = `rgba(${ember},${0.2 + 0.6 * f})`;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 8]);
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * 2.4 * (0.5 + 0.5 * Math.max(f, 0.35)), r * 1.8 * (0.5 + 0.5 * Math.max(f, 0.35)), 0, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  const sway = Math.sin(t * 2.2 + x) * 0.08 * grow, swell = 1 + 0.45 * f, flash = f > 0 && Math.sin(t * (18 + 30 * f)) > 0;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(sway);
+  ctx.scale(grow * swell, grow * swell);
+  ctx.fillStyle = '#EDE3CC'; // pied
+  ctx.beginPath();
+  ctx.moveTo(-7, 0);
+  ctx.quadraticCurveTo(-5, -14, -6, -22);
+  ctx.lineTo(6, -22);
+  ctx.quadraticCurveTo(5, -14, 7, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(16,24,26,0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = flash ? '#FFF2E8' : '#C8402E'; // chapeau
+  ctx.beginPath();
+  ctx.ellipse(0, -24, 20, 13, 0, Math.PI, 0);
+  ctx.quadraticCurveTo(0, -18, -20, -24);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#F6EEDD';
+  for (const [dx, dy, s] of [[-9, -29, 3.2], [3, -33, 2.6], [11, -27, 2.4], [-2, -26, 2]] as const) {
+    ctx.beginPath();
+    ctx.arc(dx, dy, s, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+  if (active && !f) {
+    // quelques spores qui flottent autour
+    ctx.fillStyle = 'rgba(220,235,170,0.7)';
+    for (let i = 0; i < 4; i++) {
+      const a = t * 0.9 + i * 1.6, ff = (t * 0.5 + i * 0.25) % 1;
+      ctx.fillRect(x + Math.cos(a) * r * 0.6, y - 20 - ff * 26, 2, 2);
+    }
+  }
+}
+
+/** Lueurs trompeuses : des flammes bleues tourbillonnent et se rassemblent là où un feu follet va paraître. */
+function drawWisps(ctx: Ctx, x: number, y: number, r: number, k: number, t: number, ember: string) {
+  warnRing(ctx, x, y, r, k, ember, true);
+  for (let i = 0; i < 9; i++) {
+    const a = t * 3 + (i * TAU) / 9, d = r * (1.1 - 0.9 * k) * (0.6 + 0.4 * ((i * 7) % 3) / 2);
+    const px = x + Math.cos(a) * d, py = y - 20 * k + Math.sin(a) * d * 0.6;
+    ctx.fillStyle = `rgba(111,183,255,${0.35 + 0.5 * k})`;
+    ctx.beginPath();
+    ctx.arc(px, py, 3 + 3 * k, 0, TAU);
+    ctx.fill();
+  }
+  const g = ctx.createRadialGradient(x, y - 20, 1, x, y - 20, 30 + 20 * k);
+  g.addColorStop(0, `rgba(214,238,255,${0.7 * k})`);
+  g.addColorStop(1, 'rgba(79,139,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y - 20, 30 + 20 * k, 0, TAU);
+  ctx.fill();
+}
+
+/** Piqué venimeux : l'ombre de la wyverne grandit sur sa cible, de plus en plus nette. */
+function drawDiveShadow(ctx: Ctx, x: number, y: number, r: number, k: number, ember: string) {
+  warnRing(ctx, x, y, r, k, ember);
+  const s = 0.3 + 0.7 * k * k;
+  ctx.fillStyle = `rgba(10,16,8,${0.15 + 0.4 * k})`;
+  ctx.beginPath(); // ailes ouvertes vues d'en dessous
+  ctx.moveTo(x, y - r * 0.12 * s);
+  ctx.quadraticCurveTo(x - r * 0.5 * s, y - r * 0.35 * s, x - r * 0.95 * s, y - r * 0.05 * s);
+  ctx.quadraticCurveTo(x - r * 0.45 * s, y + r * 0.05 * s, x, y + r * 0.2 * s);
+  ctx.quadraticCurveTo(x + r * 0.45 * s, y + r * 0.05 * s, x + r * 0.95 * s, y - r * 0.05 * s);
+  ctx.quadraticCurveTo(x + r * 0.5 * s, y - r * 0.35 * s, x, y - r * 0.12 * s);
+  ctx.fill();
+}
+
+/** Mare de venin : verte, épaisse, des bulles et des vapeurs. */
+function drawVenom(ctx: Ctx, x: number, y: number, r: number, active: boolean, t: number) {
+  if (!active) return;
+  const seed = (x * 5 + y * 3) % 9;
+  const g = ctx.createRadialGradient(x, y, 4, x, y, r);
+  g.addColorStop(0, 'rgba(190,255,90,0.75)');
+  g.addColorStop(0.55, 'rgba(110,190,40,0.6)');
+  g.addColorStop(1, 'rgba(60,110,20,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  for (let i = 0; i <= 16; i++) {
+    const a = (i / 16) * TAU, d = r * (1 + 0.1 * Math.sin(a * 4 + seed + t * 0.6));
+    const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.7;
+    if (i) ctx.lineTo(px, py);
+    else ctx.moveTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+  for (let b = 0; b < 6; b++) {
+    const f = (t * 1.1 + b / 6 + seed * 0.1) % 1, bx = x + Math.cos(b * 1.9 + seed) * r * 0.55, by = y + Math.sin(b * 1.9 + seed) * r * 0.35;
+    ctx.strokeStyle = `rgba(220,255,150,${0.8 * (1 - f)})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(bx, by - f * 4, 2 + f * 5, 0, TAU);
+    ctx.stroke();
+    ctx.fillStyle = `rgba(160,220,90,${0.25 * (1 - f)})`; // vapeurs
+    ctx.beginPath();
+    ctx.arc(bx, by - 10 - f * 40, 6 + f * 10, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/**
+ * Anneau du tambour (ou de l'écho) : avant, le cercle qu'il atteindra et ses brèches ; parti, une onde qui s'élargit
+ * (terre et poussière pour le gorille, ondes violettes pour la chauve-souris), interrompue aux brèches.
+ */
+function drawRing(ctx: Ctx, x: number, y: number, R: number, k: number, active: boolean, since: number, gap: number, echo: boolean, t: number, ember: string) {
+  const col = echo ? '190,140,255' : ember;
+  const arcs = (rr: number, from: number, to: number) => {
+    ctx.beginPath();
+    ctx.ellipse(x, y, rr, rr * 0.75, 0, from, to);
+    ctx.stroke();
+  };
+  const each = (rr: number) => {
+    if (gap < 0) return arcs(rr, 0, TAU);
+    for (const g0 of [gap, gap + Math.PI]) arcs(rr, g0 + DRUM_GAP, g0 + Math.PI - DRUM_GAP);
+  };
+  if (!active) {
+    ctx.strokeStyle = `rgba(${col},${0.3 + 0.5 * k})`;
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([10, 10]);
+    each(R);
+    ctx.setLineDash([]);
+    if (gap >= 0) {
+      // les brèches : deux couloirs clairs, du géant jusqu'au bord, qui montrent où se glisser
+      for (const g0 of [gap, gap + Math.PI]) {
+        const grad = ctx.createRadialGradient(x, y, R * 0.15, x, y, R);
+        grad.addColorStop(0, 'rgba(210,255,200,0)');
+        grad.addColorStop(1, `rgba(210,255,200,${0.12 + 0.22 * k})`);
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.ellipse(x, y, R, R * 0.75, 0, g0 - DRUM_GAP, g0 + DRUM_GAP);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = `rgba(210,255,200,${0.3 + 0.4 * k})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+    return;
+  }
+  const rr = since * RING_SPEED;
+  if (rr > R + RING_W) return;
+  const fade = Math.min(1, (R + RING_W - rr) / 80);
+  ctx.lineCap = 'round';
+  if (echo) {
+    for (const [w, a] of [[RING_W * 1.6, 0.18], [RING_W * 0.8, 0.35], [4, 0.9]] as const) {
+      ctx.strokeStyle = `rgba(${col},${a * fade})`;
+      ctx.lineWidth = w;
+      each(rr);
+    }
+    ctx.strokeStyle = `rgba(240,225,255,${0.6 * fade})`;
+    ctx.lineWidth = 2;
+    for (const d of [-10, 10]) each(Math.max(1, rr + d + Math.sin(t * 30) * 2));
+    return;
+  }
+  for (const [w, c] of [[RING_W * 2, `rgba(150,120,80,${0.3 * fade})`], [RING_W, `rgba(200,170,120,${0.55 * fade})`], [5, `rgba(255,235,200,${0.9 * fade})`]] as const) {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = w;
+    each(rr);
+  }
+}
+
+/** Tronc lancé par le Roi Gorille : il roule le long de son couloir (vu de dessus, l'écorce défile). */
+function drawLog(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, k: number, active: boolean, since: number, t: number, ember: string) {
+  if (!active) return warnLane(ctx, x, y, x2, y2, r, k, ember, t);
+  const len = Math.hypot(x2 - x, y2 - y), f = Math.min(1, (since * LOG_SPEED) / Math.max(1, len));
+  if (since * LOG_SPEED > len + 60) return;
+  const ang = Math.atan2(y2 - y, x2 - x), px = x + (x2 - x) * f, py = y + (y2 - y) * f, roll = since * 14;
+  ctx.fillStyle = 'rgba(8,14,12,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(px, py + 8, r * 0.9, r * 1.6, ang, 0, TAU);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(px, py - r * 0.4);
+  ctx.rotate(ang);
+  const L = r * 2.8, W = r * 0.95; // le tronc couché en travers du couloir
+  ctx.fillStyle = '#6B4A30';
+  ctx.beginPath();
+  ctx.roundRect(-W / 2, -L / 2, W, L, W * 0.45);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(16,24,26,0.8)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.strokeStyle = '#4A321F'; // écorce qui défile
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 4; i++) {
+    const u = ((roll / TAU + i / 4) % 1) * W - W / 2;
+    ctx.beginPath();
+    ctx.moveTo(u, -L / 2 + 4);
+    ctx.lineTo(u, L / 2 - 4);
+    ctx.stroke();
+  }
+  for (const sd of [-1, 1]) { // les bouts, cernes du bois
+    ctx.fillStyle = '#C49A68';
+    ctx.beginPath();
+    ctx.ellipse(0, (sd * L) / 2, W * 0.45, W * 0.2, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#8A6440';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(0, (sd * L) / 2, W * 0.25, W * 0.1, 0, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Coup de queue : un large éventail qui se remplit ; il fouette : un grand croissant de vent. */
+function drawTailSweep(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, half: number, k: number, active: boolean, ember: string) {
+  const ang = Math.atan2(y2 - y, x2 - x), a0 = ang - half, a1 = ang + half;
+  const wedge = (rr: number, from = a0, to = a1) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.ellipse(x, y, rr, rr * 0.75, 0, from, to);
+    ctx.closePath();
+  };
+  if (!active) {
+    ctx.fillStyle = `rgba(${ember},0.13)`;
+    wedge(r);
+    ctx.fill();
+    // le balayage se remplit d'un bord à l'autre, comme la queue qui va passer
+    ctx.fillStyle = `rgba(${ember},0.34)`;
+    wedge(r, a0, a0 + (a1 - a0) * k);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${ember},0.95)`;
+    ctx.lineWidth = 3;
+    wedge(r);
+    ctx.stroke();
+    return;
+  }
+  ctx.lineCap = 'round';
+  for (const [w, col, f] of [[26, 'rgba(240,230,200,0.3)', 0.85], [12, 'rgba(255,250,235,0.75)', 0.72]] as const) {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * f, r * f * 0.75, 0, a0, a1);
+    ctx.stroke();
+  }
+}
+
+/** Embuscade : le sol frémit là où il va surgir (des fissures, de petites mottes qui sautent). */
+function drawAmbushWarn(ctx: Ctx, x: number, y: number, r: number, k: number, t: number, ember: string) {
+  warnRing(ctx, x, y, r, k, ember);
+  ctx.strokeStyle = `rgba(50,34,20,${0.3 + 0.5 * k})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < 7; i++) {
+    const a = i * 0.9 + x * 0.003;
+    ctx.moveTo(x + Math.cos(a) * r * 0.1, y + Math.sin(a) * r * 0.08);
+    ctx.lineTo(x + Math.cos(a + 0.2) * r * 0.5 * k, y + Math.sin(a + 0.2) * r * 0.38 * k);
+  }
+  ctx.stroke();
+  for (let i = 0; i < 5; i++) {
+    const hop = Math.abs(Math.sin(t * (9 + i) + i)) * 10 * k, a = i * 1.3;
+    ctx.fillStyle = 'rgba(110,86,58,0.9)';
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * r * 0.45, y + Math.sin(a) * r * 0.3 - hop, 3, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/** Glyphe vert d'un totem qu'on plante (pas une attaque) : des runes qui tournent. */
+function drawTotemGlyph(ctx: Ctx, x: number, y: number, r: number, k: number, t: number) {
+  ctx.strokeStyle = `rgba(140,230,120,${0.35 + 0.5 * k})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r, r * 0.75, 0, 0, TAU);
+  ctx.stroke();
+  for (let i = 0; i < 6; i++) {
+    const a = t * 1.2 + (i * TAU) / 6, gx = x + Math.cos(a) * r * 0.75, gy = y + Math.sin(a) * r * 0.56;
+    ctx.beginPath();
+    ctx.moveTo(gx - 4, gy - 4);
+    ctx.lineTo(gx + 4, gy);
+    ctx.lineTo(gx - 4, gy + 4);
+    ctx.stroke();
+  }
+}
+
+/** Malédiction : un cercle de runes violettes qui tourne, un masque au centre qui se dessine. */
+function drawCurseMark(ctx: Ctx, x: number, y: number, r: number, k: number, t: number) {
+  const col = '170,90,220';
+  warnRing(ctx, x, y, r, k, col);
+  ctx.strokeStyle = `rgba(${col},0.9)`;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 8; i++) {
+    const a = -t * 1.5 + (i * TAU) / 8, gx = x + Math.cos(a) * r * 0.82, gy = y + Math.sin(a) * r * 0.62;
+    ctx.beginPath();
+    ctx.moveTo(gx, gy - 5);
+    ctx.lineTo(gx + 3, gy);
+    ctx.lineTo(gx, gy + 5);
+    ctx.lineTo(gx - 3, gy);
+    ctx.closePath();
+    ctx.stroke();
+  }
+  drawCurseMask(ctx, x, y - 8, 14 * (0.5 + 0.5 * k), `rgba(${col},${0.4 + 0.6 * k})`);
+}
+/** Le masque de la malédiction : un visage taillé, les yeux vides. */
+export function drawCurseMask(ctx: Ctx, x: number, y: number, s: number, col: string) {
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(x - s, y - s * 0.8);
+  ctx.quadraticCurveTo(x, y - s * 1.3, x + s, y - s * 0.8);
+  ctx.quadraticCurveTo(x + s * 0.95, y + s * 0.6, x, y + s * 1.1);
+  ctx.quadraticCurveTo(x - s * 0.95, y + s * 0.6, x - s, y - s * 0.8);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(16,8,24,0.9)';
+  for (const sd of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(x + sd * s * 0.4, y - s * 0.15, s * 0.22, s * 0.14, sd * 0.3, 0, TAU);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.ellipse(x, y + s * 0.5, s * 0.25, s * 0.1, 0, 0, TAU);
+  ctx.fill();
+}
+
+/**
+ * Gueule des dunes : le sable se fend et s'affaisse ; ouverte, elle tourbillonne vers son centre où pointe un cercle de
+ * crocs, qui se referment d'un coup à la fin.
+ */
+function drawMaw(ctx: Ctx, x: number, y: number, r: number, k: number, active: boolean, since: number, t: number, ember: string) {
+  if (!active) {
+    warnRing(ctx, x, y, r, k, ember);
+    ctx.fillStyle = `rgba(120,90,50,${0.45 * k})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * 0.7 * k, r * 0.5 * k, 0, 0, TAU);
+    ctx.fill();
+    return;
+  }
+  const life = 4, open = Math.min(1, since / 0.4), shut = Math.max(0, (since - (life - 0.35)) / 0.35);
+  const g = ctx.createRadialGradient(x, y, 2, x, y, r);
+  g.addColorStop(0, 'rgba(40,24,12,0.95)');
+  g.addColorStop(0.45, 'rgba(120,88,50,0.85)');
+  g.addColorStop(1, 'rgba(190,150,96,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r * open, r * 0.72 * open, 0, 0, TAU);
+  ctx.fill();
+  // bras de sable qui tournent vers le centre
+  ctx.lineCap = 'round';
+  for (let arm = 0; arm < 4; arm++) {
+    ctx.strokeStyle = 'rgba(214,182,128,0.55)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i <= 24; i++) {
+      const u = i / 24, a = t * 2.4 + (arm * TAU) / 4 + u * 4, d = r * open * (1 - u) * 0.95;
+      const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.72;
+      if (i) ctx.lineTo(px, py);
+      else ctx.moveTo(px, py);
+    }
+    ctx.stroke();
+  }
+  // les crocs, en cercle : ils pointent, puis se referment
+  const n = 12, teeth = r * 0.42 * open * (1 - shut * 0.85);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * TAU + t * 0.4, bx = x + Math.cos(a) * teeth, by = y + Math.sin(a) * teeth * 0.72;
+    const tx = x + Math.cos(a) * teeth * (0.45 - 0.4 * shut), ty = y + Math.sin(a) * teeth * 0.72 * (0.45 - 0.4 * shut);
+    const w = 0.16;
+    ctx.fillStyle = '#EFE4CC';
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(a - w) * teeth, y + Math.sin(a - w) * teeth * 0.72);
+    ctx.lineTo(tx, ty);
+    ctx.lineTo(x + Math.cos(a + w) * teeth, y + Math.sin(a + w) * teeth * 0.72);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(40,24,12,0.7)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    void bx;
+    void by;
+  }
+}
+
+/** Dard empaleur : la queue segmentée jaillit jusqu'au bout du couloir, puis revient. */
+export function drawStinger(ctx: Ctx, x: number, y: number, x2: number, y2: number, ext: number, boss: boolean) {
+  const ang = Math.atan2(y2 - y, x2 - x), len = Math.hypot(x2 - x, y2 - y) * ext, n = 9;
+  ctx.save();
+  ctx.translate(x, y - 20);
+  ctx.rotate(ang);
+  for (let i = 0; i < n; i++) {
+    const f = i / (n - 1), px = f * len, w = 13 - 6 * f;
+    ctx.fillStyle = boss ? (i % 2 ? '#5A1E16' : '#7A2E22') : i % 2 ? '#A06A28' : '#C8913E';
+    ctx.beginPath();
+    ctx.ellipse(px, Math.sin(f * 3) * 4 * (1 - ext), w, w * 0.8, 0, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(16,24,26,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#EDE3CC'; // le dard
+  ctx.beginPath();
+  ctx.moveTo(len + 4, -8);
+  ctx.quadraticCurveTo(len + 30, -4, len + 34, 6);
+  ctx.quadraticCurveTo(len + 18, 2, len + 2, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(160,230,80,0.9)';
+  ctx.beginPath();
+  ctx.arc(len + 34, 9, 3, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Braise qui tombe du plafond sur sa zone (vue d'en haut : elle grossit en approchant), et son cercle. */
+function drawCinderWarn(ctx: Ctx, x: number, y: number, r: number, k: number, t: number, ember: string) {
+  warnRing(ctx, x, y, r, k, ember);
+  const z = (1 - k) * 420, s = 6 + 10 * k;
+  ctx.fillStyle = `rgba(8,14,12,${0.15 + 0.35 * k})`;
+  ctx.beginPath();
+  ctx.ellipse(x, y, s * 1.2, s * 0.5, 0, 0, TAU);
+  ctx.fill();
+  const g = ctx.createRadialGradient(x, y - z, 1, x, y - z, s * 2);
+  g.addColorStop(0, 'rgba(255,240,180,1)');
+  g.addColorStop(0.4, 'rgba(255,140,50,0.9)');
+  g.addColorStop(1, 'rgba(160,40,10,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y - z, s * 2, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,170,90,0.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y - z - s);
+  ctx.lineTo(x + Math.sin(t * 20) * 2, y - z - s - 30);
+  ctx.stroke();
+}
+
+/** Reflets de lune : couloir d'un bleu pâle, en pointillés lumineux. */
+function drawMirageLane(ctx: Ctx, x: number, y: number, x2: number, y2: number, r: number, k: number, t: number, ember: string) {
+  warnLane(ctx, x, y, x2, y2, r, k, ember, t);
+  ctx.strokeStyle = `rgba(200,220,255,${0.3 + 0.5 * k})`;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 10]);
+  ctx.lineDashOffset = -t * 60;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+}
+
+/** Les nouvelles attaques : renvoie vrai si elle a été dessinée. */
+function drawBossHazard(ctx: Ctx, style: string, h: number[], t: number, k: number, active: boolean, since: number, ember: string): boolean {
+  const [, x, y, r, x2, y2] = h, extra = h[11] ?? 0;
+  switch (style) {
+    case 'stalk': if (!active) drawShadowPool(ctx, x, y, r, k, t, ember); return true;
+    case 'howl': if (!active) drawHowl(ctx, x, y, r, k, t, ember); return true;
+    case 'rampage': case 'roll': case 'impale': if (!active) warnLane(ctx, x, y, x2, y2, r, k, style === 'impale' ? '150,210,60' : ember, t); return true;
+    case 'mud': drawMud(ctx, x, y, r, active, k, t, ember); return true;
+    case 'hug': if (!active) drawHugWarn(ctx, x, y, r, k, ember); return true;
+    case 'squeeze': if (active) drawSqueeze(ctx, x, y, r, t, ember); return true;
+    case 'shroom': drawShroom(ctx, x, y, r, k, active, extra, t, ember); return true;
+    case 'wisps': if (!active) drawWisps(ctx, x, y, r, k, t, ember); return true;
+    case 'venomdive': if (!active) drawDiveShadow(ctx, x, y, r, k, ember); return true;
+    case 'venom': drawVenom(ctx, x, y, r, active, t); return true;
+    case 'drum': case 'echo': drawRing(ctx, x, y, r, k, active, since, style === 'echo' ? -1 : extra / 100, style === 'echo', t, ember); return true;
+    case 'log': drawLog(ctx, x, y, x2, y2, r, k, active, since, t, ember); return true;
+    case 'tail': if (!active || since < 0.25) drawTailSweep(ctx, x, y, x2, y2, r, extra / 100 || 1, k, active, ember); return true;
+    case 'ambush': if (!active) drawAmbushWarn(ctx, x, y, r, k, t, ember); return true;
+    case 'totem': if (!active) drawTotemGlyph(ctx, x, y, r, k, t); return true;
+    case 'curse': if (!active) drawCurseMark(ctx, x, y, r, k, t); return true;
+    case 'maw': drawMaw(ctx, x, y, r, k, active, since, t, ember); return true;
+    case 'mirage': if (!active) drawMirageLane(ctx, x, y, x2, y2, r, k, t, '170,200,255'); return true;
+    case 'husk': if (!active) warnRing(ctx, x, y, r, k, ember); return true;
+    case 'cinder': if (!active) drawCinderWarn(ctx, x, y, r, k, t, ember); return true;
+    case 'shellspin': if (!active) warnRing(ctx, x, y, r, k, ember, true); return true;
+    case 'eclipse': case 'roost': return true; // la nuit tombe (voir le jeu) ; au plafond : rien au sol
+  }
+  return false;
+}
+
+/**
+ * Totem masqué (renfort du Grand Masque) : un poteau sculpté, trois masques empilés (rouge, turquoise, ocre), des plumes
+ * au sommet ; ses yeux luisent d'un vert qui pulse quand il soigne, et une aura monte de sa base.
+ */
+function maskTotem(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
+  const f = u.flash, t = u.t + u.seed, pulse = 0.5 + 0.5 * Math.sin(t * 3);
+  const wood = f ? '#FFFFFF' : '#7A5030', woodDark = f ? '#FFFFFF' : '#4E321E';
+  if (!f) {
+    // aura de soin à la base
+    for (let i = 0; i < 3; i++) {
+      const k = (t * 0.6 + i / 3) % 1;
+      ctx.strokeStyle = `rgba(140,230,120,${0.45 * (1 - k)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0.62 * r, r * (0.6 + 1.2 * k), r * (0.25 + 0.5 * k), 0, 0, TAU);
+      ctx.stroke();
+    }
+  }
+  // poteau
+  ctx.fillStyle = wood;
+  ctx.beginPath();
+  ctx.roundRect(-0.42 * r, -2.6 * r, 0.84 * r, 3.3 * r, 0.12 * r);
+  ctx.fill();
+  ink(ctx, r);
+  ctx.fillStyle = woodDark;
+  ctx.fillRect(-0.42 * r, -2.6 * r, 0.16 * r, 3.3 * r);
+  // trois masques, du bas vers le haut
+  const masks: [number, string, string][] = [[0.15, '#B8402E', '#F0D9A0'], [-0.85, '#2E8A80', '#F6EEDD'], [-1.85, '#C88A2E', '#2A1A12']];
+  masks.forEach(([my, col, paint], i) => {
+    ctx.fillStyle = f ? '#FFFFFF' : col;
+    ctx.beginPath();
+    ctx.moveTo(-0.62 * r, my * r - 0.38 * r);
+    ctx.quadraticCurveTo(0, my * r - 0.62 * r, 0.62 * r, my * r - 0.38 * r);
+    ctx.quadraticCurveTo(0.6 * r, my * r + 0.35 * r, 0, my * r + 0.5 * r);
+    ctx.quadraticCurveTo(-0.6 * r, my * r + 0.35 * r, -0.62 * r, my * r - 0.38 * r);
+    ctx.closePath();
+    ctx.fill();
+    ink(ctx, r * 0.8);
+    if (f) return;
+    // peintures : chevrons, bouche
+    ctx.strokeStyle = paint;
+    ctx.lineWidth = Math.max(1, 0.07 * r);
+    ctx.beginPath();
+    ctx.moveTo(-0.45 * r, my * r + 0.18 * r);
+    ctx.lineTo(-0.2 * r, my * r + 0.3 * r);
+    ctx.lineTo(0, my * r + 0.18 * r);
+    ctx.lineTo(0.2 * r, my * r + 0.3 * r);
+    ctx.lineTo(0.45 * r, my * r + 0.18 * r);
+    ctx.stroke();
+    // yeux qui luisent (le masque du haut plus fort)
+    for (const sd of [-1, 1]) {
+      const glow = (i === 2 ? 1 : 0.7) * (0.5 + 0.5 * pulse);
+      ctx.fillStyle = `rgba(160,255,130,${glow})`;
+      ctx.beginPath();
+      ctx.ellipse(sd * 0.25 * r, my * r - 0.12 * r, 0.12 * r, 0.07 * r, sd * 0.3, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = `rgba(160,255,130,${0.18 * glow})`;
+      ctx.beginPath();
+      ctx.arc(sd * 0.25 * r, my * r - 0.12 * r, 0.3 * r, 0, TAU);
+      ctx.fill();
+    }
+  });
+  // plumes au sommet, qui frémissent
+  const fcol = f ? ['#FFFFFF', '#FFFFFF', '#FFFFFF'] : ['#C8382E', '#F0B64A', '#2E8A80'];
+  [-0.5, 0, 0.5].forEach((a, i) => {
+    ctx.save();
+    ctx.translate(0, -2.55 * r);
+    ctx.rotate(a + Math.sin(t * 4 + i) * 0.06);
+    ctx.fillStyle = fcol[i];
+    ctx.beginPath();
+    ctx.ellipse(0, -0.55 * r, 0.14 * r, 0.6 * r, 0, 0, TAU);
+    ctx.fill();
+    ink(ctx, r * 0.5);
+    ctx.restore();
+  });
+}
+
+/**
+ * Queue de salamandre tombée (renfort de la Salamandre-Mère) : elle se tortille seule, sa fissure de lave luisante, le
+ * bout tranché qui brûle encore.
+ */
+function salamanderTail(ctx: Ctx, r: number, fill: string, u: UnitLook) {
+  const f = u.flash, t = u.t + u.seed, skin = f ? '#FFFFFF' : fill, shade = f ? '#FFFFFF' : SALAMANDER.shade, glow = lavaPulse(u, 4);
+  const pts: [number, number, number][] = [];
+  for (let i = 0; i <= 12; i++) {
+    const k = i / 12;
+    pts.push([0.9 * r - k * 2.4 * r, 0.3 * r + Math.sin(t * 9 - k * 5) * 0.28 * r * (0.3 + k), (0.42 - 0.36 * k) * r]);
+  }
+  ctx.fillStyle = skin;
+  ctx.beginPath();
+  pts.forEach(([x, y, w], i) => (i ? ctx.lineTo(x, y - w) : ctx.moveTo(x, y - w)));
+  for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(pts[i][0], pts[i][1] + pts[i][2]);
+  ctx.closePath();
+  ctx.fill();
+  ink(ctx, r);
+  ctx.fillStyle = shade;
+  ctx.beginPath();
+  pts.forEach(([x, y, w], i) => (i ? ctx.lineTo(x, y + w * 0.25) : ctx.moveTo(x, y + w * 0.25)));
+  for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(pts[i][0], pts[i][1] + pts[i][2] * 0.95);
+  ctx.closePath();
+  ctx.fill();
+  if (f) return;
+  // fissure de lave le long du dessus, taches incandescentes
+  ctx.strokeStyle = `rgba(255,${Math.round(120 + 80 * glow)},60,${0.7 + 0.3 * glow})`;
+  ctx.lineWidth = Math.max(1, 0.07 * r);
+  ctx.beginPath();
+  pts.forEach(([x, y, w], i) => (i ? ctx.lineTo(x, y - w * 0.45) : ctx.moveTo(x, y - w * 0.45)));
+  ctx.stroke();
+  for (let i = 2; i < 12; i += 3) {
+    const [x, y, w] = pts[i];
+    ctx.fillStyle = `rgba(255,200,90,${0.6 * glow})`;
+    ctx.beginPath();
+    ctx.ellipse(x, y - w * 0.1, w * 0.25, w * 0.18, 0, 0, TAU);
+    ctx.fill();
+  }
+  // le bout tranché : une plaie de braise, et des flammèches
+  const [cx, cy, cw] = pts[0];
+  ctx.fillStyle = '#FFB347';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, cw * 0.35, cw * 0.9, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = '#FFF0B0';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, cw * 0.15, cw * 0.5, 0, 0, TAU);
+  ctx.fill();
+  for (let i = 0; i < 3; i++) {
+    const k = (t * 1.6 + i / 3) % 1;
+    ctx.fillStyle = `rgba(255,${Math.round(200 - 120 * k)},60,${0.8 * (1 - k)})`;
+    ctx.beginPath();
+    ctx.ellipse(cx + 0.1 * r + k * 0.15 * r, cy - k * 0.7 * r, (1 - k) * 0.12 * r, (1 - k) * 0.2 * r, 0, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/** Crocodile en embuscade : seuls ses yeux dépassent, des rides d'eau s'élargissent autour et derrière lui. */
+export function drawLurkEyes(ctx: Ctx, x: number, y: number, r: number, t: number, seed: number) {
+  for (let i = 0; i < 3; i++) {
+    const k = (t * 0.9 + i / 3 + seed * 0.13) % 1;
+    ctx.strokeStyle = `rgba(190,225,230,${0.55 * (1 - k)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r * (0.4 + 0.9 * k), r * (0.2 + 0.45 * k), 0, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(40,70,60,0.55)';
+  ctx.beginPath();
+  ctx.ellipse(x, y, r * 0.55, r * 0.22, 0, 0, TAU);
+  ctx.fill();
+  for (const sd of [-1, 1]) {
+    const ex = x + sd * r * 0.22, ey = y - 3 + Math.sin(t * 2 + seed) * 1.5;
+    ctx.fillStyle = '#3F5A30';
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, 7, 5, 0, Math.PI, 0);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(16,24,26,0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#F0C040';
+    ctx.beginPath();
+    ctx.ellipse(ex, ey - 2, 3.4, 2.2, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#10181A';
+    ctx.fillRect(ex - 0.6, ey - 4, 1.2, 4);
   }
 }

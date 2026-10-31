@@ -1,21 +1,22 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  alphaEquipMax, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
+  alphaEquipMax, BOSS_HP_BONUS, LEGEND_SKIPS, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
-import type { BoardRow, Holdings, PlayerState, Stats, UnitTuple } from '../../shared/protocol.ts';
+import { type BoardRow, type Holdings, type PlayerState, type Stats, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
 import { armorColor, drawElder, drawHatchling, drawPlayer, drawUnit } from './sprites.ts';
 import { CHAPTER_TITLES, ELDER_CHAPTERS, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD, zoneChapters } from './elder.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
+import { moveSkill, type Skill, type SkillIcon, traitSkills } from './moveInfo.ts';
 import { sound } from './audio.ts';
 import { ACTIONS, type Action, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
-import { landColor, seaColor } from './world.ts';
+import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
@@ -67,8 +68,6 @@ const num = (n: number) => Math.round(n).toLocaleString('fr-FR');
 /** Sac : nombre court à partir de 10 000 (11k, 250k, 1,2M), pour que la ligne tienne sur téléphone. */
 const short = (n: number) =>
   n < 10_000 ? String(n) : n < 1_000_000 ? `${Math.floor(n / 1000)}k` : `${(Math.floor(n / 100_000) / 10).toLocaleString('fr-FR')}M`;
-/** Petit nom d'un géant : son titre sans ce qui suit la virgule ni l'épithète (« Lueur », « Grisecroc », « Ursus Mâchefer »). */
-const shortTitle = (boss: number) => (SPECIES[boss]?.title ?? SPECIES[boss]?.name ?? '').split(/,| (?:le|la|les|aux|l') /)[0].trim();
 /** Tableau du village, par catégorie : clé de la statistique, libellé, mise en forme, et « moins, c'est mieux ». */
 const BOARD: { title: string; stats: { k: keyof Stats | keyof Holdings; label: string; fmt?: (n: number) => string; low?: boolean }[] }[] = [
   { title: '⚔️ Combat', stats: [
@@ -174,7 +173,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
         : { panel: 'buy', pos: c.entrance, buy: { cave: c.id }, label: 'E — Débloquer la grotte' },
       { cave: { id: c.id, enter: false }, pos: c.exit, label: 'E — Sortir de la grotte' },
     ]),
-    ...v.chests.filter((c) => !c[3]).map((c): Spot => ({ chest: c[0], pos: { x: c[1], y: c[2] }, label: c[0] < 0 ? 'E — Ouvrir le coffre du naufragé' : 'E — Ouvrir le coffre' })),
+    ...v.chests.filter((c) => !c[3]).map((c): Spot => ({ chest: c[0], pos: { x: c[1], y: c[2] }, label: 'E — Ouvrir le coffre' })),
     ...map.bushes.filter((b) => !v.bare.includes(b.id) && Math.hypot(x - b.x, y - b.y) < BUSH_PICK_R)
       .map((b): Spot => ({ pick: true, pos: b, reach: BUSH_PICK_R, label: 'E — Cueillir' })),
     ...v.sleepers.filter((z) => map.caves[z.cave]?.zone !== VOYAGE_ZONE).map((z): Spot => ({ panel: 'talk', pos: z, at: z.cave, reach: z.r + BOSS_TALK_R, label: `E — Parler à ${SPECIES[map.caves[z.cave].boss].name}` })),
@@ -226,6 +225,7 @@ export class Hud {
   private miniBg: HTMLCanvasElement;
   private last = { party: '', den: '', cls: '', spec: '', travel: '', bestiary: '', market: '', hall: '', members: '', elder: '', school: '', profile: '' };
   private denTab: 'alphas' | 'bestiary' = 'alphas';
+  private beastOpen: number | null = null; // fiche ouverte au bestiaire (espèce), ou la grille
   private form: BestiaryForm = 'wild'; // forme montrée par le bestiaire
   private beasts: Portrait[] = [];
   private portraits: Portrait[] = []; // Alphas de la Tanière
@@ -306,6 +306,7 @@ export class Hud {
   }
   elderLeaving = false; // Aubin part au chantier du bateau, mais on lui parle encore (voir Game.elderWalk)
   lore: [number, number, number] = [0, 0, 0]; // souvenirs retrouvés, étapes du bateau, secondes avant la fin de l'étape en cours
+  night = false; // il fait nuit (le gibier qui dort ne viendra pas manger)
   scrollCaves: number[] = []; // grottes dont le parchemin m'attend // portrait du géant à qui l'on parle
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
   private spotAt = 0; // Pierre ou emplacement devant lequel on se tient (panneaux voyage et camp)
@@ -399,13 +400,14 @@ export class Hud {
     onTap($('mount-btn'), () => this.onRide());
     $('talk-later').onclick = () => this.setPanel(null);
     // un nouveau-né : on se parle à tour de rôle, une réplique après l'autre
+    $('victory-ok').onclick = () => this.setPanel(null);
     $('npc-next').onclick = () => {
       const h = HATCHLINGS[this.npcWho];
       if (!h || this.npcAt >= h.lines.length - 1) return this.setPanel(null);
       this.npcAt++;
       this.showNpc();
     };
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile'] as const) {
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile', 'victory'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -447,6 +449,7 @@ export class Hud {
     const forms = $('bestiary-forms').querySelectorAll<HTMLButtonElement>('button');
     forms.forEach((b) => (b.onclick = () => {
       this.form = b.dataset.form as BestiaryForm;
+      this.beastOpen = null;
       forms.forEach((o) => o.setAttribute('aria-checked', String(o === b)));
       this.last.bestiary = '';
     }));
@@ -497,6 +500,103 @@ export class Hud {
   }
   private fadeTimer = 0;
 
+  lessonDone = false; // une leçon vient de s'achever : l'École appelle, jusqu'à ce qu'on y passe
+  private bookWas = false; // un livre pouvait déjà être lu au dernier coup d'œil (pour ne prévenir qu'une fois)
+
+  /** L'École appelle (un « ! » au-dessus d'elle, un rappel sous le sac) : une leçon vient de s'achever, ou un livre du sac peut être lu. */
+  schoolCalls(me: PlayerState) {
+    return this.buildings.includes('school') && (this.lessonDone || this.readableBook(me));
+  }
+  /** Un livre du sac peut être lu tout de suite (aucune leçon en cours, et c'est le tome qu'il faut). */
+  private readableBook(me: PlayerState) {
+    return !me.reading && LESSON_KINDS.some((_, k) => {
+      const t = tomeForLesson(me.learned?.[k] ?? 0, k);
+      return t >= 0 && (me.tomes?.[bookIndex(k, t)] ?? 0) > 0;
+    });
+  }
+  private updateSchoolHint(me: PlayerState) {
+    const book = this.buildings.includes('school') && this.readableBook(me);
+    if (book && !this.bookWas) this.toast('Un livre de ton sac peut être lu à l\'École des dompteurs, au village.', 'alpha');
+    this.bookWas = book;
+    const el = $('school-hint');
+    setHidden(el, !this.schoolCalls(me));
+    setText(el, this.lessonDone ? 'Leçon terminée ! Passe à l\'École pour la suivante.' : 'Un livre à lire à l\'École des dompteurs');
+  }
+
+  private gains: Record<'gold' | 'essence' | 'wood' | 'stone', number> = { gold: 0, essence: 0, wood: 0, stone: 0 };
+  private gainsTimer = 0;
+
+  /** Un gain (or, essence, bois, pierre) : il s'ajoute à la ligne des gains sous le sac, qui s'efface après un moment de calme. */
+  gain(kind: 'gold' | 'essence' | 'wood' | 'stone', n: number) {
+    if (n <= 0) return;
+    this.gains[kind] += n;
+    const label = { gold: 'or', essence: 'essence', wood: 'bois', stone: 'pierre' };
+    const el = $('gains');
+    el.replaceChildren(...(['gold', 'essence', 'wood', 'stone'] as const).filter((k) => this.gains[k]).map((k) => {
+      const sp = document.createElement('span');
+      sp.className = `${k}${k === kind ? ' bump' : ''}`;
+      sp.textContent = `+${this.gains[k].toLocaleString('fr-FR')} ${label[k]}${k === 'essence' && this.gains[k] > 1 ? 's' : ''}`;
+      return sp;
+    }));
+    el.classList.add('on');
+    clearTimeout(this.gainsTimer);
+    this.gainsTimer = window.setTimeout(() => {
+      el.classList.remove('on');
+      this.gains = { gold: 0, essence: 0, wood: 0, stone: 0 };
+    }, 3500);
+  }
+
+  private victoryPortrait: Portrait[] = [];
+
+  /**
+   * Écran de victoire après un géant : son portrait, la durée du combat, puis une carte par dompteur qui l'a combattu
+   * (dégâts infligés et reçus, esquives, plus gros coup ; le meilleur de chaque colonne en doré). Il attend que les
+   * autres panneaux soient refermés.
+   */
+  showVictory(v: { s: number; dur: number; first: boolean; rows: { id: number; name: string; color: string; dealt: number; taken: number; dodges: number; best: number }[] }, me: number) {
+    if (!v.rows.some((r) => r.id === me)) return;
+    const sp = SPECIES[v.s];
+    $('victory-boss').textContent = sp.name;
+    $('victory-sub').textContent = `${ZONE_NAMES[sp.zone - 1]} · vaincu en ${v.dur >= 60 ? `${Math.floor(v.dur / 60)} min ${String(v.dur % 60).padStart(2, '0')}` : `${v.dur} s`}`;
+    $('victory-first').hidden = !v.first;
+    const best = (k: 'dealt' | 'dodges' | 'best') => Math.max(...v.rows.map((r) => r[k]));
+    const top = { dealt: best('dealt'), dodges: best('dodges'), best: best('best'), taken: Math.min(...v.rows.map((r) => r.taken)) };
+    const icon: Record<string, string> = {
+      dealt: ICONS.dmg,
+      taken: ICONS.hp,
+      dodges: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M2 11c3 0 4-6 7-6h5M11 2l3 3-3 3"/></svg>',
+      best: ICONS.rally,
+    };
+    const label: Record<string, string> = { dealt: 'Dégâts infligés', taken: 'Dégâts reçus', dodges: 'Esquives', best: 'Plus gros coup' };
+    const rows = [...v.rows].sort((a, b) => b.dealt - a.dealt);
+    $('victory-rows').replaceChildren(...rows.map((r, i) => {
+      const el = document.createElement('div');
+      el.className = `victory-row${r.id === me ? ' me' : ''}`;
+      el.style.animationDelay = `${0.15 + i * 0.12}s`;
+      const who = document.createElement('span');
+      who.className = 'who';
+      who.textContent = r.name;
+      who.style.color = r.color;
+      el.append(who);
+      for (const k of ['dealt', 'taken', 'dodges', 'best'] as const) {
+        const st = document.createElement('div');
+        st.className = `victory-stat ${k}${rows.length > 1 && r[k] === top[k] ? ' top' : ''}`;
+        st.innerHTML = `${icon[k]}<b></b><span></span>`;
+        st.querySelector('b')!.textContent = r[k].toLocaleString('fr-FR');
+        st.querySelector('span')!.textContent = label[k];
+        el.append(st);
+      }
+      return el;
+    }));
+    this.victoryPortrait = [{ canvas: $<HTMLCanvasElement>('victory-portrait'), s: v.s, seen: true }];
+    const open = () => {
+      if (this.panel && this.panel !== 'victory') return void setTimeout(open, 800); // un panneau ouvert : il attend
+      this.setPanel('victory');
+      sound.play('fanfare', 0.6);
+    };
+    setTimeout(open, 1400); // le temps de le voir tomber
+  }
+
   setPanel(panel: Panel) {
     this.panel = panel;
     $('forge').hidden = panel !== 'forge';
@@ -528,6 +628,7 @@ export class Hud {
       this.elderSay(this.myScrolls ? ['Oh ! Ce que tu tiens là… ce sont des parchemins ? Fais voir, fais voir !'] : elderGreeting(this.lore[0], this.islandCaves(), this.lore[1], BOAT_STAGES.length, this.heart, this.lore[2]));
     }
     $('hall').hidden = panel !== 'hall';
+    $('victory').hidden = panel !== 'victory';
     $('settings').hidden = panel !== 'settings';
     $('profile').hidden = panel !== 'profile';
     if (panel === 'profile') {
@@ -564,7 +665,7 @@ export class Hud {
     const el = $('evolve'), c = $<HTMLCanvasElement>('evolve-canvas'), text = $('evolve-text');
     const sp = SPECIES[s], boss = bossOf(s), giant = SPECIES[boss];
     $('evolve-title').textContent = 'Quoi ? Ton Alpha éveille son vrai potentiel !';
-    $('evolve-line').textContent = `Ton Alpha ${sp.name} est devenu légendaire ! Il peut maintenant utiliser les attaques de ${giant?.title ?? giant?.name ?? 'son géant'}.`;
+    $('evolve-line').textContent = `Ton Alpha ${sp.name} est devenu légendaire ! Il peut maintenant utiliser les attaques de ${giant?.name ?? 'son géant'}.`;
 
     text.classList.remove('on');
     el.hidden = false;
@@ -684,8 +785,9 @@ export class Hud {
     setText($('self-army'), `${me.army.filter((a) => !a.alpha).length} / ${armyCap(me.learned)}`); // meute ordinaire, en bas à gauche
     setText($('ping'), ping && settings.display.ping ? `${ping} ms` : '');
     setHidden($('invite'), players.length >= MAX_PLAYERS); // village complet : plus personne à inviter
-    // au doigt, « Tendre un fruit » seulement près d'un gibier passif (ou si on en tend déjà un)
-    const prey = units.some((u) => !u[6] && SPECIES[u[1]].passive && Math.hypot(u[3] - myPos.x, u[4] - myPos.y) < LURE_R);
+    // au doigt, « Tendre un fruit » seulement près d'un gibier passif (ou si on en tend déjà un) ; pas pour des suricates
+    // qui dorment dans leur tanière (la nuit, ils ne sortiront pas)
+    const prey = units.some((u) => !u[6] && SPECIES[u[1]].passive && !(this.night && SPECIES[u[1]].shy && u[2] & UNIT_FLAG_HIDDEN) && Math.hypot(u[3] - myPos.x, u[4] - myPos.y) < LURE_R);
     setHidden($('hold-btn'), me.holding ? false : !me.fruits || !prey);
 
     // Groupe.
@@ -722,7 +824,7 @@ export class Hud {
       const act = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.heart ? this.onHeart() : b.plan ? this.onPlan() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
       onTap(prompt, act);
     }
-    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board', 'profile'].includes(this.panel);
+    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board', 'profile', 'victory'].includes(this.panel);
     if (building && b?.panel !== this.panel) this.setPanel(null);
     if (b?.buy) this.buying = b.buy;
     if (b?.at !== undefined && b.at !== this.spotAt) {
@@ -731,7 +833,11 @@ export class Hud {
     }
     if (this.panel === 'travel') this.updateTravel();
     if (this.panel === 'camp') this.updateCamp(me);
-    if (this.panel === 'school') this.updateSchool(me);
+    if (this.panel === 'school') {
+      this.lessonDone = false; // on est passé à l'École
+      this.updateSchool(me);
+    }
+    this.updateSchoolHint(me);
     if (this.panel === 'buy') this.updateBuy(me);
     if (this.panel === 'talk') this.updateTalk();
     if (this.panel === 'hall') this.updateHall(me);
@@ -743,6 +849,7 @@ export class Hud {
     if (this.panel === 'forge') this.updateForge(me);
     if (this.panel === 'den' && this.denTab === 'alphas') this.updateDen(me);
     if (this.panel === 'den' && this.denTab === 'bestiary') this.updateBestiary(me);
+    if (this.panel === 'victory') paintPortraits(this.victoryPortrait, true);
 
     // Mort.
     setHidden($('death'), !me.dead);
@@ -844,9 +951,9 @@ export class Hud {
       ...ROMAN.map((t, i) => where(`Tome ${t}`, `géants ${ZONE_NAMES.slice(0, ZONES).filter((_, z) => tomeOfZone(z + 1) === i).join(', ')}`)),
       ...LESSON_KINDS.filter((kind) => DISCIPLINES[kind].volcano).map((kind) => where(DISCIPLINES[kind].tomes[0], `géants du volcan, ${ZONE_NAMES[VOLCANO_ZONE - 1]} (${DISCIPLINES[kind].name})`)),
       // les tomes des îlots du large : chacun gardé par son géant
-      ...LESSON_KINDS.filter((kind) => DISCIPLINES[kind].isle).map((kind) => {
-        const boss = SPECIES.find((sp) => sp.tome === kind);
-        return where(DISCIPLINES[kind].tomes[0], `${boss?.name ?? 'géant'}, sur un îlot au large (${DISCIPLINES[kind].name})`);
+      ...SPECIES.filter((sp) => sp.tome).map((sp) => {
+        const [kind, n] = sp.tome!;
+        return where(DISCIPLINES[kind].tomes[n], `${sp.name}, sur un îlot au large (${DISCIPLINES[kind].name} ${ROMAN[n]})`);
       }),
     );
     $('school-list').replaceChildren(...LESSON_KINDS.map((kind, k) => {
@@ -1047,7 +1154,7 @@ export class Hud {
     if (!c) return;
     const sp = SPECIES[c.boss];
     if (this.talker[0]?.s !== c.boss) {
-      $('talk-title').textContent = sp.title ?? sp.name;
+      $('talk-title').textContent = sp.name;
       $('talk-line').textContent = `« ${BOSS_LINES[sp.key]?.intro ?? '…'} »`;
       $('talk-portrait').setAttribute('aria-label', sp.name);
       this.talker = [{ canvas: $<HTMLCanvasElement>('talk-portrait'), s: c.boss, seen: true }];
@@ -1640,7 +1747,7 @@ export class Hud {
     // Alphas possédés (sur le terrain ou au repos), et ceux qui ont fait leur double éveil
     const owned = [...me.army.filter((a) => a.alpha).map((a) => ({ s: a.species, legend: a.legend })), ...me.resting.map((r) => ({ s: r.species, legend: r.legend }))];
     const awake = new Set(owned.map((o) => o.s)), double = new Set(owned.filter((o) => o.legend).map((o) => o.s));
-    const key = `${form}|${all.filter((s) => seen.has(s)).join(',')}|${[...awake].join(',')}|${[...double].join(',')}`;
+    const key = `${form}|${this.beastOpen}|${all.filter((s) => seen.has(s)).join(',')}|${[...awake].join(',')}|${[...double].join(',')}`;
     if (key !== this.last.bestiary) {
       this.last.bestiary = key;
       const count = (set: Set<number>) => all.filter((s) => set.has(s)).length;
@@ -1649,34 +1756,96 @@ export class Hud {
         : form === 'legend' ? `<b>${count(double)}/${all.length}</b> double éveillés`
         : `<b>${count(seen)}/${all.length}</b> espèces rencontrées`;
       this.beasts = [];
-      const zones = [...new Set(all.map((s) => SPECIES[s].zone))];
-      $('bestiary').replaceChildren(
-        ...zones.flatMap((z) => {
-          const title = document.createElement('h3');
-          title.className = 'bestiary-zone';
-          title.textContent = `Zone ${z} · ${ZONE_NAMES[z - 1]}`;
-          const row = document.createElement('div');
-          row.className = 'bestiary-row';
-          for (const s of all.filter((i) => SPECIES[i].zone === z)) {
-            const known = seen.has(s), card = beastCard(s, form);
-            const el = document.createElement('div');
-            el.className = `beast ${form}${known ? '' : ' unknown'}`;
-            el.innerHTML = '<canvas></canvas><b></b><span class="tag"></span><span class="stats"></span><span class="desc"></span>';
-            el.querySelector('b')!.textContent = known ? card.name : '???';
-            el.querySelector('.tag')!.textContent = known ? card.tag : '';
-            el.querySelector('.stats')!.textContent = known ? card.stats : '';
-            el.querySelector('.desc')!.textContent = known ? card.desc : form === 'boss' ? 'Pas encore vaincu.' : 'Pas encore croisé.';
-            const canvas = el.querySelector('canvas')!;
-            canvas.setAttribute('role', 'img');
-            canvas.setAttribute('aria-label', known ? card.name : 'Espèce inconnue');
-            this.beasts.push({ canvas, s, seen: known, alpha: form === 'alpha' || form === 'legend', legend: form === 'legend' });
-            row.append(el);
-          }
-          return [title, row];
-        }),
-      );
+      const open = this.beastOpen !== null && seen.has(this.beastOpen) && all.includes(this.beastOpen) ? this.beastOpen : null;
+      if (open !== null) {
+        $('bestiary').replaceChildren(this.beastDetail(open, form));
+      } else {
+        const zones = [...new Set(all.map((s) => SPECIES[s].zone))];
+        $('bestiary').replaceChildren(
+          ...zones.flatMap((z) => {
+            const title = document.createElement('h3');
+            title.className = 'bestiary-zone';
+            title.textContent = `Zone ${z} · ${ZONE_NAMES[z - 1]}`;
+            const row = document.createElement('div');
+            row.className = 'bestiary-row';
+            for (const s of all.filter((i) => SPECIES[i].zone === z)) {
+              const known = seen.has(s), card = beastCard(s, form);
+              const el = document.createElement('button');
+              el.type = 'button';
+              el.className = `beast ${form}${known ? '' : ' unknown'}`;
+              el.disabled = !known;
+              el.innerHTML = '<canvas></canvas><b></b><span class="tag"></span><span class="beast-mini"></span>';
+              el.querySelector('b')!.textContent = known ? card.name : '???';
+              el.querySelector('.tag')!.textContent = known ? card.tag : form === 'boss' ? 'Pas encore vaincu' : 'Pas encore croisé';
+              if (known) {
+                el.querySelector('.beast-mini')!.innerHTML = `<i class="hp">${ICONS.hp}${card.chips[0][1]}</i><i class="dmg">${ICONS.dmg}${card.chips[1][1]}</i><i class="more">${card.skills.length} compétence${card.skills.length > 1 ? 's' : ''} ›</i>`;
+                el.onclick = () => {
+                  this.beastOpen = s;
+                  this.last.bestiary = '';
+                };
+              }
+              const canvas = el.querySelector('canvas')!;
+              canvas.setAttribute('role', 'img');
+              canvas.setAttribute('aria-label', known ? card.name : 'Espèce inconnue');
+              this.beasts.push({ canvas, s, seen: known, alpha: form === 'alpha' || form === 'legend', legend: form === 'legend' });
+              row.append(el);
+            }
+            return [title, row];
+          }),
+        );
+      }
     }
     paintPortraits(this.beasts);
+  }
+
+  /**
+   * Fiche d'une espèce au bestiaire : son portrait et ses traits, ses statistiques en pastilles, puis ses compétences en
+   * cartes (attaques spéciales en rouge) ; pour finir, le conseil du dompteur, ou la réplique du géant.
+   */
+  private beastDetail(s: number, form: BestiaryForm) {
+    const card = beastCard(s, form), el = document.createElement('div');
+    el.className = `beast-detail ${form}`;
+    el.innerHTML = `<button type="button" class="btn small beast-back">‹ Bestiaire</button>
+      <div class="beast-head"><canvas></canvas><div class="col"><b></b><span class="tag"></span></div></div>
+      <div class="beast-chips"></div>
+      <h3 class="beast-section">Compétences</h3>
+      <div class="skills"></div>`;
+    el.querySelector<HTMLButtonElement>('.beast-back')!.onclick = () => {
+      this.beastOpen = null;
+      this.last.bestiary = '';
+    };
+    el.querySelector('b')!.textContent = card.name;
+    el.querySelector('.tag')!.textContent = card.tag;
+    el.querySelector('.beast-chips')!.replaceChildren(...card.chips.map(([label, value, kind]) => {
+      const c = document.createElement('div');
+      c.className = `beast-chip ${kind}`;
+      c.innerHTML = `${CHIP_ICONS[kind] ?? ''}<b></b><span></span>`;
+      c.querySelector('b')!.textContent = value;
+      c.querySelector('span')!.textContent = label;
+      return c;
+    }));
+    const skills = el.querySelector('.skills')!;
+    if (!card.skills.length) skills.innerHTML = '<p class="muted small">Aucune compétence particulière : il se bat au corps à corps.</p>';
+    card.skills.forEach((sk, i) => {
+      const c = document.createElement('div');
+      c.className = `skill-card${sk.boss ? ' boss' : ''} ${sk.icon}`;
+      c.style.animationDelay = `${i * 0.04}s`;
+      c.innerHTML = `<i class="skill-icon">${SKILL_ICONS[sk.icon]}</i><div class="col"><b></b><span></span></div>`;
+      c.querySelector('b')!.textContent = sk.name;
+      c.querySelector('span')!.textContent = sk.desc;
+      skills.append(c);
+    });
+    if (card.note) {
+      const q = document.createElement('p');
+      q.className = `beast-note${form === 'boss' ? ' quote' : ''}`;
+      q.textContent = card.note;
+      el.append(q);
+    }
+    const canvas = el.querySelector('canvas')!;
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', card.name);
+    this.beasts.push({ canvas, s, seen: true, alpha: form === 'alpha' || form === 'legend', legend: form === 'legend' });
+    return el;
   }
 
   private updateDen(me: PlayerState) {
@@ -1685,7 +1854,7 @@ export class Hud {
       this.last.den = key;
       this.buildDen(me);
     }
-    paintPortraits(this.portraits);
+    paintPortraits(this.portraits, true); // les Alphas de la Tanière posent, immobiles
   }
 
   private buildDen(me: PlayerState) {
@@ -1816,7 +1985,7 @@ export class Hud {
     for (let j = 0; j < S; j++) {
       for (let i = 0; i < S; i++) {
         const x = -WORLD_HALF + (i + 0.5) * k, y = -WORLD_HALF + (j + 0.5) * k;
-        const col = this.map.isSea(x, y) ? seaColor(this.map, x, y) : this.map.isWater(x, y) ? [46, 101, 116] : landColor(this.map, x, y);
+        const col = this.map.isSea(x, y) ? seaColor(this.map, x, y) : this.map.isWater(x, y) ? lakeColor(this.map, x, y, true) : landColor(this.map, x, y);
         const o = (j * S + i) * 4;
         img.data[o] = col[0] * 0.8;
         img.data[o + 1] = col[1] * 0.8;
@@ -1876,10 +2045,11 @@ export class Hud {
       ctx.fillStyle = '#EEE7D7';
       ctx.fillText(p.name, m(x), m(y) - 11 * dpr);
     }
-    // grotte survolée : le petit nom de son géant (« Lueur »)
+    // grotte survolée : le nom de son géant, et, s'il a été vaincu, dans combien de temps il revient
     const hover = this.mapHover && this.caveUnder(m, this.mapHover.x * dpr, this.mapHover.y * dpr, 14 * dpr);
     if (hover) {
-      const x = m(hover.entrance.x), y = m(hover.entrance.y) - 16 * dpr, text = shortTitle(hover.boss);
+      const back = this.caves[hover.id] ?? 0;
+      const x = m(hover.entrance.x), y = m(hover.entrance.y) - 16 * dpr, text = `${SPECIES[hover.boss]?.name ?? ''}${back ? ` · revient dans ${back >= 60 ? `${Math.ceil(back / 60)} min` : `${back} s`}` : ''}`;
       ctx.font = `700 ${14 * dpr}px Outfit, sans-serif`;
       const w = ctx.measureText(text).width + 14 * dpr, h = 22 * dpr;
       ctx.fillStyle = 'rgba(16,24,26,0.92)';
@@ -1901,7 +2071,8 @@ export class Hud {
 
   /** Grottes affichées sur la carte : repérées (hors brouillard), dans une zone ouverte, sur l'île. */
   private shownCaves() {
-    return this.map.caves.filter((c) => c.entrance.x < WORLD_HALF && c.zone !== VOYAGE_ZONE && c.open === undefined && this.zoneOpen(c.zone) && this.fog.isExplored(c.entrance.x, c.entrance.y));
+    // (les géants des îlots du large aussi : leur « grotte » est l'îlot)
+    return this.map.caves.filter((c) => c.entrance.x < WORLD_HALF && c.zone !== VOYAGE_ZONE && this.zoneOpen(c.zone) && this.fog.isExplored(c.entrance.x, c.entrance.y));
   }
 
   /** Grotte affichée sous ce point de la carte (px du canvas), la plus proche à moins de r, ou null. */
@@ -1917,6 +2088,7 @@ export class Hud {
   /** Grottes déjà repérées (hors brouillard, dans une zone ouverte) : arche sombre, avec un sablier tant que son géant n'est pas revenu. */
   private drawCaves(ctx: CanvasRenderingContext2D, m: (v: number) => number, size: number) {
     this.drawVolcanoMark(ctx, m);
+    this.drawBoatMark(ctx, m, size);
     for (const c of this.shownCaves()) {
       const x = m(c.entrance.x), y = m(c.entrance.y);
       ctx.fillStyle = '#2A2E2D';
@@ -1956,6 +2128,39 @@ export class Hud {
         ctx.fill();
       }
     }
+  }
+
+  /** Le bateau, une fois trouvé (son épave repérée, au bout de l'île) : une coque et son mât ; voile hissée une fois rebâti. */
+  private drawBoatMark(ctx: CanvasRenderingContext2D, m: (v: number) => number, size: number) {
+    const w = this.map.shipwreck;
+    if (!this.fog.isExplored(w.x, w.y)) return;
+    const x = m(w.x), y = m(w.y), s = size * 1.1, built = this.lore[1] >= BOAT_STAGES.length;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#10181A';
+    ctx.lineWidth = s * 0.25;
+    // voile (déchirée tant que le bateau n'est pas rebâti), puis le mât
+    ctx.fillStyle = built ? '#F4EEDC' : '#C9BFA6';
+    ctx.beginPath();
+    ctx.moveTo(x + s * 0.1, y - s * 1.25);
+    ctx.lineTo(x + s * (built ? 0.85 : 0.6), y - s * 0.3);
+    ctx.lineTo(x + s * 0.1, y - s * 0.3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y - s * 1.35);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    // coque
+    ctx.fillStyle = '#8A5A34';
+    ctx.beginPath();
+    ctx.moveTo(x - s, y - s * 0.2);
+    ctx.lineTo(x + s, y - s * 0.2);
+    ctx.lineTo(x + s * 0.65, y + s * 0.45);
+    ctx.lineTo(x - s * 0.65, y + s * 0.45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
 
   /** Le volcan, une fois repéré : sa base à l'échelle de la carte, le cratère rougeoyant. */
@@ -2043,33 +2248,79 @@ export class Hud {
 
 type BestiaryForm = 'wild' | 'alpha' | 'legend' | 'boss';
 
-/** Texte d'une carte du bestiaire : nom, traits, statistiques et description selon la forme. */
-function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; stats: string; desc: string } {
-  const sp = SPECIES[s];
+/** Pastille de statistique : libellé, valeur, et sa sorte (son pictogramme, sa couleur). */
+type Chip = [string, string, 'hp' | 'dmg' | 'speed' | 'rate' | 'range' | 'gold' | 'essence' | 'time' | 'zone'];
+
+/** Carte du bestiaire : nom, traits, statistiques, compétences, et une note (conseil, ou réplique du géant). */
+function beastCard(s: number, form: BestiaryForm): { name: string; tag: string; chips: Chip[]; skills: Skill[]; note: string } {
+  const sp = SPECIES[s], num = (n: number) => n.toLocaleString('fr-FR'), dec = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
+  const moveCards = (key: string) => (BOSS_MOVES[key] ?? []).map((m) => moveSkill(m, MOVE_NAMES[m.kind]));
   if (form === 'boss') {
-    const moves = (BOSS_MOVES[sp.key] ?? []).map((m) => MOVE_NAMES[m.kind]);
     return {
-      name: sp.title ?? sp.name, tag: sp.name, stats: `${sp.hp} PV · ${sp.dmg} dégâts`,
-      desc: `${moves.length ? `${moves.join(', ')}. ` : ''}« ${BOSS_LINES[sp.key]?.intro ?? '…'} »`,
+      name: sp.name, tag: `Géant · ${ZONE_NAMES[sp.zone - 1]}${sp.optional ? ' · facultatif' : ''}`,
+      chips: [['PV', num(Math.round(sp.hp * BOSS_HP_BONUS)), 'hp'], ['Dégâts', num(sp.dmg), 'dmg'], ['Vitesse', num(sp.speed), 'speed'], ['Entre deux coups', `${dec(sp.atkCd)} s`, 'rate'], ['Coffre', `~${num(sp.gold)} or`, 'gold']],
+      skills: moveCards(sp.key), note: `« ${BOSS_LINES[sp.key]?.intro ?? '…'} »`,
     };
   }
   // apprivoisé, le gibier passif se bat comme les autres : « Passif » ne vaut que pour la forme sauvage
   const traits = [sp.passive && form === 'wild' ? 'Passif' : sp.ranged ? 'Tireur' : 'Mêlée', sp.swim ? 'aquatique' : sp.amphibious ? 'amphibie en meute' : '', MOUNTS[sp.key] ? 'monture en Alpha' : ''].filter(Boolean).join(' · ');
-  if (form === 'wild') return { name: sp.name, tag: traits, stats: `${sp.hp} PV · ${sp.dmg} dégâts`, desc: SPECIES_DESC[sp.key] ?? '' };
+  const own = (sp.moves ?? []).map((m) => moveSkill(m, MOVE_NAMES[m.kind]));
+  if (form === 'wild') {
+    return {
+      name: sp.name, tag: `${ZONE_NAMES[sp.zone - 1]} · ${traits}`,
+      chips: [['PV', num(sp.hp), 'hp'], ['Dégâts', num(sp.dmg), 'dmg'], ['Vitesse', num(sp.speed), 'speed'], ['Entre deux coups', `${dec(sp.atkCd)} s`, 'rate'],
+        ...(sp.ranged ? [['Portée', `${sp.ranged.range} px`, 'range'] as Chip] : []), ['Or', num(sp.gold), 'gold']],
+      skills: [...traitSkills(sp, false), ...own], note: SPECIES_DESC[sp.key] ?? '',
+    };
+  }
   const legend = form === 'legend', st = alphaStats(s, 0, 0, legend), boss = bossOf(s), perk = alphaPerk(s, 0);
-  const powers = [
-    MOUNTS[sp.key] ? (SWIM_MOUNTS.has(sp.key)
-      ? `Se chevauche sur l'eau seulement (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}) : on embarque près de l'eau, on descend au bord d'une rive, et s'il tombe en pleine eau, on se noie.`
-      : FLY_MOUNTS.has(sp.key) ? `Se chevauche et vole (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}) : par-dessus l'eau, les rochers et les arbres.`
-      : `Se chevauche (vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}).`) : '',
-    perk?.kind === 'guard' ? `Carapace : au combat, il dresse sa coquille ; les alliés autour de lui (dompteurs et meutes) encaissent ${pctLabel(perk.value)} de dégâts en moins pendant ${ALPHA_SHOUT_S} s, toutes les ${ALPHA_SHOUT_CD} s (plus en le renforçant).` : '',
-    perk?.kind === 'rally' ? `Cri de ralliement : au combat, il se dresse et crie ; les alliés autour de lui (dompteurs et meutes) font +${pctLabel(perk.value)} de dégâts pendant ${ALPHA_SHOUT_S} s, toutes les ${ALPHA_SHOUT_CD} s (plus en le renforçant).` : '',
-    perk?.kind === 'heal' ? `Soigne son dompteur et sa meute proche : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s (plus en le renforçant).` : '',
-    legend && boss >= 0 ? `Âme de ${SPECIES[boss].title ?? SPECIES[boss].name} : il hérite de ses attaques (${(BOSS_MOVES[SPECIES[boss].key] ?? []).map((m) => MOVE_NAMES[m.kind].toLowerCase()).join(', ')}).` : '',
-    !legend ? `Éveil : ${alphaCreateCost(s)} essences, puis ${duration(alphaAwakenS(s))}.` : '',
-  ].filter(Boolean).join(' ');
-  return { name: legend ? `${sp.name} légendaire` : `${sp.name} alpha`, tag: legend ? `Aura dorée · ×${String(LEGEND_MULT.hp).replace('.', ',')} PV et dégâts` : traits, stats: `niv. 0 · ${st.hp} PV · ${st.dmg} dégâts`, desc: powers };
+  const skills: Skill[] = [...traitSkills(sp, true), ...own];
+  if (MOUNTS[sp.key]) {
+    const v = String(MOUNTS[sp.key]).replace('.', ',');
+    skills.push({ name: 'Monture', icon: 'mount', desc: SWIM_MOUNTS.has(sp.key) ? `Se chevauche sur l'eau seulement (vitesse ×${v}) : on embarque près de l'eau, on descend au bord d'une rive.`
+      : FLY_MOUNTS.has(sp.key) ? `Se chevauche et vole (vitesse ×${v}) : par-dessus l'eau, les rochers et les arbres.` : `Se chevauche (vitesse ×${v}).` });
+  }
+  if (perk?.kind === 'guard') skills.push({ name: 'Carapace', icon: 'heal', desc: `Les alliés autour de lui encaissent ${pctLabel(perk.value)} de dégâts en moins pendant ${ALPHA_SHOUT_S} s, toutes les ${ALPHA_SHOUT_CD} s.` });
+  if (perk?.kind === 'rally') skills.push({ name: 'Cri de ralliement', icon: 'rage', desc: `Les alliés autour de lui font +${pctLabel(perk.value)} de dégâts pendant ${ALPHA_SHOUT_S} s, toutes les ${ALPHA_SHOUT_CD} s.` });
+  if (perk?.kind === 'heal') skills.push({ name: 'Soins', icon: 'heal', desc: `Soigne son dompteur et sa meute proche : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s.` });
+  if (legend && boss >= 0) skills.push(...moveCards(SPECIES[boss].key).filter((_, i) => !LEGEND_SKIPS.has((BOSS_MOVES[SPECIES[boss].key] ?? [])[i].kind)).map((c) => ({ ...c, name: `${c.name} (de ${SPECIES[boss].name})` })));
+  return {
+    name: legend ? `${sp.name} légendaire` : `${sp.name} alpha`, tag: legend ? `Aura dorée · ×${String(LEGEND_MULT.hp).replace('.', ',')} PV et dégâts` : `${ZONE_NAMES[sp.zone - 1]} · ${traits}`,
+    chips: [['PV (niv. 0)', num(st.hp), 'hp'], ['Dégâts (niv. 0)', num(st.dmg), 'dmg'], ['Vitesse', num(sp.speed), 'speed'], ['Entre deux coups', `${dec(sp.atkCd)} s`, 'rate'],
+      ...(legend ? [['Âmes du géant', String(LEGEND_SOULS), 'essence'] as Chip] : [['Éveil', `${alphaCreateCost(s)} essences`, 'essence'] as Chip, ['Durée d\'éveil', duration(alphaAwakenS(s)), 'time'] as Chip])],
+    skills, note: '',
+  };
 }
+
+/** Pictogrammes des pastilles de statistiques. */
+const CHIP_ICONS: Record<string, string> = {
+  hp: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 14.2S1.8 10.4 1.8 6a3.2 3.2 0 0 1 6.2-1.2A3.2 3.2 0 0 1 14.2 6c0 4.4-6.2 8.2-6.2 8.2z"/></svg>',
+  dmg: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M14 2 6.5 9.5M4 7.5l4.5 4.5M5.5 10.5 2 14"/></svg>',
+  speed: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M2 5h7M1 8h10M2 11h7M11 4l4 4-4 4"/></svg>',
+  rate: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 5.5v3l2 1.5M6.5 1.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  range: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.5" fill="currentColor"/></svg>',
+  gold: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6" fill="currentColor"/><circle cx="8" cy="8" r="3.5" fill="none" stroke="#7A5418" stroke-width="1"/></svg>',
+  essence: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5c2.5 3 4.5 5.4 4.5 8a4.5 4.5 0 0 1-9 0c0-2.6 2-5 4.5-8z"/></svg>',
+  time: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M4 2h8M4 14h8M5 2c0 3 6 3 6 6s-6 3-6 6M11 2c0 3-6 3-6 6s6 3 6 6"/></svg>',
+};
+
+/** Pictogrammes des cartes de compétences, par famille. */
+const SKILL_ICONS: Record<SkillIcon, string> = {
+  zone: '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="14" rx="9" ry="6" fill="none" stroke="currentColor" stroke-width="2"/><ellipse cx="12" cy="14" rx="4" ry="2.6" fill="currentColor"/><path d="M12 2v6M9 5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  line: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="9" width="15" height="6" rx="1.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  arc: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18A11 11 0 0 1 20 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M12 20L5 9M12 20l7-11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".6"/></svg>',
+  cloud: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 18a4.5 4.5 0 0 1-.6-9A6 6 0 0 1 18 9.6 4.2 4.2 0 0 1 17.5 18z"/></svg>',
+  ring: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 1 9 9M3 12a9 9 0 0 1 9-9M21 12a9 9 0 0 1-9 9M12 21a9 9 0 0 1-9-9" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="11 3"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  summon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="9" r="3.5" fill="currentColor"/><circle cx="16.5" cy="10" r="3" fill="currentColor" opacity=".7"/><path d="M2 20c.5-4 3-6 6-6s5.5 2 6 6zM13 20c.4-3 2-4.6 4-4.6s3.6 1.6 4 4.6z" fill="currentColor"/></svg>',
+  rage: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2c1 4 6 6 6 12a6 6 0 0 1-12 0c0-3 1.5-5 3-6 0 2 1 3 2 3 0-3-1-6 1-9z"/></svg>',
+  hidden: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="currentColor"/><path d="M4 20 20 4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  shot: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.5" fill="currentColor"/><path d="M9 12h11M9 6l10-2M9 18l10 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 2.5"/></svg>',
+  grab: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 14V8a2 2 0 0 1 4 0v4V5a2 2 0 0 1 4 0v7V6a2 2 0 0 1 4 0v8a7 7 0 0 1-12 0z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>',
+  heal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9.5 3h5v6.5H21v5h-6.5V21h-5v-6.5H3v-5h6.5z"/></svg>',
+  trait: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l2.6 6.2 6.7.6-5.1 4.4 1.6 6.6L12 16.3 6.2 19.8l1.6-6.6L2.7 8.8l6.7-.6z"/></svg>',
+  mount: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17c2-1 3-5 7-5h5l3-4 2 1-1 4 2 3-2 1-2-2h-4l-2 4H7l1-3c-2 0-3 1-5 1z" fill="currentColor"/></svg>',
+  night: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15 3a8 8 0 1 0 6 13A9 9 0 0 1 15 3z"/></svg>',
+};
 
 type Portrait = { canvas: HTMLCanvasElement; s: number; seen: boolean; alpha?: boolean; legend?: boolean; tame?: boolean };
 
@@ -2084,9 +2335,9 @@ const ICONS = {
   mount: '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M3 3.5 7.5 8 3 12.5M8.5 3.5 13 8l-4.5 4.5"/></svg>',
 };
 
-/** Sprites du jeu animés dans des canvas du HUD ; silhouette sombre pour une espèce pas encore croisée. */
-function paintPortraits(list: Portrait[]) {
-  const t = performance.now() / 1000, dpr = Math.min(2, devicePixelRatio || 1);
+/** Sprites du jeu animés (still : immobiles) dans des canvas du HUD ; silhouette sombre pour une espèce pas encore croisée. */
+function paintPortraits(list: Portrait[], still = false) {
+  const t = still ? 0 : performance.now() / 1000, dpr = Math.min(2, devicePixelRatio || 1);
   for (const b of list) {
     const w = b.canvas.clientWidth, h = b.canvas.clientHeight;
     if (!w) continue;
@@ -2101,7 +2352,7 @@ function paintPortraits(list: Portrait[]) {
     const r = b.alpha ? alphaStats(b.s, 0, 1, b.legend).r : SPECIES[b.s].r;
     const scale = Math.min(2.2, (h * dpr * (b.alpha ? 0.72 : 0.55)) / (r * 2)); // l'aura d'Alpha déborde : on remplit plus le cadre
     ctx.setTransform(scale, 0, 0, scale, b.canvas.width / 2, b.canvas.height * 0.55);
-    drawUnit(ctx, { x: 0, y: 0, r, species: b.s, alpha: !!b.alpha, legend: b.legend, wild: b.seen && !b.alpha && !b.tame, face: 1, t: t + b.s, seed: b.s, flash: false });
+    drawUnit(ctx, { x: 0, y: 0, r, species: b.s, alpha: !!b.alpha, legend: b.legend, wild: b.seen && !b.alpha && !b.tame, face: 1, t: still ? 0 : t + b.s, seed: b.s, flash: false });
     if (!b.seen) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'source-in';

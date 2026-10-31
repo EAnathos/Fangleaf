@@ -14,6 +14,7 @@ export interface Pose {
   squash: number; // > 1 : étiré vers le haut, < 1 : aplati
   alpha: number;
   air: number; // hauteur au-dessus du sol (bond)
+  turn?: number; // il roule sur lui-même (angle : l'image se retourne, comme vue de côté)
 }
 export const REST: Pose = { dx: 0, dy: 0, squash: 1, alpha: 1, air: 0 };
 
@@ -92,6 +93,90 @@ export function castPose(c: Cast, r: number, ox: number, oy: number, t: number):
       const back = r * 0.28 * ease(Math.min(1, c.k * 1.4)), shiver = Math.sin(t * 55) * r * 0.05 * c.k;
       return { ...p, dx: -ux * back + shiver, dy: -uy * back * 0.7, squash: 1 - 0.1 * c.k };
     }
+    case 'howl':
+    case 'eclipse':
+    case 'mirage': {
+      // il se dresse, tête levée vers le ciel, et hurle (il tremble de tout son corps)
+      if (c.since > 0) return c.since < 0.6 ? { ...p, air: r * 0.1, squash: 1.12, dx: Math.sin(t * 50) * r * 0.03 } : p;
+      const e = ease(Math.min(1, c.k * 1.4));
+      return { ...p, air: r * 0.16 * e, squash: 1 + 0.14 * e, dx: Math.sin(t * 45) * r * 0.025 * e };
+    }
+    case 'echo': {
+      // il ouvre grand la gueule : un cri strident qui le fait vibrer
+      const e = ease(Math.min(1, c.k * 1.3));
+      return { ...p, air: r * 0.25 * e, squash: 1.08 + Math.sin(t * 70) * 0.04 * e, dx: Math.sin(t * 63) * r * 0.03 * e };
+    }
+    case 'drum': {
+      // il se frappe le torse : un coup à chaque battement, de plus en plus fort
+      const beat = Math.abs(Math.sin(t * 11)), e = c.since > 0 ? 1 : ease(c.k);
+      return { ...p, air: r * 0.08 * e, squash: 1 + 0.09 * beat * e, dy: -r * 0.03 * beat * e };
+    }
+    case 'log': {
+      // il soulève le tronc au-dessus de sa tête, puis le jette devant lui
+      const d = Math.hypot(c.x2 - c.x, c.y2 - c.y) || 1, ux = (c.x2 - c.x) / d, uy = (c.y2 - c.y) / d;
+      if (c.since > 0) {
+        const f = Math.max(0, 1 - c.since / 0.35);
+        return { ...p, dx: ux * r * 0.3 * f, dy: uy * r * 0.2 * f, squash: 1 - 0.1 * f };
+      }
+      const e = ease(c.k);
+      return { ...p, air: r * 0.2 * e, squash: 1 + 0.12 * e, dx: -ux * r * 0.12 * e, dy: -uy * r * 0.08 * e };
+    }
+    case 'hug': {
+      // il se dresse de toute sa hauteur, puis se jette sur sa proie, pattes ouvertes
+      if (c.k < 0.7) {
+        const e = ease(c.k / 0.7);
+        return { ...p, air: r * 0.32 * e, squash: 1 + 0.18 * e };
+      }
+      const f = ease((c.k - 0.7) / 0.3);
+      return { ...p, air: r * 0.32 * (1 - f), squash: 1.18 - 0.2 * f, dx: (c.x - ox) * 0.45 * f, dy: (c.y - oy) * 0.45 * f };
+    }
+    case 'squeeze':
+      // il serre : des à-coups, de tout son poids
+      return { ...p, squash: 0.92 + 0.07 * Math.sin(t * 14), dx: Math.sin(t * 28) * r * 0.02 };
+    case 'roll':
+    case 'impale': {
+      // il se ramasse, recule (la queue dressée, pour le scorpion), puis se détend d'un coup
+      const d = Math.hypot(c.x2 - ox, c.y2 - oy) || 1, ux = (c.x2 - ox) / d, uy = (c.y2 - oy) / d;
+      if (c.since > 0) {
+        const f = Math.max(0, 1 - c.since / 0.4);
+        return { ...p, dx: ux * r * 0.35 * f, dy: uy * r * 0.25 * f, squash: 1 - 0.08 * f };
+      }
+      const back = r * 0.26 * ease(c.k), shiver = Math.sin(t * 55) * r * 0.03 * c.k;
+      return { ...p, dx: -ux * back + shiver, dy: -uy * back * 0.7, air: c.style === 'impale' ? r * 0.12 * ease(c.k) : 0, squash: 1 - 0.1 * c.k };
+    }
+    case 'tail': {
+      // il se tord pour armer sa queue, puis fouette (tout le corps suit)
+      const d = Math.hypot(c.x2 - ox, c.y2 - oy) || 1, ux = (c.x2 - ox) / d, uy = (c.y2 - oy) / d;
+      if (c.since > 0) {
+        const f = Math.max(0, 1 - c.since / 0.35);
+        return { ...p, dx: Math.sin(t * 40) * r * 0.08 * f + ux * r * 0.15 * f, dy: uy * r * 0.1 * f, squash: 1 - 0.06 * f };
+      }
+      return { ...p, dx: -ux * r * 0.16 * ease(c.k), dy: -uy * r * 0.1 * ease(c.k), squash: 1 - 0.06 * c.k };
+    }
+    case 'rampage': {
+      // il gratte le sol puis fonce tête baissée, en rebondissant d'un mur à l'autre
+      const d = Math.hypot(c.x2 - c.x, c.y2 - c.y) || 1, ux = (c.x2 - c.x) / d, uy = (c.y2 - c.y) / d;
+      if (c.since > 0) return { ...p, dx: ux * r * 0.12, dy: uy * r * 0.08 + Math.sin(t * 34) * r * 0.04, squash: 0.9 };
+      const back = r * 0.28 * ease(Math.min(1, c.k * 1.4)), shiver = Math.sin(t * 55) * r * 0.05 * c.k;
+      return { ...p, dx: -ux * back + shiver, dy: -uy * back * 0.7, squash: 1 - 0.1 * c.k };
+    }
+    case 'shellspin': {
+      // elle rentre dans sa carapace (elle s'aplatit), puis tourne en tanguant
+      if (c.since > 0) return { ...p, squash: 0.82, dx: Math.sin(t * 25) * r * 0.05 };
+      return { ...p, squash: 1 - 0.18 * ease(c.k), dx: Math.sin(t * 40) * r * 0.03 * c.k };
+    }
+    case 'venomdive': {
+      // elle s'élève à grands battements, disparaît dans le ciel, file au-dessus de sa cible et fond sur elle
+      const H = Math.max(420, r * 8);
+      if (c.since > 0) return { ...p, squash: 1 - 0.3 * land };
+      if (c.k < 0.3) return { ...p, air: H * 0.45 * ease(c.k / 0.3), squash: 1.08 };
+      if (c.k < 0.75) {
+        const f = (c.k - 0.3) / 0.45;
+        return { ...p, air: H * (0.45 + 0.55 * ease(f)), dx: (c.x - ox) * ease(f), dy: (c.y - oy) * ease(f), alpha: 1 - 0.6 * f };
+      }
+      const f = (c.k - 0.75) / 0.25;
+      return { ...p, air: H * (1 - f * f), dx: c.x - ox, dy: c.y - oy, alpha: 0.4 + 0.6 * f, squash: 1.15 };
+    }
     case 'laser': {
       // il se soulève en chargeant, de plus en plus fébrile ; le rayon allumé, il vibre sous la puissance du tir
       if (c.since > 0) return { ...p, air: r * 0.14, dx: Math.sin(t * 61) * r * 0.025, squash: 1.04 + Math.sin(t * 47) * 0.02 };
@@ -103,6 +188,42 @@ export function castPose(c: Cast, r: number, ox: number, oy: number, t: number):
       return { ...p, air: r * 0.15 * f, squash: 1 + 0.08 * f };
     }
   }
+}
+
+/**
+ * Ailes de la wyverne pendant une attaque (spread : déployées, down : rabattues vers le sol, beat : battement de -1 à 1,
+ * fwd : le battement pousse vers l'avant), ou null (repliées).
+ * - bond : elle déploie ses ailes en s'accroupissant, bat des ailes en l'air, puis les rabat d'un coup pour fracasser le sol ;
+ * - charge : ailes ouvertes, elle bat des ailes vers l'avant, de plus en plus vite, et file.
+ */
+export interface Wings { spread: number; down: number; beat: number; fwd: number }
+export function wingPose(c: Cast, t: number): Wings | null {
+  if (c.style === 'venomdive') {
+    // piqué : grands battements en montant, ailes repliées en fondant, rabattues au choc
+    if (c.since > 0) return c.since > 0.5 ? null : { spread: 1 - ease(c.since / 0.5), down: 1 - ease(c.since / 0.5), beat: 0, fwd: 0 };
+    if (c.k < 0.75) return { spread: 1, down: 0, beat: Math.sin(t * (c.k < 0.3 ? 14 : 7)), fwd: 0 };
+    const f = (c.k - 0.75) / 0.25;
+    return f < 0.8 ? { spread: 0.15, down: 0, beat: 0, fwd: 0 } : { spread: 1, down: ease((f - 0.8) / 0.2), beat: 0, fwd: 0 };
+  }
+  if (c.style === 'leap') {
+    if (c.since > 0) {
+      if (c.since > 0.5) return null;
+      const f = c.since / 0.5;
+      return { spread: 1 - ease(f), down: 1 - ease(f), beat: 0, fwd: 0 }; // ailes au sol, qui se replient
+    }
+    if (c.k < 0.2) return { spread: ease(c.k / 0.2), down: 0, beat: 0, fwd: 0 }; // elle les déploie en prenant son élan
+    if (c.k < 0.8) return { spread: 1, down: 0, beat: Math.sin(t * 13), fwd: 0 }; // en l'air : de grands battements
+    return { spread: 1, down: ease((c.k - 0.8) / 0.2), beat: 0, fwd: 0 }; // et les rabat vers le sol
+  }
+  if (c.style === 'charge') {
+    if (c.since > 0) {
+      if (c.since > 0.4) return null;
+      const f = c.since / 0.4;
+      return { spread: 1 - ease(f), down: 0, beat: Math.sin(t * 26) * (1 - f), fwd: 1 };
+    }
+    return { spread: ease(Math.min(1, c.k * 2.5)), down: 0, beat: Math.sin(t * (12 + 16 * c.k)), fwd: 1 };
+  }
+  return null;
 }
 
 /** Clignement : silhouette du géant qui se forme au point d'arrivée (transparence), ou 0. */

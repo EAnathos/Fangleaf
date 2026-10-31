@@ -33,12 +33,12 @@ const ISLAND_LEN: [number, number] = [34500, 48700]; // longueur de la colonne :
 const HALF_W: [number, number] = [1600, 3000]; // demi-largeur de l'île (avant le bruit de la côte)
 const DESERT_WIDEN = 0.3; // la Mer de sable est plus large (son volcan y tient, à l'écart de la voie centrale)
 const COAST_NOISE = 900; // la côte s'écarte de ± la moitié de ceci
-export const SEA_SHALLOW = 520; // mer peu profonde le long de la côte (le serpent y nage), puis mer profonde
+export const SEA_SHALLOW = 1300; // mer peu profonde le long de la côte (le serpent y nage, loin du bord), puis mer profonde
+const SEA_ROOM = 520; // mer gardée autour de l'île pour placer l'île, l'îlot du village et les îlots du large (indépendante de SEA_SHALLOW : la carte ne bouge pas)
 export const BEACH = 190; // largeur de la plage, côté terre
 const DENS = 7; // tanières de suricates
-const QUICKSANDS = 14; // sables mouvants sur les plages de la Mer de sable
 const ZONE_BLEND = 900; // largeur de la transition (affichage) entre deux zones
-const STAMP_R = 4300; // au-delà, mer profonde : on ne calcule plus la distance à la colonne
+const STAMP_R = 5100; // au-delà, mer profonde : on ne calcule plus la distance à la colonne
 const LANE = 280; // voie centrale jamais inondée (bord bruité)
 const MIN_LAKE = 40; // en cases : un lac plus petit (une flaque) est asséché
 const MIN_ISLET = 40; // en cases : un îlot plus petit est englouti
@@ -97,18 +97,20 @@ export interface Cave {
 }
 /**
  * Îlot du large : une petite île dans la mer peu profonde, qu'on rejoint à dos de serpent. Il garde un géant (à l'air
- * libre, sa « grotte » sans intérieur : cave) et ses créatures, ou un coffre de naufragé (chest).
+ * libre, sa « grotte » sans intérieur : cave) et ses créatures.
  */
 export interface Islet {
   x: number;
   y: number;
   r: number; // rayon moyen (le bord ondule)
   zone: number;
-  boss: number; // espèce du géant (-1 : un coffre à la place)
+  boss: number; // espèce du géant
   cave: number; // son géant (index dans caves, une grotte à l'air libre : Cave.open ; -1 : aucun)
-  chest: Pt | null; // coffre de naufragé
 }
-/** Les îlots, dans l'ordre : zone, et géant (clé d'espèce) ou coffre. */
+/**
+ * Les îlots, dans l'ordre : zone, et géant (clé d'espèce). Ceux sans géant (autrefois un coffre de naufragé) ne sont plus
+ * posés, mais leur tirage est gardé : les autres îlots restent à leur place.
+ */
 const ISLETS: { zone: number; boss?: string }[] = [{ zone: 2 }, { zone: 3, boss: 'drake_king' }, { zone: 4 }, { zone: 5, boss: 'wyvern_king' }, { zone: 6, boss: 'dragon_king' }];
 
 /** Demi-axes de l'intérieur d'une grotte (ou de la salle du volcan). */
@@ -186,7 +188,7 @@ function makeSpine(seed: number): Pt[] {
   const rand = rng(seed ^ 0x1234567);
   const len = ISLAND_LEN[0] + rand() * (ISLAND_LEN[1] - ISLAND_LEN[0]);
   const ang = rand() * TAU, wob = 400 + rand() * 1400, waves = 0.6 + rand() * 1.2, ph = rand() * TAU, bend = (rand() - 0.5) * 0.5;
-  const dx = Math.cos(ang), dy = Math.sin(ang), room = WORLD_HALF - HALF_W[1] * (1 + DESERT_WIDEN) - COAST_NOISE / 2 - SEA_SHALLOW - 400;
+  const dx = Math.cos(ang), dy = Math.sin(ang), room = WORLD_HALF - HALF_W[1] * (1 + DESERT_WIDEN) - COAST_NOISE / 2 - SEA_ROOM - 400;
   for (let scale = 1; ; scale -= 0.04) {
     const L = len * scale;
     // courbe dense, puis points tous les SPINE_STEP px le long de la courbe
@@ -252,7 +254,7 @@ export class WorldMap {
   readonly decor: Decor[] = [];
   readonly bushes: Bush[] = []; // buissons à fruits (décor franchissable : le gibier vient y manger)
   readonly dens: Pt[] = []; // tanières de suricates (Mer de sable) : buttes percées de trous, franchissables
-  readonly quicksands: (Pt & { r: number })[] = []; // sables mouvants sur les plages de la Mer de sable : on s'y enlise
+  quicksands: (Pt & { r: number })[] = []; // sables mouvants ouverts dans la Mer de sable (le serveur les ouvre au hasard) : on s'y enlise
   readonly paths: [number, number][][] = []; // chemins de terre : de la plage au pont, puis du pont à la porte du village
   private buckets = new Map<number, number[]>(); // décor par case de 256 px
   readonly islets: Islet[] = []; // îlots du large
@@ -438,7 +440,6 @@ export class WorldMap {
     this.buildBushes();
     this.buildHarvest();
     this.buildDens();
-    this.buildQuicksands();
     // Eau profonde (pas une berge) par zone : là où peuvent apparaître les créatures aquatiques.
     for (let z = 0; z <= ZONES; z++) this.deepWater.push([]);
     for (let j = 2; j < N - 2; j += 2) {
@@ -790,7 +791,7 @@ export class WorldMap {
   private placeIsle() {
     this.isleNoise = rng(this.seed ^ 0x15e7)() * TAU;
     const dirs: Pt[] = [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 0, y: -1 }];
-    const lim = WORLD_HALF - SEA_SHALLOW - 200;
+    const lim = WORLD_HALF - SEA_ROOM - 200;
     const attempt = (arc: number, side: number, gap: number, tol: number) => {
       const nn = this.normalAt(arc), n = { x: nn.x * side, y: nn.y * side };
       const dir = dirs.reduce((b, d) => (d.x * n.x + d.y * n.y > b.x * n.x + b.y * n.y ? d : b));
@@ -870,7 +871,8 @@ export class WorldMap {
    */
   private placeIslets() {
     const rand = rng(this.seed ^ 0x15e7);
-    const lim = WORLD_HALF - SEA_SHALLOW - 500;
+    const lim = WORLD_HALF - SEA_ROOM - 500;
+    const placed: Pt[] = []; // tous les îlots tirés, même ceux qu'on ne pose plus
     for (const plan of ISLETS) {
       for (let tries = 0; tries < 400; tries++) {
         const r = 300 + rand() * 60;
@@ -888,9 +890,10 @@ export class WorldMap {
           if (this.shoreAt(x + Math.cos(ang) * (r + 150), y + Math.sin(ang) * (r + 150)) < 80) ok = false;
         }
         if (!ok || this.inVillage(x, y, 2200) || dist2(x, y, this.spawn.x, this.spawn.y) < 2200 ** 2 || this.nearWreck(x, y, 2200)) continue;
-        if (dist2(x, y, this.bridge.a.x, this.bridge.a.y) < 2000 ** 2 || this.islets.some((t) => dist2(x, y, t.x, t.y) < 2500 ** 2)) continue;
-        const boss = plan.boss ? SPECIES.findIndex((sp) => sp.key === plan.boss) : -1;
-        const t: Islet = { x, y, r, zone: plan.zone, boss, cave: -1, chest: boss < 0 ? { x, y: y + 10 } : null };
+        if (dist2(x, y, this.bridge.a.x, this.bridge.a.y) < 2000 ** 2 || placed.some((t) => dist2(x, y, t.x, t.y) < 2500 ** 2)) continue;
+        placed.push({ x, y });
+        if (!plan.boss) break;
+        const t: Islet = { x, y, r, zone: plan.zone, boss: SPECIES.findIndex((sp) => sp.key === plan.boss), cave: -1 };
         this.stampIslet(t);
         this.islets.push(t);
         break;
@@ -914,18 +917,20 @@ export class WorldMap {
     }
   }
 
-  /** Grotte (ou îlot, pour un géant à l'air libre) où l'on affronte son géant, à ce point. */
-  arenaAt(x: number, y: number): Cave | undefined {
+  /**
+   * Grotte (ou îlot, pour un géant à l'air libre) où l'on affronte son géant, à ce point. margin : jusqu'où, autour de
+   * l'îlot, on est encore dans son arène (au-dessus de l'eau, à dos de serpent ou de vautour).
+   */
+  arenaAt(x: number, y: number, margin = 60): Cave | undefined {
     const c = this.caveAt(x, y);
     if (c) return c;
-    const t = this.isletAt(x, y, 60);
+    const t = this.isletAt(x, y, margin);
     return t && t.cave >= 0 ? this.caves[t.cave] : undefined;
   }
 
   /** Géants des îlots, au milieu de leur îlot (ajoutés en dernier aux grottes : les autres gardent leur numéro). */
   private placeIsletCaves() {
     for (const t of this.islets) {
-      if (t.boss < 0) continue;
       // à l'air libre : il se tient au milieu de son îlot (pas d'intérieur, pas d'entrée)
       const id = this.caves.length, at = { x: t.x, y: t.y + 40 };
       t.cave = id;
@@ -1051,7 +1056,6 @@ export class WorldMap {
         if (this.sites.some((c) => Math.hypot(x - c.x, y - c.y) < 300)) continue;
         if (this.isWater(x, y) || this.isWater(x + 24, y) || this.isWater(x - 24, y) || this.isWater(x, y + 24)) continue;
         if (this.caves.some((c) => Math.hypot(x - c.entrance.x, y - c.entrance.y) < 190)) continue;
-        if (this.islets.some((t) => t.chest && Math.hypot(x - t.chest.x, y - t.chest.y) < 120)) continue; // le coffre de naufragé reste dégagé
         if (this.nearVolcano(x, y, 140) || this.volcanoTrail(x, y) < 90) continue;
         if (this.ores.some((o) => Math.hypot(x - o.x, y - o.y) < 50)) continue;
         const z = this.zoneAt(x, y);
@@ -1137,31 +1141,6 @@ export class WorldMap {
       if (this.nearVolcano(x, y, 400)) continue;
       if (this.bushes.some((b) => dist2(x, y, b.x, b.y) < 100 ** 2)) continue;
       this.dens.push({ x, y });
-    }
-  }
-
-  /**
-   * Sables mouvants (hasard à part) : des mares de sable sur les plages de la Mer de sable, entre l'eau et les dunes,
-   * loin des chemins, de l'épave, des grottes, des tanières et les unes des autres.
-   */
-  private buildQuicksands() {
-    const rand = rng(this.seed ^ 0x9a1c5);
-    const lo = this.zoneFrom(DESERT_ZONE) + 200, hi = this.zoneTo(DESERT_ZONE) - 200;
-    for (let tries = 0; tries < 600 && this.quicksands.length < QUICKSANDS && hi > lo; tries++) {
-      const s = lo + rand() * (hi - lo), side = rand() < 0.5 ? -1 : 1, r = 55 + rand() * 30;
-      const { x: sx, y: sy } = this.spineAt(s), n = this.normalAt(s);
-      // de la colonne vers la mer jusqu'au sable de la plage, à un peu plus d'un rayon de l'eau
-      const want = -(r + 30 + rand() * 50);
-      let d = 0;
-      while (d < 6000 && this.shoreAt(sx + n.x * side * d, sy + n.y * side * d) < want) d += 12;
-      const x = sx + n.x * side * d, y = sy + n.y * side * d;
-      if (d >= 6000 || this.zoneAt(x, y) !== DESERT_ZONE || this.isWater(x, y)) continue;
-      if ([0, 1, 2, 3, 4, 5].some((k) => { const a = (k / 6) * Math.PI * 2; return this.isWater(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.6) || this.blocked(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.6); })) continue;
-      if (this.pathDist(x, y) < r + 70 || this.nearWreck(x, y, 450) || this.nearVolcano(x, y, 300)) continue;
-      if (this.caves.some((c) => dist2(x, y, c.entrance.x, c.entrance.y) < 300 ** 2) || this.dens.some((dn) => dist2(x, y, dn.x, dn.y) < 300 ** 2)) continue;
-      if (this.ores.some((o) => dist2(x, y, o.x, o.y) < (r + 60) ** 2) || this.bushes.some((b) => dist2(x, y, b.x, b.y) < (r + 40) ** 2)) continue;
-      if (this.islets.some((t) => dist2(x, y, t.x, t.y) < (t.r + 400) ** 2) || this.quicksands.some((q) => dist2(x, y, q.x, q.y) < 500 ** 2)) continue;
-      this.quicksands.push({ x, y, r });
     }
   }
 

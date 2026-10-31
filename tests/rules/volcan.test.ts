@@ -60,7 +60,7 @@ describe('Le volcan et ses entrailles', () => {
   rule('Les créatures de lave n\'apparaissent que dans les entrailles, une fois le volcan ouvert.', () => {
     const r = room(), m = r.map;
     r.units.clear();
-    const lava = SPECIES.map((sp, i) => (sp.zone === VOLCANO_ZONE && !sp.boss ? i : -1)).filter((i) => i >= 0);
+    const lava = SPECIES.map((sp, i) => (sp.zone === VOLCANO_ZONE && !sp.boss && !sp.minion ? i : -1)).filter((i) => i >= 0);
     check(lava.length === 3, 'trois espèces dans les entrailles');
     for (const s of lava) for (let k = 0; k < 5; k++) r.spawnPack(s);
     const wild = [...r.units.values()].filter((u: { s: number; owner: number }) => lava.includes(u.s) && !u.owner);

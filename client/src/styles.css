@@ -242,11 +242,59 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .bestiary-zone { margin: 4px 0 -4px; font: 700 16px var(--display); color: var(--alpha); }
 .bestiary { display: flex; flex-direction: column; gap: 10px; }
 .bestiary-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
-.beast { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 12px; background: var(--night); border: 1px solid var(--line); }
+.beast { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 12px; background: var(--night); border: 1px solid var(--line); text-align: left; transition: border-color 0.15s, transform 0.15s, background 0.15s; }
+.beast:not(:disabled):hover, .beast:not(:disabled):focus-visible { border-color: var(--alpha); background: rgba(180, 140, 255, 0.07); transform: translateY(-2px); }
+.beast.boss:not(:disabled):hover, .beast.boss:not(:disabled):focus-visible { border-color: var(--enemy); background: rgba(232, 105, 63, 0.07); }
+.beast:disabled { cursor: default; opacity: 0.75; }
+.beast-mini { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 2px; font-size: 13px; color: var(--text-2); }
+.beast-mini i { display: inline-flex; align-items: center; gap: 4px; font-style: normal; }
+.beast-mini svg { width: 13px; height: 13px; }
+.beast-mini .hp svg { color: var(--enemy); }
+.beast-mini .dmg svg { color: var(--amber); }
+.beast-mini .more { margin-left: auto; color: var(--alpha); font-weight: 600; }
+.beast.boss .beast-mini .more { color: var(--enemy); }
+
+/* Fiche d'une espèce : en-tête, pastilles de statistiques, cartes de compétences. */
+.beast-detail { display: flex; flex-direction: column; gap: 14px; animation: victory-in 0.3s both; }
+.beast-back { align-self: flex-start; }
+.beast-head { display: flex; align-items: center; gap: 16px; padding: 12px; border-radius: 14px; background: radial-gradient(circle at 15% 50%, rgba(180, 140, 255, 0.16), transparent 60%), var(--night); border: 2px solid rgba(180, 140, 255, 0.4); }
+.beast-detail.boss .beast-head { background: radial-gradient(circle at 15% 50%, rgba(232, 105, 63, 0.18), transparent 60%), var(--night); border-color: rgba(232, 105, 63, 0.5); }
+.beast-detail.legend .beast-head { background: radial-gradient(circle at 15% 50%, rgba(240, 182, 74, 0.2), transparent 60%), var(--night); border-color: rgba(240, 182, 74, 0.55); }
+.beast-head canvas { width: 150px; height: 120px; flex: none; }
+.beast-head b { font: 700 26px var(--display); color: var(--text); }
+.beast-head .tag { font-size: 14px; color: var(--alpha); }
+.beast-detail.boss .beast-head .tag { color: var(--enemy); }
+.beast-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.beast-chip { display: grid; grid-template-columns: 18px 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line); }
+.beast-chip svg { grid-row: 1 / 3; width: 18px; height: 18px; }
+.beast-chip b { font: 700 17px var(--display); color: var(--text); }
+.beast-chip span { font-size: 11px; color: var(--muted); }
+.beast-chip.hp svg { color: var(--enemy); }
+.beast-chip.dmg svg, .beast-chip.gold svg { color: var(--amber); }
+.beast-chip.speed svg, .beast-chip.rate svg, .beast-chip.time svg { color: var(--ally); }
+.beast-chip.range svg { color: var(--stone); }
+.beast-chip.essence svg { color: var(--alpha); }
+.beast-section { margin: 4px 0 -4px; font: 700 18px var(--display); color: var(--amber); }
+.skills { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.skill-card { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border-radius: 12px; background: linear-gradient(135deg, rgba(180, 140, 255, 0.1), transparent 60%), var(--night); border: 1px solid var(--line); border-left: 4px solid var(--alpha); animation: victory-in 0.35s both; }
+.skill-card.boss { background: linear-gradient(135deg, rgba(232, 105, 63, 0.12), transparent 60%), var(--night); border-left-color: var(--enemy); }
+.skill-card .skill-icon { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: rgba(180, 140, 255, 0.16); color: var(--alpha); }
+.skill-card.boss .skill-icon { background: rgba(232, 105, 63, 0.16); color: var(--enemy); }
+.skill-card.heal .skill-icon { background: rgba(127, 203, 91, 0.16); color: var(--hp); }
+.skill-card.mount .skill-icon, .skill-card.night .skill-icon { background: rgba(92, 200, 184, 0.16); color: var(--ally); }
+.skill-card svg { width: 22px; height: 22px; }
+.skill-card b { font: 700 16px var(--display); color: var(--text); }
+.skill-card span { font-size: 13px; line-height: 1.4; color: var(--text-2); }
+.beast-note { padding: 10px 14px; border-radius: 10px; background: var(--panel-2); font-size: 14px; line-height: 1.45; color: var(--text-2); }
+.beast-note.quote { font-style: italic; color: var(--amber); background: rgba(240, 182, 74, 0.08); border-left: 3px solid var(--amber); }
+@media (max-width: 640px) {
+  .beast-head canvas { width: 104px; height: 86px; }
+  .beast-head b { font-size: 20px; }
+  .skills { grid-template-columns: 1fr; }
+}
 .beast canvas { width: 100%; height: 96px; display: block; }
 .beast b { font: 700 16px var(--display); color: var(--text); }
 .beast .stats { font-size: 13px; color: var(--amber); }
-.beast .desc { font-size: 13px; color: var(--text-2); line-height: 1.4; }
 .beast .tag { font-size: 12px; color: var(--alpha); }
 .beast.unknown b { color: var(--muted); }
 .alpha-card { background: var(--night); border: 2px solid var(--line); border-radius: 14px; padding: 12px 16px; display: flex; align-items: center; gap: 16px; }
@@ -306,7 +354,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .beast { padding: 8px; }
   .beast canvas { height: 76px; }
   .beast b { font-size: 14px; }
-  .beast .desc { font-size: 12px; }
   #bestiary-forms { gap: 6px; }
   #bestiary-forms .seg-btn { min-width: 0; padding: 0 4px; font-size: 13px; }
 }
@@ -615,3 +662,46 @@ body.waking #hud { opacity: 0; pointer-events: none; }
 @keyframes lobby-float { 50% { transform: translateY(-4px); } }
 @keyframes cta-glow { 50% { box-shadow: 0 5px 0 #8A5E1C, 0 0 26px rgba(240, 182, 74, 0.55); } }
 @media (prefers-reduced-motion: reduce) { .lobby-hero h1, .lobby-card, #go { animation: none !important; } }
+
+/* Écran de victoire après un géant : son portrait, la durée du combat, puis une carte par dompteur. */
+.modal.victory { width: min(640px, calc(100vw - 32px)); border-color: var(--amber); gap: 16px; }
+.victory-head { display: flex; align-items: center; gap: 16px; }
+.victory-portrait { width: 110px; height: 96px; flex: none; border-radius: 14px; border: 2px solid rgba(240, 182, 74, 0.5); background: radial-gradient(circle at 50% 60%, rgba(240, 182, 74, 0.18), transparent 70%); }
+.victory-head b { font: 700 24px var(--display); color: var(--text); }
+.victory-first { align-self: flex-start; margin-top: 4px; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; color: var(--amber-ink); background: var(--amber); }
+.victory-rows { display: flex; flex-direction: column; gap: 10px; }
+.victory-row { display: grid; grid-template-columns: minmax(90px, 1fr) repeat(4, minmax(0, 1fr)); align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--night); border: 2px solid var(--line); animation: victory-in 0.45s both; }
+.victory-row.me { border-color: rgba(240, 182, 74, 0.6); }
+.victory-row .who { font: 700 16px var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.victory-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 2px; border-radius: 8px; }
+.victory-stat svg { width: 16px; height: 16px; }
+.victory-stat b { font: 700 17px var(--display); color: var(--text); }
+.victory-stat span { font-size: 11px; color: var(--muted); text-align: center; }
+.victory-stat.top { background: rgba(240, 182, 74, 0.14); }
+.victory-stat.top b { color: var(--amber); }
+.victory-stat.dealt svg { color: var(--amber); }
+.victory-stat.taken svg { color: var(--enemy); }
+.victory-stat.dodges svg { color: var(--ally); }
+.victory-stat.best svg { color: var(--alpha); }
+@keyframes victory-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (max-width: 640px) {
+  .victory-row { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .victory-row .who { grid-column: 1 / -1; }
+  .victory-portrait { width: 84px; height: 72px; }
+}
+
+/* Gains regroupés sous le sac (« +340 or · +3 essences · +12 bois ») : la ligne s'additionne, puis s'efface. */
+.gains { display: flex; flex-wrap: wrap; gap: 2px 10px; min-height: 0; max-height: 0; overflow: hidden; opacity: 0; font-size: 13px; font-weight: 700; transition: opacity 0.5s, max-height 0.3s; }
+.gains.on { max-height: 40px; opacity: 1; }
+.gains span { display: inline-block; }
+.gains span.bump { animation: gain-bump 0.25s; }
+.gains .gold { color: var(--amber); }
+.gains .essence { color: var(--alpha); }
+.gains .wood { color: #D2A06A; }
+.gains .stone { color: #B9C2BC; }
+@keyframes gain-bump { 50% { transform: scale(1.18); } }
+
+/* Rappel de l'École : une leçon finie, ou un livre à lire. */
+.school-hint { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; margin-top: 2px; padding: 2px 10px 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; color: var(--alpha); background: rgba(180, 140, 255, 0.14); border: 1px solid rgba(180, 140, 255, 0.5); animation: hint-pulse 2s ease-in-out infinite; }
+.school-hint::before { content: ''; width: 12px; height: 10px; background: currentColor; clip-path: polygon(0 10%, 45% 0, 50% 12%, 55% 0, 100% 10%, 100% 100%, 55% 90%, 50% 100%, 45% 90%, 0 100%); }
+@keyframes hint-pulse { 50% { box-shadow: 0 0 0 4px rgba(180, 140, 255, 0.12); } }

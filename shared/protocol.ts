@@ -114,6 +114,7 @@ export interface PlayerState {
   saved: boolean; // progression sauvegardée sur un compte
   mount: { id: number; species: number; hp: number; legend: boolean } | null; // monture chevauchée (pv en %)
   slowed: boolean; // pris dans une toile
+  held: boolean; // saisi par un géant (étreinte, roulade) ou étourdi : il ne peut plus bouger
   buffs: number; // compétences d'Alpha en cours sur lui : UNIT_FLAG_RALLY (cri du suricate), UNIT_FLAG_GUARD (carapace de l'escargot) ; UNIT_FLAG_POISON : empoisonné
   awakening: { species: number; left: number; total: number }[]; // Alphas en cours d'éveil (secondes)
   resting: { species: number; level: number; legend: boolean }[]; // Alphas rangés à la Tanière
@@ -147,11 +148,14 @@ export type UnitTuple = [number, number, number, number, number, number, number]
  * Attaque spéciale au sol : [type, x, y, rayon, x2, y2, avancement %, dompteur, style, lanceur, durée] — type 0 cercle,
  * 1 ligne (x2,y2 = bout, rayon = demi-largeur), 2 nuage, 3 toile, 4 arc devant le lanceur (x2,y2 = direction, rayon = portée, demi-angle PINCER_HALF). avancement 100 = actif. dompteur : id du dompteur
  * dont l'Alpha légendaire l'a lancée (dessinée à sa couleur), 0 pour un sauvage. style : index dans HAZARD_STYLES (-1 : aucun), pour l'animer ; lanceur : id de l'unité ;
- * durée : temps d'annonce avant l'impact, en centièmes de seconde.
+ * durée : temps d'annonce avant l'impact, en centièmes de seconde ; extra : selon l'attaque (angle des brèches d'un anneau
+ * de tambour et demi-angle d'un coup de queue en centièmes de radian, mèche d'un champignon en %, reste d'une éclipse en dixièmes de seconde).
  */
-export type HazardTuple = [number, number, number, number, number, number, number, number, number, number, number];
+export type HazardTuple = [number, number, number, number, number, number, number, number, number, number, number, number, number]; // … et son id (stable, pour la suivre)
 /** Attaque d'où vient une zone annoncée au sol (le client l'anime : bond, rocher lancé, onde de choc…). */
-export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores', 'lava', 'flame', 'tentacle', 'ink', 'laser', 'fireslam', 'pound', 'pincer', 'bubble', 'tongue', 'geyser', 'breath', 'tornado', 'crater'] as const; // n'ajouter qu'à la fin
+export const HAZARD_STYLES = ['leap', 'rock', 'slam', 'blink', 'charge', 'web', 'spores', 'lava', 'flame', 'tentacle', 'ink', 'laser', 'fireslam', 'pound', 'pincer', 'bubble', 'tongue', 'geyser', 'breath', 'tornado', 'crater',
+  'stalk', 'howl', 'rampage', 'mud', 'hug', 'squeeze', 'shroom', 'wisps', 'venomdive', 'venom', 'drum', 'log', 'tail', 'roll', 'ambush',
+  'totem', 'curse', 'maw', 'eclipse', 'mirage', 'impale', 'husk', 'echo', 'cinder', 'roost', 'shellspin'] as const; // n'ajouter qu'à la fin
 export type HazardStyle = (typeof HAZARD_STYLES)[number];
 /**
  * Projectile de tireur : [id, type, x, y, a, b, c, dompteur] — type 0 trait (bolt), 1 en cloche (arc), 2 jet.
@@ -159,6 +163,12 @@ export type HazardStyle = (typeof HAZARD_STYLES)[number];
  * dompteur : id du dompteur du tireur (meute, légendaire : dessiné à sa couleur), 0 pour un sauvage.
  */
 export type ShotTuple = [number, number, number, number, number, number, number, number];
+
+/**
+ * Sables mouvants ouverts : [id, x, y, rayon, âge, temps restant avant qu'ils se referment] (âge et reste en dixièmes
+ * de seconde). Une ellipse : rayon × 0,6 rayon ; il s'ouvre en QUICKSAND_OPEN_S.
+ */
+export type SandTuple = [number, number, number, number, number, number];
 
 /** Dompteur déconnecté, endormi au village : [nom, couleur, armure, classe ('' sans), x, y]. */
 export type SleeperTuple = [string, string, number, string, number, number, number]; // nom, couleur, armure, classe, x, y, chapeau
@@ -185,6 +195,8 @@ export const UNIT_FLAG_PHASE3 = 128; // … troisième phase
 export const UNIT_FLAG_RALLY = 256; // allié encouragé par le cri d'un Alpha suricate (il frappe plus fort)
 export const UNIT_FLAG_GUARD = 512; // allié abrité par la carapace d'un Alpha escargot (il encaisse moins)
 export const UNIT_FLAG_POISON = 1024; // empoisonné (fléchette de sarbacane) : il perd des PV un moment
+export const UNIT_FLAG_CURSE = 4096; // maudit par le Grand Masque : il subit plus de dégâts
+export const UNIT_FLAG_LANDED = 2048; // vautour de la meute (ou monture) posé : il a piqué sur sa proie, ou la tempête de sable le cloue au sol
 
 export type GameEvent =
   | { e: 'hit'; a: number; b: number; dmg: number; m?: 1 } // m : coup au corps à corps
@@ -209,6 +221,9 @@ export type GameEvent =
   | { e: 'sword'; by: number; n: number } // un coup pour déterrer l'épée (n : coups donnés ; SWORD_PULLS : elle est sortie)
   | { e: 'feed'; by: number; id: number } // un fruit donné, sans apprivoiser cette fois
   | { e: 'boom'; x: number; y: number; r: number; kind: string; by?: number } // une attaque spéciale frappe (by : dompteur de l'Alpha qui l'a lancée)
+  | { e: 'victory'; s: number; dur: number; first: boolean; rows: { id: number; name: string; color: string; dealt: number; taken: number; dodges: number; best: number }[] } // géant vaincu : ce qu'a fait chacun (dur : durée du combat, en s)
+  | { e: 'mend'; from: number; to: number; n: number } // un totem soigne un allié du Grand Masque (n : PV rendus)
+  | { e: 'zap'; pts: number[]; by?: number } // la décharge du Grand Drake rebondit : x, y de chaque cible touchée, dans l'ordre (by : dompteur de son Alpha légendaire)
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire
   | { e: 'shot'; by: number; x: number; y: number; tx: number; ty: number; cls: ClassId } // flèche ou orbe
   | { e: 'class'; id: number; cls: ClassId }
@@ -273,6 +288,7 @@ export interface Snapshot {
   unlocked: number[]; // grottes débloquées par le village
   hazards: HazardTuple[]; // attaques spéciales visibles
   shots: ShotTuple[]; // projectiles des tireurs (esquivables)
+  sands: SandTuple[]; // sables mouvants ouverts, près de lui
   ev: GameEvent[];
 }
 

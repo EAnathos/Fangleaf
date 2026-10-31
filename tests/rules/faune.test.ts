@@ -380,7 +380,7 @@ describe('Faune : tireurs, gibier, baies, bestiaire', () => {
   rule('Saisons : le Bigfoot ne sort qu\'en hiver, dans les Bois profonds, et s\'en va quand l\'hiver finit (loin des dompteurs).', () => {
     const r = room();
     const big = SPECIES.findIndex((sp) => sp.key === 'bigfoot');
-    check(big === SPECIES.length - 1 && SPECIES[big].zone === 2 && SPECIES[big].season === WINTER && !SPECIES[big].passive, 'Bigfoot : zone 2, hiver, hostile, ajouté en fin de liste (sauvegardes intactes)');
+    check(big === SPECIES.findIndex((sp) => sp.minion && !sp.anchored && sp.key !== 'kraken_tentacle') - 1 && SPECIES[big].zone === 2 && SPECIES[big].season === WINTER && !SPECIES[big].passive, 'Bigfoot : zone 2, hiver, hostile, ajouté en fin de liste, avant les renforts des géants (sauvegardes intactes)');
     const realNow = Date.now, t0 = realNow();
     let winter = -1, spring = -1;
     for (let t = t0; t < t0 + 4 * SEASON_MS && (winter < 0 || spring < 0); t += 60_000) {

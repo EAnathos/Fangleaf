@@ -1,15 +1,15 @@
-// Îlots du large : géants et leurs tomes, coffres de naufragé, créatures. Lancer : npm run test:rules
+// Îlots du large : géants et leurs tomes, créatures. Lancer : npm run test:rules
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
 import { maxHpOf } from '../../server/room.ts';
-import { bookIndex, DISCIPLINES, ISLE_CHEST_S, LESSON_KINDS, riderSpeed, rideSpeed, SPECIES, zoneBosses } from '../../shared/config.ts';
+import { bookIndex, DISCIPLINES, LESSON_KINDS, SPECIES, WILD_REGEN_DELAY, zoneBosses } from '../../shared/config.ts';
 
 describe('Îlots du large', () => {
-  rule('Cinq îlots dans la mer peu profonde : trois gardés par un géant (à l\'air libre), deux avec un coffre de naufragé.', () => {
+  rule('Trois îlots dans la mer peu profonde, chacun gardé par un géant (à l\'air libre).', () => {
     const r = room(), m = r.map;
-    const bosses = m.islets.filter((t: { boss: number }) => t.boss >= 0), chests = m.islets.filter((t: { chest: unknown }) => t.chest);
-    check(m.islets.length === 5 && bosses.length === 3 && chests.length === 2, `${m.islets.length} îlots : ${bosses.length} géants, ${chests.length} coffres`);
+    const bosses = m.islets.filter((t: { boss: number }) => t.boss >= 0);
+    check(m.islets.length === 3 && bosses.length === 3, `${m.islets.length} îlots, ${bosses.length} géants`);
     check(bosses.every((t: { cave: number; boss: number }) => m.caves[t.cave]?.boss === t.boss && SPECIES[t.boss].isle && SPECIES[t.boss].optional),
       'chaque géant se tient sur son îlot, et il est facultatif');
     check([1, 2, 3, 4, 5, 6, 7].every((z) => zoneBosses(z).every((b) => !SPECIES[b].isle)), 'ni porte, ni parchemin ne dépendent des géants des îlots');
@@ -36,7 +36,7 @@ describe('Îlots du large', () => {
     }
   });
 
-  rule('Géant d\'îlot à l\'air libre : on lui parle sur son îlot, il se rendort quand plus personne n\'y est.', () => {
+  rule('Géant d\'îlot à l\'air libre : on lui parle sur son îlot ; le combat tient au-dessus de l\'eau toute proche, sans qu\'il guérisse ; il se rendort quand plus personne n\'est là.', () => {
     const r = room();
     const t = r.map.islets.find((q: { boss: number }) => q.boss >= 0), c = r.map.caves[t.cave];
     const boss = r.units.get(r.caveBoss[c.id]);
@@ -46,16 +46,22 @@ describe('Îlots du large', () => {
     [p.x, p.y] = [boss.x + boss.r + 40, boss.y];
     r.onChallenge(p, c.id);
     check(!boss.dormant, 'on lui parle sur l\'îlot : le combat commence');
-    [p.x, p.y] = [t.x + t.r + 700, t.y]; // reparti en mer
+    boss.hp = boss.maxHp / 2;
+    [p.x, p.y] = [t.x + t.r * 1.6 + 300, t.y]; // au-dessus de l'eau, tout près (à dos de vautour ou de serpent)
+    r.time += WILD_REGEN_DELAY + 1;
+    for (let i = 0; i < 40; i++) r.step();
+    check(!boss.dormant && boss.hp === boss.maxHp / 2, 'au-dessus de l\'eau, tout près : le combat continue, et il ne reprend pas de forces');
+    [p.x, p.y] = [t.x + t.r * 1.6 + 1500, t.y]; // reparti au large
     for (let i = 0; i < 10; i++) r.step();
     check(boss.dormant && boss.hp === boss.maxHp, 'plus personne sur l\'îlot : il se rendort, guéri');
   });
 
-  rule('Chaque géant d\'îlot garde un tome (Endurance, Navigation, Trésors) : il passe en premier dans son coffre.', () => {
-    const isle = LESSON_KINDS.filter((k) => DISCIPLINES[k].isle);
-    check(isle.join(',') === 'vigor,swim,treasure' && isle.every((k) => SPECIES.some((sp) => sp.boss && sp.isle && sp.tome === k)), 'trois tomes, un par géant des îlots');
+  rule('Chaque géant d\'îlot garde un tome d\'Endurance (I, II, III, du plus faible au plus fort) : il passe en premier dans son coffre.', () => {
+    const isle = LESSON_KINDS.filter((k) => DISCIPLINES[k].isle), kept = SPECIES.filter((sp) => sp.tome).sort((a, b) => a.zone - b.zone);
+    check(isle.join(',') === 'vigor' && DISCIPLINES.vigor.tomes.length === 3, 'une discipline des îlots, l\'Endurance, en trois tomes');
+    check(kept.length === 3 && kept.every((sp, i) => sp.boss && sp.isle && sp.tome![0] === 'vigor' && sp.tome![1] === i), `${kept.map((sp) => sp.name).join(', ')} : les tomes I, II et III`);
     const r = room();
-    const t = r.map.islets.find((q: { boss: number }) => q.boss >= 0 && SPECIES[q.boss].tome === 'swim');
+    const t = r.map.islets.find((q: { boss: number }) => q.boss >= 0 && SPECIES[q.boss].tome?.[1] === 1);
     const c = r.map.caves[t.cave], boss = r.units.get(r.caveBoss[c.id]);
     const p = r.addPlayer('a', noop);
     [p.x, p.y] = [boss.x + boss.r + 20, boss.y];
@@ -66,8 +72,8 @@ describe('Îlots du large', () => {
     Math.random = () => 0; // le livre tombe à coup sûr
     r.onChest(p, ch.id);
     Math.random = random;
-    const k = LESSON_KINDS.indexOf('swim');
-    check(p.tomes[bookIndex(k, 0)] === 1, `${SPECIES[t.boss].name} : ${DISCIPLINES.swim.tomes[0]} dans son coffre`);
+    const k = LESSON_KINDS.indexOf('vigor');
+    check(p.tomes[bookIndex(k, 1)] === 1, `${SPECIES[t.boss].name} : ${DISCIPLINES.vigor.tomes[1]} dans son coffre`);
     // et ce tome-là ne tombe jamais d'un autre géant
     const c0 = r.map.caves[0], b0 = r.units.get(r.caveBoss[c0.id]), q = r.addPlayer('b', noop);
     [q.x, q.y] = [b0.x + b0.r + 20, b0.y];
@@ -77,28 +83,7 @@ describe('Îlots du large', () => {
     Math.random = () => 0;
     r.onChest(q, ch0.id);
     Math.random = random;
-    check(LESSON_KINDS.every((kind, i) => !DISCIPLINES[kind].isle || !q.tomes[bookIndex(i, 0)]), 'un géant de l\'île ne lâche pas les tomes des îlots');
-  });
-
-  rule('Coffre de naufragé : de l\'or, puis il se remplit au bout d\'un moment (chacun le sien).', () => {
-    const r = room();
-    const i = r.map.islets.findIndex((t: { chest: unknown }) => t.chest), t = r.map.islets[i];
-    const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
-    [p.x, p.y] = [t.chest.x + 30, t.chest.y];
-    [q.x, q.y] = [t.chest.x - 30, t.chest.y];
-    const g0 = p.gold;
-    r.onChest(p, -i - 1);
-    const won = p.gold - g0;
-    check(won > 0, `coffre ouvert : +${won} or`);
-    r.onChest(p, -i - 1);
-    check(p.gold === g0 + won, 'vide : on ne le rouvre pas tout de suite');
-    r.onChest(q, -i - 1);
-    check(q.gold > 0, 'l\'autre dompteur a le sien');
-    const now = Date.now;
-    Date.now = () => now() + ISLE_CHEST_S * 1000 + 1;
-    r.onChest(p, -i - 1);
-    Date.now = now;
-    check(p.gold > g0 + won, `${ISLE_CHEST_S / 60} minutes plus tard, il s'est rempli`);
+    check(LESSON_KINDS.every((kind, i) => !DISCIPLINES[kind].isle || [0, 1, 2].every((n) => !q.tomes[bookIndex(i, n)])), 'un géant de l\'île ne lâche pas les tomes des îlots');
   });
 
   rule('Les créatures des îlots vivent sur l\'îlot de leur géant.', () => {
@@ -110,19 +95,13 @@ describe('Îlots du large', () => {
     }
   });
 
-  rule('Effets des tomes des îlots : PV max (Endurance), nage plus rapide (Navigation), or en plus (Trésors).', () => {
+  rule('Effet de l\'Endurance : +10 % de PV max par tome lu.', () => {
     const r = room();
     const p = r.addPlayer('a', noop);
-    const hp0 = maxHpOf(p);
-    p.learned[LESSON_KINDS.indexOf('vigor')] = 1;
-    check(maxHpOf(p) === Math.round(hp0 * 1.1), `Endurance : +10 % de PV max (${hp0} → ${maxHpOf(p)})`);
-    const serpent = SPECIES.findIndex((sp) => sp.key === 'serpent'), wolf = SPECIES.findIndex((sp) => sp.key === 'wolf');
-    const learned = LESSON_KINDS.map((k) => (k === 'swim' ? 1 : 0));
-    check(riderSpeed(serpent, 1, learned) === rideSpeed(serpent, 1) * 1.25 && riderSpeed(wolf, 1, learned) === rideSpeed(wolf, 1), 'Navigation : +25 % à dos de serpent, rien à dos de loup');
-    const s = SPECIES.findIndex((sp) => sp.key === 'slime'), u = r.createUnit(s, false, p.x + 40, p.y);
-    p.learned[LESSON_KINDS.indexOf('treasure')] = 1;
-    const g0 = p.gold;
-    r.killUnit(u, p);
-    check(p.gold - g0 === Math.round(SPECIES[s].gold * 1.15), `Trésors : +15 % d'or (${p.gold - g0} au lieu de ${SPECIES[s].gold})`);
+    const hp0 = maxHpOf(p), k = LESSON_KINDS.indexOf('vigor');
+    p.learned[k] = 1;
+    check(maxHpOf(p) === Math.round(hp0 * 1.1), `Endurance I : +10 % de PV max (${hp0} → ${maxHpOf(p)})`);
+    p.learned[k] = 3;
+    check(maxHpOf(p) === Math.round(hp0 * 1.3), `les trois tomes : +30 % (${maxHpOf(p)})`);
   });
 });

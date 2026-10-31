@@ -41,7 +41,7 @@ describe('Combat des dompteurs', () => {
   rule('Monstres sauvages : récupération progressive quand on cesse de les frapper.', () => {
     const r = room();
     const p = r.addPlayer('a', noop);
-    const w = [...r.units.values()].find((u: { owner: number }) => !u.owner);
+    const w = [...r.units.values()].find((u: { owner: number; s: number }) => !u.owner && !SPECIES[u.s].boss); // (un géant, lui, ne récupère pas en plein combat)
     r.damage(w, w.maxHp / 2, p);
     const hit = w.hp;
     for (let i = 0; i < 20 * 3; i++) r.regen(), (r.time += 1 / 20); // 3 s : encore « en combat »

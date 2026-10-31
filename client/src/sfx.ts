@@ -22,7 +22,7 @@ export interface Synth {
 export type Sfx =
   | 'hurt' | 'swing' | 'arrow' | 'orb' | 'pick' | 'chop' | 'chest'
   | 'roar' | 'boom' | 'death' | 'fanfare' | 'blip' | 'pop' | 'thunk' | 'chime' | 'shout' | 'shell'
-  | 'hammer' | 'shiphorn' | 'waves' | 'kraken' | 'splash';
+  | 'hammer' | 'shiphorn' | 'waves' | 'kraken' | 'splash' | 'zap' | 'howl' | 'drum' | 'screech' | 'chomp';
 
 export interface SfxDef {
   label: string;
@@ -139,6 +139,26 @@ export const SFX: Record<Sfx, SfxDef> = {
       s.hiss('lowpass', 900, 2.8, 0.35, 60);
       s.tone(180, 40, 2.2, 0.12, 'sawtooth', 0.4);
     },
+  },
+  howl: {
+    label: 'Hurlement', when: 'Croc-d\'Ombre hurle à la mort (ou le Chacal lunaire appelle l\'éclipse).',
+    play: (s) => { s.tone(330, 520, 0.5, 0.22, 'sawtooth'); s.tone(520, 300, 1.1, 0.2, 'triangle', 0.45); s.tone(262, 410, 1.4, 0.12, 'sine', 0.1); s.hiss('bandpass', 900, 1.4, 0.08, 600, 0.1, 3); },
+  },
+  drum: {
+    label: 'Tambour de guerre', when: 'Le Roi Gorille se frappe le torse : un anneau d\'onde part.',
+    play: (s) => { s.thump(70, 38, 0.35, 0.8); s.thump(95, 50, 0.2, 0.4, 0.09); s.hiss('lowpass', 500, 0.3, 0.25, 120); },
+  },
+  screech: {
+    label: 'Cri strident', when: 'Le Seigneur des cendres lance son écholocation.',
+    play: (s) => { s.tone(2400, 3600, 0.25, 0.12, 'square'); s.tone(3200, 2100, 0.35, 0.1, 'sawtooth', 0.12); s.hiss('highpass', 6000, 0.4, 0.15, 3000, 0, 6); },
+  },
+  chomp: {
+    label: 'Mâchoires', when: 'Une gueule des dunes se referme, un crocodile happe sa proie.',
+    play: (s) => { s.thump(140, 60, 0.18, 0.6); s.hiss('lowpass', 2600, 0.2, 0.35, 400); s.tone(180, 90, 0.12, 0.2, 'square', 0.04); },
+  },
+  zap: {
+    label: 'Décharge', when: 'L\'éclair du Grand Drake rebondit d\'un monstre à l\'autre.',
+    play: (s) => { s.hiss('highpass', 5000, 0.22, 0.35, 2500, 0, 4); s.tone(1800, 300, 0.12, 0.18, 'square'); s.tone(1400, 250, 0.1, 0.12, 'sawtooth', 0.06); },
   },
   splash: {
     label: 'Gerbe d\'eau', when: 'Un tentacule du Kraken s\'abat sur le pont.',

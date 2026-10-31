@@ -116,6 +116,8 @@
         <span id="self-name" class="pname"></span>
         <div class="bar hp-bar"><div id="self-hp" class="fill"></div><span id="self-hptext" class="bar-text"></span></div>
         <div class="row stats small"><span class="muted">Sac</span><span class="res gold" title="Or"><svg aria-label="Or" role="img" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2" fill="#F0B64A" stroke="#7A5418" stroke-width="1.2"/><circle cx="8" cy="8" r="3.8" fill="none" stroke="#C98E2A" stroke-width="1"/><path d="M5.6 5.4 A3.6 3.6 0 0 1 9 4.4" fill="none" stroke="#FFE7A8" stroke-width="1.1" stroke-linecap="round"/></svg><span id="self-gold"></span></span><span class="res wood" title="Bois"><svg aria-label="Bois" role="img" width="18" height="14" viewBox="0 0 18 14"><rect x="2" y="3" width="12" height="8" rx="2" fill="#8A5A32" stroke="#3E2614" stroke-width="1.2"/><path d="M5 5.5 h6 M5 8.5 h5" stroke="#5E3A1E" stroke-width="1"/><ellipse cx="14" cy="7" rx="3" ry="4" fill="#D9A86C" stroke="#3E2614" stroke-width="1.2"/><circle cx="14" cy="7" r="1.3" fill="none" stroke="#9C6A3A" stroke-width=".8"/></svg><span id="self-wood"></span></span><span class="res rock" title="Pierre"><svg aria-label="Pierre" role="img" width="16" height="14" viewBox="0 0 16 14"><path d="M2 11 L3.5 5 L7 2.5 L11.5 3.5 L14.5 8 L13 11.5 Z" fill="#9AA39D" stroke="#3F4642" stroke-width="1.2" stroke-linejoin="round"/><path d="M4.5 6 L7.5 4 L10.5 4.8" fill="none" stroke="#D3D9D5" stroke-width="1" stroke-linecap="round"/></svg><span id="self-stone"></span></span><span class="res berry" title="Baies"><svg aria-label="Baies" role="img" width="16" height="16" viewBox="0 0 16 16"><path d="M8 2.5 C8 4 7.5 5 7 6 M8 2.5 C9 4 10 5 10.5 6" fill="none" stroke="#4E7A34" stroke-width="1.1" stroke-linecap="round"/><path d="M8 2.5 C10 1 12 1.2 13 2.4 C11.5 3.5 9.5 3.6 8 2.5 Z" fill="#7FCB5B"/><circle cx="5.5" cy="9" r="3" fill="#C8323C"/><circle cx="10.5" cy="9" r="3" fill="#D93F49"/><circle cx="8" cy="12.5" r="3" fill="#B82A34"/><circle cx="4.7" cy="8.2" r=".8" fill="#FFD3D6"/><circle cx="9.7" cy="8.2" r=".8" fill="#FFD3D6"/></svg><span id="self-fruits"></span></span></div>
+        <div id="gains" class="gains" aria-live="polite"></div>
+        <div id="school-hint" class="school-hint" hidden></div>
         <div id="mount-row" class="mount-row" hidden>
           <div class="row between small"><span id="mount-name"></span></div>
           <div class="bar thin"><div id="mount-hp" class="fill mount"></div></div>
@@ -426,6 +428,25 @@
           <ul id="school-where" class="small"></ul>
         </div>
         <div id="school-list" class="col school-list"></div>
+      </div>
+    </div>
+
+    <div id="victory" class="overlay dim" hidden>
+      <div class="panel modal victory" role="dialog" aria-modal="true" aria-labelledby="victory-title">
+        <div class="row between">
+          <h2 id="victory-title">Victoire !</h2>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div class="victory-head">
+          <canvas id="victory-portrait" class="victory-portrait" role="img"></canvas>
+          <div class="col">
+            <b id="victory-boss"></b>
+            <span id="victory-sub" class="muted"></span>
+            <span id="victory-first" class="victory-first" hidden>Première victoire du village</span>
+          </div>
+        </div>
+        <div id="victory-rows" class="victory-rows"></div>
+        <button id="victory-ok" class="cta">Continuer</button>
       </div>
     </div>
 
