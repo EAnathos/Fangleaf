@@ -705,6 +705,7 @@ export interface Species {
   shell?: boolean; // sauvage, il rentre dans sa coquille (intouchable) quand un dompteur sans fruit en main approche
   rainSpeed?: number; // sauvage, sa vitesse sous une grosse averse (multiplicateur ; l'escargot aime la pluie)
   burrows?: boolean; // sauvage, il file sous le sable (intouchable) et surgit sous sa cible (cercle annoncé), puis reste exposé
+  wings?: boolean; // wyverne, dragonnet : il vole par-dessus l'eau, les rochers et les arbres, pour poursuivre qui s'enfuit à la nage comme pour suivre son dompteur
   flies?: boolean; // sauvage, il tourne au-dessus de sa cible (hors d'atteinte), pique là où tombe son ombre (cercle annoncé), puis reste un moment au sol
   shy?: boolean; // gibier craintif : un dompteur sans fruit en main ou un vautour approche, et la colonie court se cacher dans sa tanière (elle y passe aussi la nuit)
   skittish?: boolean; // sauvage, il détale devant un dompteur qui approche sans fruit en main (lièvre)
@@ -808,8 +809,8 @@ export const SPECIES: Species[] = [
   { key: 'scorpion_king', name: 'Scorpion Empereur', color: '#7A2E22', r: 63, hp: 80000, dmg: 290, speed: 200, atkCd: 1.1, gold: 2500, zone: 7, population: 0, pack: [1, 1], boss: true, optional: true, venom: true, sprite: 'scorpion', base: 'scorpion' },
   // Îlots du large (on y va à dos de serpent) : chacun a sa créature, et son géant au fond d'une grotte, qui garde un tome.
   { key: 'drake', name: 'Drake des marées', color: '#2E7A80', r: 22, hp: 450, dmg: 22, speed: 100, atkCd: 1.3, gold: 20, zone: 3, population: 3, pack: [1, 2], isle: true, ranged: { kind: 'jet', range: 280, windup: 0.55, speed: 480 }, brawler: true, awaken: 15 },
-  { key: 'wyvern', name: 'Wyverne des falaises', color: '#5A6A3A', r: 24, hp: 1600, dmg: 65, speed: 125, atkCd: 1.3, gold: 58, zone: 5, population: 3, pack: [1, 2], isle: true, venom: true, awaken: 20 },
-  { key: 'dragon', name: 'Dragonnet de braise', color: '#A8402E', r: 26, hp: 1900, dmg: 90, speed: 105, atkCd: 1.4, gold: 66, zone: 6, population: 3, pack: [1, 2], isle: true, ranged: { kind: 'fire', range: 340, windup: 0.6, speed: 400 }, brawler: true, awaken: 25 },
+  { key: 'wyvern', name: 'Wyverne des falaises', color: '#5A6A3A', r: 24, hp: 1600, dmg: 65, speed: 125, atkCd: 1.3, gold: 58, zone: 5, population: 3, pack: [1, 2], isle: true, venom: true, awaken: 20, wings: true },
+  { key: 'dragon', name: 'Dragonnet de braise', color: '#A8402E', r: 26, hp: 1900, dmg: 90, speed: 105, atkCd: 1.4, gold: 66, zone: 6, population: 3, pack: [1, 2], isle: true, ranged: { kind: 'fire', range: 340, windup: 0.6, speed: 400 }, brawler: true, awaken: 25, wings: true },
   { key: 'drake_king', name: 'Grand Drake', color: '#1E5A66', r: 63, hp: 8500, dmg: 50, speed: 180, atkCd: 1.3, gold: 450, zone: 3, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, tome: ['vigor', 0], sprite: 'drake', base: 'drake' },
   { key: 'wyvern_king', name: 'Wyverne-Reine', color: '#3E4A2A', r: 66, hp: 42000, dmg: 125, speed: 200, atkCd: 1.2, gold: 1800, zone: 5, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, venom: true, tome: ['vigor', 1], sprite: 'wyvern', base: 'wyvern' },
   { key: 'dragon_king', name: 'Dragon ancien', color: '#7A2418', r: 70, hp: 80000, dmg: 230, speed: 190, atkCd: 1.2, gold: 2600, zone: 6, population: 0, pack: [1, 1], boss: true, optional: true, isle: true, tome: ['vigor', 2], sprite: 'dragon', base: 'dragon' },
@@ -886,8 +887,25 @@ export const SEA_RY = 620;
 export const KRAKEN_DELAY_S = 12; // à bord depuis ce temps-là, le Kraken surgit (avant, si la cinématique de son arrivée est finie)
 export const VOLCANO_R = 460; // le volcan, sur l'île : demi-largeur de sa base (une ellipse aplatie, VOLCANO_RY) ; il tient à l'écran
 export const VOLCANO_RY = 0.55;
-export const HALL_RX = 950; // la salle sous le volcan (ellipse irrégulière, comme une grotte) : depuis sa sortie, on voit l'autel
-export const HALL_RY = 540;
+// Le donjon sous le volcan : une grille de salles reliées par des couloirs (un labyrinthe tiré de la graine), le cœur au
+// centre, l'entrée en bas, les trois antres au bout de culs-de-sac (un à gauche, un à droite, un en haut).
+export const HALL_RX = 2800; // demi-largeur de la boîte du donjon
+export const HALL_RY = 1750;
+export const DUNGEON_COLS = 7;
+export const DUNGEON_ROWS = 5;
+export const DUNGEON_DX = 760; // d'une salle à la suivante
+export const DUNGEON_DY = 640;
+export const CORRIDOR_R = 72; // demi-largeur d'un couloir
+// Pièges du donjon : évents de flammes en travers des couloirs (un rythme à lire), dalles piégées dans les salles (un geyser de lave).
+export const VENT_R = 84;
+export const VENT_WARN_S = 1; // l'évent rougeoie, puis crache
+export const VENT_FIRE_S = 1.3;
+export const VENT_HURT = 0.07; // part des PV max, tous les quarts de seconde dans les flammes
+export const PLATE_R = 34; // la dalle
+export const GEYSER_R = 105; // le geyser qu'elle déclenche
+export const GEYSER_WARN_S = 0.9;
+export const GEYSER_HURT = 0.3; // part des PV max
+export const PLATE_REARM_S = 6;
 export const HEART_REACH = 90; // pour prendre le cœur volcanique, sur son autel
 // Le cœur volcanique est la dernière étape du bateau : pris sur son autel, puis installé dans la coque rebâtie.
 export const HEART_TAKEN = 1;
@@ -917,5 +935,6 @@ export const WILD_AGGRO_R = 220;
 export const WILD_REGEN_DELAY = 4; // s sans être frappé avant que le monstre sauvage récupère
 export const WILD_REGEN = 0.08; // part des PV max récupérée par seconde ensuite
 export const WILD_LEASH_R = 650;
+export const WINGS_LEASH = 1.6; // un dragon poursuit plus loin (en volant) qu'un monstre à pied
 export const FOLLOW_ENGAGE_R = 320; // la meute engage les ennemis à cette distance du dompteur
 export const FOLLOW_MAX_R = 400; // une cible plus loin du dompteur est abandonnée

@@ -19,7 +19,7 @@
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = mer profonde).
 
-import { CAMP_R, CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, SCHOOL_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, LAKES_ZONE, JUNGLE_ZONE, DESERT_ZONE, type BuildingId, type Resource } from './config.ts';
+import { CAMP_R, CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, DUNGEON_COLS, DUNGEON_ROWS, DUNGEON_DX, DUNGEON_DY, CORRIDOR_R, PLATE_R, VENT_R, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, SCHOOL_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, LAKES_ZONE, JUNGLE_ZONE, DESERT_ZONE, type BuildingId, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -117,6 +117,11 @@ const ISLETS: { zone: number; boss?: string }[] = [{ zone: 2 }, { zone: 3, boss:
 /** Demi-axes de l'intérieur d'une grotte (ou de la salle du volcan). */
 export const caveRadii = (c: Cave) => ({ rx: c.rx ?? CAVE_RX, ry: c.ry ?? CAVE_RY });
 export const HALL_ID = -1;
+/** Salle du donjon sous le volcan : l'entrée (on y arrive), le cœur (au centre), un antre (au bout d'un cul-de-sac), ou une salle. */
+export interface Room { x: number; y: number; rx: number; ry: number; kind: 'entry' | 'heart' | 'lair' | 'room' }
+/** Piège du donjon : évent de flammes en travers d'un couloir (il crache à son rythme), ou dalle piégée dans une salle. */
+export interface Trap { kind: 'vent' | 'plate'; x: number; y: number; period: number; phase: number }
+const DCELL = 16; // grille du sol du donjon
 
 export interface Ore {
   id: number;
@@ -171,6 +176,12 @@ export function coastGreen(map: WorldMap, x: number, y: number) {
  * Bord de l'intérieur d'une grotte dans la direction a, en part de l'ellipse CAVE_RX × CAVE_RY (de 0,82 à 1,08) :
  * une paroi rocheuse irrégulière plutôt qu'un ovale parfait. Même forme pour le jeu (caveAt) et le dessin.
  */
+/** Distance d'un point au segment [a, b]. */
+export function segDist(x: number, y: number, a: Pt, b: Pt) {
+  const dx = b.x - a.x, dy = b.y - a.y, t = clamp(((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy || 1), 0, 1);
+  return Math.hypot(x - a.x - t * dx, y - a.y - t * dy);
+}
+
 export function caveEdge(c: Cave, a: number) {
   const k = c.id * 1.7;
   const n = Math.sin(a * 3 + k) * 0.06 + Math.sin(a * 5 + k * 2.3) * 0.045 + Math.sin(a * 9 + k * 0.7) * 0.025 + Math.sin(a * 14 + k * 1.3) * 0.015;
@@ -247,7 +258,12 @@ export class WorldMap {
   volcanoMouth: Pt = { x: 0, y: 0 }; // son entrée, au pied du volcan (devant, en bas à l'écran)
   /** La salle sous le volcan : une grotte (hors du monde) de la zone VOLCANO_ZONE, plus grande, sans géant à elle. */
   depths: Cave = { id: HALL_ID, zone: VOLCANO_ZONE, boss: -1, entrance: { x: 0, y: 0 }, inside: { x: 0, y: 0 }, exit: { x: 0, y: 0 }, rx: HALL_RX, ry: HALL_RY };
-  readonly lavaPools: { x: number; y: number; r: number }[] = []; // mares de lave de la salle (infranchissables)
+  readonly lavaPools: { x: number; y: number; r: number }[] = []; // mares de lave du donjon (infranchissables)
+  readonly rooms: Room[] = []; // salles du donjon sous le volcan
+  readonly links: [number, number][] = []; // couloirs (droits, d'un centre de salle à l'autre)
+  readonly traps: Trap[] = [];
+  private floor = new Uint8Array(0); // sol du donjon (1), roche (0), par cases de DCELL depuis le coin de sa boîte
+  private floorW = 0;
   school: Pt = { x: 0, y: 0 }; // École des dompteurs, au village
   planChest: Pt = { x: 0, y: 0 }; // coffre du plan de l'école, dans le premier camp (sur le côté de la piste)
   readonly caves: Cave[] = [];
@@ -1421,7 +1437,8 @@ export class WorldMap {
       const { rx, ry } = caveRadii(c), nx = (x - c.inside.x) / rx, ny = (y - c.inside.y) / ry;
       return nx * nx + ny * ny < caveEdge(c, Math.atan2(ny, nx)) ** 2;
     };
-    return inside(this.depths) ? this.depths : this.caves.find(inside);
+    const d = this.depths.inside;
+    return Math.abs(x - d.x) < HALL_RX && Math.abs(y - d.y) < HALL_RY ? this.depths : this.caves.find(inside);
   }
 
   /**
@@ -1459,7 +1476,6 @@ export class WorldMap {
     return Math.abs(dx) ** 2.6 + (dy / taper) ** 2 < 1;
   }
 
-  /** Dans la salle du volcan : mares de lave, autel du cœur et buttes des antres (les seuls obstacles). */
   /** Au-dessus d'une mare de lave de la salle sous le volcan (on la survole à dos de vautour). */
   overLava(x: number, y: number) {
     return this.caveAt(x, y) === this.depths && this.lavaPools.some((p) => dist2(x, y, p.x, p.y) < p.r * p.r);
@@ -1467,6 +1483,7 @@ export class WorldMap {
 
   private hallSolid(x: number, y: number) {
     const h = this.depths.inside;
+    if (!this.onFloor(x, y)) return true; // la roche, hors des salles et des couloirs
     if (dist2(x, y, h.x, h.y) < 34 ** 2) return true; // l'autel
     if (this.lavaPools.some((p) => dist2(x, y, p.x, p.y) < p.r * p.r)) return true;
     return this.caves.some((c) => {
@@ -1547,32 +1564,226 @@ export class WorldMap {
   }
 
   /**
-   * Antres des géants du volcan, dans la salle : en arc dans sa moitié haute, l'intérieur de chacun hors du monde comme
-   * une grotte ordinaire. Puis les mares de lave, à l'écart du centre, de la sortie, des antres et des passages qui y mènent.
+   * Le donjon sous le volcan : une grille de salles, un labyrinthe tiré de la graine (parcours en profondeur depuis le
+   * cœur, au centre, plus quelques boucles), l'entrée en bas au milieu. Les trois antres sont au bout de culs-de-sac,
+   * un dans la colonne de gauche, un dans celle de droite, un dans la rangée du haut : il faut fouiller pour les trouver.
+   * Dans les salles, des mares de lave et des dalles piégées ; en travers des couloirs, des évents de flammes.
    */
   private placeLairs(bosses: number[]) {
-    const h = this.depths.inside;
-    bosses.forEach((boss, k) => {
-      const a = -Math.PI / 2 + (k - (bosses.length - 1) / 2) * 0.95;
-      const entrance = { x: h.x + Math.cos(a) * HALL_RX * 0.66, y: h.y + Math.sin(a) * HALL_RY * 0.66 + 60 };
-      const id = this.caves.length, inside = { x: WORLD_HALF + 1400 + id * CAVE_GAP, y: 0 };
-      this.caves.push({ id, zone: VOLCANO_ZONE, boss, entrance, inside, exit: { x: inside.x, y: inside.y + CAVE_RY - 90 } });
-    });
-    const rand = rng(this.seed ^ 0x1a7a);
-    const lanes = [this.depths.exit, ...this.caves.filter((c) => c.zone === VOLCANO_ZONE).map((c) => ({ x: c.entrance.x, y: c.entrance.y + 70 }))];
-    const toLane = (x: number, y: number) =>
-      Math.min(...lanes.map((a) => {
-        const dx = h.x - a.x, dy = h.y - a.y, l2 = dx * dx + dy * dy || 1, t = clamp(((x - a.x) * dx + (y - a.y) * dy) / l2, 0, 1);
-        return Math.hypot(x - a.x - t * dx, y - a.y - t * dy);
-      }));
-    for (let tries = 0; tries < 600 && this.lavaPools.length < 7; tries++) {
-      const a = rand() * TAU, k = Math.sqrt(rand()) * 0.82, r = 50 + rand() * 55;
-      const x = h.x + Math.cos(a) * HALL_RX * k * caveEdge(this.depths, a), y = h.y + Math.sin(a) * HALL_RY * k * caveEdge(this.depths, a);
-      if (dist2(x, y, h.x, h.y) < (r + 220) ** 2 || toLane(x, y) < r + 90) continue;
-      if (lanes.some((l) => dist2(x, y, l.x, l.y) < (r + 190) ** 2)) continue;
-      if (this.lavaPools.some((p) => dist2(x, y, p.x, p.y) < (r + p.r + 120) ** 2)) continue;
-      this.lavaPools.push({ x, y, r });
+    const h = this.depths.inside, rand = rng(this.seed ^ 0x1a7a);
+    const C = DUNGEON_COLS, R = DUNGEON_ROWS, mi = (C - 1) >> 1, mj = (R - 1) >> 1;
+    const key = (i: number, j: number) => j * C + i;
+    const pick = <T>(a: T[]) => a[Math.floor(rand() * a.length)];
+    const heart = key(mi, mj), entry = key(mi, R - 1);
+    const lairs = [key(0, Math.floor(rand() * R)), key(C - 1, Math.floor(rand() * R)), key(pick([...Array(C).keys()].filter((i) => i > 0 && i < C - 1 && i !== mi)), 0)].slice(0, bosses.length);
+    const near = (k: number) => {
+      const i = k % C, j = (k - i) / C;
+      return [[i - 1, j], [i + 1, j], [i, j - 1], [i, j + 1]].filter(([a, b]) => a >= 0 && b >= 0 && a < C && b < R).map(([a, b]) => key(a, b));
+    };
+    // quelques trous dans la grille (pas contre un antre, ni sur le chemin de l'entrée au cœur)
+    const holes = new Set<number>();
+    for (let n = 0; n < 5; n++) {
+      const k = Math.floor(rand() * C * R);
+      if (k === heart || k === entry || k === key(mi, R - 2) || lairs.includes(k) || near(k).some((q) => lairs.includes(q))) continue;
+      holes.add(k);
     }
+    const linked = new Set<string>(), link = (a: number, b: number) => {
+      linked.add(`${Math.min(a, b)},${Math.max(a, b)}`);
+      cellLinks.push([a, b]);
+    };
+    const cellLinks: [number, number][] = [];
+    const seen = new Set([heart]), stack = [heart];
+    while (stack.length) {
+      const k = stack[stack.length - 1], nb = near(k).filter((q) => !holes.has(q) && !lairs.includes(q) && !seen.has(q));
+      if (!nb.length) {
+        stack.pop();
+        continue;
+      }
+      const q = pick(nb);
+      seen.add(q);
+      link(k, q);
+      stack.push(q);
+    }
+    // quelques boucles : on peut revenir par un autre chemin
+    for (let n = 0; n < 12 && cellLinks.length < seen.size - 1 + 4; n++) {
+      const k = pick([...seen]), q = pick(near(k).filter((c) => seen.has(c)));
+      if (q !== undefined && !linked.has(`${Math.min(k, q)},${Math.max(k, q)}`)) link(k, q);
+    }
+    for (const l of lairs) {
+      const q = near(l).filter((c) => seen.has(c));
+      link(l, q.length ? pick(q) : heart);
+    }
+    // les salles
+    const index = new Map<number, number>();
+    for (const k of [...seen, ...lairs]) {
+      const i = k % C, j = (k - i) / C;
+      const kind: Room['kind'] = k === heart ? 'heart' : k === entry ? 'entry' : lairs.includes(k) ? 'lair' : 'room';
+      const [rx, ry] = kind === 'heart' ? [380, 290] : kind === 'lair' ? [330, 250] : kind === 'entry' ? [250, 190] : [200 + rand() * 90, 150 + rand() * 70];
+      const jx = kind === 'heart' ? 0 : (rand() - 0.5) * 140, jy = kind === 'heart' ? 0 : (rand() - 0.5) * 110;
+      index.set(k, this.rooms.length);
+      this.rooms.push({ x: h.x + (i - mi) * DUNGEON_DX + jx, y: h.y + (j - mj) * DUNGEON_DY + jy, rx, ry, kind });
+    }
+    for (const [a, b] of cellLinks) this.links.push([index.get(a)!, index.get(b)!]);
+    const ent = this.rooms[index.get(entry)!];
+    this.depths = { ...this.depths, exit: { x: ent.x, y: ent.y + ent.ry * 0.5 } };
+    // les antres : une butte de roche au milieu de leur salle
+    lairs.forEach((k, n) => {
+      const r = this.rooms[index.get(k)!], entrance = { x: r.x, y: r.y + 20 };
+      const id = this.caves.length, inside = { x: WORLD_HALF + 1400 + id * CAVE_GAP, y: 0 };
+      this.caves.push({ id, zone: VOLCANO_ZONE, boss: bosses[n], entrance, inside, exit: { x: inside.x, y: inside.y + CAVE_RY - 90 } });
+    });
+    this.carveFloor();
+    // mares de lave : dans les salles ordinaires et autour de l'autel, jamais sur l'axe d'un couloir
+    const offAxis = (x: number, y: number, m: number) => this.links.every(([a, b]) => segDist(x, y, this.rooms[a], this.rooms[b]) > CORRIDOR_R + m);
+    this.rooms.forEach((r) => {
+      if (r.kind === 'entry' || r.kind === 'lair') return;
+      const want = r.kind === 'heart' ? 4 : 1 + Math.floor(rand() * 2);
+      for (let tries = 0, got = 0; tries < 60 && got < want; tries++) {
+        const a = rand() * TAU, k = r.kind === 'heart' ? 0.62 : 0.4 + rand() * 0.3, pr = r.kind === 'heart' ? 45 + rand() * 20 : 34 + rand() * 26;
+        const x = r.x + Math.cos(a) * r.rx * k, y = r.y + Math.sin(a) * r.ry * k;
+        if (!offAxis(x, y, pr + 12) || this.lavaPools.some((p) => dist2(x, y, p.x, p.y) < (pr + p.r + 70) ** 2)) continue;
+        if (r.kind === 'heart' && dist2(x, y, r.x, r.y) < (pr + 170) ** 2) continue;
+        if (![0, 1, 2, 3, 4, 5].every((s) => this.onFloor(x + Math.cos(s) * (pr + 24), y + Math.sin(s) * (pr + 24)))) continue;
+        this.lavaPools.push({ x, y, r: pr });
+        got++;
+      }
+    });
+    // évents de flammes : au milieu d'un couloir sur trois environ (pas celui qui part de l'entrée)
+    for (const [a, b] of this.links) {
+      if (this.rooms[a].kind === 'entry' || this.rooms[b].kind === 'entry' || rand() < 0.6) continue;
+      const A = this.rooms[a], B = this.rooms[b];
+      this.traps.push({ kind: 'vent', x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, period: 3.5 + rand() * 2, phase: rand() * 10 });
+    }
+    // dalles piégées : dans les salles ordinaires, à l'écart des mares
+    for (const r of this.rooms) {
+      if (r.kind !== 'room') continue;
+      const want = rand() < 0.55 ? 1 : 0;
+      for (let tries = 0, got = 0; tries < 30 && got < want; tries++) {
+        const a = rand() * TAU, k = Math.sqrt(rand()) * 0.75, x = r.x + Math.cos(a) * r.rx * k, y = r.y + Math.sin(a) * r.ry * k;
+        if (!this.onFloor(x, y) || this.lavaPools.some((p) => dist2(x, y, p.x, p.y) < (p.r + PLATE_R + 40) ** 2)) continue;
+        if (this.traps.some((t) => dist2(x, y, t.x, t.y) < 160 ** 2)) continue;
+        this.traps.push({ kind: 'plate', x, y, period: 0, phase: 0 });
+        got++;
+      }
+    }
+  }
+
+  /** Bord d'une salle du donjon (rayon relatif, un peu irrégulier), dans la direction a. */
+  roomEdge(r: Room, a: number) {
+    const k = r.x * 0.013 + r.y * 0.007;
+    return 0.94 + Math.sin(a * 3 + k) * 0.04 + Math.sin(a * 7 + k * 2.1) * 0.025;
+  }
+
+  /** Dans cette salle du donjon (dans son ellipse). */
+  inRoom(r: Room, x: number, y: number) {
+    const nx = (x - r.x) / r.rx, ny = (y - r.y) / r.ry;
+    return nx * nx + ny * ny < this.roomEdge(r, Math.atan2(ny, nx)) ** 2;
+  }
+
+  /** Creuse le sol du donjon : les salles (un peu irrégulières) et les couloirs (droits), sur la grille. */
+  private carveFloor() {
+    const h = this.depths.inside, x0 = h.x - HALL_RX, y0 = h.y - HALL_RY;
+    const W = (this.floorW = Math.ceil((2 * HALL_RX) / DCELL)), H = Math.ceil((2 * HALL_RY) / DCELL);
+    this.floor = new Uint8Array(W * H);
+    const mark = (ax: number, ay: number, bx: number, by: number, test: (x: number, y: number) => boolean) => {
+      for (let j = Math.max(0, Math.floor((ay - y0) / DCELL)); j <= Math.min(H - 1, Math.floor((by - y0) / DCELL)); j++) {
+        for (let i = Math.max(0, Math.floor((ax - x0) / DCELL)); i <= Math.min(W - 1, Math.floor((bx - x0) / DCELL)); i++) {
+          if (test(x0 + (i + 0.5) * DCELL, y0 + (j + 0.5) * DCELL)) this.floor[j * W + i] = 1;
+        }
+      }
+    };
+    for (const r of this.rooms) mark(r.x - r.rx, r.y - r.ry, r.x + r.rx, r.y + r.ry, (x, y) => this.inRoom(r, x, y));
+    for (const [a, b] of this.links) {
+      const A = this.rooms[a], B = this.rooms[b], m = CORRIDOR_R + 12;
+      mark(Math.min(A.x, B.x) - m, Math.min(A.y, B.y) - m, Math.max(A.x, B.x) + m, Math.max(A.y, B.y) + m, (x, y) => segDist(x, y, A, B) < CORRIDOR_R);
+    }
+  }
+
+  /** Sur le sol du donjon (une salle ou un couloir). */
+  onFloor(x: number, y: number) {
+    const h = this.depths.inside, i = Math.floor((x - h.x + HALL_RX) / DCELL), j = Math.floor((y - h.y + HALL_RY) / DCELL);
+    if (i < 0 || j < 0 || i >= this.floorW) return false;
+    return this.floor[j * this.floorW + i] === 1;
+  }
+
+  /** Salle du donjon où se trouve ce point (-1 : dans un couloir, ou hors du donjon). */
+  roomAt(x: number, y: number) {
+    return this.rooms.findIndex((r) => this.inRoom(r, x, y));
+  }
+
+  /**
+   * Chemin dans le donjon : de salle en salle par les couloirs (les portes : là où un couloir entre dans une salle),
+   * puis lissé comme sur l'île. null si l'on n'y est pas.
+   */
+  private dungeonPath(ax: number, ay: number, bx: number, by: number): Pt[] | null {
+    if (!this.rooms.length) return null;
+    // salles d'où l'on part (celle où l'on est, ou les deux bouts du couloir le plus proche)
+    const ends = (x: number, y: number) => {
+      const k = this.roomAt(x, y);
+      if (k >= 0) return [k];
+      let best = this.links[0], bd = Infinity;
+      for (const l of this.links) {
+        const d = segDist(x, y, this.rooms[l[0]], this.rooms[l[1]]);
+        if (d < bd) [best, bd] = [l, d];
+      }
+      return [...best];
+    };
+    const from = ends(ax, ay), to = new Set(ends(bx, by));
+    const prev = new Map<number, number>(from.map((k) => [k, -1]));
+    const queue = [...from];
+    let goal = -1;
+    while (queue.length) {
+      const k = queue.shift()!;
+      if (to.has(k)) {
+        goal = k;
+        break;
+      }
+      for (const [a, b] of this.links) {
+        const q = a === k ? b : b === k ? a : -1;
+        if (q >= 0 && !prev.has(q)) {
+          prev.set(q, k);
+          queue.push(q);
+        }
+      }
+    }
+    if (goal < 0) return null;
+    const chain: number[] = [];
+    for (let k = goal; k >= 0; k = prev.get(k)!) chain.unshift(k);
+    const door = (r: Room, o: Room) => {
+      const a = Math.atan2((o.y - r.y) / r.ry, (o.x - r.x) / r.rx), e = this.roomEdge(r, a) * 0.8;
+      return { x: r.x + Math.cos(a) * r.rx * e, y: r.y + Math.sin(a) * r.ry * e };
+    };
+    const pts: Pt[] = [];
+    for (let n = 0; n + 1 < chain.length; n++) {
+      const A = this.rooms[chain[n]], B = this.rooms[chain[n + 1]];
+      pts.push(door(A, B), door(B, A));
+    }
+    pts.push({ x: bx, y: by });
+    // d'une porte à l'autre, l'autel, une mare ou la butte d'un antre peut barrer la salle : on passe à côté
+    for (let n = 0, cur: Pt = { x: ax, y: ay }; n < pts.length; cur = pts[n++]) {
+      if (this.clearLine(cur.x, cur.y, pts[n].x, pts[n].y)) continue;
+      const k = this.roomAt((cur.x + pts[n].x) / 2, (cur.y + pts[n].y) / 2), r = this.rooms[k >= 0 ? k : chain[0]];
+      let best: Pt | null = null, bd = Infinity;
+      for (const f of [0.45, 0.65, 0.3]) {
+        for (let i = 0; i < 16; i++) {
+          const a = (i / 16) * TAU, q = { x: r.x + Math.cos(a) * r.rx * f, y: r.y + Math.sin(a) * r.ry * f };
+          const d = Math.hypot(q.x - cur.x, q.y - cur.y) + Math.hypot(pts[n].x - q.x, pts[n].y - q.y);
+          if (d < bd && this.clearLine(cur.x, cur.y, q.x, q.y) && this.clearLine(q.x, q.y, pts[n].x, pts[n].y)) [best, bd] = [q, d];
+        }
+        if (best) break;
+      }
+      if (best) pts.splice(n, 0, best);
+    }
+    const out: Pt[] = [];
+    let cur = { x: ax, y: ay }, i = 0;
+    while (i < pts.length) {
+      let j = pts.length - 1;
+      while (j > i && !this.clearLine(cur.x, cur.y, pts[j].x, pts[j].y)) j--;
+      out.push(pts[j]);
+      cur = pts[j];
+      i = j + 1;
+    }
+    return out;
   }
 
   /** Bruit des lacs : coordonnées tournées et déformées pour des rives organiques, pas alignées sur la grille. */
@@ -1683,6 +1894,7 @@ export class WorldMap {
    * puis lissé : on ne garde que les points nécessaires. null si rien de trouvé (ou hors du monde).
    */
   findPath(ax: number, ay: number, bx: number, by: number, maxNodes = 5000): Pt[] | null {
+    if (ax >= WORLD_HALF && this.caveAt(ax, ay) === this.depths) return this.dungeonPath(ax, ay, bx, by);
     const cell = (v: number) => Math.floor((v + WORLD_HALF) / MAP_CELL);
     const si = cell(ax), sj = cell(ay);
     let gi = cell(bx), gj = cell(by);

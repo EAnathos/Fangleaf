@@ -6,7 +6,7 @@ import {
   ARC_FLIGHT_S, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
-  SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, alphaLevelMult, alphaReviveS, alphaUpCost,
+  SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, WINGS_LEASH, VENT_R, VENT_WARN_S, VENT_FIRE_S, VENT_HURT, PLATE_R, GEYSER_R, GEYSER_WARN_S, GEYSER_HURT, PLATE_REARM_S, alphaLevelMult, alphaReviveS, alphaUpCost,
   treeHp, treeWood, TREE_RESPAWN_S, TREE_STILL_S, TREANT_CHANCE, TREANT_ZONE,
   populationOf, PINCER_HALF, PINCER_R, TORNADO_PULL, TORNADO_PULL_R, TORNADO_R, TORNADO_SPEED, POISON_DPS, BURN_DPS, BURN_S, elementOf, affinity, JUNGLE_ZONE, LAKES_ZONE, LEGEND_SKIPS, HUG_S, ROLL_S, RING_SPEED, RING_W, DRUM_R, ECHO_R, DRUM_GAP, ECHO_STUN_S, LOG_SPEED, RAMPAGE_SPEED, MAW_PULL, MAW_R, CURSE_S, CURSE_BONUS, SHELL_SPEED, DECOY_S, SPARK_JUMPS, SPARK_R, SPARK_FALLOFF, POISON_S,
   armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, ALPHA_SHOUT_AGGRO, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, mineDmg, weaponDmg, type SpeciesId,
@@ -1422,6 +1422,7 @@ export class Room {
     this.updateSands();
     this.updateBolts();
     this.quicksandDamage();
+    this.updateTraps();
     this.updateSeen();
 
     // La monture suit exactement son cavalier (elle n'est pas une cible séparée).
@@ -1841,6 +1842,55 @@ export class Room {
     }
   }
 
+  /** Évent de flammes du donjon : 0 au repos, 1 il rougeoit (il va cracher), 2 il crache. Son rythme ne dépend que du temps. */
+  private ventState(i: number) {
+    const v = this.map.traps[i], t = (this.time + v.phase) % v.period;
+    return t < VENT_FIRE_S ? 2 : t > v.period - VENT_WARN_S ? 1 : 0;
+  }
+  private plateAt = new Map<number, number>(); // dalle piégée → réarmée à ce moment
+  private geysers: { i: number; at: number }[] = []; // geysers annoncés (dalle foulée)
+
+  /**
+   * Pièges du donjon, pour les dompteurs à pied (en vol, on passe au-dessus) : les évents brûlent qui se tient dans leurs
+   * flammes, une dalle foulée fait jaillir un geyser de lave peu après (le temps de s'écarter), puis se réarme.
+   */
+  private updateTraps() {
+    const traps = this.map.traps;
+    const here = [...this.players.values()].filter((p) => !p.dead && !this.airborne(p) && this.map.caveAt(p.x, p.y) === this.map.depths);
+    if (!here.length) return void (this.geysers = []);
+    if (this.tick % (TICK_HZ / 4) === 0) {
+      traps.forEach((v, i) => {
+        if (v.kind !== 'vent' || this.ventState(i) !== 2) return;
+        for (const p of here) if (dist2(p.x, p.y, v.x, v.y) < (VENT_R + p.r * 0.5) ** 2) this.damage(p, maxHpOf(p) * VENT_HURT, p);
+      });
+    }
+    traps.forEach((d, i) => {
+      if (d.kind !== 'plate' || this.time < (this.plateAt.get(i) ?? 0)) return;
+      if (!here.some((p) => dist2(p.x, p.y, d.x, d.y) < (PLATE_R + p.r * 0.6) ** 2)) return;
+      this.plateAt.set(i, this.time + PLATE_REARM_S);
+      this.geysers.push({ i, at: this.time + GEYSER_WARN_S });
+    });
+    for (const g of this.geysers) {
+      if (this.time < g.at) continue;
+      const d = traps[g.i];
+      this.events.push({ e: 'boom', x: Math.round(d.x), y: Math.round(d.y), r: GEYSER_R, kind: 'trap' });
+      for (const p of here) if (dist2(p.x, p.y, d.x, d.y) < (GEYSER_R + p.r * 0.5) ** 2) this.damage(p, maxHpOf(p) * GEYSER_HURT, p);
+    }
+    this.geysers = this.geysers.filter((g) => this.time < g.at);
+  }
+
+  /** État des pièges du donjon près d'un dompteur : [index, état]… (évent : 1 il rougeoit, 2 il crache ; dalle : 1 geyser annoncé, 2 enfoncée). */
+  private trapsNear(viewer: Player, vr2: number) {
+    const out: number[] = [];
+    if (this.map.caveAt(viewer.x, viewer.y) !== this.map.depths) return out;
+    this.map.traps.forEach((t, i) => {
+      if (dist2(t.x, t.y, viewer.x, viewer.y) > vr2) return;
+      const st = t.kind === 'vent' ? this.ventState(i) : this.geysers.some((g) => g.i === i) ? 1 : this.time < (this.plateAt.get(i) ?? 0) ? 2 : 0;
+      if (st) out.push(i, st);
+    });
+    return out;
+  }
+
   /** Cactus de la Mer de sable : s'y frotter pique (une part des PV max, à intervalles), sauf à dos de monture volante. */
   private cactusDamage() {
     for (const p of this.players.values()) {
@@ -1885,11 +1935,11 @@ export class Room {
         const den = map.dens[Math.floor(Math.random() * map.dens.length)];
         [cx, cy] = [den.x + (Math.random() - 0.5) * 60, den.y + (Math.random() - 0.5) * 60];
       } else if (sp.zone === VOLCANO_ZONE) {
-        // créature de lave : dans la salle sous le volcan, loin de sa sortie, de l'autel et des antres
-        const h = map.depths, a = Math.random() * Math.PI * 2, k = Math.sqrt(Math.random()) * 0.85;
-        [cx, cy] = [h.inside.x + Math.cos(a) * (h.rx ?? 0) * k, h.inside.y + Math.sin(a) * (h.ry ?? 0) * k];
-        if (dist2(cx, cy, h.exit.x, h.exit.y) < 450 ** 2 || dist2(cx, cy, h.inside.x, h.inside.y) < 330 ** 2) continue;
-        if (map.caves.some((c) => c.zone === VOLCANO_ZONE && dist2(cx, cy, c.entrance.x, c.entrance.y) < 300 ** 2)) continue;
+        // créature de lave : dans une salle ordinaire du donjon (ni l'entrée, ni le cœur, ni un antre)
+        const rooms = map.rooms.filter((r) => r.kind === 'room');
+        if (!rooms.length) return false;
+        const r = rooms[Math.floor(Math.random() * rooms.length)], a = Math.random() * Math.PI * 2, k = Math.sqrt(Math.random()) * 0.6;
+        [cx, cy] = [r.x + Math.cos(a) * r.rx * k, r.y + Math.sin(a) * r.ry * k];
       } else if (sp.isle) {
         // créature d'un îlot du large : sur la terre de l'îlot de son géant
         const t = map.islets.find((q) => q.boss >= 0 && SPECIES[q.boss].base === sp.key);
@@ -3412,6 +3462,7 @@ export class Room {
       if (this.airborne(u)) return this.glide(u, tx, ty, speed, stop); // vautour de la meute : il suit en volant (pas dans la tempête)
     }
     if (this.swims(u)) return this.move(u, tx, ty, speed, stop); // dans l'eau : il longe la rive, sans détour par la terre
+    if (this.winged(u) && !this.map.caveAt(u.x, u.y)) return this.move(u, tx, ty, speed, stop); // dragon : il vole tout droit
     // serpent, crabe ou crapaud de la meute : à la nage tout droit dès que l'eau est en jeu, sinon par les chemins comme les autres
     if ((this.amphibious(u) || this.lurks(u)) && (this.map.isWater(u.x, u.y) || this.map.isWater(tx, ty))) return this.move(u, tx, ty, speed, stop);
     if (this.map.clearLine(u.x, u.y, tx, ty)) {
@@ -3446,9 +3497,15 @@ export class Room {
     return !!u.owner && !!(SPECIES[u.s].swim || SPECIES[u.s].amphibious);
   }
 
+  /** Dragon (pas son géant) : il vole par-dessus l'eau, les rochers et les arbres. */
+  private winged(u: Unit) {
+    return !!SPECIES[u.s].wings && !isBoss(u.s);
+  }
+
   private blockedFor(u: Unit, x: number, y: number) {
     if (this.swims(u)) return !this.map.isWater(x, y);
     if (!u.owner && this.map.onIsle(x, y)) return true; // l'îlot du village et son pont : pas pour les sauvages
+    if (this.winged(u)) return this.map.isForest(x, y) || (this.map.blocked(x, y) && !!this.map.caveAt(x, y)); // ni la mer profonde, ni les murs d'une grotte
     return this.map.blocked(x, y) && !((this.amphibious(u) || this.lurks(u)) && this.map.isWater(x, y));
   }
 
@@ -3670,6 +3727,7 @@ export class Room {
     // à portée (même si son détour autour d'un obstacle ne le dit pas encore arrivé) : il frappe
     if (u.atkCd <= 0 && dist2(u.x, u.y, t.x, t.y) <= (arrived ? range + 4 : range) ** 2) {
       u.atkCd = u.atkCdBase;
+      if (this.outOfReach(t, u)) return; // le scorpion ne pique pas un dompteur qui vole au-dessus de lui
       this.damage(t, u.dmg, u, true);
       if (sp.venom) this.poisonOf(t, u.dmg, u); // le dard du scorpion
       if (elementOf(u.s) === 'feu') this.burnOf(t, u.dmg, u); // les créatures de feu brûlent
@@ -3716,7 +3774,7 @@ export class Room {
       }
       return;
     }
-    if (!isBoss(u.s) && (dist2(u.x, u.y, u.homeX, u.homeY) > WILD_LEASH_R ** 2 || this.campAt(u.x, u.y) >= 0)) { // un géant ne quitte pas sa grotte : pas de laisse
+    if (!isBoss(u.s) && (dist2(u.x, u.y, u.homeX, u.homeY) > (WILD_LEASH_R * (this.winged(u) ? WINGS_LEASH : 1)) ** 2 || this.campAt(u.x, u.y) >= 0)) { // un géant ne quitte pas sa grotte : pas de laisse
       u.returning = true;
       u.target = 0;
       return;
@@ -4032,7 +4090,7 @@ export class Room {
     const o = this.players.get(u.owner);
     if (!o) return;
     // Dompteur sur l'eau (serpent) : un monstre terrestre ne l'y suit pas, il l'attend sur la berge la plus proche de lui.
-    const bank = this.amphibious(u) || SPECIES[u.s].flies ? null : this.bankOf(o); // le vautour le suit au-dessus de l'eau
+    const bank = this.amphibious(u) || SPECIES[u.s].flies || this.winged(u) ? null : this.bankOf(o); // le vautour, le dragon le suivent au-dessus de l'eau
     const hx = bank?.x ?? o.x, hy = bank?.y ?? o.y;
     // Trop loin, ou coincé derrière un arbre ou la palissade depuis un moment : il rejoint son dompteur (ou la berge).
     if (dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead && !bank)) {
@@ -4151,10 +4209,14 @@ export class Room {
     return true;
   }
 
+  /** À dos de vautour, hors d'atteinte des coups de griffe, de crocs et de dard : seuls les tirs et les géants le touchent. */
+  private outOfReach(t: Ent, by: Ent) {
+    return (t.kind === 'p' || this.isMount(t)) && this.airborne(t) && !(by.kind === 'u' && isBoss(by.s));
+  }
+
   /** melee : coup au corps à corps (le client anime l'attaquant qui se fend vers sa cible). */
   private damage(t: Ent, amount: number, by: Ent, melee = false) {
-    // à dos de vautour, hors d'atteinte des coups de griffe et de crocs : seuls les tirs et les géants le touchent
-    if (melee && (t.kind === 'p' || this.isMount(t)) && this.airborne(t) && !(by.kind === 'u' && isBoss(by.s))) return;
+    if (melee && this.outOfReach(t, by)) return;
     // sous le sable, dans sa tanière ou haut dans le ciel : rien ne l'atteint (sauf, dans le ciel, depuis le dos d'un vautour)
     if (t.kind === 'u' && t.hidden && !(SPECIES[t.s].flies && this.airborne(by))) return;
     const m = melee ? { m: 1 as const } : {};
@@ -4701,7 +4763,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ev });
     }
   }
 }

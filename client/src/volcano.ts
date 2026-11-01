@@ -1,9 +1,9 @@
 // Le volcan de la Mer de sable (sur la carte) et ses entrailles (la salle de lave, hors du monde) : le cœur volcanique
 // sur son autel, scellé par une flamme par géant du volcan encore debout.
 
-import { HALL_RX, HALL_RY, VOLCANO_R, VOLCANO_RY } from '../../shared/config.ts';
+import { CORRIDOR_R, GEYSER_R, PLATE_R, VENT_R, VOLCANO_R, VOLCANO_RY } from '../../shared/config.ts';
 import { hash2 } from '../../shared/math.ts';
-import { caveEdge, type WorldMap } from '../../shared/worldmap.ts';
+import { type Room, type WorldMap } from '../../shared/worldmap.ts';
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -155,70 +155,104 @@ export function drawVolcano(ctx: Ctx, map: WorldMap, t: number, open: boolean) {
 }
 
 /**
- * Les entrailles du volcan (dessinées à chaque image : la lave bouge) : paroi irrégulière, sol de basalte fissuré
- * de lave, mares de lave, la sortie et, au centre, l'autel du cœur et ses sceaux (une flamme par géant encore debout).
+ * Les entrailles du volcan, un donjon (dessiné à chaque image : la lave bouge, les pièges s'animent ; seulement ce qui
+ * est à l'écran) : roche sombre, salles de basalte fissuré de lave reliées par des couloirs, mares de lave, évents de
+ * flammes et dalles piégées, la sortie et, au centre, l'autel du cœur et ses sceaux (une flamme par géant encore debout).
  * sealed[i] : le géant de l'antre i n'est pas encore vaincu. taken : le cœur a déjà été emporté.
+ * traps : état des pièges proches ([index, état]…, voir le snapshot). view : le rectangle visible.
  */
-export function drawDepths(ctx: Ctx, map: WorldMap, t: number, sealed: boolean[], taken: boolean) {
+export function drawDepths(ctx: Ctx, map: WorldMap, t: number, sealed: boolean[], taken: boolean, traps: number[], view: { x0: number; y0: number; x1: number; y1: number }) {
   const c = map.depths, { x: cx, y: cy } = c.inside;
-  ctx.save();
-  ctx.translate(cx, cy);
-  const outline = (k: number, jag = 0) => {
+  const seen = (x: number, y: number, m: number) => x > view.x0 - m && x < view.x1 + m && y > view.y0 - m && y < view.y1 + m;
+  ctx.fillStyle = '#0E0907';
+  ctx.fillRect(view.x0, view.y0, view.x1 - view.x0, view.y1 - view.y0);
+  const rooms = map.rooms.map((r, k) => ({ r, k })).filter(({ r }) => seen(r.x, r.y, Math.max(r.rx, r.ry) + 60));
+  const links = map.links.filter(([a, b]) => {
+    const A = map.rooms[a], B = map.rooms[b];
+    return Math.min(A.x, B.x) < view.x1 + 200 && Math.max(A.x, B.x) > view.x0 - 200 && Math.min(A.y, B.y) < view.y1 + 200 && Math.max(A.y, B.y) > view.y0 - 200;
+  });
+  const roomPath = (r: Room, k: number) => {
     ctx.beginPath();
-    for (let i = 0; i <= 160; i++) {
-      const a = (i / 160) * TAU, e = caveEdge(c, a) * k + (jag ? (hash2(i, 7, map.seed + 5) - 0.5) * jag : 0);
-      const px = Math.cos(a) * HALL_RX * e, py = Math.sin(a) * HALL_RY * e;
+    for (let i = 0; i <= 64; i++) {
+      const a = (i / 64) * TAU, e = map.roomEdge(r, a) * k;
+      const px = r.x + Math.cos(a) * r.rx * e + (k > 1 ? Math.cos(a) * 14 : 0), py = r.y + Math.sin(a) * r.ry * e + (k > 1 ? Math.sin(a) * 14 : 0);
       if (i) ctx.lineTo(px, py);
       else ctx.moveTo(px, py);
     }
     ctx.closePath();
   };
-  ctx.fillStyle = '#0E0907';
-  ctx.fillRect(-HALL_RX * 1.6, -HALL_RY * 1.6, HALL_RX * 3.2, HALL_RY * 3.2);
-  ctx.fillStyle = '#2A1A14';
-  outline(1.14, 0.04);
-  ctx.fill();
-  ctx.fillStyle = '#3A2620';
-  outline(1.05, 0.03);
-  ctx.fill();
-  const floor = ctx.createRadialGradient(0, 0, 60, 0, 0, HALL_RX);
-  floor.addColorStop(0, '#5A3424');
-  floor.addColorStop(0.6, '#3A2620');
-  floor.addColorStop(1, '#22160F');
-  ctx.fillStyle = floor;
-  outline(1);
-  ctx.fill();
-  // fissures de lave dans le sol
-  const pulse = 0.6 + 0.4 * Math.sin(t * 1.4);
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 40; i++) {
-    const a = hash2(i, 1, map.seed) * TAU, k = 0.15 + hash2(i, 2, map.seed) * 0.75;
-    let px = Math.cos(a) * HALL_RX * k, py = Math.sin(a) * HALL_RY * k;
-    ctx.strokeStyle = `rgba(240,110,50,${0.35 + 0.3 * pulse * hash2(i, 3, map.seed)})`;
-    ctx.lineWidth = 2 + hash2(i, 4, map.seed) * 3;
+  const corridors = (w: number, col: string) => {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(px, py);
-    for (let s = 0; s < 4; s++) {
-      px += (hash2(i, 10 + s, map.seed) - 0.5) * 90;
-      py += (hash2(i, 20 + s, map.seed) - 0.5) * 60;
-      ctx.lineTo(px, py);
+    for (const [a, b] of links) {
+      ctx.moveTo(map.rooms[a].x, map.rooms[a].y);
+      ctx.lineTo(map.rooms[b].x, map.rooms[b].y);
     }
     ctx.stroke();
+  };
+  // la paroi (deux tons), puis le sol des couloirs et des salles
+  corridors((CORRIDOR_R + 26) * 2, '#2A1A14');
+  ctx.fillStyle = '#2A1A14';
+  for (const { r } of rooms) {
+    roomPath(r, 1.06);
+    ctx.fill();
   }
-  // orgues de basalte le long de la paroi
-  for (let i = 0; i < 26; i++) {
-    const a = (i / 26) * TAU + hash2(i, 5, map.seed) * 0.15, k = 0.93 * caveEdge(c, a);
-    const px = Math.cos(a) * HALL_RX * k, py = Math.sin(a) * HALL_RY * k;
-    if (py > HALL_RY - 260 && Math.abs(px) < 200) continue; // la sortie reste dégagée
-    for (let j = 0; j < 3; j++) {
-      const h = 40 + hash2(i, 30 + j, map.seed) * 50;
-      ctx.fillStyle = j % 2 ? '#2C201C' : '#3C2C26';
-      ctx.fillRect(px + (j - 1) * 16 - 7, py - h, 14, h + 6);
+  corridors((CORRIDOR_R + 10) * 2, '#3A2620');
+  ctx.fillStyle = '#3A2620';
+  for (const { r } of rooms) {
+    roomPath(r, 1.02);
+    ctx.fill();
+  }
+  corridors(CORRIDOR_R * 2, '#33211A');
+  for (const { r } of rooms) {
+    const floor = ctx.createRadialGradient(r.x, r.y, 30, r.x, r.y, Math.max(r.rx, r.ry));
+    floor.addColorStop(0, r.kind === 'heart' ? '#5E3624' : '#4A2E22');
+    floor.addColorStop(1, '#2A1A13');
+    ctx.fillStyle = floor;
+    roomPath(r, 1);
+    ctx.fill();
+  }
+  // fissures de lave dans le sol des salles
+  const pulse = 0.6 + 0.4 * Math.sin(t * 1.4);
+  ctx.lineCap = 'round';
+  for (const { r, k } of rooms) {
+    for (let i = 0; i < 7; i++) {
+      const a = hash2(i, k, map.seed) * TAU, f = 0.15 + hash2(i, k + 50, map.seed) * 0.55;
+      let px = r.x + Math.cos(a) * r.rx * f, py = r.y + Math.sin(a) * r.ry * f;
+      ctx.strokeStyle = `rgba(240,110,50,${0.3 + 0.3 * pulse * hash2(i, k + 90, map.seed)})`;
+      ctx.lineWidth = 2 + hash2(i, k + 130, map.seed) * 3;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      for (let s2 = 0; s2 < 3; s2++) {
+        px += (hash2(i, k * 7 + s2, map.seed + 3) - 0.5) * 80;
+        py += (hash2(i, k * 7 + s2, map.seed + 4) - 0.5) * 55;
+        ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+    }
+    // orgues de basalte le long de la paroi (pas devant les couloirs)
+    const doors = map.links.filter(([a, b]) => a === k || b === k).map(([a, b]) => {
+      const o = map.rooms[a === k ? b : a];
+      return Math.atan2((o.y - r.y) / r.ry, (o.x - r.x) / r.rx);
+    });
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * TAU + hash2(i, k, map.seed + 7) * 0.2;
+      if (doors.some((d) => Math.abs(Math.atan2(Math.sin(a - d), Math.cos(a - d))) < 0.55)) continue;
+      if (r.kind === 'entry' && Math.sin(a) > 0.5) continue; // la sortie reste dégagée
+      const e = map.roomEdge(r, a) * 0.95, px = r.x + Math.cos(a) * r.rx * e, py = r.y + Math.sin(a) * r.ry * e;
+      for (let j = 0; j < 3; j++) {
+        const hh = 34 + hash2(i, 30 + j + k, map.seed) * 44;
+        ctx.fillStyle = j % 2 ? '#2C201C' : '#3C2C26';
+        ctx.fillRect(px + (j - 1) * 14 - 6, py - hh, 12, hh + 6);
+      }
     }
   }
   // mares de lave
   for (const [k, p] of map.lavaPools.entries()) {
-    const x = p.x - cx, y = p.y - cy;
+    if (!seen(p.x, p.y, p.r + 30)) continue;
+    const { x, y } = p;
     ctx.fillStyle = '#1E120E';
     ctx.beginPath();
     ctx.ellipse(x, y, p.r + 16, p.r * 0.78 + 12, 0, 0, TAU);
@@ -240,21 +274,110 @@ export function drawDepths(ctx: Ctx, map: WorldMap, t: number, sealed: boolean[]
       ctx.stroke();
     }
   }
+  // les pièges
+  const state = new Map<number, number>();
+  for (let i = 0; i + 1 < traps.length; i += 2) state.set(traps[i], traps[i + 1]);
+  map.traps.forEach((tr, i) => {
+    if (!seen(tr.x, tr.y, VENT_R + 40)) return;
+    const st = state.get(i) ?? 0;
+    if (tr.kind === 'vent') drawVent(ctx, tr.x, tr.y, st, t, i);
+    else drawPlate(ctx, tr.x, tr.y, st, t);
+  });
   // la sortie : un rai de lumière du jour
-  const ex = c.exit.x - cx, ey = c.exit.y - cy;
-  const day = ctx.createRadialGradient(ex, ey + 30, 10, ex, ey + 30, 140);
-  day.addColorStop(0, 'rgba(240,226,180,0.5)');
-  day.addColorStop(1, 'rgba(240,226,180,0)');
-  ctx.fillStyle = day;
-  ctx.beginPath();
-  ctx.arc(ex, ey + 30, 140, 0, TAU);
-  ctx.fill();
-  label(ctx, 'Sortie', ex, ey + 56, '#EEE7D7');
-  drawAltar(ctx, map, t, sealed, taken);
-  ctx.restore();
+  const ex = c.exit.x, ey = c.exit.y;
+  if (seen(ex, ey, 200)) {
+    const day = ctx.createRadialGradient(ex, ey + 30, 10, ex, ey + 30, 140);
+    day.addColorStop(0, 'rgba(240,226,180,0.5)');
+    day.addColorStop(1, 'rgba(240,226,180,0)');
+    ctx.fillStyle = day;
+    ctx.beginPath();
+    ctx.arc(ex, ey + 30, 140, 0, TAU);
+    ctx.fill();
+    label(ctx, 'Sortie', ex, ey + 56, '#EEE7D7');
+  }
+  if (seen(cx, cy, 300)) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    drawAltar(ctx, map, t, sealed, taken);
+    ctx.restore();
+  }
 }
 
-/** L'autel du cœur, au centre de la salle (coordonnées relatives à son centre). */
+/** Évent de flammes, en travers d'un couloir : une grille de fer ; il rougeoit (st 1), puis crache une colonne de feu (st 2). */
+function drawVent(ctx: Ctx, x: number, y: number, st: number, t: number, seed: number) {
+  ctx.fillStyle = '#1A1210';
+  ctx.beginPath();
+  ctx.ellipse(x, y, 40, 28, 0, 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = st ? '#C8582A' : '#4A3A32';
+  ctx.lineWidth = 4;
+  for (let k = -2; k <= 2; k++) {
+    ctx.beginPath();
+    ctx.moveTo(x + k * 13, y - 22 + Math.abs(k) * 3);
+    ctx.lineTo(x + k * 13, y + 22 - Math.abs(k) * 3);
+    ctx.stroke();
+  }
+  if (st === 1) {
+    // il va cracher : la zone rougeoit
+    ctx.strokeStyle = `rgba(255,120,60,${0.5 + 0.4 * Math.sin(t * 20)})`;
+    ctx.lineWidth = 3;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.ellipse(x, y, VENT_R, VENT_R * 0.7, 0, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  } else if (st === 2) {
+    const g = ctx.createRadialGradient(x, y, 6, x, y, VENT_R);
+    g.addColorStop(0, 'rgba(255,236,160,0.95)');
+    g.addColorStop(0.5, 'rgba(255,130,50,0.75)');
+    g.addColorStop(1, 'rgba(200,50,20,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(x, y, VENT_R, VENT_R * 0.7, 0, 0, TAU);
+    ctx.fill();
+    for (let k = 0; k < 9; k++) {
+      const u = (t * 2.4 + k / 9 + seed * 0.13) % 1, a = k * 2.4 + seed, d = (hash2(k, seed, 9) * 0.8) * VENT_R * 0.6;
+      ctx.fillStyle = `rgba(255,${150 + Math.round(90 * (1 - u))},70,${0.85 * (1 - u)})`;
+      ctx.beginPath();
+      ctx.ellipse(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.6 - u * 110, 12 * (1 - u) + 4, 20 * (1 - u) + 6, 0, 0, TAU);
+      ctx.fill();
+    }
+  }
+}
+
+/** Dalle piégée : une dalle gravée d'une rune, un peu disjointe ; foulée, la rune s'allume (st 1 : le geyser arrive), puis reste enfoncée (st 2). */
+function drawPlate(ctx: Ctx, x: number, y: number, st: number, t: number) {
+  const s = PLATE_R;
+  ctx.fillStyle = st === 2 ? '#2E201A' : '#4C3A30';
+  ctx.strokeStyle = '#22160F';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x - s, y - s * 0.6);
+  ctx.lineTo(x + s, y - s * 0.6);
+  ctx.lineTo(x + s * 0.9, y + s * 0.6);
+  ctx.lineTo(x - s * 0.9, y + s * 0.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = st === 1 ? `rgba(255,170,80,${0.7 + 0.3 * Math.sin(t * 24)})` : 'rgba(120,90,70,0.8)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(x, y, s * 0.35, 0, TAU);
+  ctx.moveTo(x, y - s * 0.5);
+  ctx.lineTo(x, y + s * 0.5);
+  ctx.stroke();
+  if (st === 1) {
+    ctx.fillStyle = `rgba(255,90,40,${0.18 + 0.12 * Math.sin(t * 24)})`;
+    ctx.strokeStyle = 'rgba(255,120,60,0.9)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(x, y, GEYSER_R, GEYSER_R * 0.72, 0, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+/** L'autel du cœur, au centre de sa salle (coordonnées relatives à son centre). */
 function drawAltar(ctx: Ctx, map: WorldMap, t: number, sealed: boolean[], taken: boolean) {
   // dalle hexagonale et ses marches
   for (const [r, col] of [[120, '#2A1E1A'], [92, '#44342C'], [62, '#55423A']] as const) {

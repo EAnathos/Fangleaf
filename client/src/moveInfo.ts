@@ -88,6 +88,7 @@ export function traitSkills(sp: Species, tame: boolean): Skill[] {
   if (sp.brawler) add('Bagarreur', 'Collé à sa cible, il cogne au corps à corps au lieu de tirer.');
   if (sp.venom) add('Venin', `Ses coups empoisonnent (${POISON_S} s) : ne reste pas collé à lui.`);
   if (elementOf(SPECIES.indexOf(sp)) === 'feu') add('Brûlure', 'Ses coups mettent le feu : on brûle quelques secondes (plonger dans l\'eau l\'éteint).');
+  if (sp.wings) add('Ailes', tame ? 'Il vole par-dessus l\'eau, les rochers et les arbres pour te suivre.' : 'Il vole par-dessus l\'eau et les obstacles : s\'enfuir à la nage ne le sème pas.');
   if (sp.reach) add('Allonge', 'Il se jette hors de l\'eau sur ce qui passe au bord.');
   if (!tame) {
     if (sp.passive) add('Passif', 'Il ne se bat pas : il broute les buissons et fuit qui le frappe. Tends-lui une baie (T).', 'heal');
@@ -100,7 +101,7 @@ export function traitSkills(sp: Species, tame: boolean): Skill[] {
     if (sp.sleeps) add(sp.sleeps === 'night' ? 'Dort la nuit' : 'Dort le jour', 'Endormi, il ne voit personne : on peut le surprendre.', 'night');
     if (sp.night) add('Nocturne', 'Il n\'apparaît qu\'à la nuit tombée et s\'en va au lever du jour.', 'night');
     if (sp.day) add('Diurne', 'Il n\'apparaît que le jour et s\'enfouit au coucher du soleil.', 'night');
-    if (sp.season === 3) add('Hivernal', 'Il ne sort qu\'en hiver, et repart à la fonte des neiges.', 'night');
+    if (sp.season === 3) add('Hivernal', 'Il ne sort que quand la neige couvre l\'île (fin d\'année), et repart à la fonte.', 'night');
     if (sp.rainSpeed) add('Aime la pluie', 'Sous une grosse averse, il va bien plus vite.');
     if (sp.swim) add('Aquatique', 'Sauvage, il ne quitte jamais l\'eau.');
     if (sp.isle) add('Îlot du large', 'Il ne vit que sur l\'îlot de son géant, au large de la côte.');

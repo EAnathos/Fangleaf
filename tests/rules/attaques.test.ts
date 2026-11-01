@@ -10,7 +10,9 @@ type R = ReturnType<typeof room>;
 /** Un coin dégagé de la carte, loin de l'eau et des arbres. */
 const open = (r: R) => {
   let s = 3000, at = r.map.spineAt(s);
-  const ok = (x: number, y: number) => [-300, -150, 0, 150, 300].every((d) => [-300, -150, 0, 150, 300].every((e) => !r.map.blocked(x + d, y + e) && !r.map.isForest(x + d, y + e)));
+  const ok = (x: number, y: number) =>
+    [-300, -150, 0, 150, 300].every((d) => [-300, -150, 0, 150, 300].every((e) => !r.map.blocked(x + d, y + e) && !r.map.isForest(x + d, y + e))) &&
+    r.map.clearLine(x - 300, y, x + 400, y); // et rien en travers, de part et d'autre du géant (le tronc roule droit devant lui)
   while (!ok(at.x, at.y)) at = r.map.spineAt((s += 41));
   return at;
 };

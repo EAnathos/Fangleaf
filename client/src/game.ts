@@ -19,7 +19,7 @@ import { drawShadowRun, drawLurkEyes, drawStinger, drawDizzy, drawBrokenEgg, dra
 import { GLOW, SkyFx } from './sky.ts';
 import { Ambient } from './ambient.ts';
 import { desertMix, drawQuicksand, jungleMix, lakesMix, World } from './world.ts';
-import { SEASON_NAMES, sky as skyAt, WINTER } from '../../shared/weather.ts';
+import { LUNES, SNOWFALL, type Sky, sky as skyAt, snowAt, WINTER } from '../../shared/weather.ts';
 import { HALL_ID, VILLAGE_GATES, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts';
 import { drawSubmerged, drawVoyage } from './voyage.ts';
@@ -41,8 +41,8 @@ const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits:
 
 const FLY_HEIGHT = 2.2; // hauteur de vol à dos de vautour (en rayons de l'oiseau)
 
-// En local seulement : ?ciel=nuit, ?ciel=pluie, ?ciel=orage (nuit et pluie) ou ?ciel=tempete (dans la Mer de sable) pour voir le ciel sans attendre.
-const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1, thunder: 1 }, brouillard: { fog: 1 }, tempete: { storm: 1 }, printemps: { season: 0 }, automne: { season: 2 }, hiver: { season: 3 }, neige: { season: 3, rain: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
+// En local seulement : ?ciel=nuit, ?ciel=pluie, ?ciel=orage (nuit et pluie), ?ciel=tempete (dans la Mer de sable), ?ciel=givre (la neige qui s'installe)… pour voir le ciel sans attendre.
+const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1, thunder: 1 }, brouillard: { fog: 1 }, tempete: { storm: 1 }, printemps: { season: 0 }, automne: { season: 2 }, givre: { season: 2, snow: 0.35 }, hiver: { season: 3, snow: 1 }, neige: { season: 3, snow: 1, rain: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
 
 /** Rayon runique suivi par le client : angle et vitesse de rotation (extrapolés entre deux snapshots), dernier passage, sol brûlé. */
 interface LaserState {
@@ -1156,6 +1156,13 @@ export class Game {
           this.fx.fireWave(e.x, e.y, e.r * 1.05, [glow, mine ? glow : '111,183,255', mine ? '255,250,235' : '214,238,255']);
           this.fx.ring(e.x, e.y, mine ?? '#BFE3FF', e.r * 0.15, e.r * 1.05, 0.45);
           if (near) this.shake = Math.max(this.shake, 0.35);
+          break;
+        }
+        if (e.kind === 'trap') {
+          // geyser d'une dalle piégée du donjon : une gerbe de lave
+          this.fx.fireWave(e.x, e.y, e.r, ['255,120,50', '255,190,90', '255,240,200']);
+          this.fx.debris(e.x, e.y, ['#FF8A3D', '#FFD27A', '#3A2620'], 14, 260, 8);
+          if (near) this.shake = Math.max(this.shake, 0.3);
           break;
         }
         if (this.bossBoom(e.kind, e.x, e.y, e.r, mine, near)) break;
@@ -2351,18 +2358,19 @@ export class Game {
     return { x, y, dx: dest.x - from.x, dy: dest.y - from.y, alpha, back: trip.back };
   }
 
-  /** Saison : le sol et les arbres changent, et on l'annonce quand elle tourne (pas à l'arrivée). */
-  private seasonSeen = -1;
-  private watchSeason(season: number) {
-    this.world.setSeason(season);
-    this.map.frozen = season === WINTER; // l'hiver, les mares gèlent (même règle que le serveur)
-    if (season === this.seasonSeen) return;
-    if (this.seasonSeen >= 0) {
-      const say = ['Le printemps est là : les arbres fleurissent.', 'L\'été arrive.', 'L\'automne arrive : les feuilles roussissent.', 'L\'hiver tombe sur l\'île : la neige recouvre tout, et des Bigfoots rôdent dans les Bois profonds…'][season];
-      this.hud.toast(say, season === WINTER ? '' : 'good');
-    }
-    this.seasonSeen = season;
-    this.hud.setSeason(SEASON_NAMES[season]);
+  /**
+   * Les jours qui passent : le sol et les arbres suivent la saison, la neige s'installe et fond peu à peu ; on annonce
+   * chaque nouvelle lune (pas à l'arrivée), et la date s'affiche sous la minicarte.
+   */
+  private luneSeen = -1;
+  private watchCalendar(sky: Sky) {
+    this.world.setSeason(sky.season, sky.snow);
+    this.map.frozen = sky.season === WINTER; // l'hiver, les mares gèlent (même règle que le serveur)
+    this.hud.setDate(sky.date);
+    const lune = sky.date.lune;
+    if (lune === this.luneSeen) return;
+    if (this.luneSeen >= 0) this.hud.toast(`${LUNES[lune].emblem} ${LUNES[lune].name} : ${LUNES[lune].about}`, snowAt(sky.date.t + 1) > 0 ? '' : 'good');
+    this.luneSeen = lune;
   }
 
   private watchStorm(level: number) {
@@ -2469,7 +2477,7 @@ export class Game {
     sky.rain *= 1 - desert;
     const storm = sky.storm * desert * (this.gateOpen(DESERT_ZONE - 1) ? 1 : 0); // pas de tempête avant que le village ait ouvert le désert
     this.watchStorm(storm);
-    this.watchSeason(sky.season);
+    this.watchCalendar(sky);
 
     // Dans une grotte, on ne voit que la grotte (pas la forêt qui borde le monde).
     if (!this.map.caveAt(camX, camY)) this.world.draw(ctx, camX - hw, camY - hh, camX + hw, camY + hh);
@@ -2481,7 +2489,7 @@ export class Game {
     if (here === this.map.depths) {
       // les entrailles du volcan : dessinées à chaque image (la lave bouge), avec les sceaux de l'autel
       const sealed = this.map.caves.filter((c) => c.zone === VOLCANO_ZONE).map((c) => !this.hud.beaten.includes(c.boss));
-      drawDepths(ctx, this.map, this.time, sealed, !!this.hud.heart);
+      drawDepths(ctx, this.map, this.time, sealed, !!this.hud.heart, this.net.latest?.traps ?? [], { x0: camX - hw, y0: camY - hh, x1: camX + hw, y1: camY + hh });
     } else if (here?.zone === VOYAGE_ZONE) drawVoyage(ctx, here, this.time, camX, camY, hw, hh);
     else if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
     if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id]);
@@ -2813,6 +2821,22 @@ export class Game {
           continue;
         }
       }
+      // Dragon : il s'élève au-dessus de l'eau, des rochers et des arbres (il vole), et se repose sur la terre ferme.
+      if (SPECIES[s].wings && !boss) {
+        const w = this.wings.get(id) ?? { k: 0, at: this.time, x, y, ang: 0 };
+        const want = this.map.blocked(x, y) || this.map.isWater(x, y) ? 1 : 0, dt = Math.min(0.1, this.time - w.at);
+        w.k += Math.sign(want - w.k) * Math.min(Math.abs(want - w.k), dt * 2.5);
+        [w.at, w.x, w.y] = [this.time, x, y];
+        this.wings.set(id, w);
+        if (w.k > 0.05 && pose.air <= r * 0.6) {
+          const k = w.k;
+          air.push({ y, draw: () => {
+            drawUnit(ctx, { ...look(), inWater: false, x, y: y - Math.sin(this.time * 4 + id) * 3 * k, air: r * 1.6 * k });
+            if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6 - r * 1.6 * k, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
+          } });
+          continue;
+        }
+      }
       // clignement : sa silhouette se forme déjà au point d'arrivée
       if (ghost && cast) list.push({ y: cast.y, draw: () => this.drawUnitCached(ctx, id, { ...look(), x: cast.x, y: cast.y }, { ...REST, alpha: ghost }) });
       if (pose.air > r * 0.6) {
@@ -2975,7 +2999,7 @@ export class Game {
       this.drawCanopy(camX, camY);
       this.drawThunder(sky.thunder * (1 - desert));
     }
-    sound.rain(here || !settings.display.weather || sky.season === WINTER ? 0 : sky.rain); // la neige tombe sans bruit
+    sound.rain(here || !settings.display.weather || sky.snow >= SNOWFALL ? 0 : sky.rain); // la neige tombe sans bruit
     sound.storm(here ? 0 : storm);
 
     // Joystick tactile / souris.

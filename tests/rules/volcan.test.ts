@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, ALL_CAVES } from '../helpers.ts';
-import { BOAT_REACH, BOAT_STAGES, boatReady, BUILDING_IDS, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
+import { BOAT_REACH, BOAT_STAGES, boatReady, BUILDING_IDS, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
 import { HALL_ID } from '../../shared/worldmap.ts';
 import { Room } from '../../server/room.ts';
 
@@ -17,26 +17,56 @@ describe('Le volcan et ses entrailles', () => {
     check(m.zoneTo(ZONES) - m.zoneFrom(ZONES) > 1.5 * (m.zoneTo(5) - m.zoneFrom(5)), 'la Mer de sable est bien plus longue que les autres zones');
   });
 
-  rule('Les entrailles : une grande salle de la zone 7, ses mares de lave, trois antres de géants.', () => {
+  rule('Les entrailles : un donjon de la zone 7, ses salles, ses couloirs, ses mares de lave, trois antres au bout de culs-de-sac.', () => {
     const m = room().map, d = m.depths, h = d.inside;
-    check(m.caveAt(h.x + 300, h.y + 200) === d && m.zoneAt(h.x + 300, h.y + 200) === VOLCANO_ZONE, 'la salle est la zone 7');
+    check(m.caveAt(h.x + 120, h.y + 60) === d && m.zoneAt(h.x + 120, h.y + 60) === VOLCANO_ZONE, 'le donjon est la zone 7');
     check(m.blocked(h.x, h.y) && !m.blocked(h.x + 120, h.y + 60), 'l\'autel du cœur, au centre, et on tourne autour');
+    check(m.rooms.length >= 20 && m.rooms.filter((r: { kind: string }) => r.kind === 'heart').length === 1, `${m.rooms.length} salles, dont celle du cœur`);
     check(m.lavaPools.length >= 5 && m.lavaPools.every((p: { x: number; y: number }) => m.blocked(p.x, p.y)), `${m.lavaPools.length} mares de lave, infranchissables`);
+    check(m.traps.some((t: { kind: string }) => t.kind === 'vent') && m.traps.some((t: { kind: string }) => t.kind === 'plate'), 'des évents de flammes et des dalles piégées');
     const lairs = m.caves.filter((c: { zone: number }) => c.zone === VOLCANO_ZONE);
     check(lairs.length === zoneBosses(VOLCANO_ZONE).length && lairs.length === 3, 'trois antres, un par géant du volcan');
+    const sides = new Set<string>();
     for (const c of lairs) {
-      check(m.caveAt(c.entrance.x, c.entrance.y) === d && !m.blocked(c.entrance.x, c.entrance.y + 70), `antre de ${SPECIES[c.boss].name} : son entrée est dans la salle, dégagée`);
-      // de la sortie à l'autel, puis de l'autel à l'antre : aucune mare de lave en travers (on contourne l'autel)
-      const clear = (a: { x: number; y: number }, b: { x: number; y: number }) => {
-        for (let t = 0; t <= 1; t += 0.02) {
-          const x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t;
-          if (Math.hypot(x - h.x, y - h.y) > 90 && m.blocked(x, y)) return false;
-        }
-        return true;
-      };
-      check(clear(d.exit, h) && clear(h, { x: c.entrance.x, y: c.entrance.y + 70 }), '… et on y va depuis la sortie de la salle, sans mare de lave en travers');
+      const k = m.roomAt(c.entrance.x, c.entrance.y);
+      check(k >= 0 && m.rooms[k].kind === 'lair' && m.links.filter(([a, b]: number[]) => a === k || b === k).length === 1, `antre de ${SPECIES[c.boss].name} : au bout d'un cul-de-sac`);
+      check(!m.blocked(c.entrance.x, c.entrance.y + 70), '… son entrée dégagée');
+      // de la sortie à l'antre : un chemin de salle en salle, droit d'un point à l'autre
+      const path = m.findPath(d.exit.x, d.exit.y, c.entrance.x, c.entrance.y + 70);
+      let cur = d.exit, ok = !!path;
+      for (const q of path ?? []) {
+        ok &&= m.clearLine(cur.x, cur.y, q.x, q.y);
+        cur = q;
+      }
+      check(ok, '… et on y va depuis la sortie');
+      sides.add(c.entrance.x < h.x - 1500 ? 'gauche' : c.entrance.x > h.x + 1500 ? 'droite' : 'haut');
     }
-    check(m.blocked(d.exit.x, d.exit.y + 400), 'hors de la salle : la roche');
+    check(sides.size === 3, 'un antre à gauche, un à droite, un en haut');
+    check(m.blocked(d.exit.x, d.exit.y + 400), 'hors des salles : la roche');
+  });
+
+  rule('Les pièges du donjon : l\'évent brûle à son rythme, la dalle fait jaillir un geyser (pas en vol).', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map, p = r.addPlayer('a', noop);
+    const vi = m.traps.findIndex((t: { kind: string }) => t.kind === 'vent'), v = m.traps[vi];
+    [p.x, p.y] = [v.x, v.y];
+    let hurt = false;
+    for (let i = 0; i < TICK_HZ * 7 && !hurt; i++) {
+      const hp = p.hp;
+      r.tick++;
+      r.time += 1 / TICK_HZ;
+      r.updateTraps();
+      if (p.hp < hp) hurt = r.ventState(vi) === 2;
+    }
+    check(hurt, 'dans les flammes de l\'évent, quand il crache : on brûle');
+    const d = m.traps.find((t: { kind: string }) => t.kind === 'plate');
+    p.hp = 100000;
+    [p.x, p.y] = [d.x, d.y];
+    r.updateTraps();
+    const hp = p.hp;
+    r.time += 2;
+    r.updateTraps();
+    check(p.hp < hp && r.events.some((e: { e: string; kind?: string }) => e.e === 'boom' && e.kind === 'trap'), 'sur la dalle : le geyser jaillit peu après');
   });
 
   rule('La bouche s\'ouvre quand le village a vaincu les géants de la Mer de sable ; on y descend avec sa meute.', () => {

@@ -291,6 +291,7 @@ export interface Snapshot {
   hazards: HazardTuple[]; // attaques spéciales visibles
   shots: ShotTuple[]; // projectiles des tireurs (esquivables)
   sands: SandTuple[]; // sables mouvants ouverts, près de lui
+  traps: number[]; // pièges du donjon sous le volcan, près de lui, à l'œuvre : [index dans map.traps, état]… (évent : 1 rougeoie, 2 crache ; dalle : 1 geyser annoncé, 2 enfoncée)
   bolts: [number, number, number, number][]; // coups de foudre annoncés près de lui : [id, x, y, dixièmes de seconde avant qu'elle tombe]
   ev: GameEvent[];
 }

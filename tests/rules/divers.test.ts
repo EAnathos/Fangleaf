@@ -66,4 +66,30 @@ describe('Petites règles', () => {
       check(!p.burn, 'dans l\'eau, elle s\'éteint');
     }
   });
+
+  rule('À dos de vautour, le dard du scorpion ne nous atteint pas (ni coup, ni poison).', () => {
+    const r = room(), m = r.map;
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    const lane = m.spineAt(m.zoneFrom(1) + 400);
+    [p.x, p.y] = [lane.x, lane.y];
+    const mount = r.spawnAlpha(p, S('vulture'), 0, false);
+    [mount.x, mount.y] = [p.x, p.y];
+    r.onMount(p, mount.id);
+    const sc = r.createUnit(S('scorpion'), false, p.x + 30, p.y), hp0 = p.hp, mhp0 = mount.hp;
+    sc.atkCd = 0;
+    r.tryAttack(sc, p);
+    check(p.hp === hp0 && mount.hp === mhp0 && !p.poison, 'ni blessé, ni empoisonné');
+  });
+
+  rule('Wyvernes et dragonnets volent par-dessus l\'eau (le drake, sans ailes, non).', () => {
+    const r = room(), m = r.map;
+    r.units.clear();
+    const lake = m.deepWater.find((pool: number[]) => pool.length);
+    const [wx, wy] = [lake[0], lake[1]];
+    check(m.isWater(wx, wy), 'un point d\'eau');
+    const wy0 = r.createUnit(S('wyvern'), false, wx, wy), dr = r.createUnit(S('drake'), false, wx, wy);
+    check(!r.blockedFor(wy0, wx, wy) && r.blockedFor(dr, wx, wy), 'la wyverne survole l\'eau, pas le drake');
+    check(!!SPECIES[S('dragon')].wings && !SPECIES[S('drake')].wings, 'le dragonnet a des ailes, le drake non');
+  });
 });

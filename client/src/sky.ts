@@ -3,7 +3,7 @@
 //   créatures lumineuses), appliquée sur l'image en « multiply ». Une seule copie plein écran par image.
 // - Pluie : des traits obliques recyclés, accrochés au monde (ils défilent quand on bouge), et des éclaboussures.
 
-import { type Sky, WINTER } from '../../shared/weather.ts';
+import { type Sky, SNOWFALL } from '../../shared/weather.ts';
 import { particleRate, settings } from './settings.ts';
 
 const LIGHT_RES = 4; // la carte de lumière est 4 fois moins fine que l'écran : ses halos sont flous de toute façon
@@ -195,7 +195,7 @@ export class SkyFx {
       return;
     }
     const n = Math.min(MAX_DROPS, Math.round(MAX_DROPS * sky.rain * particleRate() * Math.min(1, (W * H) / (1920 * 1080))));
-    if (sky.season === WINTER) return this.snow(ctx, n, dx, dy, sky, dt, dpr);
+    if (sky.snow >= SNOWFALL) return this.snow(ctx, n, dx, dy, sky, dt, dpr);
     const d = this.drops, wind = -0.22;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);

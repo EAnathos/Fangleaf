@@ -16,7 +16,7 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 - [Le volcan et le cœur volcanique](#le-volcan-et-le-cœur-volcanique)
 - [Le vieil homme et le bateau](#le-vieil-homme-et-le-bateau)
 - [La haute mer et le Kraken](#la-haute-mer-et-le-kraken)
-- [Jour, nuit, saisons et météo](#jour-nuit-saisons-et-météo)
+- [Jour, nuit, calendrier et météo](#jour-nuit-calendrier-et-météo)
 - [Jouer à plusieurs](#jouer-à-plusieurs)
 
 ## Contrôles
@@ -48,7 +48,7 @@ d'un village à l'autre. Les zones sont des bandes successives, de plus en plus 
 s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois plus grandes, et plus peuplées) :
 
 1. **Lisière** : Gluants, Sporelins, Escargots des mousses.
-2. **Bois profonds** : Loups, Araignées sylvestres ; Lucioles la nuit ; Bigfoots l'hiver ; un arbre abattu réveille parfois un **Tréant**.
+2. **Bois profonds** : Loups, Araignées sylvestres ; Lucioles la nuit ; Bigfoots quand la neige couvre l'île ; un arbre abattu réveille parfois un **Tréant**.
 3. **Landes** : Sangliers, Ours des fourrés (ils chassent la nuit, dorment le jour), Lièvres des ronces.
 4. **Ruines moussues** : Golems de mousse, Feux follets, Guetteurs runiques.
 5. **Lacs brumeux** : Crapauds-mortiers, Serpents des brumes (dans l'eau), Crabes des berges ; une brume légère y flotte.
@@ -101,7 +101,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   - Au bord de l'eau, avec une monture nageuse et une terrestre : **F** en regardant l'eau monte la nageuse, en
     regardant la terre, la terrestre.
   - Le **Vautour** vole : il passe au-dessus de l'eau, des rochers et des arbres. En vol, les monstres ne l'atteignent
-    pas au corps à corps (seuls leurs tirs et les géants), mais on ne récolte ni bois ni pierre de là-haut. Dans la meute
+    pas au corps à corps, ni le dard du scorpion (seuls leurs tirs et les géants), mais on ne récolte ni bois ni pierre de là-haut. Dans la meute
     aussi, il suit son dompteur en volant, se pose quand il s'arrête, et pique sur sa proie pour se poser à côté et la
     frapper. Pendant une tempête de sable, le vent le cloue au sol (monture comprise) : on ne vole plus dans le désert.
   - L'**Escargot** se monte… mais ralentit.
@@ -230,7 +230,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   plus personne n'est là), avec ses créatures autour, du plus facile au plus dur : le **Grand Drake** (zone 3 ; Drakes
   des marées, qui crachent de l'eau ; lui lance des décharges électriques qui rebondissent sur ceux qui se tiennent à côté), la **Wyverne-Reine** (zone 5 ; Wyvernes
   des falaises, au dard empoisonné) et le **Dragon ancien** (zone 6 ; Dragonnets de braise, qui crachent des boules de
-  feu en ligne droite). Chacun garde dans son coffre un tome d'**Endurance** (+10 % de PV max par tome), qu'on ne trouve
+  feu en ligne droite). Wyvernes et Dragonnets ont des ailes : ils volent par-dessus l'eau et les obstacles, pour
+  poursuivre qui s'enfuit à la nage comme pour suivre leur dompteur (le Drake, lui, n'en a pas). Chacun garde dans son coffre un tome d'**Endurance** (+10 % de PV max par tome), qu'on ne trouve
   que là : le tome I chez le Grand Drake, le II chez la Wyverne-Reine, le III chez le Dragon ancien.
 - Vaincu, il laisse un **coffre** (chacun l'ouvre une fois, pour un montant d'or aléatoire) et parfois son **âme**.
   Le dernier géant d'une zone que le village bat (une fois tous vaincus) laisse le **parchemin de la zone** pour le
@@ -242,9 +243,15 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Un grand volcan se dresse dans la Mer de sable. Sa bouche, à son pied, reste scellée par une croûte d'obsidienne
   tant que le village n'a pas vaincu les trois géants de la Mer de sable ; ensuite, **E** pour y descendre, de jour
   comme de nuit et par tous les temps.
-- Les **entrailles du volcan** sont une grande salle souterraine (zone 7) : mares de lave infranchissables à pied (à
-  dos de vautour, on les survole), créatures de lave, et trois antres de géants à débloquer (deux fois plus cher que
-  les grottes de la Mer de sable).
+- Les **entrailles du volcan** sont un donjon (zone 7) : un labyrinthe de salles reliées par des couloirs, différent
+  d'un village à l'autre. On arrive en bas ; le cœur est au centre ; les trois antres de géants (à débloquer, deux fois
+  plus cher que les grottes de la Mer de sable) sont au bout de culs-de-sac — un à gauche, un à droite, un en haut —
+  et il faut fouiller pour les trouver. Dedans, la minicarte montre les salles déjà vues.
+- Dans les salles, des mares de lave infranchissables à pied (à dos de vautour, on les survole) et des créatures de
+  lave. Et des **pièges** (en vol, on passe au-dessus) :
+  - les **évents de flammes**, en travers des couloirs : ils rougeoient, puis crachent du feu, chacun à son rythme ;
+  - les **dalles piégées**, gravées d'une rune : marcher dessus fait jaillir un geyser de lave peu après (le cercle
+    s'allume : on s'écarte). La dalle se réarme au bout de quelques secondes.
 - **Le feu brûle** : flammes, lave, cratères, boules de feu, roches en fusion et coups des créatures de feu mettent
   le feu ; on brûle quelques secondes (une flamme au-dessus de la tête). Plonger dans l'eau l'éteint.
 - Au centre, l'**autel du cœur** : une flamme brûle par géant du volcan encore debout. Les trois vaincus, le cœur
@@ -280,14 +287,20 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Tant qu'il n'est pas vaincu, on ne va pas plus loin. Vaincu, il laisse un coffre, et la route du Colisée est libre
   (le Colisée arrive bientôt). S'il ne reste plus personne à bord, il replonge, guéri.
 
-## Jour, nuit, saisons et météo
+## Jour, nuit, calendrier et météo
 
 - Le ciel suit l'heure du serveur : tout le village voit la même nuit et la même averse.
 - **Nuit** : certains monstres dorment (le Lièvre), d'autres se réveillent (l'Ours), d'autres n'apparaissent
   qu'alors (Lucioles, Chacals fantômes). La torche éclaire autour du dompteur.
-- **Saisons** : printemps, été, automne, hiver, une heure chacune (affichée sous la minicarte). Les arbres fleurissent,
-  roussissent, se couvrent de neige ; l'hiver, la pluie tombe en neige et des **Bigfoots** rôdent dans les Bois
-  profonds (rares et costauds, ils repartent à la fin de l'hiver).
+- **Calendrier** : les jours passent (un jour = un cycle jour et nuit, il commence au lever du soleil), deux par lune,
+  douze lunes par an — du Dégel à la Longue Nuit. La date s'affiche sous la minicarte ; un clic ouvre le calendrier
+  (les lunes de l'année, ce que chacune apporte). Chaque nouvelle lune est annoncée.
+  - Au printemps (Bourgeons, Fleurs), les arbres fleurissent ; aux Brumes et aux Feuilles mortes, ils roussissent ;
+    pendant la Lune des Orages, presque toutes les averses tournent à l'orage.
+  - **Fin d'année** : la neige s'installe peu à peu pendant la Lune des Premiers Givres, par plaques, jusqu'à tout
+    couvrir (jamais la jungle ni le désert), et la pluie tombe en flocons. Quand elle couvre le sol, les mares gèlent et
+    des **Bigfoots** rôdent dans les Bois profonds (rares et costauds, ils repartent avec la neige). Elle fond peu à peu
+    pendant la Lune du Dégel.
 - **Pluie** : l'Escargot l'adore, il va plus vite.
 - **Tempête de sable** (Mer de sable) : elle blesse ceux qui restent dehors ; les vers restent sous le sable, les
   suricates cachés, et les vautours sont cloués au sol (sauvages, de la meute, et la monture).

@@ -131,25 +131,28 @@ const AUTUMN_GROUND = [150, 112, 56];
 const SPRING_GROUND = [96, 146, 66];
 
 /**
- * Le sol selon la saison (ni le désert ni la jungle n'en changent) : l'hiver, la neige par grandes plaques ; l'automne,
- * l'herbe roussie ; le printemps, un vert plus tendre ; l'été, rien.
+ * Le sol selon la saison (ni le désert ni la jungle n'en changent) : l'automne, l'herbe roussie ; le printemps, un vert
+ * plus tendre ; l'été, rien. Par-dessus, la neige (snow, 0 à 1) : elle s'installe par plaques, d'abord dans les creux
+ * du bruit, jusqu'à tout couvrir, et fond de même.
  */
-function seasonGround(map: WorldMap, col: number[], x: number, y: number, season: number) {
-  if (season === SUMMER) return col;
+function seasonGround(map: WorldMap, col: number[], x: number, y: number, season: number, snow: number) {
+  if (season === SUMMER && snow <= 0) return col;
   const k = 1 - Math.max(desertMix(map, x, y), jungleMix(map, x, y) * 0.8);
   if (k <= 0) return col;
   const n = fbm(x / 190, y / 190, map.seed + 201, 3);
-  if (season === WINTER) return lerp3(col, SNOW, (0.55 + smooth((n - 0.3) / 0.3) * 0.38) * k);
-  if (season === AUTUMN) return lerp3(col, AUTUMN_GROUND, (0.22 + n * 0.3) * k);
-  return lerp3(col, SPRING_GROUND, (0.12 + n * 0.12) * k);
+  if (season === AUTUMN || season === WINTER) col = lerp3(col, AUTUMN_GROUND, (0.22 + n * 0.3) * k);
+  else if (season === SPRING) col = lerp3(col, SPRING_GROUND, (0.12 + n * 0.12) * k);
+  if (snow <= 0) return col;
+  const cover = smooth(Math.min(1, Math.max(0, (snow * 1.5 - n) / 0.25)));
+  return lerp3(col, SNOW, (0.55 + smooth((n - 0.3) / 0.3) * 0.38) * k * cover);
 }
 
 /**
  * Couleur d'un point de l'île vu d'en haut : son sol (selon la saison), la plage au bord de la mer, et le relief (versants
  * éclairés au nord-ouest, à l'ombre au sud-est ; sommets un peu plus clairs).
  */
-export function landColor(map: WorldMap, x: number, y: number, season = SUMMER) {
-  let col = seasonGround(map, groundColor(map, x, y), x, y, season);
+export function landColor(map: WorldMap, x: number, y: number, season = SUMMER, snow = 0) {
+  let col = seasonGround(map, groundColor(map, x, y), x, y, season, snow);
   const sh = map.shoreAt(x, y);
   if (sh > -BEACH) col = lerp3(col, BEACH_SAND, Math.min(1, (sh + BEACH) / (BEACH * 0.7)));
   const e = 24, h = map.height(x, y);
@@ -264,9 +267,13 @@ export class World {
     this.camp = this.drawCamp();
   }
 
-  setSeason(season: number) {
-    if (season === this.season) return;
+  snow = 0; // neige au sol, par dixièmes (le sol n'est repeint qu'à chaque dixième de plus ou de moins)
+
+  setSeason(season: number, snow: number) {
+    const level = Math.round(snow * 10) / 10;
+    if (season === this.season && level === this.snow) return;
     this.season = season;
+    this.snow = level;
     this.chunks.clear(); // le sol est à repeindre ; les arbres ont une image par saison
   }
 
@@ -311,7 +318,7 @@ export class World {
         const sea = map.isSea(px, py), sh = map.caveAt(px, py) ? -1e9 : map.shoreAt(px, py);
         const meadow = fbm(px / 420, py / 420, this.seed + 3, 2);
         const v = sea ? 0.97 + meadow * 0.06 : 0.93 + meadow * 0.12;
-        let col = sea ? seaColor(map, px, py) : landColor(map, px, py, this.season);
+        let col = sea ? seaColor(map, px, py) : landColor(map, px, py, this.season, this.snow);
         // Près d'une embouchure (et dans les Lacs brumeux), l'eau du lac est peinte avec le sol (les disques s'y effacent, voir plus bas) ; son bord
         // est adouci comme celui de la côte : part d'eau parmi les cases voisines (pondérées), pas de marches.
         let wet = 0, mouth = false;
@@ -336,7 +343,7 @@ export class World {
           // au bord de l'eau, la mer et le sable se fondent : la côte est continue une fois agrandie (pas de marches) ;
           // face à une embouchure, la mer reste de l'eau (pas de sable sous l'eau du lac qui s'y jette)
           const k = (sh + 32) / 64, f = k * k * (3 - 2 * k), s = sea ? surfAt(map, px, py) : 1;
-          if (s) col = lerp3(col, lerp3(sea ? landColor(map, px, py, this.season) : col, sea ? col : seaColor(map, px, py), f), s);
+          if (s) col = lerp3(col, lerp3(sea ? landColor(map, px, py, this.season, this.snow) : col, sea ? col : seaColor(map, px, py), f), s);
         }
         const o = (j * T + i) * 4;
         ground.img.data[o] = col[0] * v;

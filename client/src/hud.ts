@@ -3,10 +3,11 @@
 import {
   alphaEquipMax, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
-  armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
+  armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
 import { type BoardRow, type Holdings, type PlayerState, type Stats, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
+import { type CalendarDate, LUNE_DAYS, LUNES, snowAt } from '../../shared/weather.ts';
 import { armorColor, drawElder, drawHatchling, drawPlayer, drawUnit } from './sprites.ts';
 import { CHAPTER_TITLES, ELDER_CHAPTERS, ELDER_LEAVES, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD, zoneChapters } from './elder.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
@@ -16,7 +17,7 @@ import { ACTIONS, type Action, applyUi, keyLabel, labelOf, resetKeys, saveSettin
 import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
@@ -82,7 +83,7 @@ const BOARD: { title: string; stats: { k: keyof Stats | keyof Holdings; label: s
     { k: 'wood', label: 'Bois récolté' }, { k: 'stone', label: 'Pierre récoltée' }, { k: 'given', label: 'Dons à l\'entrepôt' }, { k: 'spent', label: 'Or pour le village' },
   ] },
   { title: '🧭 Exploration', stats: [
-    { k: 'chests', label: 'Coffres de géants ouverts' }, { k: 'books', label: 'Livres trouvés' },
+    { k: 'books', label: 'Livres trouvés' },
     { k: 'dist', label: 'Distance parcourue', fmt: (n) => `${(n * 0.00003).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} km` },
     { k: 'time', label: 'Temps de jeu', fmt: (n) => (n >= 3600 ? `${Math.floor(n / 3600)} h ${String(Math.floor((n % 3600) / 60)).padStart(2, '0')}` : `${Math.floor(n / 60)} min`) },
   ] },
@@ -365,6 +366,7 @@ export class Hud {
       }
     };
     $('minimap').addEventListener('click', () => this.setPanel('map'));
+    $('date').onclick = () => this.setPanel('calendar');
     $('quit-confirm').onclick = () => this.onQuit();
     // Repartir de zéro, avec une confirmation dans le même panneau.
     $('reset-ask').textContent = founder ? 'Supprimer le village' : 'Effacer ma progression ici';
@@ -415,7 +417,7 @@ export class Hud {
       this.npcAt++;
       this.showNpc();
     };
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile', 'victory'] as const) {
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'calendar', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile', 'victory'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -616,6 +618,8 @@ export class Hud {
     $('reset-main').hidden = false; // les paramètres rouvrent toujours sur leurs choix, jamais sur la confirmation
     $('reset-confirm').hidden = true;
     $('travel').hidden = panel !== 'travel';
+    $('calendar').hidden = panel !== 'calendar';
+    if (panel === 'calendar') this.renderCalendar();
     $('camp').hidden = panel !== 'camp';
     $('school').hidden = panel !== 'school';
     $('talk').hidden = panel !== 'talk';
@@ -755,10 +759,46 @@ export class Hud {
     el.style.animation = '';
   }
 
-  /** Saison du village, sous la minicarte. */
-  setSeason(name: string) {
-    const icon: Record<string, string> = { Printemps: '🌸', Été: '☀️', Automne: '🍂', Hiver: '❄️' };
-    $('season').textContent = `${icon[name] ?? ''} ${name}`;
+  /** Date du village, sous la minicarte : le jour et la lune (le calendrier s'ouvre d'un clic). */
+  private date: CalendarDate | null = null;
+  setDate(date: CalendarDate) {
+    if (this.date && this.date.day === date.day && this.date.year === date.year) return;
+    this.date = date;
+    const l = LUNES[date.lune];
+    $('date').textContent = `${l.emblem} ${date.dayOfLune} · ${l.name}`;
+    if (this.panel === 'calendar') this.renderCalendar();
+  }
+
+  /** Le calendrier : les douze lunes de l'année, leurs jours, celle du moment et ce qu'elle apporte. */
+  private renderCalendar() {
+    const d = this.date;
+    if (!d) return;
+    const l = LUNES[d.lune];
+    $('calendar-title').textContent = `Calendrier · An ${d.year}`;
+    const today = $('calendar-today');
+    today.replaceChildren();
+    const b = document.createElement('b');
+    b.textContent = `${l.emblem} Jour ${d.dayOfLune} de la ${l.name}`;
+    today.append(b, document.createElement('br'), l.about);
+    $('calendar-lunes').replaceChildren(...LUNES.map((lune, i) => {
+      const el = document.createElement('div');
+      el.className = `lune${i === d.lune ? ' now' : i < d.lune ? ' past' : ''}${snowAt(i * LUNE_DAYS + LUNE_DAYS / 2) > 0.3 ? ' snow' : ''}`;
+      el.title = lune.about;
+      const em = document.createElement('span');
+      em.className = 'emblem';
+      em.textContent = lune.emblem;
+      const name = document.createElement('span');
+      name.textContent = lune.name.replace(/^Lune (des |du |de la )/, '');
+      const days = document.createElement('span');
+      days.className = 'days';
+      for (let k = 1; k <= LUNE_DAYS; k++) {
+        const dot = document.createElement('i');
+        if (i < d.lune || (i === d.lune && k <= d.dayOfLune)) dot.className = 'on';
+        days.append(dot);
+      }
+      el.append(em, name, days);
+      return el;
+    }));
   }
 
     toast(text: string, kind: '' | 'alpha' | 'good' = '') {
@@ -2285,7 +2325,74 @@ export class Hud {
     ctx.stroke();
   }
 
+  private explored = new Set<number>(); // salles du donjon déjà vues (cette session)
+
+  /**
+   * Minicarte du donjon sous le volcan : les salles déjà vues et leurs couloirs, le cœur au centre, les antres une fois
+   * découverts (barrés quand leur géant est vaincu), les dompteurs.
+   */
+  private drawDungeonMap(me: PlayerState, players: PlayerState[], myPos: { x: number; y: number }) {
+    const ctx = this.mini, S = 180, map = this.map, h = map.depths.inside, k = S / (2 * HALL_RX);
+    const m = (x: number, y: number): [number, number] => [S / 2 + (x - h.x) * k, S / 2 + (y - h.y) * k];
+    map.rooms.forEach((r, i) => {
+      if (Math.hypot(r.x - myPos.x, r.y - myPos.y) < Math.max(r.rx, r.ry) + 420) this.explored.add(i);
+    });
+    ctx.fillStyle = '#120C0A';
+    ctx.fillRect(0, 0, S, S);
+    ctx.strokeStyle = '#6A4A3A';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const [a, b] of map.links) {
+      if (!this.explored.has(a) && !this.explored.has(b)) continue;
+      ctx.moveTo(...m(map.rooms[a].x, map.rooms[a].y));
+      ctx.lineTo(...m(map.rooms[b].x, map.rooms[b].y));
+    }
+    ctx.stroke();
+    const lairs = map.caves.filter((c) => c.zone === VOLCANO_ZONE);
+    map.rooms.forEach((r, i) => {
+      if (!this.explored.has(i)) return;
+      const [x, y] = m(r.x, r.y);
+      ctx.fillStyle = r.kind === 'heart' ? '#8A3A22' : '#4A3228';
+      ctx.beginPath();
+      ctx.ellipse(x, y, r.rx * k, r.ry * k, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (r.kind === 'heart') this.star(ctx, x, y, 5, 1);
+      if (r.kind === 'entry') {
+        ctx.fillStyle = '#EEE7D7';
+        ctx.fillRect(x - 3, y + 2, 6, 3);
+      }
+      if (r.kind === 'lair') {
+        const c = lairs.find((q) => map.roomAt(q.entrance.x, q.entrance.y) === i), done = !!c && this.beaten.includes(c.boss);
+        ctx.fillStyle = done ? '#A9B3A6' : '#E8693F';
+        ctx.beginPath();
+        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        if (done) {
+          ctx.strokeStyle = '#120C0A';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(x - 3, y - 3);
+          ctx.lineTo(x + 3, y + 3);
+          ctx.stroke();
+        }
+      }
+    });
+    for (const p of players) {
+      const [x, y] = m(p.id === me.id ? myPos.x : p.x, p.id === me.id ? myPos.y : p.y);
+      if (x < 0 || y < 0 || x > S || y > S) continue;
+      ctx.fillStyle = p.dead ? '#A9B3A6' : p.color;
+      ctx.strokeStyle = '#10181A';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, p.id === me.id ? 4.5 : 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
   private drawMinimap(me: PlayerState, players: PlayerState[], units: UnitTuple[], myPos: { x: number; y: number }) {
+    if (this.map.caveAt(myPos.x, myPos.y) === this.map.depths) return this.drawDungeonMap(me, players, myPos);
     const ctx = this.mini;
     const S = 180, k = S / (WORLD_HALF * 2);
     const m = (v: number) => (v + WORLD_HALF) * k;
