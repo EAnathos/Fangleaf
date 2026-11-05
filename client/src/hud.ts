@@ -7,8 +7,9 @@ import {
 } from '../../shared/config.ts';
 import { type BoardRow, type Holdings, type PlayerState, type Stats, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
-import { type CalendarDate, LUNE_DAYS, LUNES, snowAt } from '../../shared/weather.ts';
-import { armorColor, drawElder, drawHatchling, drawPlayer, drawUnit } from './sprites.ts';
+import { type CalendarDate, LUNE_DAYS, LUNES, SEASON_EMBLEMS, SEASON_NAMES, seasonDay, snowAt } from '../../shared/weather.ts';
+import { armorColor, drawElder, drawHatchling, drawPlayer, drawSweat, drawUnit } from './sprites.ts';
+import { bossMemory, moodLine } from './bossMemory.ts';
 import { CHAPTER_TITLES, ELDER_CHAPTERS, ELDER_LEAVES, eggsOf, elderGreeting, elderName, HATCHLINGS, REREAD, zoneChapters } from './elder.ts';
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { moveSkill, type Skill, type SkillIcon, traitSkills } from './moveInfo.ts';
@@ -291,6 +292,7 @@ export class Hud {
   onChest = (_id: number) => {};
   onChallenge = (_cave: number) => {};
   private talker: Portrait[] = [];
+  private talkKey = ''; // géant et humeur du dialogue affiché
   private elderAt = 0; // réplique du vieil homme en cours
   private npcWho = 0; // nouveau-né à qui l'on parle
   private npcAt = 0; // réplique en cours avec lui
@@ -759,42 +761,47 @@ export class Hud {
     el.style.animation = '';
   }
 
-  /** Date du village, sous la minicarte : le jour et la lune (le calendrier s'ouvre d'un clic). */
+  /** Date du village, sous la minicarte : la saison et son jour (le calendrier s'ouvre d'un clic). */
   private date: CalendarDate | null = null;
   setDate(date: CalendarDate) {
     if (this.date && this.date.day === date.day && this.date.year === date.year) return;
     this.date = date;
-    const l = LUNES[date.lune];
-    $('date').textContent = `${l.emblem} ${date.dayOfLune} · ${l.name}`;
+    const sd = seasonDay(date);
+    $('date').textContent = `${SEASON_EMBLEMS[sd.season]} ${SEASON_NAMES[sd.season]} · jour ${sd.day}`;
+    $('date').title = `${LUNES[date.lune].name} : ${LUNES[date.lune].about}`;
     if (this.panel === 'calendar') this.renderCalendar();
   }
 
-  /** Le calendrier : les douze lunes de l'année, leurs jours, celle du moment et ce qu'elle apporte. */
+  /** Le calendrier : les quatre saisons de l'année, leurs jours, celui du moment et ce qu'il apporte. */
   private renderCalendar() {
     const d = this.date;
     if (!d) return;
-    const l = LUNES[d.lune];
+    const l = LUNES[d.lune], sd = seasonDay(d);
     $('calendar-title').textContent = `Calendrier · An ${d.year}`;
     const today = $('calendar-today');
     today.replaceChildren();
     const b = document.createElement('b');
-    b.textContent = `${l.emblem} Jour ${d.dayOfLune} de la ${l.name}`;
-    today.append(b, document.createElement('br'), l.about);
-    $('calendar-lunes').replaceChildren(...LUNES.map((lune, i) => {
+    b.textContent = `${SEASON_EMBLEMS[sd.season]} ${SEASON_NAMES[sd.season]} · jour ${sd.day} sur ${sd.days}`;
+    today.append(b, document.createElement('br'), `${l.emblem} ${l.name} : ${l.about}`);
+    $('calendar-lunes').replaceChildren(...SEASON_NAMES.map((season, s) => {
+      const lunes = LUNES.map((_, i) => i).filter((i) => LUNES[i].season === s);
       const el = document.createElement('div');
-      el.className = `lune${i === d.lune ? ' now' : i < d.lune ? ' past' : ''}${snowAt(i * LUNE_DAYS + LUNE_DAYS / 2) > 0.3 ? ' snow' : ''}`;
-      el.title = lune.about;
+      const snowy = lunes.some((i) => snowAt(i * LUNE_DAYS + LUNE_DAYS / 2) > 0.5);
+      el.className = `lune${s === sd.season ? ' now' : s < sd.season ? ' past' : ''}${snowy ? ' snow' : ''}`;
       const em = document.createElement('span');
       em.className = 'emblem';
-      em.textContent = lune.emblem;
+      em.textContent = SEASON_EMBLEMS[s];
       const name = document.createElement('span');
-      name.textContent = lune.name.replace(/^Lune (des |du |de la )/, '');
+      name.textContent = season;
       const days = document.createElement('span');
       days.className = 'days';
-      for (let k = 1; k <= LUNE_DAYS; k++) {
-        const dot = document.createElement('i');
-        if (i < d.lune || (i === d.lune && k <= d.dayOfLune)) dot.className = 'on';
-        days.append(dot);
+      for (const i of lunes) {
+        for (let k = 1; k <= LUNE_DAYS; k++) {
+          const dot = document.createElement('i');
+          dot.title = `${LUNES[i].emblem} ${LUNES[i].name} : ${LUNES[i].about}`;
+          if (i < d.lune || (i === d.lune && k <= d.dayOfLune)) dot.className = 'on';
+          days.append(dot);
+        }
       }
       el.append(em, name, days);
       return el;
@@ -1211,12 +1218,14 @@ export class Hud {
   private updateTalk() {
     const c = this.map.caves[this.spotAt];
     if (!c) return;
-    const sp = SPECIES[c.boss];
-    if (this.talker[0]?.s !== c.boss) {
+    const sp = SPECIES[c.boss], mood = bossMemory.mood(c.id), key = `${c.id}|${mood?.mood}|${mood?.n}`;
+    if (this.talkKey !== key) {
+      // il se souvient de nous : apeuré s'il a été vaincu aujourd'hui, moqueur s'il nous a corrigés
+      this.talkKey = key;
       $('talk-title').textContent = sp.name;
-      $('talk-line').textContent = `« ${BOSS_LINES[sp.key]?.intro ?? '…'} »`;
+      $('talk-line').textContent = `« ${moodLine(mood, c.boss) ?? BOSS_LINES[sp.key]?.intro ?? '…'} »`;
       $('talk-portrait').setAttribute('aria-label', sp.name);
-      this.talker = [{ canvas: $<HTMLCanvasElement>('talk-portrait'), s: c.boss, seen: true }];
+      this.talker = [{ canvas: $<HTMLCanvasElement>('talk-portrait'), s: c.boss, seen: true, fear: mood?.mood === 'fear' }];
     }
     paintPortraits(this.talker);
   }
@@ -1227,8 +1236,9 @@ export class Hud {
     if (!buy) return;
     const { name, cost, hall } = purchaseOf(this.map, buy);
     // le pont : le bois et la pierre du sac comptent (l'entrepôt est de l'autre côté)
-    const funds = 'b' in buy && buy.b === 'bridge' ? { gold: me.gold, wood: me.wood + this.stock[0], stone: me.stone + this.stock[1] } : this.funds(me);
-    this.costChips('buy-cost', funds, cost);
+    const bridge = 'b' in buy && buy.b === 'bridge', all = { gold: me.gold, wood: me.wood + this.stock[0], stone: me.stone + this.stock[1] };
+    const funds = bridge ? all : this.funds(me);
+    this.costChips('buy-cost', funds, cost, bridge ? 'dans ton sac' : undefined);
     $('buy-title').textContent = 'b' in buy ? `${buy.b === 'bridge' ? 'Réparer' : 'Construire'} : ${name}` : `Débloquer : ${name}`;
     if ('b' in buy) $('buy-desc').textContent = BUILDINGS[buy.b].desc;
     else {
@@ -1237,7 +1247,8 @@ export class Hud {
     }
     const btn = $<HTMLButtonElement>('buy-go');
     btn.disabled = this.hall < hall || !canPay(funds, cost);
-    btn.textContent = this.hall < hall ? `Hôtel de ville niv. ${hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : `${'b' in buy ? (buy.b === 'bridge' ? 'Réparer' : 'Construire') : 'Débloquer'} pour le village`;
+    const unloaded = !canPay(funds, cost) && canPay(all, cost); // assez dans le sac, mais pas encore déposé
+    btn.textContent = this.hall < hall ? `Hôtel de ville niv. ${hall} requis` : unloaded ? 'Dépose d\'abord ton sac à l\'entrepôt' : !canPay(funds, cost) ? 'Il manque des ressources' : `${'b' in buy ? (buy.b === 'bridge' ? 'Réparer' : 'Construire') : 'Débloquer'} pour le village`;
   }
 
   /** Paramètres : mode d'attaque et touches (PC), membres du village (expulsion par le fondateur). */
@@ -1622,13 +1633,21 @@ export class Hud {
     return { gold: me.gold, wood: this.stock[0], stone: this.stock[1] };
   }
 
-  /** Pastilles de coût : en rouge ce qui manque encore. */
-  private costChips(id: string, me: Funds, c: Cost) {
+  /**
+   * Pastilles de coût : en rouge ce qui manque encore. Sous le bois et la pierre, ce qu'on en a là où l'on puise
+   * (where : l'entrepôt du village, sauf pour le pont) : on comprend qu'il faut y déposer son sac.
+   */
+  private costChips(id: string, me: Funds, c: Cost, where = 'à l\'entrepôt') {
     $(id).replaceChildren(
       ...([['gold', 'or'], ['wood', 'bois'], ['stone', 'pierre']] as const).filter(([k]) => c[k] > 0).map(([k, label]) => {
         const el = document.createElement('span');
         el.className = me[k] >= c[k] ? 'ok' : 'miss';
         el.textContent = `${c[k]} ${label}`;
+        if (k !== 'gold') {
+          const have = document.createElement('small');
+          have.textContent = `${me[k]} ${where}`;
+          el.append(have);
+        }
         return el;
       }),
     );
@@ -2520,7 +2539,7 @@ const SKILL_ICONS: Record<SkillIcon, string> = {
   night: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M15 3a8 8 0 1 0 6 13A9 9 0 0 1 15 3z"/></svg>',
 };
 
-type Portrait = { canvas: HTMLCanvasElement; s: number; seen: boolean; alpha?: boolean; legend?: boolean; tame?: boolean };
+type Portrait = { canvas: HTMLCanvasElement; s: number; seen: boolean; alpha?: boolean; legend?: boolean; tame?: boolean; fear?: boolean }; // fear : un géant qui tremble de peur
 
 /** Petites icônes des statistiques (couleur via currentColor). */
 const ICONS = {
@@ -2549,8 +2568,10 @@ function paintPortraits(list: Portrait[], still = false) {
     ctx.clearRect(0, 0, b.canvas.width, b.canvas.height);
     const r = b.alpha ? alphaStats(b.s, 0, 1, b.legend).r : SPECIES[b.s].r;
     const scale = Math.min(2.2, (h * dpr * (b.alpha ? 0.72 : 0.55)) / (r * 2)); // l'aura d'Alpha déborde : on remplit plus le cadre
+    const shiver = b.fear && !still ? Math.sin(t * 55) * r * 0.04 : 0;
     ctx.setTransform(scale, 0, 0, scale, b.canvas.width / 2, b.canvas.height * 0.55);
-    drawUnit(ctx, { x: 0, y: 0, r, species: b.s, alpha: !!b.alpha, legend: b.legend, wild: b.seen && !b.alpha && !b.tame, face: 1, t: still ? 0 : t + b.s, seed: b.s, flash: false });
+    drawUnit(ctx, { x: shiver, y: 0, r, species: b.s, alpha: !!b.alpha, legend: b.legend, wild: b.seen && !b.alpha && !b.tame, face: 1, t: still ? 0 : t + b.s, seed: b.s, flash: false });
+    if (b.fear) drawSweat(ctx, shiver + r * 0.42, -r * 1.05, Math.max(4, r * 0.13), t);
     if (!b.seen) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalCompositeOperation = 'source-in';

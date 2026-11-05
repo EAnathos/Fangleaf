@@ -219,4 +219,43 @@ describe('Meute et montures', () => {
     check(swimmers.every((u) => Math.hypot(u.x - p.x, u.y - p.y) < 180) && swimmers.filter((u) => m.isWater(u.x, u.y)).length >= 2,
       'serpent, crabe et crapaud de la meute suivent leur dompteur dans l\'eau');
   });
+
+  rule('Lièvre de la meute : il ne va pas au contact, il reste en retrait derrière son dompteur.', () => {
+    const r = room();
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    const at = r.map.freeNear(r.map.spineAt(r.map.zoneFrom(2) + 600).x, r.map.spineAt(r.map.zoneFrom(2) + 600).y);
+    [p.x, p.y] = [at.x, at.y];
+    p.hp = 1e6;
+    const hare = r.createUnit(SPECIES.findIndex((sp) => sp.key === 'hare'), false, p.x, p.y + 20);
+    hare.owner = p.id;
+    p.army.push(hare.id);
+    const foe = r.createUnit(1, false, p.x + 120, p.y);
+    foe.hp = foe.maxHp = 1e6;
+    foe.speed = 0;
+    for (let i = 0; i < 20 * 3; i++) r.step();
+    check(foe.hp === foe.maxHp, 'il ne frappe pas l\'ennemi');
+    check(hare.x < p.x && Math.hypot(hare.x - foe.x, hare.y - foe.y) > Math.hypot(p.x - foe.x, p.y - foe.y), 'il se tient derrière son dompteur, à l\'opposé de l\'ennemi');
+  });
+
+  rule('Tréant de la meute : comme le golem avec la pierre, il abat les arbres alentour ; le bois revient à son dompteur.', () => {
+    const r = room();
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    const d = r.map.decor.find((x: { kind: number; x: number; y: number }) => x.kind === 0 && r.map.zoneAt(x.x, x.y) === 1 && !r.map.caveAt(x.x, x.y));
+    const t = r.map.trunkOf(d);
+    const at = r.map.freeNear(t.x + 70, t.y);
+    [p.x, p.y] = [at.x, at.y];
+    const tr = r.createUnit(SPECIES.findIndex((sp) => sp.key === 'treant'), false, at.x, at.y + 10);
+    tr.owner = p.id;
+    p.army.push(tr.id);
+    const others = r.map.treesNear(t.x, t.y, 400).filter((i: number) => i !== d.id);
+    for (const i of others) r.map.treeDown.add(i); // seul cet arbre à portée
+    const w0 = p.wood;
+    for (let i = 0; i < 20 * 15 && !r.map.treeDown.has(d.id); i++) {
+      p.movedAt = r.time; // le dompteur ne coupe pas lui-même
+      r.step();
+    }
+    check(r.map.treeDown.has(d.id) && p.wood > w0, `l'arbre tombe sous ses coups (+${p.wood - w0} bois pour son dompteur)`);
+  });
 });

@@ -20,7 +20,7 @@ interface Crack { x: number; y: number; r: number; life: number; max: number; li
 /** Onde de choc enflammée : un front de flammes qui s'élargit (colors : halo, flamme, cœur, en « r,g,b »). */
 interface FireWave { x: number; y: number; r: number; life: number; max: number; seed: number; colors: [string, string, string] }
 /** Sol brûlé en anneau, après une onde enflammée. */
-interface Scorch { x: number; y: number; r: number; life: number; max: number }
+interface Scorch { x: number; y: number; r: number; life: number; max: number; solid?: boolean } // solid : une tache noircie (sinon un anneau)
 /** Traînée au sol (charge) : un sillon qui s'efface. */
 interface Streak { x: number; y: number; x2: number; y2: number; w: number; life: number; max: number; color: string }
 /** Impact d'un coup au corps à corps, selon l'arme du monstre (crocs, griffes, défenses…). */
@@ -94,6 +94,11 @@ export class Fx {
       const a = (i / n) * TAU + Math.random() * 0.3, d = r * (0.4 + Math.random() * 0.5);
       this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.6, `rgb(${i % 2 ? colors[2] : colors[1]})`, 2, 150);
     }
+  }
+
+  /** Sol noirci en tache autour de (x, y) (la foudre vient de tomber là), qui s'efface peu à peu. */
+  blacken(x: number, y: number, r: number, life = 6) {
+    this.scorches.push({ x, y, r, life, max: life, solid: true });
   }
 
   /** Sillon au sol de (x, y) à (x2, y2) (une charge vient de passer). */
@@ -214,6 +219,22 @@ export class Fx {
   drawGround(ctx: CanvasRenderingContext2D) {
     ctx.lineCap = 'round';
     for (const s of this.scorches) {
+      if (s.solid) {
+        ctx.globalAlpha = Math.min(1, (s.life / s.max) * 2) * 0.55;
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.scale(1, 0.6); // vue en perspective
+        const g = ctx.createRadialGradient(0, 0, 0, 0, 0, s.r);
+        g.addColorStop(0, 'rgba(14,10,10,1)');
+        g.addColorStop(0.6, 'rgba(22,16,14,0.7)');
+        g.addColorStop(1, 'rgba(22,16,14,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0, 0, s.r, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+        continue;
+      }
       // anneau de sol noirci, posé au fur et à mesure que le front passe
       const age = s.max - s.life, reach = s.r * Math.min(1, age / 0.55);
       ctx.globalAlpha = Math.min(1, (s.life / s.max) * 1.8) * 0.32;

@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { DT, mountSpeedOf, BERRIES_PICKED, fruitTameChance, BUSH_REGROW_S, SPECIES } from '../../shared/config.ts';
+import { DT, mountSpeedOf, BERRIES_PICKED, fruitTameChance, BUSH_REGROW_S, SPECIES, SPLASH_FLAT } from '../../shared/config.ts';
 import { calendar, DAY_MS, LUNE_DAYS, LUNES, SEASON_MS, season, sky, snowAt, WINTER } from '../../shared/weather.ts';
 
 describe('Faune : tireurs, gibier, baies, bestiaire', () => {
@@ -416,5 +416,25 @@ describe('Faune : tireurs, gibier, baies, bestiaire', () => {
     }
     check(steps === LUNES.length * LUNE_DAYS, `les jours passent un à un (${steps})`);
     check(snowJump < 0.05, 'jamais de neige d\'un coup');
+  });
+
+  rule('Tir en cloche : il ne touche que ce qui se tient dans l\'ellipse annoncée au sol.', () => {
+    const r = room();
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    const turtle = r.createUnit(SPECIES.findIndex((sp) => sp.key === 'lava_tortoise'), false, p.x - 200, p.y);
+    const land = (dx: number, dy: number) => {
+      p.hp = 1e6;
+      r.shots = [];
+      r.launch(turtle, 'magma', p.x + dx, p.y + dy, 100, 0, 1000, 60);
+      r.grid.clear();
+      r.grid.insert(p);
+      r.time += 2;
+      r.updateShots();
+      return p.hp < 1e6;
+    };
+    check(land(0, 0), 'au centre : touché');
+    check(!land(0, 60 * SPLASH_FLAT + p.r * SPLASH_FLAT + 4), 'juste sous l\'ellipse (dans l\'ancien cercle) : épargné');
+    check(land(60, 0), 'sur le bord, de côté : touché');
   });
 });

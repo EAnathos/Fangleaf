@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  ARC_FLIGHT_S, SPLASH_FLAT, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, WINGS_LEASH, VENT_R, VENT_WARN_S, VENT_FIRE_S, VENT_HURT, PLATE_R, GEYSER_R, GEYSER_WARN_S, GEYSER_HURT, PLATE_REARM_S, alphaLevelMult, alphaReviveS, alphaUpCost,
@@ -16,13 +16,14 @@ import type { ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, Player
 import { STAT_KEYS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { HALL_ID, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
-import { sky, WINTER } from '../shared/weather.ts';
+import { sky, SNOWFALL, WINTER } from '../shared/weather.ts';
 import { Grid } from './grid.ts';
 import type { Profile } from './persist.ts';
 
 interface Unit {
   kind: 'u';
   eatOre?: number; // golem de la meute : le rocher qu'il est en train de manger (-1 : aucun)
+  chopTree?: number; // Tréant de la meute : l'arbre qu'il est en train d'abattre (index dans decor, -1 : aucun)
   id: number;
   s: SpeciesId;
   alpha: boolean;
@@ -356,6 +357,11 @@ const FOLLOWS = new Set(['tongue', 'pincer', 'tail', 'impale']);
 /** Nuages qui ne blessent pas d'eux-mêmes : la nuit d'une éclipse, la place du géant au plafond, la toupie (ses coups à part). */
 const NO_TICK = new Set(['eclipse', 'roost', 'shellspin']);
 const speciesOf = (key: string) => SPECIES.findIndex((sp) => sp.key === key);
+const BACKLINE_R = 70; // un lièvre de la meute se tient à cette distance derrière son dompteur, à l'opposé de l'ennemi
+const BEACH_REST_R = 260; // pont cassé : on reprend des forces à cette distance de la plage d'arrivée
+const CHOP_BOLT_CHANCE = 0.2; // sous la pluie, un arbre abattu sur cinq attire la foudre sur le bûcheron…
+const CHOP_BOLT_STUN_S = 1.6; // … qui reste étourdi ce temps-là…
+const CHOP_BOLT_DMG = 0.1; // … et perd cette part de ses PV max
 const BOLT_R = 110; // la foudre touche ce qui se tient à cette distance de l'arbre…
 const BOLT_DMG = 0.15; // … une part de ses PV max
 const BOLT_WARN_S = 1.6; // annoncée ce temps-là (le sol crépite)
@@ -1695,6 +1701,7 @@ export class Room {
     this.night = sky.light < 0.5;
     this.storm = this.zoneOpen(DESERT_ZONE) ? sky.storm : 0; // pas de tempête tant que le village n'a pas ouvert la porte du désert
     this.rain = sky.rain;
+    this.snowing = sky.snow >= SNOWFALL;
     this.fog = sky.fog;
     this.thunder = sky.thunder;
     const frozen = sky.season === WINTER;
@@ -1729,6 +1736,7 @@ export class Room {
   private storm = 0; // tempête de sable (Mer de sable), mise à jour 2 fois par seconde
   private sands: { id: number; x: number; y: number; r: number; born: number; until: number }[] = []; // sables mouvants ouverts
   private rain = 0; // force de l'averse (0 à 1), mise à jour 2 fois par seconde
+  private snowing = false; // assez de neige au sol : l'averse tombe en flocons (pas de foudre sur les bûcherons)
   private season = 0; // saison du village (0 printemps … 3 hiver), mise à jour 2 fois par seconde
   private fog = 0; // brouillard des Lacs brumeux (0 à 1)
   private thunder = 0; // orage (0 à 1) : la foudre tombe sur les arbres isolés
@@ -2147,7 +2155,7 @@ export class Room {
     const b = this.map.bushes.find((x) => this.bushBack[x.id] <= this.time && dist2(p.x, p.y, x.x, x.y) <= BUSH_PICK_R ** 2);
     if (!b) return;
     const n = Math.min(BERRIES_PICKED, MAX_BERRIES - p.fruits);
-    if (n <= 0) return p.send({ t: 'error', msg: `Tu portes déjà ${MAX_BERRIES} baies : tu n'en as plus de place.` });
+    if (n <= 0) return p.send({ t: 'error', msg: `Ton sac de baies est plein : tu ne peux pas en porter plus de ${MAX_BERRIES}.` });
     this.bushBack[b.id] = this.time + BUSH_REGROW_S;
     p.fruits += n;
     p.dirty = true;
@@ -2249,12 +2257,8 @@ export class Room {
       this.treeBack.set(i, this.time + TREE_HEAL_S); // laissé là, il cicatrise
       return;
     }
-    this.treeBack.set(i, this.time + TREE_RESPAWN_S);
-    this.map.treeDown.add(i);
-    const wood = resRoll(treeWood(d.zone) * this.map.treeScale(d) * (1 + lessonBonus(p.learned, 'gather'))), t = this.map.trunkOf(d); // et donne plus de bois
-    p.wood += wood;
-    p.dirty = true;
-    this.events.push({ e: 'res', to: p.id, wood, stone: 0, x: t.x, y: t.y - 40 });
+    const t = this.fell(i, p);
+    this.chopBolt(p, t);
     if (d.zone === TREANT_ZONE && Math.random() < TREANT_CHANCE) {
       const s = SPECIES.findIndex((sp) => sp.key === 'treant'), at = this.map.freeNear(t.x, t.y);
       const u = this.createUnit(s as SpeciesId, false, at.x, at.y);
@@ -2262,6 +2266,74 @@ export class Room {
       u.lastAttacker = p.id;
       u.lastHitAt = this.time;
     }
+  }
+
+  /**
+   * Sous la pluie, abattre un arbre attire parfois la foudre : elle tombe sur le bûcheron, qui reste étourdi un instant
+   * (elle ne l'achève jamais). Pas sous la neige, ni à l'abri d'une grotte, ni dans le désert ou le volcan, où il ne pleut pas.
+   */
+  private chopBolt(p: Player, t: { x: number; y: number }) {
+    if (this.rain < 0.5 || this.snowing || this.map.caveAt(p.x, p.y) || this.map.zoneAt(t.x, t.y) >= DESERT_ZONE) return;
+    if (Math.random() >= CHOP_BOLT_CHANCE) return;
+    this.root(p, CHOP_BOLT_STUN_S);
+    this.events.push({ e: 'struck', id: p.id, x: Math.round(p.x), y: Math.round(p.y) });
+    const dmg = Math.min(Math.round(maxHpOf(p) * CHOP_BOLT_DMG), Math.ceil(p.hp) - 1);
+    if (dmg <= 0) return;
+    p.hp -= dmg;
+    this.events.push({ e: 'hit', a: p.id, b: p.id, dmg });
+  }
+
+  /** L'arbre tombe : il disparaît jusqu'à ce qu'il repousse, et son bois revient à ce dompteur (un grand arbre en donne plus). */
+  private fell(i: number, p: Player) {
+    const d = this.map.decor[i], t = this.map.trunkOf(d);
+    this.treeBack.set(i, this.time + TREE_RESPAWN_S);
+    this.map.treeDown.add(i);
+    const wood = resRoll(treeWood(d.zone) * this.map.treeScale(d) * (1 + lessonBonus(p.learned, 'gather')));
+    p.wood += wood;
+    p.dirty = true;
+    this.events.push({ e: 'res', to: p.id, wood, stone: 0, x: t.x, y: t.y - 40 });
+    return t;
+  }
+
+  /**
+   * Tréant de la meute (ordinaire ou Alpha), sans ennemi à combattre : comme le golem avec la pierre, il va abattre
+   * l'arbre le plus proche, pas trop loin de son dompteur, en quelques coups de branche ; le bois revient à son dompteur.
+   */
+  private treantChops(u: Unit, o: Player) {
+    const ok = (i: number) => {
+      if (this.map.treeDown.has(i)) return false;
+      const t = this.map.trunkOf(this.map.decor[i]);
+      return dist2(o.x, o.y, t.x, t.y) < (FOLLOW_MAX_R * 0.8) ** 2 && !this.map.caveAt(t.x, t.y);
+    };
+    if (u.chopTree === undefined || u.chopTree < 0 || !ok(u.chopTree)) {
+      u.chopTree = -1;
+      if (this.tick % 5 !== 0) return false;
+      let bd = Infinity;
+      for (const i of this.map.treesNear(u.x, u.y, GOLEM_EAT_R)) {
+        const t = this.map.trunkOf(this.map.decor[i]), d = dist2(u.x, u.y, t.x, t.y);
+        if (d < bd && ok(i)) [bd, u.chopTree] = [d, i];
+      }
+      if (u.chopTree < 0) return false;
+    }
+    const i = u.chopTree, d = this.map.decor[i], t = this.map.trunkOf(d), reach = u.r + t.r + 8;
+    if (dist2(u.x, u.y, t.x, t.y) > reach ** 2) {
+      this.navTo(u, t.x, t.y, u.speed, reach - 6);
+      return true;
+    }
+    u.atkCd -= DT;
+    if (u.atkCd > 0) return true;
+    u.atkCd = GOLEM_BITE_S;
+    const full = treeHp(d.zone) * this.map.treeScale(d), hp = (this.treeHp.get(i) ?? full) - full / GOLEM_BITES - 0.01;
+    this.treeHp.set(i, Math.max(0, hp));
+    const done = hp <= 0;
+    this.events.push({ e: 'chop', by: u.id, id: i, done });
+    if (!done) {
+      this.treeBack.set(i, this.time + TREE_HEAL_S);
+      return true;
+    }
+    this.fell(i, o);
+    u.chopTree = -1;
+    return true;
   }
 
   // ───────────────────────── Attaques spéciales des mini-boss ─────────────────────────
@@ -3640,12 +3712,12 @@ export class Room {
     }
   }
 
-  /** Cibles qu'un projectile peut toucher autour de (x, y). */
-  private shotTargets(s: Shot, x: number, y: number, r: number) {
+  /** Cibles qu'un projectile peut toucher autour de (x, y) ; flat : zone au sol aplatie en ellipse (tir en cloche), comme elle est dessinée. */
+  private shotTargets(s: Shot, x: number, y: number, r: number, flat = 1) {
     const out: Ent[] = [];
     this.grid.query(x, y, r + 40, (e) => {
       if (!this.alive(e) || (s.wild ? !this.isAllyOfPlayers(e) : !this.isWild(e))) return;
-      if (dist2(x, y, e.x, e.y) <= (r + e.r) ** 2) out.push(e);
+      if ((e.x - x) ** 2 + ((e.y - y) / flat) ** 2 <= (r + e.r) ** 2) out.push(e);
     });
     return out;
   }
@@ -3655,7 +3727,7 @@ export class Room {
       if (lobbedShot(s.kind)) {
         if (this.time - s.start < ARC_FLIGHT_S) return true;
         const magma = SHOT_KINDS[s.kind] === 'magma';
-        for (const e of this.shotTargets(s, s.tx, s.ty, s.splash)) {
+        for (const e of this.shotTargets(s, s.tx, s.ty, s.splash, SPLASH_FLAT)) {
           this.damage(e, s.dmg, s.by);
           if (magma) this.burnOf(e, s.dmg, s.by); // la roche en fusion met le feu
         }
@@ -4129,6 +4201,14 @@ export class Room {
       u.lastAttacker = 0;
     }
     if (!t) t = this.nearest(anchorX, anchorY, o.dead ? 120 : FOLLOW_ENGAGE_R, prey, u.x, u.y);
+    if (t && SPECIES[u.s].backline && !o.dead) {
+      // il ne va pas au contact : il se tient derrière son dompteur, à l'opposé de l'ennemi
+      u.target = 0;
+      const d = Math.hypot(t.x - o.x, t.y - o.y) || 1, bx = o.x - ((t.x - o.x) / d) * BACKLINE_R, by = o.y - ((t.y - o.y) / d) * BACKLINE_R;
+      const spot = this.blockedFor(u, bx, by) ? { x: o.x, y: o.y } : { x: bx, y: by };
+      this.navTo(u, spot.x, spot.y, Math.max(u.speed, PLAYER_SPEED * 1.15), 10, !!bank);
+      return;
+    }
     if (t) {
       u.target = t.id;
       if ((u.legend || SPECIES[u.s].moves) && this.legendMove(u, t)) return; // en pleine attaque spéciale
@@ -4137,6 +4217,7 @@ export class Room {
     }
     if (o.dead) return;
     if (SPECIES[u.s].key === 'golem' && this.golemEats(u, o)) return;
+    if (SPECIES[u.s].key === 'treant' && this.treantChops(u, o)) return;
     // Au village ou dans un camp (dompteur et monstre à l'abri) : la meute se promène tranquillement.
     const area = this.safeArea(o.x, o.y);
     if (area && dist2(u.x, u.y, area.x, area.y) < area.r ** 2) {
@@ -4604,10 +4685,20 @@ export class Room {
     }
   }
 
+  /**
+   * Où l'on reprend des forces : au village et dans les camps établis. Tant que le pont est cassé, le village est hors
+   * d'atteinte : on se soigne sur la plage où l'on s'est échoué (et plus sur le pont).
+   */
+  private restsAt(x: number, y: number) {
+    if (this.campAt(x, y) >= 0) return true;
+    if (this.buildings.includes('bridge')) return this.map.onIsle(x, y);
+    return dist2(x, y, this.map.spawn.x, this.map.spawn.y) < BEACH_REST_R ** 2;
+  }
+
   private regen() {
     for (const p of this.players.values()) {
       if (p.dead) continue;
-      if (!this.safe(p.x, p.y)) continue; // aucune régénération hors du village et des camps
+      if (!this.restsAt(p.x, p.y)) continue; // aucune régénération hors du village (ou de la plage) et des camps
       p.hp = Math.min(maxHpOf(p), p.hp + 30 * DT);
     }
     for (const u of this.units.values()) {
@@ -4618,7 +4709,7 @@ export class Room {
         if (this.time - u.lastHitAt >= WILD_REGEN_DELAY && !isBoss(u.s)) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * WILD_REGEN * DT);
         continue;
       }
-      if (!this.safe(u.x, u.y)) continue;
+      if (!this.restsAt(u.x, u.y)) continue;
       u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.15 * DT);
     }
   }
@@ -4654,6 +4745,7 @@ export class Room {
       case 'hit': return ent(e.b) ?? ent(e.a) ?? null;
       case 'die': case 'shot': case 'boom': return e;
       case 'zap': return { x: e.pts[0], y: e.pts[1] };
+      case 'struck': return e;
       case 'mend': return ent(e.to) ?? null;
       case 'move': case 'charge': case 'feed': case 'revive': case 'heal': case 'shout': return ent(e.id) ?? null;
       case 'mine': return this.map.ores[e.id] ?? null;

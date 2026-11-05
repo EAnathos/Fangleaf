@@ -1,6 +1,7 @@
 // Combat des dompteurs. Lancer : npm run test:rules
 
 import { describe } from 'node:test';
+import { Room } from '../../server/room.ts';
 import { rule, check, room, noop } from '../helpers.ts';
 import { alphaCreateCost, DT, REVIVE_HOLD_S, REVIVE_R, REVIVE_WINDOW_S, armorMaxHp, DEATH_GOLD_LOSS, SPECIES } from '../../shared/config.ts';
 
@@ -214,5 +215,18 @@ describe('Combat des dompteurs', () => {
     const r = room();
     const p = r.addPlayer('a', noop);
     check(p.hp === Math.round(armorMaxHp(0) * 1.25), `nouveau dompteur : ${p.hp} PV à l'arrivée, le maximum`);
+  });
+
+  rule('Pont cassé : on reprend des forces sur la plage où l\'on s\'est échoué, pas sur le pont.', () => {
+    const r: any = new Room('TEST');
+    const p = r.addPlayer('a', noop), br = r.map.bridge;
+    [p.x, p.y] = [r.map.spawn.x + 40, r.map.spawn.y];
+    p.hp = 20;
+    for (let i = 0; i < 40; i++) r.regen();
+    check(p.hp > 20, 'sur la plage d\'arrivée, on se soigne');
+    [p.x, p.y] = [(br.a.x * 3 + br.b.x) / 4, (br.a.y * 3 + br.b.y) / 4];
+    p.hp = 20;
+    for (let i = 0; i < 40; i++) r.regen();
+    check(p.hp === 20, 'sur le pont cassé, non');
   });
 });

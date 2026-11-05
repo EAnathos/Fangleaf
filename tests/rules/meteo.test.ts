@@ -87,4 +87,31 @@ describe('Météo et affinités', () => {
     check(Math.hypot(p.x - b.x, p.y - b.y) > 110 + p.r || p.hp < 1e4, 'ceux qui étaient tout près sont touchés');
   });
 
+
+  rule('Sous la pluie, abattre un arbre attire parfois la foudre sur le bûcheron : étourdi, jamais achevé.', () => {
+    const r = room();
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    const d = r.map.decor.find((x: { kind: number; x: number; y: number }) => x.kind === 0 && r.map.zoneAt(x.x, x.y) === 1 && !r.map.caveAt(x.x, x.y));
+    const t = r.map.trunkOf(d);
+    [p.x, p.y] = [t.x + 30, t.y];
+    p.hp = 3;
+    r.rain = 1;
+    r.snowing = false;
+    const rand = Math.random;
+    Math.random = () => 0; // la foudre tombe à coup sûr
+    r.treeHp.set(d.id, 0.001);
+    r.chop(p, d.id);
+    Math.random = rand;
+    check(r.events.some((e: { e: string; id: number }) => e.e === 'struck' && e.id === p.id), 'la foudre tombe sur lui');
+    check(r.rooted(p) && p.hp >= 1 && !p.dead, 'il est étourdi, mais jamais achevé');
+    r.events.length = 0;
+    r.rain = 0;
+    r.map.treeDown.delete(d.id);
+    r.treeHp.set(d.id, 0.001);
+    Math.random = () => 0;
+    r.chop(p, d.id);
+    Math.random = rand;
+    check(!r.events.some((e: { e: string }) => e.e === 'struck'), 'par temps sec, jamais');
+  });
 });

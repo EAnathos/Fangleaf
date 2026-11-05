@@ -1,7 +1,7 @@
 // Descriptions des espèces : bestiaire de la Tanière.
 
 export const SPECIES_DESC: Record<string, string> = {
-  hare: 'Gibier des Landes qui grignote les baies des buissons. Il ne se bat pas : il détale devant qui approche les mains vides. Avance un fruit à la main (T) pour l\'apprivoiser.',
+  hare: 'Gibier des Landes qui grignote les baies des buissons. Il ne se bat pas : il détale devant qui approche les mains vides. Avance un fruit à la main (T) pour l\'apprivoiser. Dans ta meute, il reste en retrait, derrière toi.',
   meerkat: 'Vit en colonie autour de sa tanière, dans la Mer de sable. Quand un dompteur sans fruit ou un vautour approche, tout le monde court s’y cacher. Avance doucement, un fruit à la main (T).',
   sandworm: 'File sous le sable, intouchable : on ne voit qu’une bosse qui avance. Un cercle au sol annonce sa sortie : écarte-toi, puis frappe-le avant qu’il replonge.',
   vulture: 'Tourne au-dessus de toi, hors d’atteinte, puis pique là où tombe son ombre : un cercle au sol l’annonce. Frappe-le pendant qu’il est posé, avant qu’il redécolle. Une tempête de sable le cloue au sol.',
@@ -23,7 +23,7 @@ export const SPECIES_DESC: Record<string, string> = {
   watcher: 'Sentinelle de pierre moussue (tireur). Son œil se charge, puis un trait runique lent part vers toi : écarte-toi.',
   toad: 'Crapaud des Lacs brumeux (tireur). Gonfle sa gorge et crache en cloche : sors du cercle annoncé au sol.',
   serpent: 'Nage dans les lacs sans jamais en sortir (tireur). Se dresse, puis tire un jet d\'eau rapide. À frapper depuis la rive ou à distance.',
-  treant: 'Il dort dans un sapin des Bois profonds. Abats le mauvais arbre, et il se réveille de très mauvaise humeur.',
+  treant: 'Il dort dans un sapin des Bois profonds. Abats le mauvais arbre, et il se réveille de très mauvaise humeur. Dans ta meute, il abat les arbres alentour et t\'en rapporte le bois.',
   crab: 'Carapace épaisse, marche de côté et pince fort. Le tank des Lacs brumeux, qui protège les tireurs.',
   salamander: 'Lézard noir dont le dos rougeoie comme une braise. Vive et nerveuse, elle chasse en bande au ras de la lave : ses morsures brûlent.',
   ash_bat: 'Chauve-souris aux ailes de cendre, qui laisse une traînée d\'étincelles. Elle arrive en nuée et frappe vite : garde ta meute serrée.',

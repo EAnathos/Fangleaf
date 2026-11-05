@@ -39,7 +39,8 @@ On se réveille sur une plage inconnue, sans arme. Une épée est plantée dans 
 plusieurs fois dessus (**E**) pour la déterrer, et on ne peut pas se battre avant. Un chemin de cailloux mène de
 la plage à un **pont de bois** qui traverse un bras de mer jusqu'à l'**îlot du village**. Le pont est cassé : on le
 répare (**E** à son pied) avec le bois et la pierre de son sac, ramassés sur la plage et alentour. De l'autre côté,
-le village n'est encore qu'un camp de fortune ; tant que le pont n'est pas réparé, on se réveille sur la plage.
+le village n'est encore qu'un camp de fortune ; tant que le pont n'est pas réparé, on se réveille sur la plage, et
+c'est là qu'on reprend des forces (pas sur le pont).
 
 ## L'île et ses zones
 
@@ -79,7 +80,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   **torche** (rayon de lumière la nuit), les **bottes** (vitesse) et la **selle** (vitesse des montures). Chaque
   amélioration coûte de l'or et du **bois** : celui du sac d'abord, puis celui de l'entrepôt du village.
 - **Tireurs** (Guetteur, Crapaud-mortier, Serpent, Gorille, Petit Masqué) : ils s'immobilisent pour charger leur tir. On s'écarte de la
-  trajectoire, ou on sort du cercle annoncé au sol. Monté, un tireur (Serpent, Gorille) tire de loin sur les sauvages,
+  trajectoire, ou on sort du cercle annoncé au sol (seul ce qui s'y tient est touché). Monté, un tireur (Serpent, Gorille) tire de loin sur les sauvages,
   sans s'arrêter.
 - **Hors du village** (et des camps établis), on ne régénère pas. Les monstres sauvages, eux, récupèrent si on
   cesse de les frapper.
@@ -115,7 +116,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - On le **renforce** avec des essences, de plus en plus cher à chaque niveau, et un peu plus dans les zones lointaines.
 - Seuls quelques Alphas sont **équipés** à la fois ; les autres se reposent à la Tanière.
 - **Bonus de collection** : chaque Alpha éveillé renforce tous les autres.
-- **Alphas à pouvoir** : le Lièvre soigne son dompteur et la meute proche. Le Suricate et l'Escargot ont une
+- **Alphas à pouvoir** : le Lièvre soigne son dompteur et la meute proche (dans la meute, il ne va pas au contact :
+  il reste en retrait, derrière son dompteur). Le Suricate et l'Escargot ont une
   compétence, lancée seule au combat dès qu'elle est rechargée : le Suricate se dresse et crie (les alliés autour de lui
   frappent plus fort), l'Escargot dresse sa carapace (ils encaissent moins). Elle profite à tous les alliés proches,
   dompteurs et meutes, pendant quelques secondes : une épée et ses flèches, ou un bouclier, au-dessus de leur tête.
@@ -129,7 +131,12 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 
 - **Récolte** : à côté d'un arbre (bois), d'un rocher (pierre) ou d'un filon (or et un peu de pierre), le dompteur
   sort sa hache ou sa pioche tout seul quand aucun monstre n'est à portée. Bois et pierre vont dans son sac :
-  **E à l'entrepôt** du village pour les verser dans la réserve commune, qui paie les constructions.
+  **E à l'entrepôt** du village pour les verser dans la réserve commune, qui paie les constructions (leurs coûts
+  affichent ce qu'il y a dans l'entrepôt). Une barre montre ce qu'il reste à un arbre entamé avant qu'il tombe.
+- **Foudre** : sous la pluie, abattre un arbre attire parfois la foudre sur le bûcheron : il perd un peu de PV (elle
+  ne l'achève jamais) et reste étourdi un instant.
+- Dans la meute, le **Golem de mousse** croque les rochers alentour et le **Tréant** abat les arbres : la pierre et le
+  bois reviennent à leur dompteur.
 - **Baies** : **E** près d'un buisson garni pour cueillir. **T** pour tendre un fruit ; fruit en main, on ne se bat plus.
 - **Gibier passif** (Escargot, Lièvre, Luciole, Suricate) : il n'attaque jamais et vient manger aux buissons.
   Fruit tendu, il s'approche peu à peu, et chaque fruit mangé peut l'apprivoiser (bien plus rarement pour un
@@ -181,6 +188,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Chaque espèce hostile a son **géant**, qui dort au fond d'une grotte. On **débloque** la grotte pour tout le village
   (de plus en plus cher selon la zone), puis on y entre avec sa meute (E à l'entrée, E à la sortie pour ressortir).
 - **E** près du géant pour lui parler, puis on lance le combat. Ses PV dépendent du nombre de membres du village.
+- Il se souvient de toi, le jour même : vaincu, il a peur quand tu reviens (il tremble, une goutte de sueur au front) ;
+  s'il t'a corrigé, il se moque de toi.
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
   (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact.
 - Sur ordinateur, en combat, sa barre de vie et son nom s'affichent en haut de l'écran.
@@ -292,15 +301,16 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Le ciel suit l'heure du serveur : tout le village voit la même nuit et la même averse.
 - **Nuit** : certains monstres dorment (le Lièvre), d'autres se réveillent (l'Ours), d'autres n'apparaissent
   qu'alors (Lucioles, Chacals fantômes). La torche éclaire autour du dompteur.
-- **Calendrier** : les jours passent (un jour = un cycle jour et nuit, il commence au lever du soleil), deux par lune,
-  douze lunes par an — du Dégel à la Longue Nuit. La date s'affiche sous la minicarte ; un clic ouvre le calendrier
-  (les lunes de l'année, ce que chacune apporte). Chaque nouvelle lune est annoncée.
-  - Au printemps (Bourgeons, Fleurs), les arbres fleurissent ; aux Brumes et aux Feuilles mortes, ils roussissent ;
-    pendant la Lune des Orages, presque toutes les averses tournent à l'orage.
-  - **Fin d'année** : la neige s'installe peu à peu pendant la Lune des Premiers Givres, par plaques, jusqu'à tout
-    couvrir (jamais la jungle ni le désert), et la pluie tombe en flocons. Quand elle couvre le sol, les mares gèlent et
-    des **Bigfoots** rôdent dans les Bois profonds (rares et costauds, ils repartent avec la neige). Elle fond peu à peu
-    pendant la Lune du Dégel.
+- **Calendrier** : les jours passent (un jour = un cycle jour et nuit, il commence au lever du soleil), au fil des
+  quatre saisons — printemps, été, automne, hiver. La date (saison et jour) s'affiche sous la minicarte ; un clic ouvre
+  le calendrier (les saisons de l'année, leurs jours, ce qu'apporte le moment présent). Chaque début, milieu et fin de
+  saison est annoncé.
+  - Au printemps, les arbres fleurissent ; à l'automne, ils roussissent ; pendant les **Orages d'été**, presque toutes
+    les averses tournent à l'orage.
+  - **Fin d'année** : la neige s'installe peu à peu à la fin de l'automne, par plaques, jusqu'à tout couvrir (jamais la
+    jungle ni le désert), et la pluie tombe en flocons. Quand elle couvre le sol, les mares gèlent et des **Bigfoots**
+    rôdent dans les Bois profonds (rares et costauds, ils repartent avec la neige). Elle fond peu à peu au début du
+    printemps.
 - **Pluie** : l'Escargot l'adore, il va plus vite.
 - **Tempête de sable** (Mer de sable) : elle blesse ceux qui restent dehors ; les vers restent sous le sable, les
   suricates cachés, et les vautours sont cloués au sol (sauvages, de la meute, et la monture).

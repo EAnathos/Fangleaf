@@ -10,12 +10,13 @@ import { type Ambience, sound } from './audio.ts';
 import { Fog } from './fog.ts';
 import { Fx } from './fx.ts';
 import { playWakeUp } from './intro.ts';
+import { bossMemory, moodCry } from './bossMemory.ts';
 import { eggsOf, elderName, HATCHLINGS } from './elder.ts';
 import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, textScale, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawShadowRun, drawLurkEyes, drawStinger, drawDizzy, drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, drawTornado, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawZap, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawShadowRun, drawLurkEyes, drawStinger, drawDizzy, drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawBambooStump, drawSweat, drawSkyBolt, drawStruck, STRUCK_S, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, drawTornado, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawZap, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { Ambient } from './ambient.ts';
 import { desertMix, drawQuicksand, jungleMix, lakesMix, World } from './world.ts';
@@ -76,6 +77,27 @@ export class Game {
   private sandSeen = new Map<number, { born: number; until: number }>(); // sables mouvants : quand ils se sont ouverts et quand ils se referment (horloge locale)
   private movesSaid = new Map<number, Set<string>>(); // géant → attaques déjà annoncées par leur nom dans ce combat
   private strikes: { x: number; y: number; at: number; seed: number }[] = []; // éclairs qui viennent de tomber
+  private struck = new Map<number, { at: number; seed: number }>(); // dompteurs que la foudre vient de frapper (sous la pluie, en abattant un arbre)
+  private struckTold = false;
+  private smugAt = 0; // prochain ricanement d'un géant qui nous a corrigés aujourd'hui
+
+  /**
+   * Humeur du géant endormi en (x, y) (s : son espèce) envers nous, s'il est dans notre grotte : peur s'il a été vaincu
+   * aujourd'hui, moquerie s'il nous a corrigés (bossMemory) ; revu endormi après un combat sans victoire, il a gagné.
+   */
+  private bossMoodAt(x: number, y: number, s: number) {
+    const c = this.map.arenaAt(this.me.x, this.me.y);
+    if (!c || c.boss !== s || this.map.arenaAt(x, y)?.id !== c.id) return null;
+    bossMemory.settle(c.id, this.time);
+    return bossMemory.mood(c.id);
+  }
+
+  /** Le géant de notre grotte est réveillé : on se bat contre lui (pour savoir, après, qui a eu le dessus). */
+  private watchBossFight(units: UnitTuple[]) {
+    const c = this.map.arenaAt(this.me.x, this.me.y);
+    if (!c) return;
+    if (units.some(([, s, flags, , , , owner]) => s === c.boss && !owner && !(flags & UNIT_FLAG_DORMANT))) bossMemory.fighting(c.id, this.time);
+  }
   private beams: { from: number; to: number; at: number }[] = []; // soins des totems : un rayon vert du totem à l'allié
   private zaps: { pts: number[]; at: number; color?: string }[] = []; // décharges du Grand Drake qui rebondissent (éclairs à dessiner)
   private chestSeen = new Map<number, number>(); // coffre → première apparition (il tombe en rebondissant)
@@ -923,7 +945,8 @@ export class Game {
         const b = this.posOf(e.id, players), boss = SPECIES[this.map.caves[e.cave]?.boss ?? 0];
         this.hud.setPanel(this.hud.panel === 'talk' ? null : this.hud.panel);
         if (b) {
-          this.fx.text(b.x, b.y - 90, `« ${BOSS_LINES[boss.key]?.cry ?? '!'} »`, '#FF9B78', 20, 2.2);
+          const cry = this.map.arenaAt(this.me.x, this.me.y)?.id === e.cave ? moodCry(bossMemory.mood(e.cave), this.map.caves[e.cave]?.boss ?? 0) : null; // il se souvient de nous
+          this.fx.text(b.x, b.y - 90, `« ${cry ?? BOSS_LINES[boss.key]?.cry ?? '!'} »`, '#FF9B78', 20, 2.2);
           this.fx.ring(b.x, b.y, '#E8693F', 20, 160, 0.8);
         }
         this.shake = 0.35;
@@ -1234,15 +1257,22 @@ export class Game {
         if (!d) break;
         const t = this.map.trunkOf(d);
         this.chopAt.set(e.id, this.time);
-        this.fx.burst(t.x, t.y - 10, '#B88A5A', e.done ? 24 : 5, e.done ? 160 : 70);
-        if (e.done) this.fx.burst(t.x, t.y - 50, this.map.styleZone(d.x, d.y) === DESERT_ZONE ? '#7FA65A' : '#4F8A45', 26, 140); // le feuillage s'éparpille
-        this.tools.set(e.by, { kind: 'axe', at: this.time, tx: t.x, ty: t.y });
+        const z = this.map.styleZone(d.x, d.y), bamboo = z === JUNGLE_ZONE && this.world.isBamboo(d.x, d.y);
+        this.fx.burst(t.x, t.y - 10, bamboo ? '#9DBF5A' : '#B88A5A', e.done ? 24 : 5, e.done ? 160 : 70); // copeaux (ou éclats de bambou)
+        if (e.done) this.fx.burst(t.x, t.y - 50, z === DESERT_ZONE ? '#7FA65A' : '#4F8A45', 26, 140); // le feuillage s'éparpille
+        if (e.by === this.myId || players.some((p) => p.id === e.by)) this.tools.set(e.by, { kind: 'axe', at: this.time, tx: t.x, ty: t.y });
+        else {
+          // un Tréant de la meute frappe le tronc de ses branches
+          const g = this.posOf(e.by, players);
+          if (g) this.lunges.set(e.by, { at: this.time, ang: Math.atan2(t.y - g.y, t.x - g.x) });
+        }
         break;
       }
       case 'boss': {
         const c = this.map.caves[e.cave];
         const near = c && (this.map.arenaAt(this.me.x, this.me.y)?.id === c.id || Math.hypot(this.me.x - c.entrance.x, this.me.y - c.entrance.y) < 1500);
         if (e.down) this.hud.toast(`${bossName(e.s)} est vaincu !`, 'good');
+        if (e.down) bossMemory.won(e.cave); // (si l'on se battait contre lui)
         if (!e.down && c && this.map.arenaAt(this.me.x, this.me.y)?.id === c.id) {
           // il réapparaît sous nos yeux : le cercle d'invocation éclate
           const x = c.inside.x, y = c.inside.y - 60, col = SPECIES[e.s].color;
@@ -1277,6 +1307,30 @@ export class Game {
         if (near < 900) this.flashScreen(0.55 * (1 - near / 900));
         if (near < 500) this.shake = Math.max(this.shake, 0.45);
         sound.play('thunder', Math.max(0.25, 1 - near / 1400));
+        break;
+      }
+      case 'struck': {
+        // la foudre tombe sur un bûcheron : éclair ramifié, flash, sol noirci et fendu, gerbe d'étincelles ; lui, foudroyé,
+        // apparaît en radiographie, puis noirci de suie, l'électricité crépitant autour de lui (drawStruck)
+        const near = Math.hypot(this.me.x - e.x, this.me.y - e.y), mine = e.id === this.myId;
+        this.struck.set(e.id, { at: this.time, seed: Math.random() * 100 });
+        this.fx.blacken(e.x, e.y + 10, 58, 7);
+        this.fx.crack(e.x, e.y + 10, 95, 4);
+        this.fx.ring(e.x, e.y + 10, '#BFD4FF', 12, 150, 0.45);
+        this.fx.ring(e.x, e.y + 10, '#FFFFFF', 6, 90, 0.25);
+        this.fx.burst(e.x, e.y - 10, '#DDE8FF', 26, 280);
+        this.fx.burst(e.x, e.y - 10, '#FFE9A0', 14, 220);
+        this.fx.debris(e.x, e.y + 8, ['#3A2A1E', '#5A3E28', '#2A2420'], 10, 200, 5);
+        this.fx.dust(e.x, e.y + 10, 70, 10, 'rgba(90,88,92,0.5)');
+        if (near < 1100) this.flashScreen((mine ? 0.85 : 0.6) * (1 - near / 1100));
+        if (near < 600) this.shake = Math.max(this.shake, mine ? 0.7 : 0.4);
+        sound.play('thunder', Math.max(0.3, 1 - near / 1400));
+        sound.play('zap', Math.max(0.2, 1 - near / 900));
+        if (mine) {
+          this.fx.text(e.x, e.y - 70, 'Foudroyé !', '#DDE8FF', 20, 1.6);
+          if (!this.struckTold) this.hud.toast('La foudre ! Sous la pluie, abattre un arbre l\'attire parfois sur le bûcheron.');
+          this.struckTold = true;
+        } else this.fx.text(e.x, e.y - 70, `${name(e.id)} est foudroyé !`, '#DDE8FF', 15, 1.4);
         break;
       }
       case 'mend': {
@@ -2360,16 +2414,17 @@ export class Game {
 
   /**
    * Les jours qui passent : le sol et les arbres suivent la saison, la neige s'installe et fond peu à peu ; on annonce
-   * chaque nouvelle lune (pas à l'arrivée), et la date s'affiche sous la minicarte.
+   * chaque nouvelle période de la saison (pas à l'arrivée), et la date s'affiche sous la minicarte.
    */
   private luneSeen = -1;
   private watchCalendar(sky: Sky) {
     this.world.setSeason(sky.season, sky.snow);
     this.map.frozen = sky.season === WINTER; // l'hiver, les mares gèlent (même règle que le serveur)
     this.hud.setDate(sky.date);
+    bossMemory.setDay(`${sky.date.year}-${sky.date.day}`);
     const lune = sky.date.lune;
     if (lune === this.luneSeen) return;
-    if (this.luneSeen >= 0) this.hud.toast(`${LUNES[lune].emblem} ${LUNES[lune].name} : ${LUNES[lune].about}`, snowAt(sky.date.t + 1) > 0 ? '' : 'good');
+    if (this.luneSeen >= 0) this.hud.toast(`${LUNES[lune].emblem} ${LUNES[lune].name} : ${LUNES[lune].about}`, snowAt(sky.date.t + 1) > 0 ? '' : 'good'); // « Fin de l'automne : … »
     this.luneSeen = lune;
   }
 
@@ -2613,8 +2668,8 @@ export class Game {
     const trees = all.filter((d) => !this.map.treeDown.has(d.id));
     for (const d of all) {
       if (!this.map.treeDown.has(d.id)) continue;
-      const t = this.map.trunkOf(d);
-      list.push({ y: t.y, draw: () => drawStump(ctx, t.x, t.y, t.r) });
+      const t = this.map.trunkOf(d), z = this.map.styleZone(d.x, d.y);
+      list.push({ y: t.y, draw: () => (z === JUNGLE_ZONE && this.world.isBamboo(d.x, d.y) ? drawBambooStump(ctx, t.x, t.y, t.r, d.id) : drawStump(ctx, t.x, t.y, t.r)) });
     }
     const tz = new Map(trees.map((d) => [d, this.map.styleZone(d.x, d.y)])); // style de chaque arbre (la jungle a ses géants)
     for (const d of trees) this.world.treeShadow(ctx, d.x, d.y, tz.get(d));
@@ -2632,6 +2687,12 @@ export class Game {
           if (shake) ctx.translate(shake, 0);
           this.world.tree(ctx, d.x, d.y, tz.get(d) ?? 1, next, false);
           if (shake) ctx.translate(-shake, 0);
+          // entamé : ce qu'il lui reste avant de tomber (comme les rochers et les filons)
+          const hp = treeState.get(d.id);
+          if (hp !== undefined && hp > 0 && hp < 100) {
+            const t = this.map.trunkOf(d);
+            hpBar(ctx, t.x, t.y - 34, 34, hp, '#C89B5E');
+          }
         },
       });
     }
@@ -2729,6 +2790,7 @@ export class Game {
     }
 
     const topBoss = this.updateBossBar(units);
+    this.watchBossFight(units);
     const sleepingDens = new Set<number>(); // tanières où la colonie de suricates dort (la nuit) : des « z » au-dessus
     for (const u of units) {
       const [id, s0, flags, x, y, hp, owner] = u;
@@ -2847,8 +2909,16 @@ export class Game {
       list.push({
         y,
         draw: () => {
+          const mood = boss && flags & UNIT_FLAG_DORMANT ? this.bossMoodAt(x, y, s0) : null;
+          const shiver = mood?.mood === 'fear' ? Math.sin(this.time * 55) * Math.min(4, 1.2 + mood.n) : 0; // il tremble de peur
+          if (shiver) ctx.translate(shiver, 0);
           this.drawUnitCached(ctx, id, look(), pose);
-          if (boss && flags & UNIT_FLAG_DORMANT) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
+          if (shiver) ctx.translate(-shiver, 0);
+          if (mood?.mood === 'fear') drawSweat(ctx, x + shiver + r * 0.42 * (this.faces.get(id)?.face ?? 1), y - r * 1.05, Math.max(4, r * 0.13), this.time, id % 7 / 7);
+          else if (mood?.mood === 'smug' && Math.hypot(this.me.x - x, this.me.y - y) < 450 && this.time > this.smugAt) {
+            this.smugAt = this.time + 3.5;
+            this.fx.text(x, y - r * 1.6 - 30, 'Hé hé hé…', '#FF9B78', 16, 1.6); // il ricane en nous voyant revenir
+          } else if (boss && flags & UNIT_FLAG_DORMANT && !mood) this.snore(x + r * 0.6, y - r * 1.3, 18, id); // géant endormi : il attend qu'on lui parle
           if (flags & UNIT_FLAG_ASLEEP) this.snore(x + r * 0.6, y - r * 1.2, 12, id); // lièvre qui dort la nuit, ours le jour
           if (boss && (SPECIES[s0].mimic ? !topBoss : id !== topBoss)) { // (un leurre : comme son géant)
             // Mini-boss : nom et grande barre de vie, toujours visibles (en combat sur ordinateur : en haut de l'écran).
@@ -2961,6 +3031,11 @@ export class Game {
           );
           if (p.torch && sky.light < 0.85) drawTorch(ctx, x + back - (fx < -0.1 ? -15 : 15), y - lift - 2, p.torch, this.time); // de l'autre main
           if (p.slowed) drawWebbed(ctx, x, y - lift, this.time);
+          const zapped = this.struck.get(p.id), zage = zapped ? this.time - zapped.at : STRUCK_S;
+          if (zapped && zage < STRUCK_S) {
+            drawStruck(ctx, x + back, y - lift, zage, this.time, zapped.seed); // foudroyé
+            if (zage < 1.6 && Math.random() < this.dt * 14) this.fx.burst(x + (Math.random() - 0.5) * 30, y - lift + (Math.random() - 0.5) * 26, Math.random() < 0.6 ? '#DDE8FF' : '#FFE9A0', 2, 110);
+          }
           if (p.held) drawDizzy(ctx, x, y - lift - 58, this.time); // saisi, étourdi
           if (p.buffs) drawBuffs(ctx, x, y - lift - 64, p.buffs, this.time, p.id);
           if (p.buffs & UNIT_FLAG_BURN && Math.random() < this.dt * 12) this.fx.burst(x + (Math.random() - 0.5) * 22, y - lift - 18, Math.random() < 0.5 ? '#FFB347' : '#FF6A2A', 2, 60); // il brûle
@@ -2982,6 +3057,11 @@ export class Game {
     }
     this.drawBeams(ctx, units);
     this.drawStrikes(ctx);
+    for (const [id, st] of this.struck) {
+      const age = this.time - st.at, at = this.posOf(id, players);
+      if (age > STRUCK_S) this.struck.delete(id);
+      else if (at) drawSkyBolt(ctx, at.x, at.y - 18, age, st.seed);
+    }
     this.zaps = this.zaps.filter((z) => this.time - z.at < ZAP_S);
     for (const z of this.zaps) drawZap(ctx, z.pts, 1 - (this.time - z.at) / ZAP_S, Math.floor(this.time * 30) + z.at, z.color);
     if (!here) this.drawLakeMist(camX, camY, hw, hh);

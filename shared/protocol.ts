@@ -224,6 +224,7 @@ export type GameEvent =
   | { e: 'boom'; x: number; y: number; r: number; kind: string; by?: number } // une attaque spéciale frappe (by : dompteur de l'Alpha qui l'a lancée)
   | { e: 'victory'; s: number; dur: number; first: boolean; rows: { id: number; name: string; color: string; dealt: number; taken: number; dodges: number; best: number }[] } // géant vaincu : ce qu'a fait chacun (dur : durée du combat, en s)
   | { e: 'thunder'; x: number; y: number; tree: number } // la foudre tombe (sur cet arbre, qui brûle et tombe ; -1 : aucun)
+  | { e: 'struck'; id: number; x: number; y: number } // sous la pluie, la foudre tombe sur un dompteur qui vient d'abattre un arbre (il est étourdi)
   | { e: 'mend'; from: number; to: number; n: number } // un totem soigne un allié du Grand Masque (n : PV rendus)
   | { e: 'zap'; pts: number[]; by?: number } // la décharge du Grand Drake rebondit : x, y de chaque cible touchée, dans l'ordre (by : dompteur de son Alpha légendaire)
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire

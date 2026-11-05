@@ -26,31 +26,33 @@ const FOG_FADE = 60_000;
 const THUNDER_CHANCE = 0.4;
 export const SNOWFALL = 0.15; // assez de neige au sol : il fait froid, la pluie tombe en flocons (et plus d'orage)
 
-// Le calendrier de l'île : douze lunes de LUNE_DAYS jours (un jour = un cycle jour + nuit, il commence au lever du
-// soleil), chaque village à son propre moment de l'année. La neige s'installe peu à peu pendant la Lune des Premiers
-// Givres, couvre l'île les deux dernières lunes, et fond pendant la Lune du Dégel.
+// Le calendrier de l'île : quatre saisons, découpées en douze périodes de LUNE_DAYS jours (un jour = un cycle jour +
+// nuit, il commence au lever du soleil), chaque village à son propre moment de l'année. La neige s'installe peu à peu
+// à la fin de l'automne, couvre l'île tout l'hiver, et fond au début du printemps.
 export const LUNE_DAYS = 2;
 export const SPRING = 0, SUMMER = 1, AUTUMN = 2, WINTER = 3;
+export const SEASON_NAMES = ['Printemps', 'Été', 'Automne', 'Hiver'];
+export const SEASON_EMBLEMS = ['🌸', '☀️', '🍂', '❄️'];
 export interface Lune { name: string; emblem: string; season: number; about: string }
 export const LUNES: Lune[] = [
-  { name: 'Lune du Dégel', emblem: '💧', season: SPRING, about: 'La neige fond peu à peu, les mares dégèlent.' },
-  { name: 'Lune des Bourgeons', emblem: '🌱', season: SPRING, about: 'Les arbres reverdissent.' },
-  { name: 'Lune des Fleurs', emblem: '🌸', season: SPRING, about: 'Les arbres sont en fleurs.' },
-  { name: 'Lune du Soleil', emblem: '☀️', season: SUMMER, about: 'Le plein été.' },
-  { name: 'Lune des Orages', emblem: '⛈️', season: SUMMER, about: 'Chaleur lourde : presque toutes les averses tournent à l\'orage.' },
-  { name: 'Lune des Moissons', emblem: '🌾', season: SUMMER, about: 'L\'été bat son plein.' },
-  { name: 'Lune des Braises', emblem: '🔥', season: SUMMER, about: 'Les derniers jours brûlants de l\'été.' },
-  { name: 'Lune des Brumes', emblem: '🌫️', season: AUTUMN, about: 'Les feuilles roussissent.' },
-  { name: 'Lune des Feuilles mortes', emblem: '🍂', season: AUTUMN, about: 'Les arbres se dégarnissent.' },
-  { name: 'Lune des Premiers Givres', emblem: '❄️', season: AUTUMN, about: 'Fin d\'année : la neige s\'installe peu à peu sur l\'île (jamais sur la jungle ni le désert).' },
-  { name: 'Lune des Neiges', emblem: '☃️', season: WINTER, about: 'Tout est blanc, les mares gèlent, des Bigfoots rôdent dans les Bois profonds.' },
-  { name: 'Lune de la Longue Nuit', emblem: '🌙', season: WINTER, about: 'La dernière lune de l\'année, au plus froid.' },
+  { name: 'Début du printemps', emblem: '💧', season: SPRING, about: 'La neige fond peu à peu, les mares dégèlent.' },
+  { name: 'Printemps', emblem: '🌱', season: SPRING, about: 'Les arbres reverdissent.' },
+  { name: 'Fin du printemps', emblem: '🌸', season: SPRING, about: 'Les arbres sont en fleurs.' },
+  { name: 'Début de l\'été', emblem: '☀️', season: SUMMER, about: 'Il fait beau et chaud.' },
+  { name: 'Orages d\'été', emblem: '⛈️', season: SUMMER, about: 'Chaleur lourde : presque toutes les averses tournent à l\'orage.' },
+  { name: 'Plein été', emblem: '🌾', season: SUMMER, about: 'L\'été bat son plein.' },
+  { name: 'Fin de l\'été', emblem: '🔥', season: SUMMER, about: 'Les derniers jours brûlants de l\'été.' },
+  { name: 'Début de l\'automne', emblem: '🌫️', season: AUTUMN, about: 'Les feuilles roussissent.' },
+  { name: 'Automne', emblem: '🍂', season: AUTUMN, about: 'Les arbres se dégarnissent.' },
+  { name: 'Fin de l\'automne', emblem: '❄️', season: AUTUMN, about: 'Les premières neiges s\'installent peu à peu sur l\'île (jamais sur la jungle ni le désert).' },
+  { name: 'Début de l\'hiver', emblem: '☃️', season: WINTER, about: 'Tout est blanc, les mares gèlent, des Bigfoots rôdent dans les Bois profonds.' },
+  { name: 'Fin de l\'hiver', emblem: '🌙', season: WINTER, about: 'Les derniers jours de l\'année, au plus froid.' },
 ];
 export const YEAR_DAYS = LUNES.length * LUNE_DAYS;
 export const YEAR_MS = YEAR_DAYS * DAY_MS;
 export const SEASON_MS = YEAR_MS / 4; // un quart d'année
 const EPOCH_DAY = Math.floor(Date.UTC(2026, 0, 1) / DAY_MS); // pour numéroter les années
-const STORM_LUNE = 4; // la Lune des Orages
+const STORM_LUNE = 4; // les Orages d'été
 const STORM_LUNE_THUNDER = 0.85;
 
 /** Date du village : année (depuis 1), jour de l'année (0…), lune (0…11), jour de la lune (1…), et t, le jour de l'année avec sa part écoulée. */
@@ -62,7 +64,13 @@ export function calendar(seed: number, now: number): CalendarDate {
   return { year: Math.floor(d / YEAR_DAYS) + 1, day, lune, dayOfLune: (day % LUNE_DAYS) + 1, t: day + (u - d) };
 }
 
-/** Neige au sol (0 à 1) à ce moment de l'année : elle monte pendant les Premiers Givres, reste, puis fond au Dégel. */
+/** Saison du calendrier (0 printemps … 3 hiver) d'une date, et le jour de cette saison (à partir de 1) sur combien. */
+export function seasonDay(date: CalendarDate) {
+  const s = LUNES[date.lune].season, first = LUNES.findIndex((l) => l.season === s);
+  return { season: s, day: date.day - first * LUNE_DAYS + 1, days: LUNES.filter((l) => l.season === s).length * LUNE_DAYS };
+}
+
+/** Neige au sol (0 à 1) à ce moment de l'année : elle monte à la fin de l'automne, reste tout l'hiver, puis fond au début du printemps. */
 export function snowAt(t: number) {
   const first = 9 * LUNE_DAYS, thaw = LUNE_DAYS;
   if (t >= first + LUNE_DAYS) return 1;
@@ -101,7 +109,7 @@ function slotFog(seed: number, k: number) {
   return hash2(k, 14, seed + 97) < FOG_CHANCE ? 0.6 + hash2(k, 15, seed + 98) * 0.4 : 0;
 }
 
-/** Une averse d'orage (dans cette tranche de pluie) : 1, sinon 0. Pendant la Lune des Orages, presque toutes. */
+/** Une averse d'orage (dans cette tranche de pluie) : 1, sinon 0. Pendant les Orages d'été, presque toutes. */
 function slotThunder(seed: number, k: number) {
   const storms = calendar(seed, (k + 0.5) * RAIN_SLOT).lune === STORM_LUNE;
   return slotRain(seed, k) && hash2(k, 13, seed + 96) < (storms ? STORM_LUNE_THUNDER : THUNDER_CHANCE) ? 1 : 0;

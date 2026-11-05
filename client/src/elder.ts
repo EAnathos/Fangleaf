@@ -10,6 +10,7 @@ export const ELDER_INTRO = [
   'Pardonne-moi, j\'ai la mémoire qui flanche. Je ne me souviens plus de rien : ni de mon nom, ni de comment je suis arrivé ici.',
   'Mais je suis bien content de te voir ! Ça fait bien longtemps que je n\'ai vu personne…',
   'Enfin, je crois…',
+  'Tu veux rebâtir le village ? Alors commence par déposer ton bois et ta pierre à l\'entrepôt, juste là. C\'est dans sa réserve que tout le village puise pour construire.',
   'Si un jour tu trouves des écrits… des parchemins, peut-être… rapporte-les-moi. Qui sait ce qui me reviendrait ?',
 ];
 

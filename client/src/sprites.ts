@@ -1,6 +1,6 @@
 // Sprites procéduraux (Canvas 2D) : aucune image à charger.
 
-import { DESERT_ZONE, DRUM_GAP, LOG_SPEED, PINCER_HALF, RING_SPEED, RING_W, SPECIES, type Resource } from '../../shared/config.ts';
+import { DESERT_ZONE, DRUM_GAP, LOG_SPEED, PINCER_HALF, RING_SPEED, RING_W, SPECIES, SPLASH_FLAT, type Resource } from '../../shared/config.ts';
 import { HAZARD_STYLES, UNIT_FLAG_BURN, UNIT_FLAG_CURSE, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
 import { hash2 } from '../../shared/math.ts';
 import type { Wings } from './anim.ts';
@@ -2290,7 +2290,7 @@ export function drawShot(ctx: Ctx, kind: number, x: number, y: number, a: number
     ctx.strokeStyle = `rgba(${col},0.85)`;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.ellipse(a, b, splash, splash * 0.45, 0, 0, TAU);
+    ctx.ellipse(a, b, splash, splash * SPLASH_FLAT, 0, 0, TAU); // (la même ellipse que le serveur)
     ctx.fill();
     ctx.stroke();
     const bx = x + (a - x) * p, by = y + (b - y) * p - Math.sin(p * Math.PI) * 120;
@@ -7006,6 +7006,255 @@ export function drawStump(ctx: Ctx, x: number, y: number, r: number) {
     ctx.beginPath();
     ctx.ellipse(x, y - w * 0.55, w * k, w * 0.4 * k, 0, 0, TAU);
     ctx.stroke();
+  }
+}
+
+/**
+ * Goutte de sueur d'un géant apeuré, sur son front (x, y) : elle perle, coule le long de sa tempe, puis tombe et
+ * s'efface ; une nouvelle perle aussitôt. size : sa taille (selon celle du géant).
+ */
+export function drawSweat(ctx: Ctx, x: number, y: number, size: number, t: number, seed = 0) {
+  const k = ((t + seed) % 1.3) / 1.3;
+  const grow = Math.min(1, k / 0.3), slide = k < 0.3 ? 0 : (k - 0.3) / 0.7;
+  const dy = slide * slide * size * 7, a = slide > 0.75 ? 1 - (slide - 0.75) / 0.25 : 1, w = size * (0.55 + 0.45 * grow);
+  const cx = x + slide * size * 0.8, cy = y + dy;
+  ctx.save();
+  ctx.globalAlpha *= a;
+  ctx.fillStyle = '#9ED8FF';
+  ctx.strokeStyle = 'rgba(30,60,90,0.8)';
+  ctx.lineWidth = Math.max(1, size * 0.14);
+  ctx.beginPath(); // goutte : pointe en haut, ventre rond en bas
+  ctx.moveTo(cx, cy - w * 1.6);
+  ctx.quadraticCurveTo(cx + w * 1.05, cy - w * 0.2, cx + w * 0.8, cy + w * 0.35);
+  ctx.arc(cx, cy + w * 0.35, w * 0.8, 0, Math.PI);
+  ctx.quadraticCurveTo(cx - w * 1.05, cy - w * 0.2, cx, cy - w * 1.6);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.beginPath();
+  ctx.ellipse(cx - w * 0.3, cy + w * 0.1, w * 0.18, w * 0.32, -0.4, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ───────────────────────── Foudre sur le bûcheron ─────────────────────────
+
+export const STRUCK_S = 3.4; // durée de l'animation d'un dompteur foudroyé (l'étourdissement, lui, dure moins)
+
+/**
+ * Éclair qui tombe du ciel sur (x, y) : un tronc brisé et ses fourches, qui scintille en trois ou quatre décharges de
+ * plus en plus faibles (le tracé change à chaque décharge), et un halo aveuglant au point d'impact.
+ */
+export function drawSkyBolt(ctx: Ctx, x: number, y: number, age: number, seed: number) {
+  const pulses: [number, number, number][] = [[0, 0.09, 1], [0.13, 0.22, 0.8], [0.27, 0.34, 0.55], [0.39, 0.45, 0.3]];
+  const p = pulses.find(([a, b]) => age >= a && age < b);
+  if (!p) return;
+  const k = p[2], frame = pulses.indexOf(p) * 7 + Math.floor(age * 40), top = y - 1000, n = 18;
+  // le tronc : une marche au hasard qui revient sur sa cible en bas
+  const pts: [number, number][] = [];
+  let walk = 0;
+  for (let i = 0; i <= n; i++) {
+    const f = i / n;
+    walk += (hash2(i, frame, seed) - 0.5) * 70;
+    pts.push([x + walk * (1 - f) ** 0.8 * (i < n ? 1 : 0), top + (y - top) * f]);
+  }
+  // les fourches : elles partent du tronc, filent de biais vers le bas et s'affinent
+  const forks: [number, number][][] = [];
+  for (let b = 0; b < 4; b++) {
+    const from = 3 + Math.floor(hash2(b, frame, seed + 1) * (n - 7)), side = hash2(frame, b, seed + 2) < 0.5 ? -1 : 1;
+    let [fx, fy] = pts[from];
+    const fork: [number, number][] = [[fx, fy]];
+    for (let j = 0; j < 5; j++) {
+      fx += side * (14 + hash2(j, b + frame, seed + 3) * 26);
+      fy += 22 + hash2(b, j + frame, seed + 4) * 26;
+      fork.push([fx, fy]);
+    }
+    forks.push(fork);
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  const line = (path: [number, number][], w: number, col: string) => {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    path.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+    ctx.stroke();
+  };
+  for (const [w, col] of [[26, `rgba(110,140,255,${0.22 * k})`], [11, `rgba(180,205,255,${0.55 * k})`], [4, `rgba(255,255,255,${k})`]] as const) {
+    line(pts, w, col);
+    for (const f of forks) line(f, w * 0.45, col);
+  }
+  // halo d'impact
+  const g = ctx.createRadialGradient(x, y, 0, x, y, 150);
+  g.addColorStop(0, `rgba(255,255,255,${0.9 * k})`);
+  g.addColorStop(0.25, `rgba(190,210,255,${0.5 * k})`);
+  g.addColorStop(1, 'rgba(120,150,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(x, y, 150, 110, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Dompteur foudroyé, dessiné par-dessus lui (corps rond de rayon 16 centré en x, y) : d'abord la « radiographie » de
+ * dessin animé (son crâne apparaît en clignotant), puis des arcs électriques qui crépitent autour de lui, le visage
+ * noirci de suie où ne restent que deux yeux ronds, et de la fumée qui monte de sa tête.
+ */
+export function drawStruck(ctx: Ctx, x: number, y: number, age: number, t: number, seed: number) {
+  const R = 16;
+  // fumée : des bouffées grises qui montent et se dissipent
+  for (let i = 0; i < 7; i++) {
+    const born = 0.3 + i * 0.32, k = (age - born) / 1.6;
+    if (k <= 0 || k >= 1) continue;
+    const px = x + Math.sin(i * 2.1 + seed) * 6 + Math.sin(k * 5 + i) * 5 + k * 10, py = y - R - 4 - k * 52;
+    ctx.fillStyle = `rgba(74,72,76,${0.5 * (1 - k) * Math.min(1, k * 6)})`;
+    ctx.beginPath();
+    ctx.arc(px, py, 4 + 10 * k, 0, TAU);
+    ctx.fill();
+  }
+  const xray = age < 0.8 && Math.floor(age * 16) % 2 === 0;
+  if (xray) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(140,180,255,0.55)';
+    ctx.beginPath();
+    ctx.arc(x, y, R + 8, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#1B2A5E'; // le corps, sombre et bleuté
+    ctx.strokeStyle = '#BFD4FF';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, R + 1, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+    // le crâne
+    ctx.fillStyle = '#F4F7FF';
+    ctx.beginPath();
+    ctx.ellipse(x, y - 2.5, 11, 9.5, 0, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.roundRect(x - 6.5, y + 3, 13, 7, 2.5);
+    ctx.fill();
+    ctx.fillStyle = '#1B2A5E';
+    ctx.beginPath();
+    ctx.ellipse(x - 4.3, y - 2, 3.1, 3.6, 0, 0, TAU);
+    ctx.ellipse(x + 4.3, y - 2, 3.1, 3.6, 0, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x, y + 1);
+    ctx.lineTo(x - 1.6, y + 3.6);
+    ctx.lineTo(x + 1.6, y + 3.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#1B2A5E';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = -2; i <= 2; i++) {
+      ctx.moveTo(x + i * 2.4, y + 5.5);
+      ctx.lineTo(x + i * 2.4, y + 9.5);
+    }
+    ctx.stroke();
+  } else if (age < 3) {
+    // de la suie sur tout le corps, et deux yeux ronds écarquillés qui clignent
+    const fade = age < 2.2 ? 1 : 1 - (age - 2.2) / 0.8;
+    ctx.fillStyle = `rgba(24,20,18,${0.62 * fade})`;
+    ctx.beginPath();
+    ctx.arc(x, y, R + 0.5, 0, TAU);
+    ctx.fill();
+    const blink = Math.sin(t * 3 + seed) > 0.96 ? 0.25 : 1;
+    ctx.fillStyle = `rgba(255,255,255,${fade})`;
+    ctx.beginPath();
+    ctx.ellipse(x - 4.5, y - 2, 3.2, 3.4 * blink, 0, 0, TAU);
+    ctx.ellipse(x + 4.5, y - 2, 3.2, 3.4 * blink, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = `rgba(16,24,26,${fade})`;
+    ctx.beginPath();
+    ctx.arc(x - 4.5, y - 2, 1.3 * blink, 0, TAU);
+    ctx.arc(x + 4.5, y - 2, 1.3 * blink, 0, TAU);
+    ctx.fill();
+  }
+  // arcs électriques qui crépitent autour de lui (le tracé change vingt fois par seconde)
+  const zap = 1 - age / 1.8;
+  if (zap > 0) {
+    const frame = Math.floor(t * 20);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < 3; i++) {
+      if (hash2(frame, i, seed + 7) < 0.25) continue; // un arc s'éteint parfois une image
+      const a0 = hash2(frame, i, seed) * TAU, sweep = 0.9 + hash2(i, frame, seed + 5) * 0.9, pts: [number, number][] = [];
+      for (let j = 0; j <= 6; j++) {
+        const a = a0 + (sweep * j) / 6, rr = R + 3 + hash2(j, frame + i, seed + 6) * 9;
+        pts.push([x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.9]);
+      }
+      for (const [w, col] of [[4.5, `rgba(110,160,255,${0.55 * zap})`], [1.6, `rgba(240,248,255,${zap})`]] as const) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        pts.forEach(([px, py], j) => (j ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+}
+
+/** Bouquet de bambous coupé : des tiges vertes tranchées en biseau, à des hauteurs différentes, creuses au cœur. */
+export function drawBambooStump(ctx: Ctx, x: number, y: number, r: number, seed: number) {
+  const n = 5, span = Math.max(14, r * 1.3);
+  ctx.fillStyle = 'rgba(8,16,10,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x, y + 2, span * 0.85, span * 0.3, 0, 0, TAU);
+  ctx.fill();
+  const stalks = Array.from({ length: n }, (_, k) => ({
+    bx: x + (k / (n - 1) - 0.5) * span * 1.1 + (hash2(k, seed, 151) - 0.5) * 4,
+    by: y + (hash2(seed, k, 152) - 0.5) * 6,
+    h: 7 + hash2(k, seed, 153) * 11,
+    tone: hash2(seed, k, 154),
+  })).sort((a, b) => a.by - b.by); // de l'arrière vers l'avant
+  for (const st of stalks) {
+    const w = 3.2, top = st.by - st.h, cut = 3; // biseau : le côté droit plus haut que le gauche
+    ctx.fillStyle = st.tone < 0.45 ? '#5E8A34' : '#7FA846';
+    ctx.strokeStyle = 'rgba(30,48,16,0.8)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(st.bx - w, st.by);
+    ctx.lineTo(st.bx - w, top + cut);
+    ctx.lineTo(st.bx + w, top - cut);
+    ctx.lineTo(st.bx + w, st.by);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(220,240,160,0.45)'; // reflet
+    ctx.beginPath();
+    ctx.moveTo(st.bx - w + 1.2, st.by - 1);
+    ctx.lineTo(st.bx - w + 1.2, top + cut + 1);
+    ctx.stroke();
+    if (st.h > 12) {
+      ctx.strokeStyle = '#3E5E22'; // un nœud
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(st.bx - w, st.by - 6);
+      ctx.lineTo(st.bx + w, st.by - 6);
+      ctx.stroke();
+    }
+    // la coupe : un ovale clair, creux au milieu
+    ctx.save();
+    ctx.translate(st.bx, top);
+    ctx.rotate(-Math.atan2(cut * 2, w * 2));
+    ctx.fillStyle = '#D9E6A6';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * 1.15, 1.9, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#6C7E3A';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, w * 0.6, 0.9, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
   }
 }
 

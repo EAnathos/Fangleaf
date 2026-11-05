@@ -709,6 +709,7 @@ export interface Species {
   flies?: boolean; // sauvage, il tourne au-dessus de sa cible (hors d'atteinte), pique là où tombe son ombre (cercle annoncé), puis reste un moment au sol
   shy?: boolean; // gibier craintif : un dompteur sans fruit en main ou un vautour approche, et la colonie court se cacher dans sa tanière (elle y passe aussi la nuit)
   skittish?: boolean; // sauvage, il détale devant un dompteur qui approche sans fruit en main (lièvre)
+  backline?: boolean; // dans une meute, il ne va pas au contact : il reste en retrait, derrière son dompteur (lièvre, qui soigne)
   awaken?: number; // essences pour éveiller son Alpha, si elles ne suivent pas la règle (espèce rare)
   passive?: boolean; // sauvage, il n'attaque jamais : il broute les buissons à fruits et s'enfuit quand on le frappe
   brawler?: boolean; // tireur qui cogne aussi : une cible collée à lui, il la frappe au corps à corps au lieu de tirer (gorille)
@@ -736,6 +737,8 @@ export const SHOT_KINDS = ['bolt', 'arc', 'jet', 'banana', 'dart', 'fire', 'spar
 /** Tir en cloche (il retombe là où était la cible, cercle annoncé au sol) : arc, banane du gorille. */
 export const lobbedShot = (kind: number | Ranged['kind']) => { const k = typeof kind === 'number' ? SHOT_KINDS[kind] : kind; return k === 'arc' || k === 'banana' || k === 'magma'; };
 export const ARC_FLIGHT_S = 0.9;
+/** Zone de chute d'un tir en cloche, vue en perspective : une ellipse aplatie à ce rapport (le serveur ne touche que ce qui s'y tient). */
+export const SPLASH_FLAT = 0.6;
 
 // Deux à trois espèces par zone, progression marquée d'une zone à l'autre (PV et dégâts ×2,5 à ×3).
 // L'index de chaque espèce sert dans les profils sauvegardés (essences, Alphas) : n'ajouter qu'à la fin.
@@ -769,7 +772,7 @@ export const SPECIES: Species[] = [
   { key: 'mist_hydra', name: 'Hydre des brumes', color: '#3E8290', r: 57, hp: 23400, dmg: 95, speed: 205, atkCd: 1.2, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'serpent', base: 'serpent' },
   { key: 'titan_crab', name: 'Crabe Titan', color: '#B9532F', r: 63, hp: 34580, dmg: 110, speed: 185, atkCd: 1.4, gold: 1200, zone: 5, population: 0, pack: [1, 1], boss: true, sprite: 'crab', base: 'crab' },
   // Gibier passif : il broute les buissons à fruits et s'enfuit quand on le frappe (pas de géant). S'apprivoise surtout aux baies.
-  { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 30, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 3, population: 20, pack: [1, 3], passive: true, sleeps: 'night', skittish: true },
+  { key: 'hare', name: 'Lièvre des ronces', color: '#B89A72', r: 13, hp: 110, dmg: 2, speed: 150, atkCd: 1.0, gold: 3, zone: 3, population: 20, pack: [1, 3], passive: true, sleeps: 'night', skittish: true, backline: true },
   { key: 'snail', name: 'Escargot des mousses', color: '#C99A5B', r: 12, hp: 22, dmg: 1, speed: 32, atkCd: 1.4, gold: 2, zone: 1, population: 20, pack: [1, 2], passive: true, shell: true, rainSpeed: 1.5 },
   // Gibier de nuit : il n'apparaît qu'une fois la nuit tombée, et s'en va au lever du jour.
   { key: 'firefly', name: 'Luciole', color: '#E4F07A', r: 11, hp: 20, dmg: 1, speed: 70, atkCd: 1.4, gold: 4, zone: 2, population: 24, pack: [3, 5], passive: true, night: true },
