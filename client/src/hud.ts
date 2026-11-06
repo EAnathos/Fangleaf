@@ -17,6 +17,7 @@ import { sound } from './audio.ts';
 import { ACTIONS, type Action, applyUi, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
 import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
+import { clamp } from '../../shared/math.ts';
 
 export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
@@ -336,6 +337,7 @@ export class Hud {
       this.mapHover = { x: e.clientX - b.left, y: e.clientY - b.top };
     });
     big.addEventListener('pointerleave', () => (this.mapHover = null));
+    this.initMapZoom(big);
     $('hud').hidden = false;
     // pastille de meute : le gluant du jeu, dessiné avec son sprite et qui remplit la pastille
     requestAnimationFrame(() => {
@@ -616,6 +618,7 @@ export class Hud {
     $('market').hidden = panel !== 'market';
     $('buy').hidden = panel !== 'buy';
     $('bigmap').hidden = panel !== 'map';
+    if (panel !== 'map') this.mapView = { z: 1, x: 0.5, y: 0.5 }; // la carte rouvre en entier
     $('quit').hidden = panel !== 'quit';
     $('reset-main').hidden = false; // les paramètres rouvrent toujours sur leurs choix, jamais sur la confirmation
     $('reset-confirm').hidden = true;
@@ -829,6 +832,15 @@ export class Hud {
     const fill = $('self-hp');
     setStyle(fill, 'width', `${Math.round(Math.max(0, hpRatio) * 1000) / 10}%`); // arrondi : comparable à ce que le navigateur garde
     fill.classList.toggle('low', hpRatio < 0.3);
+    // bord de l'écran rouge sous 35 % de vie, plus intense (et le cœur plus rapide) à mesure qu'elle baisse
+    const low = me.dead ? 0 : clamp((0.35 - hpRatio) / 0.3, 0, 1), vignette = $('low-hp');
+    vignette.classList.toggle('on', !me.dead && hpRatio < 0.35);
+    const lowKey = low.toFixed(2);
+    if (vignette.dataset.low !== lowKey) {
+      vignette.dataset.low = lowKey;
+      vignette.style.setProperty('--low', lowKey);
+      vignette.style.setProperty('--beat', `${(1.3 - 0.65 * low).toFixed(2)}s`);
+    }
     setText($('self-hptext'), `${me.hp} / ${me.maxHp}`); // dans la barre de vie
     setText($('self-gold'), short(me.gold)); // l'icône (pièce) dit ce que c'est
     setText($('self-wood'), short(me.wood)); // l'icône dit ce que c'est
@@ -2140,6 +2152,78 @@ export class Hud {
   }
 
   private mapHover: { x: number; y: number } | null = null; // souris sur la grande carte (px CSS du canvas)
+  private mapView = { z: 1, x: 0.5, y: 0.5 }; // zoom de la grande carte, et son centre (en fraction de la carte)
+
+  /** Point de la carte (fraction) sous ce point du canvas (fraction de sa taille). */
+  private mapPoint(fx: number, fy: number) {
+    const v = this.mapView;
+    return { x: v.x + (fx - 0.5) / v.z, y: v.y + (fy - 0.5) / v.z };
+  }
+
+  /** Zoome la grande carte (facteur f) en gardant immobile le point du canvas (fx, fy), sans jamais sortir de la carte. */
+  private zoomMap(f: number, fx = 0.5, fy = 0.5) {
+    const v = this.mapView, at = this.mapPoint(fx, fy);
+    v.z = clamp(v.z * f, 1, 6);
+    [v.x, v.y] = [at.x - (fx - 0.5) / v.z, at.y - (fy - 0.5) / v.z];
+    this.panMap(0, 0);
+  }
+
+  private panMap(dx: number, dy: number) {
+    const v = this.mapView, h = 0.5 / v.z;
+    v.x = clamp(v.x + dx, h, 1 - h);
+    v.y = clamp(v.y + dy, h, 1 - h);
+  }
+
+  /** Grande carte : pincer (ou la molette) pour zoomer, glisser pour se déplacer, toucher deux fois pour zoomer ou revenir. */
+  private initMapZoom(big: HTMLCanvasElement) {
+    const touches = new Map<number, { x: number; y: number }>();
+    let lastTap = 0;
+    const frac = (e: { clientX: number; clientY: number }) => {
+      const b = big.getBoundingClientRect();
+      return { x: (e.clientX - b.left) / b.width, y: (e.clientY - b.top) / b.height };
+    };
+    const spread = () => {
+      const [a, b] = [...touches.values()];
+      return { d: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    };
+    big.addEventListener('pointerdown', (e) => {
+      big.setPointerCapture(e.pointerId);
+      touches.set(e.pointerId, frac(e));
+      if (e.pointerType === 'mouse' || touches.size > 1) return;
+      const now = performance.now();
+      if (now - lastTap < 300) {
+        const f = frac(e);
+        if (this.mapView.z > 1.05) this.mapView = { z: 1, x: 0.5, y: 0.5 };
+        else this.zoomMap(2.5, f.x, f.y);
+        lastTap = 0;
+      } else lastTap = now;
+    });
+    big.addEventListener('pointermove', (e) => {
+      const was = touches.get(e.pointerId);
+      if (!was) return;
+      const now = frac(e);
+      if (touches.size === 2) {
+        const a = spread();
+        touches.set(e.pointerId, now);
+        const b = spread();
+        if (a.d > 0.01) this.zoomMap(b.d / a.d, b.x, b.y);
+        this.panMap((a.x - b.x) / this.mapView.z, (a.y - b.y) / this.mapView.z);
+      } else if (touches.size === 1) {
+        touches.set(e.pointerId, now);
+        this.panMap((was.x - now.x) / this.mapView.z, (was.y - now.y) / this.mapView.z);
+      }
+      this.bigAt = 0; // redessinée tout de suite
+    });
+    const up = (e: PointerEvent) => void touches.delete(e.pointerId);
+    big.addEventListener('pointerup', up);
+    big.addEventListener('pointercancel', up);
+    big.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const f = frac(e);
+      this.zoomMap(Math.exp(-e.deltaY * 0.0015), f.x, f.y);
+      this.bigAt = 0;
+    }, { passive: false });
+  }
 
   /** Grande carte (touche M) : terrain, brouillard, camp, village et dompteurs. */
   private drawBigMap(me: PlayerState, players: PlayerState[], myPos: { x: number; y: number }) {
@@ -2148,49 +2232,55 @@ export class Hud {
     const S = Math.round(Math.min(canvas.clientWidth, canvas.clientHeight || canvas.clientWidth) * dpr);
     if (!S) return;
     if (canvas.width !== S) canvas.width = canvas.height = S;
-    this.bigBg ??= this.renderMapBackground(640);
+    this.bigBg ??= this.renderMapBackground(1024);
     const ctx = canvas.getContext('2d')!;
+    // zoom : le décor est agrandi, les repères gardent leur taille à l'écran (u : un pixel CSS, à l'échelle du zoom)
+    const v = this.mapView, u = dpr / v.z;
+    ctx.setTransform(v.z, 0, 0, v.z, S * (0.5 - v.x * v.z), S * (0.5 - v.y * v.z));
     const k = S / (WORLD_HALF * 2), m = (v: number) => (v + WORLD_HALF) * k;
     ctx.imageSmoothingEnabled = true;
+    ctx.fillStyle = '#0B1210';
+    ctx.fillRect(0, 0, S, S);
     ctx.drawImage(this.bigBg, 0, 0, S, S);
     this.fog.draw(ctx, 0, 0, S, S, 0.94);
     const { spawn, village } = this.map;
     ctx.strokeStyle = '#EEE7D7';
-    ctx.lineWidth = 2 * dpr;
+    ctx.lineWidth = 2 * u;
     ctx.beginPath();
-    ctx.arc(m(spawn.x), m(spawn.y), 6 * dpr, 0, Math.PI * 2);
+    ctx.arc(m(spawn.x), m(spawn.y), 6 * u, 0, Math.PI * 2);
     ctx.stroke();
-    this.drawCaves(ctx, m, 8 * dpr);
-    this.drawCamps(ctx, m, 7 * dpr);
-    this.star(ctx, m(village.x), m(village.y), 11 * dpr, dpr);
+    this.drawCaves(ctx, m, 8 * u);
+    this.drawCamps(ctx, m, 7 * u);
+    this.star(ctx, m(village.x), m(village.y), 11 * u, u);
     for (const p of players) {
       const x = p.id === me.id ? myPos.x : p.x, y = p.id === me.id ? myPos.y : p.y;
       ctx.fillStyle = p.dead ? '#A9B3A6' : p.color;
       ctx.strokeStyle = '#10181A';
-      ctx.lineWidth = 2.5 * dpr;
+      ctx.lineWidth = 2.5 * u;
       ctx.beginPath();
-      ctx.arc(m(x), m(y), (p.id === me.id ? 7 : 6) * dpr, 0, Math.PI * 2);
+      ctx.arc(m(x), m(y), (p.id === me.id ? 7 : 6) * u, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.font = `600 ${12 * dpr}px Outfit, sans-serif`;
+      ctx.font = `600 ${12 * u}px Outfit, sans-serif`;
       ctx.textAlign = 'center';
-      ctx.lineWidth = 3 * dpr;
-      ctx.strokeText(p.name, m(x), m(y) - 11 * dpr);
+      ctx.lineWidth = 3 * u;
+      ctx.strokeText(p.name, m(x), m(y) - 11 * u);
       ctx.fillStyle = '#EEE7D7';
-      ctx.fillText(p.name, m(x), m(y) - 11 * dpr);
+      ctx.fillText(p.name, m(x), m(y) - 11 * u);
     }
     // grotte survolée : le nom de son géant, et, s'il a été vaincu, dans combien de temps il revient
-    const hover = this.mapHover && this.caveUnder(m, this.mapHover.x * dpr, this.mapHover.y * dpr, 14 * dpr);
+    const at = this.mapHover && this.mapPoint(this.mapHover.x / canvas.clientWidth, this.mapHover.y / canvas.clientHeight);
+    const hover = at && this.caveUnder(m, at.x * S, at.y * S, 14 * u);
     if (hover) {
       const back = this.caves[hover.id] ?? 0;
-      const x = m(hover.entrance.x), y = m(hover.entrance.y) - 16 * dpr, text = `${hover.open !== undefined ? `${ISLE_NAMES[SPECIES[hover.boss]?.key] ?? ''} · ` : ''}${SPECIES[hover.boss]?.name ?? ''}${back ? ` · revient dans ${back >= 60 ? `${Math.ceil(back / 60)} min` : `${back} s`}` : ''}`;
-      ctx.font = `700 ${14 * dpr}px Outfit, sans-serif`;
-      const w = ctx.measureText(text).width + 14 * dpr, h = 22 * dpr;
+      const x = m(hover.entrance.x), y = m(hover.entrance.y) - 16 * u, text = `${hover.open !== undefined ? `${ISLE_NAMES[SPECIES[hover.boss]?.key] ?? ''} · ` : ''}${SPECIES[hover.boss]?.name ?? ''}${back ? ` · revient dans ${back >= 60 ? `${Math.ceil(back / 60)} min` : `${back} s`}` : ''}`;
+      ctx.font = `700 ${14 * u}px Outfit, sans-serif`;
+      const w = ctx.measureText(text).width + 14 * u, h = 22 * u;
       ctx.fillStyle = 'rgba(16,24,26,0.92)';
       ctx.strokeStyle = '#F0B64A';
-      ctx.lineWidth = 1.5 * dpr;
+      ctx.lineWidth = 1.5 * u;
       ctx.beginPath();
-      ctx.roundRect(x - w / 2, y - h, w, h, 6 * dpr);
+      ctx.roundRect(x - w / 2, y - h, w, h, 6 * u);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#F0B64A';
@@ -2199,7 +2289,8 @@ export class Hud {
       ctx.fillText(text, x, y - h / 2);
       ctx.textBaseline = 'alphabetic';
     }
-    canvas.style.cursor = hover ? 'pointer' : '';
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    canvas.style.cursor = hover ? 'pointer' : v.z > 1 ? 'grab' : '';
     $('explored').textContent = `${Math.round(this.fog.progress * 100)} % de la carte explorée`;
   }
 

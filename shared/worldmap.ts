@@ -34,6 +34,7 @@ const HALF_W: [number, number] = [1600, 3000]; // demi-largeur de l'île (avant 
 const DESERT_WIDEN = 0.3; // la Mer de sable est plus large (son volcan y tient, à l'écart de la voie centrale)
 const COAST_NOISE = 900; // la côte s'écarte de ± la moitié de ceci
 export const SEA_SHALLOW = 1300; // mer peu profonde le long de la côte (le serpent y nage, loin du bord), puis mer profonde
+export const SWIM_SPAWN_SHORE = 90; // en mer, les créatures aquatiques apparaissent à moins de ça de la côte
 const SEA_ROOM = 520; // mer gardée autour de l'île pour placer l'île, l'îlot du village et les îlots du large (indépendante de SEA_SHALLOW : la carte ne bouge pas)
 export const BEACH = 190; // largeur de la plage, côté terre
 const DENS = 7; // tanières de suricates
@@ -457,11 +458,13 @@ export class WorldMap {
     this.buildBushes();
     this.buildHarvest();
     this.buildDens();
-    // Eau profonde (pas une berge) par zone : là où peuvent apparaître les créatures aquatiques.
+    // Eau profonde (pas une berge) par zone : là où peuvent apparaître les créatures aquatiques. En mer, tout près
+    // de la côte seulement (la mer peu profonde est large) : qu'un archer ou un mage puisse les toucher depuis la rive.
     for (let z = 0; z <= ZONES; z++) this.deepWater.push([]);
     for (let j = 2; j < N - 2; j += 2) {
       for (let i = 2; i < N - 2; i += 2) {
         const x = -WORLD_HALF + (i + 0.5) * MAP_CELL, y = -WORLD_HALF + (j + 0.5) * MAP_CELL;
+        if (this.shoreAt(x, y) > SWIM_SPAWN_SHORE) continue;
         if (this.isWater(x, y) && this.isWater(x + 40, y) && this.isWater(x - 40, y) && this.isWater(x, y + 40) && this.isWater(x, y - 40)) {
           this.deepWater[this.zoneAt(x, y)].push(x, y);
         }
