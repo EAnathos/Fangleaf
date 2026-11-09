@@ -120,6 +120,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   pendant un combat de géant, ou si son dompteur est à terre, il attend la fin.
 - On le **renforce** avec des essences, de plus en plus cher à chaque niveau, et un peu plus dans les zones lointaines.
 - Seuls quelques Alphas sont **équipés** à la fois ; les autres se reposent à la Tanière.
+- **Marquer un Alpha** (bouton ☆ de sa carte, éveillé ou non) : une barre d'essences s'affiche alors dans le HUD, vers son
+  coût d'éveil, puis de renforcement. Un seul à la fois ; marquer le même à nouveau le démarque.
 - **Bonus de collection** : chaque Alpha éveillé renforce tous les autres.
 - **Alphas à pouvoir** : le Lièvre soigne son dompteur et la meute proche (dans la meute, il ne va pas au contact :
   il reste en retrait, derrière son dompteur). Le Suricate et l'Escargot ont une

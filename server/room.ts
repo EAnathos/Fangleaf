@@ -227,6 +227,7 @@ export interface Player {
   cls: ClassId | null; // classe choisie à la forge (null : pas encore)
   spec: SpecId | null; // spécialisation de l'arme, choisie à la Grande forge (null : pas encore)
   specs: Partial<Record<ClassId, SpecId>>; // spécialisation retenue pour chaque classe (on la retrouve en y revenant)
+  marked: number; // espèce d'Alpha marquée (-1 : aucune)
   resting: { s: number; lvl: number; legend: boolean }[]; // Alphas rangés à la Tanière (pas sur le terrain)
   wiped?: boolean; // progression effacée : plus sauvegardé
   seen: Set<number>; // espèces déjà croisées (bestiaire de la Tanière)
@@ -488,13 +489,15 @@ export class Room {
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
       hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, saddle: 0, hat: 0, hats: [], gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: statsOf(), manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
-      sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], seen: new Set(), tomes: Array(BOOKS).fill(0), learned: LESSON_KINDS.map(() => 0), readAt: 0, readKind: 0,
+      sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], marked: -1, seen: new Set(), tomes: Array(BOOKS).fill(0), learned: LESSON_KINDS.map(() => 0), readAt: 0, readKind: 0,
     };
     const prof = account?.profile;
     if (prof) {
       p.gold = prof.gold;
       p.wood = Math.max(0, Math.floor(prof.wood ?? 0));
       p.stone = Math.max(0, Math.floor(prof.stone ?? 0));
+      const mk = Math.floor(Number(prof.alpha_mark ?? -1));
+      p.marked = mk in SPECIES && !isBoss(mk) && !SPECIES[mk].minion ? mk : -1;
       p.hats = [...new Set((prof.hats ?? []).map(Number).filter((h) => Number.isInteger(h) && h > 0 && h < HATS.length))];
       p.hat = clamp(Math.floor(Number(prof.hat) || 0), 0, HATS.length - 1);
       if (p.hat && !p.hats.includes(p.hat)) p.hat = 0;
@@ -848,7 +851,7 @@ export class Room {
     }
     for (const r of p.resting) alphas.push({ s: r.s, lvl: r.lvl, legend: r.legend || undefined, rest: true });
     for (const [s, wakeAt] of p.awakening) alphas.push({ s, lvl: 0, wakeAt });
-    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, saddle: p.saddle, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats }, tomes: [...p.tomes], learned: [...p.learned], read_at: p.readAt, read_kind: p.readKind, seat: Math.max(0, PLAYER_COLORS.indexOf(p.color)), hat: p.hat, hats: [...p.hats] };
+    return { name: p.name, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, saddle: p.saddle, armed: p.sword >= SWORD_PULLS, scrolls: [...p.scrolls], essences: [...p.essences], alphas, village_found: p.villageFound, class: p.cls, spec: p.spec, specs: { ...p.specs }, pack, seen: [...p.seen], stats: { ...p.stats }, tomes: [...p.tomes], learned: [...p.learned], read_at: p.readAt, read_kind: p.readKind, seat: Math.max(0, PLAYER_COLORS.indexOf(p.color)), hat: p.hat, hats: [...p.hats], alpha_mark: p.marked };
   }
 
   private near(p: Player, pos: { x: number; y: number }) {
@@ -1272,6 +1275,19 @@ export class Room {
     } else r!.legend = true;
     p.dirty = true;
     this.events.push({ e: 'legend', id: u?.id ?? 0, by: p.id, s });
+  }
+
+  /** Marque une espèce (éveillée ou non) pour suivre ses essences dans le HUD : une seule à la fois, la même une 2e fois démarque. */
+  onAlphaMark(p: Player, s: number) {
+    if (!Number.isInteger(s) || !(s in SPECIES) || isBoss(s) || SPECIES[s].minion) return;
+    if (p.marked === s) p.marked = -1;
+    else {
+      // comme la Tanière : une espèce croisée, ou dont on a déjà l'Alpha
+      const owned = !!this.fieldAlpha(p, s) || p.resting.some((r) => r.s === s) || p.awakening.has(s);
+      if (!p.seen.has(s) && !owned) return;
+      p.marked = s;
+    }
+    p.dirty = true;
   }
 
   onAlphaCreate(p: Player, s: number) {
@@ -4799,6 +4815,7 @@ export class Room {
         slowed: p.slowUntil > this.time,
         held: this.rooted(p),
         buffs: this.buffFlags(p),
+        marked: p.marked,
         status: this.statusOf(p),
         resting: p.resting.map((r) => ({ species: r.s, level: r.lvl, legend: r.legend })),
         seen: [...p.seen],
@@ -4807,7 +4824,7 @@ export class Room {
         })),
       };
       full.set(p.id, st);
-      light.set(p.id, { ...st, essences: [], army: [], resting: [], seen: [], awakening: [], tomes: [], status: [] });
+      light.set(p.id, { ...st, marked: -1, essences: [], army: [], resting: [], seen: [], awakening: [], tomes: [], status: [] });
     }
     const vr2 = VIEW_R * VIEW_R;
     const spots = this.events.map((e) => this.eventSpot(e)), er2 = (VIEW_R + 300) ** 2;

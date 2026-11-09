@@ -55,6 +55,36 @@ describe('Alphas de la Tanière', () => {
     check(p2.awakening.has(2) && p2.army.filter((id: number) => r2.units.get(id)?.alpha).length === 1, 'profil rechargé : l\'éveil du Sanglier continue');
   });
 
+  rule('Alpha marqué : une seule espèce à la fois (éveillée ou non), la même une 2e fois démarque, sauvegardé.', () => {
+    const r = room();
+    const p = r.addPlayer('a', noop);
+    check(p.marked === -1, 'aucun Alpha marqué au départ');
+    r.onAlphaMark(p, 1);
+    check(p.marked === -1, 'une espèce jamais croisée ne se marque pas');
+    p.seen.add(1);
+    p.seen.add(2);
+    r.onAlphaMark(p, 1);
+    check(p.marked === 1, 'une espèce non éveillée peut être marquée');
+    r.onAlphaMark(p, 2);
+    check(p.marked === 2, 'marquer une autre espèce remplace la première (une seule)');
+    r.onAlphaMark(p, 999);
+    r.onAlphaMark(p, -3);
+    check(p.marked === 2, 'espèce invalide : ignorée');
+    const boss = SPECIES.findIndex((sp) => sp.boss);
+    r.onAlphaMark(p, boss);
+    check(p.marked === 2, 'un géant ne se marque pas');
+    const minion = SPECIES.findIndex((sp) => sp.minion);
+    p.seen.add(minion);
+    r.onAlphaMark(p, minion);
+    check(p.marked === 2, 'un renfort de géant ne se marque pas');
+    const prof = r.profileOf(p);
+    const r2 = room();
+    const p2 = r2.addPlayer('a', noop, { userId: 'u1', profile: prof });
+    check(p2.marked === 2, 'profil rechargé : la marque est conservée');
+    r.onAlphaMark(p, 2);
+    check(p.marked === -1, 'la même espèce une 2e fois : démarquée');
+  });
+
   rule('Aucun Alpha sauvage, même après beaucoup de kills.', () => {
     const r = room();
     const p = r.addPlayer('a', noop);
