@@ -1494,10 +1494,24 @@ export class Room {
       this.refreshAlphas(p);
     } else if (kind === 'wild') {
       if (on) {
-        const a = Math.random() * Math.PI * 2, at = this.map.freeNear(p.x + Math.cos(a) * 160, p.y + Math.sin(a) * 160);
-        const u = this.createUnit(s as SpeciesId, false, at.x, at.y);
-        u.homeX = u.x;
-        u.homeY = u.y;
+        const sp = SPECIES[s];
+        if (sp.isle || sp.zone === VOLCANO_ZONE) return; // leur place (îlot, salles du donjon) ne se devine pas depuis ici
+        let at: { x: number; y: number };
+        if (sp.swim) {
+          // aquatique : un point d'eau profonde de sa zone, le plus proche de soi
+          const pool = this.map.deepWater[sp.zone] ?? [];
+          let bd = Infinity;
+          at = { x: NaN, y: NaN };
+          for (let k = 0; k + 1 < pool.length; k += 2) {
+            const d = dist2(pool[k], pool[k + 1], p.x, p.y);
+            if (d < bd) [bd, at] = [d, { x: pool[k], y: pool[k + 1] }];
+          }
+          if (bd === Infinity) return;
+        } else {
+          const a = Math.random() * Math.PI * 2;
+          at = this.map.freeNear(p.x + Math.cos(a) * 160, p.y + Math.sin(a) * 160);
+        }
+        this.createUnit(s as SpeciesId, false, at.x, at.y);
       } else {
         for (const u of [...this.units.values()]) if (!u.owner && !u.alpha && u.s === s) this.units.delete(u.id);
       }
@@ -1520,22 +1534,11 @@ export class Room {
       this.saveVillage();
       this.events.push({ e: 'info', text: `${p.name} débloque la zone ${z} (mode dev)` });
     } else if (act === 'tp' && !p.dead) {
+      if (this.swimming(p)) return; // descendre du serpent d'abord
       if (this.map.caveAt(p.x, p.y)) return; // d'abord sortir de la grotte
       const spot = z === 0 ? this.map.village : this.map.spineAt(z === 1 ? this.map.gates[0] + 450 : this.map.zoneFrom(z) + 300);
       const at = this.map.freeNear(spot.x, spot.y);
-      this.events.push({ e: 'travel', id: p.id, x: Math.round(p.x), y: Math.round(p.y), tx: Math.round(at.x), ty: Math.round(at.y) });
-      p.x = at.x;
-      p.y = at.y;
-      p.send({ t: 'teleport', x: p.x, y: p.y });
-      for (const uid of p.army) {
-        const u = this.units.get(uid);
-        if (u && !u.reviveAt) {
-          this.placeNear(u, p);
-          u.target = 0;
-          u.recalling = false;
-          u.path = null;
-        }
-      }
+      this.teleportPack(p, at);
     }
   }
 
@@ -1796,6 +1799,11 @@ export class Room {
     if (from === null || from === to || !open) return;
     const st = to === -2 ? this.map.boatStone : this.map.stones[to + 1];
     const at = this.map.freeNear(st.x - 10, st.y + 60);
+    this.teleportPack(p, at);
+  }
+
+  /** Téléporte le dompteur en `at` avec toute sa meute (Pierre de passage, triche de zone). */
+  private teleportPack(p: Player, at: { x: number; y: number }) {
     this.events.push({ e: 'travel', id: p.id, x: Math.round(p.x), y: Math.round(p.y), tx: Math.round(at.x), ty: Math.round(at.y) });
     p.x = at.x;
     p.y = at.y;

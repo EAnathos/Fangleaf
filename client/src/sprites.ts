@@ -68,9 +68,9 @@ export interface Leap { ext: number; reach: number; crouch: number }
 /** Grande couronne d'un géant : décalage vertical, en rayons, pour ceux dont la tête est bien plus basse (ou plus haute). */
 const BOSS_CROWN_Y: Record<string, number> = { drake: -0.12, wyvern: -0.55, dragon: -0.45, croc: 0.75, masked: -1.05 };
 /** Décalage de la couronne (Alpha, géant) vers la tête, en rayons, pour les espèces dont la tête est loin devant. */
-const CROWN_X: Record<string, number> = { drake: 0.7, wyvern: 0.7, dragon: 0.8, scorpion: 0.45, gorilla: 0.7, croc: 0.6, masked: 0.02, bear: 0.8, boar: 0.9, firefly: 0.5, sandworm: 0.5, vulture: 0.55, jackal: 0.85, meerkat: 0.08, bigfoot: 0.12, salamander: 0.95, lava_tortoise: 1.05 };
+const CROWN_X: Record<string, number> = { drake: 0.7, wyvern: 0.7, dragon: 0.8, scorpion: 0.45, gorilla: 0.7, croc: 0.6, masked: 0.02, bear: 0.8, boar: 0.9, firefly: 0.5, sandworm: 0.5, vulture: 0.55, jackal: 0.85, meerkat: 0.08, rufous_coati: 0.9, bigfoot: 0.12, salamander: 0.95, lava_tortoise: 1.05 };
 /** … et vers le bas, en rayons, pour celles dont la tête est plus basse que le haut du corps. */
-const CROWN_Y: Record<string, number> = { drake: -0.15, wyvern: -0.55, dragon: -0.35, scorpion: 0.05, gorilla: 0.25, croc: 0.82, masked: -0.95, kraken: -0.6, crab: -0.05, boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, rufous_coati: -0.4, bigfoot: -0.35, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
+const CROWN_Y: Record<string, number> = { drake: -0.15, wyvern: -0.55, dragon: -0.35, scorpion: 0.05, gorilla: 0.25, croc: 0.82, masked: -0.95, kraken: -0.6, crab: -0.05, boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, rufous_coati: 0.2, bigfoot: -0.35, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
 
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
