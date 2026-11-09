@@ -60,6 +60,10 @@ describe('Alphas de la Tanière', () => {
     const p = r.addPlayer('a', noop);
     check(p.marked === -1, 'aucun Alpha marqué au départ');
     r.onAlphaMark(p, 1);
+    check(p.marked === -1, 'une espèce jamais croisée ne se marque pas');
+    p.seen.add(1);
+    p.seen.add(2);
+    r.onAlphaMark(p, 1);
     check(p.marked === 1, 'une espèce non éveillée peut être marquée');
     r.onAlphaMark(p, 2);
     check(p.marked === 2, 'marquer une autre espèce remplace la première (une seule)');
@@ -69,6 +73,10 @@ describe('Alphas de la Tanière', () => {
     const boss = SPECIES.findIndex((sp) => sp.boss);
     r.onAlphaMark(p, boss);
     check(p.marked === 2, 'un géant ne se marque pas');
+    const minion = SPECIES.findIndex((sp) => sp.minion);
+    p.seen.add(minion);
+    r.onAlphaMark(p, minion);
+    check(p.marked === 2, 'un renfort de géant ne se marque pas');
     const prof = r.profileOf(p);
     const r2 = room();
     const p2 = r2.addPlayer('a', noop, { userId: 'u1', profile: prof });

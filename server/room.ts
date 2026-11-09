@@ -497,7 +497,7 @@ export class Room {
       p.wood = Math.max(0, Math.floor(prof.wood ?? 0));
       p.stone = Math.max(0, Math.floor(prof.stone ?? 0));
       const mk = Math.floor(Number(prof.alpha_mark ?? -1));
-      p.marked = mk in SPECIES && !isBoss(mk) ? mk : -1;
+      p.marked = mk in SPECIES && !isBoss(mk) && !SPECIES[mk].minion ? mk : -1;
       p.hats = [...new Set((prof.hats ?? []).map(Number).filter((h) => Number.isInteger(h) && h > 0 && h < HATS.length))];
       p.hat = clamp(Math.floor(Number(prof.hat) || 0), 0, HATS.length - 1);
       if (p.hat && !p.hats.includes(p.hat)) p.hat = 0;
@@ -1279,8 +1279,14 @@ export class Room {
 
   /** Marque une espèce (éveillée ou non) pour suivre ses essences dans le HUD : une seule à la fois, la même une 2e fois démarque. */
   onAlphaMark(p: Player, s: number) {
-    if (!Number.isInteger(s) || !(s in SPECIES) || isBoss(s)) return;
-    p.marked = p.marked === s ? -1 : s;
+    if (!Number.isInteger(s) || !(s in SPECIES) || isBoss(s) || SPECIES[s].minion) return;
+    if (p.marked === s) p.marked = -1;
+    else {
+      // comme la Tanière : une espèce croisée, ou dont on a déjà l'Alpha
+      const owned = !!this.fieldAlpha(p, s) || p.resting.some((r) => r.s === s) || p.awakening.has(s);
+      if (!p.seen.has(s) && !owned) return;
+      p.marked = s;
+    }
     p.dirty = true;
   }
 

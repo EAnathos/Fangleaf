@@ -2223,9 +2223,10 @@ export class Hud {
       paintPortraits([this.markPortrait], true);
     }
     setText($('mark-name'), sp.name);
-    $('mark-row').title = `${sp.name} alpha · ${waking ? 'éveil en cours' : a ? `essences pour le renforcer (niv. ${lvl})` : 'essences pour l\'éveiller'}`;
+    const title = `${sp.name} alpha · ${waking ? 'éveil en cours' : a ? `essences pour le renforcer (niv. ${lvl})` : 'essences pour l\'éveiller'}`;
+    if ($('mark-row').title !== title) $('mark-row').title = title;
     setText($('mark-text'), text);
-    setStyle($('mark-fill'), 'width', `${pct}%`);
+    setStyle($('mark-fill'), 'width', `${Math.round(pct * 10) / 10}%`); // arrondi : comparable à ce que le navigateur garde
   }
 
   /** Fond de la minicarte (zones + lacs), calculé une seule fois à partir de la carte. */
