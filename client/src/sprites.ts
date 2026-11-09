@@ -72,6 +72,33 @@ const CROWN_X: Record<string, number> = { drake: 0.7, wyvern: 0.7, dragon: 0.8, 
 /** … et vers le bas, en rayons, pour celles dont la tête est plus basse que le haut du corps. */
 const CROWN_Y: Record<string, number> = { drake: -0.15, wyvern: -0.55, dragon: -0.35, scorpion: 0.05, gorilla: 0.25, croc: 0.82, masked: -0.95, kraken: -0.6, crab: -0.05, boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, rufous_coati: 0.2, bigfoot: -0.35, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
 
+/** Filtre CSS de la robe de l'Alpha (et du légendaire, qui a la même), ou '' pour la forme de base. Une espèce sans entrée n'a pas de robe (voir tests/rules/sprites.test.ts). */
+export const variantFilter = (key: string, alpha: boolean) => (alpha ? (VARIANT_FILTERS[key] ?? '') : '');
+
+let tintLayer: HTMLCanvasElement | null = null;
+/**
+ * Dessine le corps dans un calque à part, puis le recopie une seule fois avec le filtre (au lieu d'un filtre par tracé).
+ * Le calque finit avec la même transformation que le contexte : les drawers qui laissent un translate actif (saut du
+ * sporelin, du vautour) le transmettent comme avant à ce qui est dessiné ensuite (couronne, effets).
+ */
+function drawTinted(ctx: Ctx, tint: string, draw: (g: Ctx) => void) {
+  const cv = ctx.canvas as HTMLCanvasElement;
+  const layer = (tintLayer ??= document.createElement('canvas'));
+  if (layer.width !== cv.width || layer.height !== cv.height) [layer.width, layer.height] = [cv.width, cv.height];
+  const g = layer.getContext('2d')!;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, layer.width, layer.height);
+  g.setTransform(ctx.getTransform());
+  draw(g);
+  const after = g.getTransform();
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.filter = tint;
+  ctx.drawImage(layer, 0, 0);
+  ctx.restore();
+  ctx.setTransform(after);
+}
+
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
   const key = u.key ?? SPECIES[u.species].sprite ?? SPECIES[u.species].key;
@@ -141,7 +168,12 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
   if (hop?.tilt) ctx.rotate(hop.tilt); // museau vers le haut au décollage, vers le sol à l'arrivée
   const base = u.color ?? SPECIES[u.species].color;
   const fill = u.flash ? '#FFFFFF' : base;
-  (DRAWERS[key] ?? golem)(ctx, r, fill, u);
+  const tint = u.flash || u.key || SPECIES[u.species]?.boss ? '' : variantFilter(key, u.alpha || !!u.legend);
+  const effects = u.legend && !u.flash; // légendaire : des effets propres à l'espèce, qui ne prennent pas la teinte du corps
+  if (effects) LEGEND_BACK[key]?.(ctx, r, u);
+  if (tint) drawTinted(ctx, tint, (g) => (DRAWERS[key] ?? golem)(g, r, fill, u)); // Alpha et légendaire : robe d'une autre couleur que la forme de base
+  else (DRAWERS[key] ?? golem)(ctx, r, fill, u);
+  if (effects) LEGEND_FRONT[key]?.(ctx, r, u);
   if (SPECIES[u.species]?.boss && !u.key) {
     // Mini-boss : grande couronne dorée.
     ctx.fillStyle = '#F0B64A';
@@ -2975,12 +3007,13 @@ function vulture(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
  * Vautour en vol (hors d'atteinte), vu de dessus : grandes ailes ouvertes, couvertures brunes, rémiges sombres
  * en doigts écartés, queue en éventail, collerette et tête rose ; haut au-dessus de son ombre.
  */
-export function drawSoaring(ctx: Ctx, x: number, y: number, r: number, t: number, seed: number, height = 4.2, beat = 0, heading?: number) {
+export function drawSoaring(ctx: Ctx, x: number, y: number, r: number, t: number, seed: number, height = 4.2, beat = 0, heading?: number, tint = '') {
   // il plane, et de temps en temps (ou au décollage et à l'atterrissage : beat) il bat franchement des ailes
   const cyc = (t * 0.23 + seed * 0.37) % 1, burst = Math.max(beat, cyc < 0.18 ? Math.sin((cyc / 0.18) * Math.PI) : 0);
   const flap = Math.sin(t * 2.2 + seed) * 0.12 + Math.sin(t * 11 + seed) * 0.5 * burst, h = r * height + Math.sin(t * 1.3 + seed) * r * 0.3;
   const span = r * 2.1 * (1 - 0.12 * burst * Math.abs(Math.sin(t * 11 + seed))), tilt = Math.sin(t * 0.9 + seed) * 0.08; // il penche dans les virages
   ctx.save();
+  if (tint) ctx.filter = tint; // robe de l'Alpha (voir variantFilter)
   ctx.translate(x, y - h);
   ctx.rotate(tilt + (heading === undefined ? 0 : heading + Math.PI / 2)); // la tête vers où il va
   // queue en éventail
@@ -8187,3 +8220,1492 @@ function drawMagma(ctx: Ctx, x: number, y: number, t: number, gx: number, gy: nu
     ctx.fillRect(x + Math.sin(i * 4 + t * 3) * 8, y + k * 18, 2, 2);
   }
 }
+
+// ───────────── Robe de l'Alpha et du légendaire (double éveil) ─────────────
+// Alpha et légendaire partagent la même robe (VARIANT_FILTERS, un filtre de couleur sur le corps de l'espèce). Le légendaire y
+// ajoute des effets visuels propres à l'espèce, dessinés derrière (LEGEND_BACK) ou devant (LEGEND_FRONT) le corps, sans filtre.
+// Les espèces sans géant n'ont pas de légendaire : seule leur robe d'Alpha est définie ici.
+export const VARIANT_FILTERS: Record<string, string> = {
+  // espèces sans géant (pas de légendaire) : hare … rufous_coati ; puis slime, wolf, spider, drake, qui ont un géant (effets plus bas)
+  hare: 'hue-rotate(220deg) saturate(1.5) brightness(1.05)',
+  snail: 'hue-rotate(100deg) saturate(1.3) brightness(1.15)',
+  firefly: 'hue-rotate(120deg)',
+  meerkat: 'hue-rotate(80deg) saturate(1.3) brightness(1.15)',
+  treant: 'hue-rotate(170deg) saturate(1.2) brightness(1.2)',
+  bigfoot: 'hue-rotate(160deg) saturate(0.3) brightness(1.6)',
+  rufous_coati: 'hue-rotate(160deg) saturate(1.1) brightness(1.15)',
+  slime: 'hue-rotate(-75deg) saturate(1.5) brightness(1.1)',
+  wolf: 'saturate(2.2) hue-rotate(-15deg) brightness(0.5) contrast(1.25)',
+  spider: 'hue-rotate(80deg) saturate(1.5) brightness(0.65)',
+  drake: 'hue-rotate(95deg) saturate(1.3) brightness(0.7)',
+};
+const glowOn = (ctx: Ctx, col: string, blur: number) => { ctx.shadowColor = col; ctx.shadowBlur = blur; };
+const glowOff = (ctx: Ctx) => { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; };
+const spike = (ctx: Ctx, x: number, y: number, w: number, h: number, ang: number, col: string, edge = 'rgba(12,18,16,0.6)', lw = 1) => {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(-w / 2, 0);
+  ctx.lineTo(0, -h);
+  ctx.lineTo(w / 2, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = lw;
+  ctx.stroke();
+  ctx.restore();
+};
+const pulseOf = (u: UnitLook, sp = 3) => 0.65 + 0.35 * Math.sin(u.t * sp + u.seed);
+
+const LEGEND_BACK: Record<string, (ctx: Ctx, r: number, u: UnitLook) => void> = {
+  wolf: (ctx, r, u) => {
+    // crinière spectrale : une grande collerette de givre derrière le cou, qui frémit
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    for (const [cx, cy, rx, ry, col] of [[0.48, -0.1, 0.62, 0.72, '#7FC8E0'], [0.54, -0.08, 0.5, 0.58, '#D8F2FF']] as const) {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      const n = 10;
+      for (let k = 0; k <= n * 2; k++) {
+        const a = (k / (n * 2)) * TAU, d = k % 2 ? 1 : 1.2 + Math.sin(u.t * 4 + k) * 0.04;
+        const x = cx * r + Math.cos(a) * rx * r * d, y = cy * r + Math.sin(a) * ry * r * d;
+        if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ink(ctx, r * 0.5);
+    }
+    ctx.restore();
+  },
+};
+
+export const LEGEND_FRONT: Record<string, (ctx: Ctx, r: number, u: UnitLook) => void> = {
+  slime: (ctx, r, u) => {
+    const p = pulseOf(u);
+    // noyau d'or qui bat au fond du corps
+    const g = ctx.createRadialGradient(0, 0.3 * r, 0, 0, 0.3 * r, 0.5 * r);
+    g.addColorStop(0, `rgba(255,245,190,${0.95 * p})`);
+    g.addColorStop(0.45, `rgba(255,200,60,${0.8 * p})`);
+    g.addColorStop(1, 'rgba(255,170,30,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0.3 * r, 0.5 * r, 0, TAU);
+    ctx.fill();
+    // gouttes d'or en orbite et pièces collées à la surface
+    glowOn(ctx, '#FFD34A', r * 0.3);
+    ctx.fillStyle = '#FFE27A';
+    for (let k = 0; k < 5; k++) {
+      const a = u.t * 1.4 + (k / 5) * TAU, rx = 1.45 * r, ry = 0.6 * r;
+      ctx.beginPath();
+      ctx.ellipse(Math.cos(a) * rx, -0.05 * r + Math.sin(a) * ry, r * 0.07, r * 0.09, 0, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+    for (const [x, y] of [[0.62, 0.28], [-0.7, 0.18], [0.1, 0.52]] as const) {
+      ctx.fillStyle = '#F0B64A';
+      ctx.beginPath();
+      ctx.arc(x * r, y * r, r * 0.1, 0, TAU);
+      ctx.fill();
+      ink(ctx, r * 0.18);
+      ctx.fillStyle = '#FFF1B0';
+      ctx.beginPath();
+      ctx.arc((x - 0.03) * r, (y - 0.03) * r, r * 0.035, 0, TAU);
+      ctx.fill();
+    }
+    // trois pointes de gelée dorée sur le dessus
+    for (const [x, h] of [[-0.35, 0.3], [0.05, 0.4], [0.42, 0.28]] as const) spike(ctx, x * r, -0.78 * r, 0.2 * r, h * r, (x) * 0.4, '#FFD34A', 'rgba(12,18,16,0.7)', Math.max(1, r * 0.04));
+  },
+  wolf: (ctx, r, u) => {
+    const p = pulseOf(u);
+    // cristaux de glace le long de l'échine
+    glowOn(ctx, '#7FE8FF', r * 0.2);
+    for (const [x, h, a] of [[-0.62, 0.22, -0.5], [-0.42, 0.3, -0.3], [-0.2, 0.34, -0.1], [0.02, 0.3, 0.1], [0.22, 0.24, 0.25]] as const) {
+      spike(ctx, x * r, -0.4 * r, 0.14 * r, h * r, a, '#BFF4FF', 'rgba(20,60,80,0.7)', Math.max(1, r * 0.03));
+    }
+    glowOff(ctx);
+    // runes lumineuses sur le flanc
+    ctx.save();
+    ctx.strokeStyle = `rgba(127,232,255,${0.5 + 0.5 * p})`;
+    ctx.lineWidth = Math.max(1.5, r * 0.05);
+    ctx.lineCap = 'round';
+    glowOn(ctx, '#7FE8FF', r * 0.3);
+    for (const [x, dy] of [[-0.45, 0], [-0.18, 0.04], [0.1, 0]] as const) {
+      ctx.beginPath();
+      ctx.moveTo(x * r, (-0.18 + dy) * r);
+      ctx.lineTo((x + 0.08) * r, (-0.02 + dy) * r);
+      ctx.lineTo((x - 0.02) * r, (0.06 + dy) * r);
+      ctx.lineTo((x + 0.08) * r, (0.16 + dy) * r);
+      ctx.stroke();
+    }
+    // œil de glace
+    ctx.fillStyle = '#E8FCFF';
+    ctx.beginPath();
+    ctx.ellipse(0.92 * r, -0.27 * r, 0.1 * r, 0.075 * r, 0, 0, TAU);
+    ctx.fill();
+    // flamme de givre au bout de la queue
+    for (let k = 0; k < 3; k++) {
+      const f = (u.t * 2 + k / 3) % 1;
+      ctx.fillStyle = `rgba(160,235,255,${0.8 * (1 - f)})`;
+      ctx.beginPath();
+      ctx.ellipse((-1.28 - f * 0.18) * r, (-0.38 - f * 0.4) * r, 0.1 * r * (1 - f * 0.5), 0.14 * r * (1 - f * 0.4), 0, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+    glowOff(ctx);
+  },
+  spider: (ctx, r, u) => {
+    const p = pulseOf(u, 4);
+    // pointes dorsales sur l'abdomen
+    for (let k = 0; k < 5; k++) {
+      const x = -0.92 + k * 0.18, y = -0.58 * Math.sqrt(Math.max(0, 1 - ((x + 0.42) / 0.7) ** 2));
+      spike(ctx, x * r, y * r + 0.04 * r, 0.14 * r, (0.2 + (k === 2 ? 0.1 : 0)) * r, (x + 0.42) * 0.7, '#2A0C12', 'rgba(12,18,16,0.8)', Math.max(1, r * 0.03));
+    }
+    // sablier qui brûle
+    glowOn(ctx, '#FF4A2A', r * 0.4 * p);
+    ctx.fillStyle = `rgba(255,${(150 + 80 * p) | 0},70,1)`;
+    ctx.beginPath();
+    ctx.moveTo(-0.62 * r, -0.22 * r);
+    ctx.lineTo(-0.22 * r, -0.22 * r);
+    ctx.lineTo(-0.42 * r, 0);
+    ctx.lineTo(-0.22 * r, 0.22 * r);
+    ctx.lineTo(-0.62 * r, 0.22 * r);
+    ctx.lineTo(-0.42 * r, 0);
+    ctx.closePath();
+    ctx.fill();
+    // quatre yeux de plus, en couronne
+    ctx.fillStyle = '#FFD34A';
+    for (const [ex, ey, er] of [[0.4, -0.16, 0.05], [0.58, -0.2, 0.05], [0.76, -0.14, 0.04], [0.82, 0.04, 0.04]] as const) {
+      ctx.beginPath();
+      ctx.arc(ex * r, ey * r, er * r, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+    // venin qui goutte des crochets
+    for (let k = 0; k < 2; k++) {
+      const f = (u.t * 1.2 + k * 0.5) % 1;
+      ctx.fillStyle = `rgba(120,255,90,${1 - f})`;
+      ctx.beginPath();
+      ctx.ellipse((0.92 + k * 0.02) * r, (0.5 + f * 0.35) * r, 0.04 * r, 0.06 * r, 0, 0, TAU);
+      ctx.fill();
+    }
+  },
+  drake: (ctx, r, u) => {
+    const p = pulseOf(u, 2.5), t = u.t + u.seed, breathe = Math.sin(t * 2) * 0.01, sway = Math.sin(t * 3) * 0.06;
+    // crête de nageoires lumineuses (aigue-marine), du garrot au bout de la queue
+    const tail = bez([-0.4, -0.05], [-1.0, 0.0 + sway], [-1.55, -0.25 + sway * 2], 14);
+    const pts: P2[] = [...bez([0.55, -0.32], [0.1, -0.52 + breathe], [-0.55, -0.12], 6), ...tail.filter((_, i) => i >= 2 && i <= 12 && i % 2 === 0).map((q): P2 => [q[0], q[1] - 0.1])];
+    glowOn(ctx, '#5CF0E0', r * 0.35 * p);
+    ctx.fillStyle = 'rgba(120,255,235,0.9)';
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [x, y] = pts[i], [px, py] = pts[i - 1], [nx, ny] = pts[i + 1], k = 0.42 * (1 - Math.abs(i / (pts.length - 1) - 0.4) * 0.7);
+      ctx.beginPath();
+      ctx.moveTo(((x + px) / 2) * r, ((y + py) / 2) * r);
+      ctx.quadraticCurveTo((x - 0.12) * r, (y - k * 0.6) * r, (x - 0.1) * r, (y - k) * r);
+      ctx.lineTo(((x + nx) / 2) * r, ((y + ny) / 2) * r);
+      ctx.closePath();
+      ctx.fill();
+      ink(ctx, r * 0.12);
+    }
+    // nageoire de queue en éventail
+    const [tx, ty] = tail[14];
+    ctx.fillStyle = 'rgba(130,255,235,0.85)';
+    ctx.beginPath();
+    ctx.moveTo((tx + 0.12) * r, (ty + 0.02) * r);
+    ctx.quadraticCurveTo((tx - 0.1) * r, (ty - 0.5) * r, (tx - 0.4) * r, (ty - 0.36) * r);
+    ctx.quadraticCurveTo((tx - 0.22) * r, (ty - 0.1) * r, (tx - 0.42) * r, (ty + 0.08) * r);
+    ctx.quadraticCurveTo((tx - 0.2) * r, (ty + 0.22) * r, (tx - 0.36) * r, (ty + 0.42) * r);
+    ctx.quadraticCurveTo((tx - 0.05) * r, (ty + 0.3) * r, (tx + 0.12) * r, (ty + 0.02) * r);
+    ctx.fill();
+    ink(ctx, r * 0.12);
+    glowOff(ctx);
+    // grandes cornes d'or recourbées sur la tête
+    const hx = 0.86, hy = -0.36 + breathe;
+    for (const [dx, k] of [[-0.12, 1], [0.0, 0.72]] as const) {
+      ctx.fillStyle = '#F0B64A';
+      ctx.beginPath();
+      ctx.moveTo((hx + dx - 0.07) * r, (hy - 0.1) * r);
+      ctx.quadraticCurveTo((hx + dx - 0.5 * k) * r, (hy - 0.2) * r, (hx + dx - 0.78 * k) * r, (hy - 0.72 * k) * r);
+      ctx.quadraticCurveTo((hx + dx - 0.3 * k) * r, (hy - 0.42 * k) * r, (hx + dx + 0.07) * r, (hy - 0.12) * r);
+      ctx.closePath();
+      ctx.fill();
+      ink(ctx, r * 0.2);
+    }
+    // perles d'or sur l'épaule
+    for (const [x, y] of [[0.3, -0.2], [0.42, -0.08], [0.18, -0.06]] as const) {
+      ctx.fillStyle = '#FFE27A';
+      ctx.beginPath();
+      ctx.arc(x * r, y * r, r * 0.05, 0, TAU);
+      ctx.fill();
+      ink(ctx, r * 0.1);
+    }
+  },
+};
+
+// ───────── Groupe A : sanglier, golem, sporelin, ours, feu follet, guetteur, crapaud ─────────
+const legAHash = (n: number) => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+/** Éclair en zigzag de (x0,y0) à (x1,y1) (unités de r), qui scintille par paliers de temps. */
+const legABolt = (ctx: Ctx, r: number, x0: number, y0: number, x1: number, y1: number, seed: number, t: number, col: string, core: string) => {
+  const step = Math.floor(t * 9), n = 7;
+  const pts: [number, number][] = [];
+  for (let i = 0; i <= n; i++) {
+    const k = i / n, j = i === 0 || i === n ? 0 : (legAHash(seed * 13 + i + step * 7) - 0.5) * 0.2;
+    pts.push([x0 + (x1 - x0) * k, y0 + (y1 - y0) * k + j - Math.sin(k * Math.PI) * 0.14]);
+  }
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  glowOn(ctx, col, r * 0.3);
+  for (const [c, w] of [[col, 0.07], [core, 0.03]] as const) {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = Math.max(1, r * w);
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x * r, y * r) : ctx.moveTo(x * r, y * r)));
+    ctx.stroke();
+  }
+  ctx.restore();
+  glowOff(ctx);
+};
+/** Petite flamme en goutte (pointe vers le haut), centrée en (x,y). */
+const legAFlame = (ctx: Ctx, x: number, y: number, w: number, h: number, col: string, sway = 0) => {
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(x - w, y + h * 0.3);
+  ctx.quadraticCurveTo(x - w * 1.1, y - h * 0.3, x + sway, y - h);
+  ctx.quadraticCurveTo(x + w * 1.1, y - h * 0.3, x + w, y + h * 0.3);
+  ctx.quadraticCurveTo(x, y + h * 0.9, x - w, y + h * 0.3);
+  ctx.closePath();
+  ctx.fill();
+};
+
+Object.assign(VARIANT_FILTERS, {
+  boar: 'hue-rotate(195deg) saturate(1.7) brightness(0.5) contrast(1.2)', // pelage bleu nuit d'orage
+  golem: 'hue-rotate(-105deg) saturate(1.8) brightness(0.42) contrast(1.15)', // obsidienne brun-rouge sombre
+  sporelin: 'hue-rotate(275deg) saturate(1.5) brightness(0.85)', // chapeau violet
+  bear: 'hue-rotate(110deg) saturate(1.5) brightness(0.75)', // vert forêt profond
+  wisp: 'hue-rotate(105deg) saturate(1.5) brightness(0.95)', // flamme magenta
+  watcher: 'sepia(1) saturate(2.6) hue-rotate(-8deg) brightness(0.8)', // pierre bronze / or ancien
+  toad: 'hue-rotate(85deg) saturate(1.5) brightness(0.6)', // abysses sarcelle
+});
+
+Object.assign(LEGEND_BACK, {
+  golem: (ctx: Ctx, r: number, u: UnitLook) => {
+    // éclats d'obsidienne qui dépassent derrière les épaules et le dos
+    const sway = Math.sin(u.t * 1.5 + u.seed) * 0.02;
+    for (const [x, y, w, h, a] of [[-0.78, -0.6, 0.34, 0.8, -0.5], [0.78, -0.6, 0.34, 0.8, 0.5], [-0.38, -0.7, 0.28, 0.6, -0.18], [0.4, -0.7, 0.28, 0.6, 0.18], [-1.0, -0.2, 0.26, 0.5, -1.1], [1.0, -0.2, 0.26, 0.5, 1.1]] as const) {
+      spike(ctx, x * r, y * r, w * r, (h + sway) * r, a, '#2B1A22', 'rgba(8,6,10,0.9)', Math.max(1.5, r * 0.05));
+      spike(ctx, (x + Math.sin(a) * 0.1) * r, y * r, w * 0.4 * r, h * 0.7 * r, a, '#5A3342', 'rgba(0,0,0,0)', 0);
+    }
+  },
+  wisp: (ctx: Ctx, r: number, u: UnitLook) => {
+    // grandes ailes de flamme qui battent derrière le feu follet
+    const flap = Math.sin(u.t * 5 + u.seed) * 0.12;
+    for (const s of [-1, 1]) {
+      for (const [sc, col] of [[1, 'rgba(210,60,190,0.75)'], [0.66, 'rgba(255,160,230,0.85)']] as const) {
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.moveTo(s * 0.35 * r, -0.1 * r);
+        ctx.quadraticCurveTo(s * 1.0 * r * sc, (-0.45 - flap) * r * sc, s * 1.55 * r * sc, (-1.05 - flap * 2) * r * sc);
+        ctx.quadraticCurveTo(s * 1.45 * r * sc, (-0.35 - flap) * r * sc, s * 1.85 * r * sc, (-0.45 - flap) * r * sc);
+        ctx.quadraticCurveTo(s * 1.3 * r * sc, (-0.05) * r * sc, s * 1.55 * r * sc, (0.35 + flap) * r * sc);
+        ctx.quadraticCurveTo(s * 0.9 * r * sc, (0.15) * r * sc, s * 0.4 * r, 0.3 * r);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+  },
+  watcher: (ctx: Ctx, r: number, u: UnitLook) => {
+    // anneau runique doré qui tourne dans le dos de la sentinelle
+    const cx = 0, cy = -0.15 * r, p = pulseOf(u, 2);
+    ctx.save();
+    ctx.translate(cx, cy);
+    glowOn(ctx, '#FFC84A', r * 0.3 * p);
+    ctx.strokeStyle = `rgba(255,200,80,${0.55 + 0.3 * p})`;
+    ctx.lineWidth = Math.max(1.5, r * 0.05);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 1.05 * r, 1.1 * r, 0, 0, TAU);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, r * 0.025);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 0.88 * r, 0.93 * r, 0, 0, TAU);
+    ctx.stroke();
+    ctx.rotate(u.t * 0.5);
+    ctx.lineWidth = Math.max(2, r * 0.07);
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * TAU, d = k % 3 === 0 ? 0.14 : 0.07;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 0.95 * r, Math.sin(a) * 1.0 * r);
+      ctx.lineTo(Math.cos(a) * (0.95 + d) * r, Math.sin(a) * (1.0 + d) * r);
+      ctx.stroke();
+    }
+    ctx.restore();
+    glowOff(ctx);
+  },
+});
+
+Object.assign(LEGEND_FRONT, {
+  boar: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 5);
+    // lueur électrique dans les rayures du flanc
+    ctx.save();
+    ctx.strokeStyle = `rgba(150,235,255,${0.35 + 0.35 * p})`;
+    ctx.lineWidth = Math.max(1, r * 0.04);
+    ctx.lineCap = 'round';
+    glowOn(ctx, '#58C8FF', r * 0.2);
+    for (const y of [-0.36, -0.16, 0.04]) {
+      ctx.beginPath();
+      ctx.moveTo(-0.9 * r, (y + 0.06) * r);
+      ctx.quadraticCurveTo(-0.1 * r, (y - 0.08) * r, 0.65 * r, (y + 0.02) * r);
+      ctx.stroke();
+    }
+    ctx.restore();
+    // arcs de foudre qui sautent d'un point à l'autre de l'échine
+    legABolt(ctx, r, -0.78, -0.42, -0.3, -0.62, 1, u.t + u.seed, '#58C8FF', '#F0FFFF');
+    legABolt(ctx, r, -0.3, -0.62, 0.18, -0.64, 2, u.t + u.seed, '#58C8FF', '#F0FFFF');
+    legABolt(ctx, r, 0.18, -0.64, 0.58, -0.46, 3, u.t + u.seed, '#58C8FF', '#F0FFFF');
+    // défense électrique, œil d'éclair
+    glowOn(ctx, '#9AEBFF', r * 0.3 * p);
+    ctx.strokeStyle = '#D8FAFF';
+    ctx.lineWidth = Math.max(1.5, r * 0.07);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0.98 * r, 0.34 * r);
+    ctx.quadraticCurveTo(1.08 * r, 0.24 * r, 1.04 * r, 0.1 * r);
+    ctx.stroke();
+    ctx.fillStyle = '#FFF6B0';
+    ctx.beginPath();
+    ctx.arc(0.78 * r, -0.08 * r, 0.05 * r, 0, TAU);
+    ctx.fill();
+    glowOff(ctx);
+    // étincelles qui jaillissent des sabots
+    for (let k = 0; k < 6; k++) {
+      const f = (u.t * 2.2 + k * 0.37) % 1, x = [-0.52, -0.32, 0.32, 0.52, 0.8, -0.7][k];
+      ctx.fillStyle = `rgba(180,240,255,${1 - f})`;
+      ctx.fillRect((x + Math.sin(k * 5 + u.t * 6) * 0.1) * r, (0.8 - f * 0.4) * r, Math.max(1.5, r * 0.035), Math.max(1.5, r * 0.035));
+    }
+  },
+  golem: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 2.5);
+    // fissures de lave sur le corps et les bras
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    const cracks: [number, number][][] = [
+      [[-0.78, -0.5], [-0.6, -0.34], [-0.7, -0.14], [-0.5, 0.02], [-0.6, 0.22]],
+      [[0.8, -0.45], [0.62, -0.3], [0.72, -0.08], [0.55, 0.12], [0.66, 0.32]],
+      [[-0.2, 0.3], [-0.1, 0.5], [-0.25, 0.66]],
+      [[0.2, 0.28], [0.3, 0.46], [0.18, 0.7]],
+      [[-1.2, 0.05], [-1.0, 0.2], [-1.1, 0.4]],
+      [[1.2, 0.05], [1.0, 0.22], [1.1, 0.42]],
+    ];
+    glowOn(ctx, '#FF7A1A', r * 0.3 * p);
+    for (const [c, w] of [['rgba(255,110,20,1)', 0.075], [`rgba(255,${(215 + 40 * p) | 0},120,1)`, 0.03]] as const) {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = Math.max(1, r * w);
+      for (const pl of cracks) {
+        ctx.beginPath();
+        pl.forEach(([x, y], i) => (i ? ctx.lineTo(x * r, y * r) : ctx.moveTo(x * r, y * r)));
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+    glowOff(ctx);
+    // la chaleur de la braise dans les yeux
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const s of [-1, 1]) {
+      const g = ctx.createRadialGradient(s * 0.27 * r, -0.15 * r, 0, s * 0.27 * r, -0.15 * r, 0.3 * r);
+      g.addColorStop(0, `rgba(255,140,40,${0.55 * p})`);
+      g.addColorStop(1, 'rgba(255,140,40,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(s * 0.27 * r, -0.15 * r, 0.3 * r, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+    // braises et cendres qui montent du sommet
+    for (let k = 0; k < 6; k++) {
+      const f = (u.t * 0.7 + k / 6 + u.seed) % 1, x = -0.7 + (k % 3) * 0.7 + Math.sin(k * 3 + u.t * 2) * 0.1;
+      ctx.fillStyle = `rgba(255,${(120 + 100 * f) | 0},40,${1 - f})`;
+      ctx.beginPath();
+      ctx.arc(x * r, (-0.7 - f * 0.9) * r, r * 0.045 * (1 - f * 0.5), 0, TAU);
+      ctx.fill();
+    }
+    // lave qui goutte du poing
+    for (const s of [-1, 1]) {
+      const f = (u.t * 0.8 + (s > 0 ? 0.5 : 0)) % 1;
+      ctx.fillStyle = `rgba(255,140,30,${1 - f * 0.8})`;
+      ctx.beginPath();
+      ctx.ellipse(s * 1.02 * r, (0.65 + f * 0.15) * r, r * 0.035, r * 0.055, 0, 0, TAU);
+      ctx.fill();
+    }
+  },
+  sporelin: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 3);
+    ctx.save();
+    // (le drawer du sporelin laisse son translate de saut actif : les extras sautent déjà avec le champignon)
+    // lueur bioluminescente : halo sur les taches du chapeau
+    glowOn(ctx, '#8DFFE0', r * 0.4 * p);
+    ctx.fillStyle = `rgba(150,255,225,${0.55 + 0.35 * p})`;
+    for (const [sx, sy, sr] of [[-0.45, -0.45, 0.16], [0.15, -0.72, 0.13], [0.55, -0.3, 0.11], [-0.1, -0.3, 0.08]] as const) {
+      ctx.beginPath();
+      ctx.arc(sx * r, sy * r, sr * r, 0, TAU);
+      ctx.fill();
+    }
+    // lamelles lumineuses sous le bord du chapeau
+    ctx.strokeStyle = `rgba(160,255,230,${0.5 + 0.3 * p})`;
+    ctx.lineWidth = Math.max(1, r * 0.03);
+    ctx.lineCap = 'round';
+    for (let k = -4; k <= 4; k++) {
+      ctx.beginPath();
+      ctx.moveTo(k * 0.2 * r, (0.06 - Math.abs(k) * 0.005) * r);
+      ctx.lineTo(k * 0.14 * r, 0.14 * r);
+      ctx.stroke();
+    }
+    glowOff(ctx);
+    // petits champignons qui poussent sur le chapeau, de part et d'autre
+    for (const [x, y, a, s, ph] of [[-0.78, -0.42, -0.6, 1, 0], [0.8, -0.28, 0.6, 0.85, 1.7], [-0.62, -0.78, -0.3, 0.6, 3.1]] as const) {
+      ctx.save();
+      ctx.translate(x * r, y * r);
+      ctx.rotate(a + Math.sin(u.t * 2 + ph) * 0.05);
+      ctx.fillStyle = '#E8DCF0';
+      ctx.beginPath();
+      ctx.roundRect(-0.045 * r * s, -0.2 * r * s, 0.09 * r * s, 0.22 * r * s, 0.03 * r);
+      ctx.fill();
+      ctx.fillStyle = '#B04CE8';
+      ctx.beginPath();
+      ctx.ellipse(0, -0.22 * r * s, 0.2 * r * s, 0.13 * r * s, 0, Math.PI, TAU);
+      ctx.fill();
+      ink(ctx, r * 0.5 * s);
+      ctx.fillStyle = '#F6E8FF';
+      ctx.beginPath();
+      ctx.arc(-0.06 * r * s, -0.27 * r * s, 0.03 * r * s, 0, TAU);
+      ctx.arc(0.06 * r * s, -0.25 * r * s, 0.025 * r * s, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+    // nuée de spores lumineuses en orbite (non liée au saut)
+    glowOn(ctx, '#8DFFE0', r * 0.25);
+    for (let k = 0; k < 7; k++) {
+      const a = u.t * 0.9 + (k / 7) * TAU, rx = 1.25 * r, ry = 0.35 * r;
+      ctx.fillStyle = `rgba(170,255,235,${0.5 + 0.4 * Math.sin(u.t * 3 + k)})`;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * rx, -0.2 * r + Math.sin(a) * ry, r * 0.045, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+  },
+  bear: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 2.5), sway = u.moving ? Math.sin(u.t * 12 + u.seed) : Math.sin(u.t * 1.5 + u.seed) * 0.3;
+    const top = (x: number) => Math.min(-0.12 - Math.sqrt(Math.max(0, 0.62 ** 2 - (x - 0.1) ** 2)), 0.05 - Math.sqrt(Math.max(0, 0.55 ** 2 - (x + 0.45) ** 2)));
+    // cristaux d'ambre plantés dans l'échine
+    glowOn(ctx, '#FFB030', r * 0.3 * p);
+    for (const [x, h, w] of [[-0.62, 0.3, 0.15], [-0.42, 0.42, 0.18], [-0.2, 0.5, 0.2], [0.02, 0.62, 0.22], [0.22, 0.48, 0.19], [0.4, 0.34, 0.15]] as const) {
+      const a = (x - 0.05) * 0.5;
+      spike(ctx, x * r, (top(x) + 0.08 + sway * 0.01) * r, w * r, (h + Math.sin(u.t * 2 + x * 6) * 0.015) * r, a, '#FFB838', 'rgba(60,30,0,0.85)', Math.max(1.2, r * 0.04));
+      spike(ctx, (x - 0.02) * r, (top(x) + 0.06) * r, w * 0.35 * r, h * 0.65 * r, a, '#FFEBA8', 'rgba(0,0,0,0)', 0);
+    }
+    glowOff(ctx);
+    // rune d'ambre qui brille sur l'épaule
+    ctx.save();
+    glowOn(ctx, '#FFB030', r * 0.3);
+    ctx.strokeStyle = `rgba(255,205,90,${0.5 + 0.5 * p})`;
+    ctx.lineWidth = Math.max(1.5, r * 0.05);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-0.02 * r, 0.04 * r);
+    ctx.lineTo(0.12 * r, -0.14 * r);
+    ctx.lineTo(0.28 * r, 0.04 * r);
+    ctx.moveTo(0.12 * r, -0.14 * r);
+    ctx.lineTo(0.12 * r, 0.22 * r);
+    ctx.stroke();
+    // œil d'ambre ardent
+    ctx.fillStyle = '#FFF0B0';
+    ctx.beginPath();
+    ctx.arc(0.94 * r, -0.1 * r + sway * r * 0.025, 0.05 * r, 0, TAU);
+    ctx.fill();
+    // griffes incandescentes
+    ctx.strokeStyle = `rgba(255,190,70,${0.5 + 0.4 * p})`;
+    ctx.lineWidth = Math.max(1, r * 0.03);
+    for (const x of [-0.7, -0.4, 0.35, 0.65]) {
+      ctx.beginPath();
+      ctx.moveTo((x - 0.08) * r, 0.78 * r);
+      ctx.lineTo((x - 0.1) * r, 0.84 * r);
+      ctx.moveTo((x + 0.04) * r, 0.78 * r);
+      ctx.lineTo((x + 0.02) * r, 0.85 * r);
+      ctx.stroke();
+    }
+    ctx.restore();
+    glowOff(ctx);
+    // lucioles d'ambre autour de la bête
+    for (let k = 0; k < 4; k++) {
+      const a = u.t * 0.8 + (k / 4) * TAU;
+      ctx.fillStyle = `rgba(255,210,100,${0.5 + 0.4 * Math.sin(u.t * 4 + k * 2)})`;
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * 1.35 * r, -0.2 * r + Math.sin(a * 1.3) * 0.5 * r, r * 0.04, 0, TAU);
+      ctx.fill();
+    }
+  },
+  wisp: (ctx: Ctx, r: number, u: UnitLook) => {
+    // trois petits feux follets qui tournent autour du grand (derrière / devant selon la phase)
+    for (let k = 0; k < 3; k++) {
+      const a = u.t * 1.6 + (k / 3) * TAU, x = Math.cos(a) * 1.15 * r, y = (-0.05 + Math.sin(a) * 0.3) * r;
+      const s = 1.35 + 0.35 * Math.sin(a), sw = Math.sin(u.t * 9 + k) * 0.04 * r;
+      glowOn(ctx, '#FF7AE0', r * 0.4);
+      legAFlame(ctx, x, y, 0.1 * r * s, 0.26 * r * s, 'rgba(255,100,215,0.95)', sw);
+      glowOff(ctx);
+      legAFlame(ctx, x, y + 0.03 * r, 0.05 * r * s, 0.13 * r * s, '#FFFFFF', sw * 0.5);
+    }
+    // anneau de braises runiques autour de la base
+    const p = pulseOf(u, 3);
+    ctx.strokeStyle = `rgba(255,150,230,${0.4 + 0.3 * p})`;
+    ctx.lineWidth = Math.max(1, r * 0.03);
+    ctx.setLineDash([r * 0.12, r * 0.1]);
+    ctx.lineDashOffset = -u.t * r * 0.3;
+    ctx.beginPath();
+    ctx.ellipse(0, 0.72 * r, 0.8 * r, 0.16 * r, 0, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  },
+  watcher: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 2), ch = u.charge ?? 0;
+    // runes dorées supplémentaires sur le fût
+    ctx.save();
+    glowOn(ctx, '#FFC84A', r * 0.25);
+    ctx.strokeStyle = `rgba(255,214,110,${0.45 + 0.35 * p + ch * 0.2})`;
+    ctx.lineWidth = Math.max(1.5, r * 0.05);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-0.42 * r, 0.1 * r);
+    ctx.lineTo(-0.34 * r, 0.4 * r);
+    ctx.moveTo(-0.46 * r, 0.24 * r);
+    ctx.lineTo(-0.28 * r, 0.24 * r);
+    ctx.moveTo(0.34 * r, 0.1 * r);
+    ctx.lineTo(0.46 * r, 0.22 * r);
+    ctx.lineTo(0.34 * r, 0.4 * r);
+    ctx.moveTo(-0.45 * r, -0.62 * r);
+    ctx.lineTo(-0.3 * r, -0.5 * r);
+    ctx.moveTo(0.35 * r, -0.62 * r);
+    ctx.lineTo(0.4 * r, -0.48 * r);
+    ctx.stroke();
+    // anneau doré autour de l'œil
+    ctx.lineWidth = Math.max(1.5, r * 0.045);
+    ctx.beginPath();
+    ctx.arc(0.05 * r, -0.35 * r, 0.33 * r * (1 + ch * 0.3), 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+    glowOff(ctx);
+    // quatre pierres runiques flottantes en orbite
+    for (let k = 0; k < 4; k++) {
+      const a = u.t * 1.1 + (k / 4) * TAU, x = Math.cos(a) * 0.95 * r, y = (-0.2 + Math.sin(a) * 0.25 + Math.sin(u.t * 2 + k) * 0.05) * r, s = 1.35 + 0.35 * Math.sin(a);
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(u.t * 0.8 + k);
+      glowOn(ctx, '#FFC84A', r * 0.25);
+      ctx.fillStyle = '#5A4A2A';
+      ctx.beginPath();
+      ctx.moveTo(0, -0.17 * r * s);
+      ctx.lineTo(0.1 * r * s, 0);
+      ctx.lineTo(0, 0.17 * r * s);
+      ctx.lineTo(-0.1 * r * s, 0);
+      ctx.closePath();
+      ctx.fill();
+      glowOff(ctx);
+      ink(ctx, r * 0.3 * s);
+      ctx.strokeStyle = `rgba(255,220,120,${0.6 + 0.4 * p})`;
+      ctx.lineWidth = Math.max(1, r * 0.03);
+      ctx.beginPath();
+      ctx.moveTo(0, -0.08 * r * s);
+      ctx.lineTo(0, 0.08 * r * s);
+      ctx.moveTo(-0.04 * r * s, 0);
+      ctx.lineTo(0.04 * r * s, 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+  },
+  toad: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 3);
+    // crête de pointes venimeuses le long du dos
+    glowOn(ctx, '#38F0D0', r * 0.2 * p);
+    for (const [x, y, h, a] of [[-0.72, -0.5, 0.2, -0.7], [-0.52, -0.6, 0.27, -0.45], [-0.3, -0.66, 0.31, -0.2], [-0.08, -0.69, 0.3, 0.05], [0.14, -0.67, 0.26, 0.25]] as const) {
+      spike(ctx, x * r, (y + 0.05) * r, 0.14 * r, h * r, a, '#3CE8C8', 'rgba(8,40,40,0.9)', Math.max(1.2, r * 0.04));
+    }
+    glowOff(ctx);
+    // verrues et glandes qui luisent sur le dos et le flanc
+    glowOn(ctx, '#38F0D0', r * 0.3 * p);
+    for (const [x, y, s] of [[-0.55, -0.22, 0.06], [-0.2, -0.38, 0.07], [0.12, -0.42, 0.055], [-0.75, 0.02, 0.05], [0.3, -0.2, 0.05], [0.55, -0.12, 0.045], [-0.4, 0.05, 0.045]] as const) {
+      ctx.fillStyle = `rgba(150,255,235,${0.55 + 0.4 * Math.sin(u.t * 3 + x * 7 + u.seed)})`;
+      ctx.beginPath();
+      ctx.arc(x * r, y * r, s * r, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+    // bulles toxiques qui montent, et filet de venin au coin de la gueule
+    for (let k = 0; k < 4; k++) {
+      const f = (u.t * 0.6 + k / 4 + u.seed) % 1, x = -0.3 + k * 0.28 + Math.sin(u.t * 3 + k * 2) * 0.05;
+      ctx.strokeStyle = `rgba(150,255,235,${0.8 * (1 - f)})`;
+      ctx.lineWidth = Math.max(1, r * 0.025);
+      ctx.beginPath();
+      ctx.arc(x * r, (-0.78 - f * 0.55) * r, r * (0.04 + 0.04 * f), 0, TAU);
+      ctx.stroke();
+    }
+    const f = (u.t * 0.9 + u.seed) % 1;
+    ctx.fillStyle = `rgba(90,255,215,${1 - f})`;
+    ctx.beginPath();
+    ctx.ellipse(0.93 * r, (0.28 + f * 0.4) * r, r * 0.035, r * 0.06, 0, 0, TAU);
+    ctx.fill();
+  },
+});
+
+
+// ───────── Groupe B : serpent, crabe, ver des sables, vautour, chacal, salamandre, chauve-souris ─────────
+const legBFlame = (ctx: Ctx, x: number, y: number, w: number, h: number, t: number, outer: string, inner: string, ph = 0) => {
+  const sw = Math.sin(t * 7 + ph) * w * 0.35, hh = h * (0.88 + 0.12 * Math.sin(t * 9 + ph * 2));
+  for (const [k, col] of [[1, outer], [0.55, inner]] as const) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x - w * k, y);
+    ctx.quadraticCurveTo(x - w * 0.9 * k, y - hh * 0.55 * k, x + sw * k, y - hh * k);
+    ctx.quadraticCurveTo(x + w * 0.9 * k, y - hh * 0.5 * k, x + w * k, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+};
+
+Object.assign(VARIANT_FILTERS, {
+  serpent: 'hue-rotate(85deg) saturate(1.7) brightness(0.62) contrast(1.15)', // violet d'orage
+  sandworm: 'hue-rotate(-28deg) saturate(2.2) brightness(0.5) contrast(1.2)', // basalte rouge sombre
+  vulture: 'sepia(0.45) saturate(0.8) brightness(1.75) contrast(0.95)', // plumes d'os et d'or
+  jackal: 'grayscale(1) brightness(0.3) contrast(1.5)', // noir d'Anubis
+  salamander: 'hue-rotate(190deg) saturate(1.5) brightness(0.95)', // flamme bleue
+  ash_bat: 'hue-rotate(125deg) saturate(1.4) brightness(1.05)', // spectre vert
+});
+
+Object.assign(LEGEND_BACK, {
+  vulture: (ctx: Ctx, r: number, u: UnitLook) => {
+    // disque solaire à rayons dorés qui tourne doucement derrière le dos
+    const p = pulseOf(u, 2), cx = 0.0 * r, cy = -0.05 * r;
+    ctx.save();
+    glowOn(ctx, '#FFC94A', r * 0.35);
+    for (let k = 0; k < 14; k++) {
+      const a = (k / 14) * TAU + u.t * 0.4, l = (k % 2 ? 1.0 : 1.2) * r * (0.95 + 0.05 * p);
+      ctx.fillStyle = k % 2 ? '#E8A93A' : '#FFE08A';
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a - 0.1) * 0.78 * r, cy + Math.sin(a - 0.1) * 0.78 * r);
+      ctx.lineTo(cx + Math.cos(a) * l, cy + Math.sin(a) * l);
+      ctx.lineTo(cx + Math.cos(a + 0.1) * 0.78 * r, cy + Math.sin(a + 0.1) * 0.78 * r);
+      ctx.closePath();
+      ctx.fill();
+    }
+    glowOff(ctx);
+    ctx.strokeStyle = 'rgba(255,214,110,0.9)';
+    ctx.lineWidth = Math.max(2, r * 0.05);
+    ctx.beginPath();
+    ctx.arc(cx, cy, 0.8 * r, 0, TAU);
+    ctx.stroke();
+    ctx.restore();
+  },
+  ash_bat: (ctx: Ctx, r: number, u: UnitLook) => {
+    // anneau runique spectral derrière la chauve-souris
+    const p = pulseOf(u, 3);
+    ctx.save();
+    glowOn(ctx, '#5CFFB0', r * 0.4);
+    ctx.strokeStyle = `rgba(120,255,190,${0.5 + 0.4 * p})`;
+    ctx.lineWidth = Math.max(1.5, r * 0.04);
+    ctx.beginPath();
+    ctx.arc(0, -0.05 * r, 0.82 * r, 0, TAU);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1, r * 0.03);
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * TAU + u.t * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 0.74 * r, -0.05 * r + Math.sin(a) * 0.74 * r);
+      ctx.lineTo(Math.cos(a + 0.12) * 0.9 * r, -0.05 * r + Math.sin(a + 0.12) * 0.9 * r);
+      ctx.stroke();
+    }
+    ctx.restore();
+    glowOff(ctx);
+  },
+});
+
+Object.assign(LEGEND_FRONT, {
+  serpent: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 5), rise = u.charge ?? 0, hy = -(0.38 + rise * 0.5) * r;
+    const pts: [number, number][] = [];
+    for (let i = 0; i < 14; i++) {
+      const k = i / 13;
+      pts.push([(0.1 - k * 1.7) * r, (0.38 + Math.sin(k * 7 - u.t * 4 + u.seed) * 0.12) * r]);
+    }
+    // nageoire dorsale dorée, le long du corps puis du cou
+    glowOn(ctx, '#FFD34A', r * 0.2);
+    for (let i = 1; i < 13 && !u.inWater; i++) { // à l'eau, le corps est sous la surface : pas de nageoire
+      const [x, y] = pts[i], hgt = (0.34 - i * 0.018) * r;
+      spike(ctx, x, y - (0.22 - i * 0.012) * r, 0.16 * r, hgt, -0.25, i % 2 ? '#FFD34A' : '#F0B64A', 'rgba(30,10,50,0.8)', Math.max(1, r * 0.03));
+    }
+    glowOff(ctx);
+    // grandes cornes d'or rabattues vers l'arrière
+    for (const [dx, k] of [[0.34, 1], [0.46, 0.7]] as const) {
+      ctx.fillStyle = '#F0B64A';
+      ctx.beginPath();
+      ctx.moveTo((dx - 0.06) * r, hy - 0.2 * r);
+      ctx.quadraticCurveTo((dx - 0.3 * k) * r, hy - 0.46 * k * r, (dx - 0.62 * k) * r, hy - 0.34 * k * r);
+      ctx.quadraticCurveTo((dx - 0.3 * k) * r, hy - 0.3 * k * r, (dx + 0.06) * r, hy - 0.16 * r);
+      ctx.closePath();
+      ctx.fill();
+      ink(ctx, r * 0.2);
+    }
+    // arcs électriques qui crépitent autour du cou
+    ctx.save();
+    ctx.strokeStyle = `rgba(190,230,255,${0.55 + 0.45 * p})`;
+    ctx.lineWidth = Math.max(1.2, r * 0.035);
+    ctx.lineJoin = 'round';
+    glowOn(ctx, '#7FC8FF', r * 0.3);
+    for (let b = 0; b < 3; b++) {
+      const ph = Math.floor(u.t * 8 + b * 3) * 1.7 + b, x0 = (-0.1 + b * 0.05) * r, y0 = hy + (0.7 + b * 0.2) * r * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      for (let s = 1; s <= 4; s++) ctx.lineTo(x0 + (s * 0.1 + Math.sin(ph + s * 2.3) * 0.07 + b * 0.04) * r, y0 - s * 0.14 * r + Math.cos(ph * 1.3 + s) * 0.05 * r);
+      ctx.stroke();
+    }
+    ctx.restore();
+    // œil qui rougeoie plus fort
+    glowOn(ctx, '#7FE0FF', r * 0.35 * p);
+    ctx.fillStyle = '#E8FAFF';
+    ctx.beginPath();
+    ctx.ellipse(0.58 * r, hy - 0.08 * r, 0.04 * r, 0.04 * r, 0, 0, TAU);
+    ctx.fill();
+    glowOff(ctx);
+  },
+  sandworm: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 3), sway = Math.sin(u.t * 2.4 + u.seed) * 0.08;
+    const seg = [[0, 0.5, 0.48], [0.08, 0.15, 0.46], [0.2, -0.2, 0.43], [0.34, -0.52, 0.4]];
+    // cristaux d'ambre autour du cratère
+    for (const [x, h, a] of [[-0.95, 0.4, -0.5], [-0.78, 0.3, -0.3], [0.8, 0.34, 0.4], [0.98, 0.26, 0.6]] as const) {
+      glowOn(ctx, '#FF8A2A', r * 0.15);
+      spike(ctx, x * r, 0.66 * r, 0.16 * r, h * r, a, '#FFB84A', 'rgba(40,10,5,0.8)', Math.max(1, r * 0.03));
+    }
+    glowOff(ctx);
+    for (const [i, [sx, sy, sr]] of seg.entries()) {
+      const x = (sx + sway * i) * r, y = sy * r;
+      // plaques osseuses en pointes sur le dos (côté gauche, loin du visage)
+      for (const [da, k] of [[-2.5, 1], [-2.05, 0.8]] as const) {
+        const bx = x + Math.cos(da) * sr * r * 0.85, by = y + Math.sin(da) * sr * r * 0.8;
+        spike(ctx, bx, by, 0.16 * r, 0.3 * k * r, da + Math.PI / 2, '#E8DCC0', 'rgba(30,10,5,0.8)', Math.max(1, r * 0.03));
+      }
+      // lave entre les anneaux
+      ctx.strokeStyle = `rgba(255,${(110 + 80 * p) | 0},40,${0.55 + 0.4 * p})`;
+      ctx.lineWidth = Math.max(1.5, r * 0.05);
+      ctx.beginPath();
+      ctx.ellipse(x, y + sr * r * 0.62, sr * r * 0.78, sr * r * 0.16, 0, 0.1, Math.PI - 0.1);
+      ctx.stroke();
+    }
+    // grosses braises qui s'envolent du cratère
+    for (let k = 0; k < 5; k++) {
+      const f = (u.t * 0.6 + k / 5) % 1;
+      ctx.fillStyle = `rgba(255,170,60,${0.9 * (1 - f)})`;
+      ctx.beginPath();
+      ctx.arc((-0.9 + k * 0.45 + Math.sin(f * 5 + k) * 0.08) * r, (0.55 - f * 1.1) * r, 0.045 * r * (1 - f * 0.5), 0, TAU);
+      ctx.fill();
+    }
+  },
+  vulture: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 4), t = u.t;
+    ctx.save(); // (le drawer du vautour laisse son translate de saut actif : les extras sautent déjà avec lui)
+    // flammes d'or au bout des rémiges et de la queue
+    glowOn(ctx, '#FFB02A', r * 0.3);
+    for (let k = 0; k < 5; k++) legBFlame(ctx, (-0.62 - k * 0.09) * r, (0.3 + k * 0.06) * r, 0.1 * r, 0.45 * r, t, 'rgba(255,170,40,0.9)', 'rgba(255,240,170,0.95)', k * 1.3);
+    for (const [x, y] of [[-1.0, 0.5], [-0.9, 0.62]] as const) legBFlame(ctx, x * r, y * r, 0.06 * r, 0.24 * r, t, 'rgba(255,150,30,0.9)', 'rgba(255,235,150,0.95)', x * 7);
+    glowOff(ctx);
+    // collier d'or
+    ctx.strokeStyle = '#F0B64A';
+    ctx.lineWidth = r * 0.07;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.ellipse(0.4 * r, -0.4 * r, 0.2 * r, 0.09 * r, 0.3, 0.1, Math.PI - 0.1);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(40,20,5,0.7)';
+    ctx.lineWidth = r * 0.02;
+    ctx.stroke();
+    glowOn(ctx, '#FFE08A', r * 0.2 * p);
+    ctx.fillStyle = '#FF6A4A';
+    ctx.beginPath();
+    ctx.arc(0.43 * r, -0.31 * r, 0.04 * r, 0, TAU);
+    ctx.fill();
+    // œil d'or
+    ctx.fillStyle = '#FFE08A';
+    ctx.beginPath();
+    ctx.arc(0.6 * r, -0.67 * r, 0.04 * r, 0, TAU);
+    ctx.fill();
+    glowOff(ctx);
+    // plumes de lumière qui montent
+    for (let k = 0; k < 4; k++) {
+      const f = (t * 0.5 + k / 4) % 1;
+      ctx.fillStyle = `rgba(255,225,130,${0.8 * (1 - f)})`;
+      ctx.beginPath();
+      ctx.ellipse((-0.5 + k * 0.35) * r, (-0.4 - f * 0.7) * r, 0.025 * r, 0.06 * r, 0.4, 0, TAU);
+      ctx.fill();
+    }
+    ctx.restore();
+  },
+  jackal: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 3), gt = gait(u, 14), t = u.t;
+    const step = u.moving ? Math.sin(u.t * 14 + u.seed) * 0.16 : 0;
+    const hx = 0.82 * r, hy = -0.48 * r;
+    // bracelets d'or aux pattes
+    ctx.strokeStyle = '#F0B64A';
+    ctx.lineWidth = r * 0.13;
+    ctx.lineCap = 'butt';
+    for (const [lx, i] of [[-0.5, 0], [-0.32, 2], [0.38, 1], [0.55, 3]] as const) {
+      const k = gt[i].a * 0.16, up = gt[i].lift * 0.08;
+      const fx = lx + k, fy = 0.72 - up, kx = lx + k * 0.6 + up * 0.5, ky = 0.42 - up;
+      const x = kx + (fx - kx) * 0.62, y = ky + (fy - ky) * 0.62;
+      ctx.beginPath();
+      ctx.moveTo((x - 0.045) * r, y * r);
+      ctx.lineTo((x + 0.045) * r, y * r);
+      ctx.stroke();
+    }
+    // collier usekh : large arc d'or, perles turquoise
+    ctx.fillStyle = '#F0B64A';
+    ctx.beginPath();
+    ctx.ellipse(0.62 * r, -0.2 * r, 0.26 * r, 0.14 * r, 0.55, 0.15, Math.PI - 0.1);
+    ctx.ellipse(0.62 * r, -0.2 * r, 0.14 * r, 0.06 * r, 0.55, Math.PI - 0.1, 0.15, true);
+    ctx.fill();
+    ink(ctx, r * 0.35);
+    ctx.fillStyle = '#3FE0C8';
+    for (let k = 0; k < 4; k++) {
+      const a = 0.5 + k * 0.7;
+      ctx.beginPath();
+      ctx.arc(0.62 * r + Math.cos(a + 0.55) * 0.2 * r * 0.9 - 0.02 * r, -0.2 * r + Math.sin(a) * 0.1 * r + 0.04 * r, 0.025 * r, 0, TAU);
+      ctx.fill();
+    }
+    // pointes d'or sur les oreilles
+    for (const [ox, tip] of [[-0.12, -0.2], [0.03, -0.02]] as const) spike(ctx, hx + (ox + tip) * r, hy - 0.5 * r, 0.1 * r, 0.18 * r, 0, '#F0B64A', 'rgba(30,15,5,0.8)', Math.max(1, r * 0.03));
+    // khôl doré qui prolonge l'œil
+    glowOn(ctx, '#FFD34A', r * 0.15);
+    ctx.strokeStyle = '#FFD34A';
+    ctx.lineWidth = Math.max(1.5, r * 0.04);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hx + 0.12 * r, hy - 0.04 * r);
+    ctx.quadraticCurveTo(hx + 0.3 * r, hy - 0.02 * r, hx + 0.34 * r, hy + 0.08 * r);
+    ctx.stroke();
+    // ankh lumineux sur le flanc
+    ctx.strokeStyle = `rgba(255,214,90,${0.55 + 0.45 * p})`;
+    ctx.lineWidth = Math.max(1.5, r * 0.045);
+    glowOn(ctx, '#FFC93A', r * 0.3);
+    ctx.beginPath();
+    ctx.ellipse(-0.3 * r, -0.14 * r, 0.06 * r, 0.075 * r, 0, 0, TAU);
+    ctx.moveTo(-0.3 * r, -0.065 * r);
+    ctx.lineTo(-0.3 * r, 0.12 * r);
+    ctx.moveTo(-0.38 * r, -0.01 * r);
+    ctx.lineTo(-0.22 * r, -0.01 * r);
+    ctx.stroke();
+    // flamme spectrale turquoise au bout de la queue
+    legBFlame(ctx, -1.15 * r, (0.3 + step * 0.2) * r, 0.1 * r, 0.42 * r, t, 'rgba(60,230,210,0.85)', 'rgba(210,255,250,0.95)', 1);
+    glowOff(ctx);
+  },
+  salamander: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 4), t = u.t;
+    glowOn(ctx, '#4AB8FF', r * 0.35);
+    // crête de flammes bleues le long de l'échine
+    for (let k = 0; k < 8; k++) {
+      const x = -0.65 + k * 0.17, by = 0.06 - 0.38 * Math.sqrt(Math.max(0, 1 - ((x + 0.05) / 0.82) ** 2)) + 0.03;
+      legBFlame(ctx, x * r, by * r, 0.075 * r, (0.3 + 0.06 * Math.sin(k * 1.3)) * r, t, 'rgba(60,150,255,0.9)', 'rgba(200,245,255,0.95)', k * 1.1);
+    }
+    // flamme de queue
+    const wig = Math.sin(u.t * 6 + u.seed - 1.6) * 0.22;
+    legBFlame(ctx, -1.9 * r, (0.12 + wig) * r, 0.1 * r, 0.42 * r, t, 'rgba(60,150,255,0.9)', 'rgba(200,245,255,0.95)', 2);
+    glowOff(ctx);
+    // cornes de basalte recourbées vers l'arrière, pointes bleues
+    for (const [x, y, k] of [[0.68, -0.3, 1], [0.8, -0.3, 0.75]] as const) {
+      ctx.fillStyle = '#2A2230';
+      ctx.beginPath();
+      ctx.moveTo((x - 0.06) * r, y * r + 0.04 * r);
+      ctx.quadraticCurveTo((x - 0.1) * r, (y - 0.3 * k) * r, (x - 0.4 * k) * r, (y - 0.34 * k) * r);
+      ctx.quadraticCurveTo((x - 0.16) * r, (y - 0.12 * k) * r, (x + 0.07) * r, y * r + 0.04 * r);
+      ctx.closePath();
+      ctx.fill();
+      ink(ctx, r * 0.25);
+      glowOn(ctx, '#7FD0FF', r * 0.2);
+      ctx.fillStyle = '#B8ECFF';
+      ctx.beginPath();
+      ctx.arc((x - 0.4 * k) * r, (y - 0.34 * k) * r, 0.03 * r, 0, TAU);
+      ctx.fill();
+      glowOff(ctx);
+    }
+    // fissures de gel-feu sur le flanc
+    ctx.strokeStyle = `rgba(150,225,255,${0.4 + 0.5 * p})`;
+    ctx.lineWidth = Math.max(1.2, r * 0.035);
+    glowOn(ctx, '#4AB8FF', r * 0.2);
+    ctx.beginPath();
+    ctx.moveTo(-0.5 * r, 0.02 * r);
+    ctx.lineTo(-0.38 * r, 0.12 * r);
+    ctx.lineTo(-0.26 * r, 0.04 * r);
+    ctx.moveTo(0.05 * r, 0.04 * r);
+    ctx.lineTo(0.18 * r, 0.14 * r);
+    ctx.lineTo(0.3 * r, 0.06 * r);
+    ctx.stroke();
+    glowOff(ctx);
+  },
+  ash_bat: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 4), t = u.t, lift = Math.sin(u.t * 14 + u.seed) * 0.5 * r;
+    glowOn(ctx, '#5CFFB0', r * 0.35);
+    // flammes spectrales au bout des doigts d'aile
+    for (const sd of [-1, 1]) {
+      const tips = [[1.6, -0.55 * r - lift], [1.45, 0.05 * r - lift * 0.5], [1.0, 0.35 * r - lift * 0.2]];
+      tips.forEach(([tx, ty], i) => legBFlame(ctx, sd * tx * r, ty, 0.07 * r, (i ? 0.2 : 0.32) * r, t, 'rgba(70,255,170,0.85)', 'rgba(220,255,240,0.95)', i * 1.7 + sd));
+    }
+    // sigil sur le poitrail
+    ctx.strokeStyle = `rgba(170,255,215,${0.5 + 0.5 * p})`;
+    ctx.lineWidth = Math.max(1.2, r * 0.035);
+    ctx.beginPath();
+    ctx.moveTo(-0.08 * r, 0.2 * r);
+    ctx.lineTo(0, 0.1 * r);
+    ctx.lineTo(0.08 * r, 0.2 * r);
+    ctx.lineTo(0, 0.3 * r);
+    ctx.closePath();
+    ctx.stroke();
+    // halo autour des yeux
+    ctx.fillStyle = `rgba(150,255,210,${0.35 * p})`;
+    for (const sd of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(sd * 0.15 * r, -0.14 * r, 0.13 * r, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+    // grandes cornes d'os entre les oreilles
+    for (const sd of [-1, 1]) {
+      ctx.fillStyle = '#E8F5E0';
+      ctx.beginPath();
+      ctx.moveTo(sd * 0.04 * r, -0.4 * r);
+      ctx.quadraticCurveTo(sd * 0.1 * r, -0.7 * r, sd * 0.2 * r, -0.62 * r);
+      ctx.quadraticCurveTo(sd * 0.12 * r, -0.55 * r, sd * 0.13 * r, -0.38 * r);
+      ctx.closePath();
+      ctx.fill();
+      ink(ctx, r * 0.2);
+    }
+    // âmes qui s'échappent vers le bas
+    for (let k = 0; k < 3; k++) {
+      const f = (t * 0.5 + k / 3) % 1;
+      ctx.fillStyle = `rgba(150,255,210,${0.7 * (1 - f)})`;
+      ctx.beginPath();
+      ctx.ellipse((-0.3 + k * 0.3) * r, (0.55 + f * 0.6) * r, 0.04 * r, 0.07 * r, 0, 0, TAU);
+      ctx.fill();
+    }
+  },
+});
+
+// ───────────── Légendaires du groupe C : tortue-volcan, gorille, croc, masqué, scorpion, wyverne, dragon ─────────────
+/** Une flamme (goutte qui danse) : base centrée en (x, y), hauteur h vers le haut ; c0 l'extérieur, c1 le cœur. */
+const legCFlame = (ctx: Ctx, x: number, y: number, w: number, h: number, t: number, ph: number, c0: string, c1: string) => {
+  const hh = h * (0.8 + 0.2 * Math.sin(t * 9 + ph)), sw = Math.sin(t * 6 + ph) * w * 0.35;
+  for (const [k, col] of [[1, c0], [0.5, c1]] as const) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x - (w / 2) * k, y);
+    ctx.quadraticCurveTo(x - w * 0.6 * k, y - hh * 0.5 * k, x + sw * k, y - hh * k);
+    ctx.quadraticCurveTo(x + w * 0.6 * k, y - hh * 0.5 * k, x + (w / 2) * k, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+};
+/** Éclair en dents de scie de (x0, y0) à (x1, y1), qui scintille (nouvelle forme ~10 fois par seconde). */
+const legCBolt = (ctx: Ctx, x0: number, y0: number, x1: number, y1: number, t: number, seed: number, col: string, lw: number, jit: number) => {
+  const n = 6, fr = Math.floor(t * 10), dx = x1 - x0, dy = y1 - y0, l = Math.hypot(dx, dy) || 1;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = col;
+  ctx.lineWidth = lw;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  for (let i = 1; i < n; i++) {
+    const k = i / n, o = Math.sin((fr + seed) * 12.9898 + i * 78.233) * jit;
+    ctx.lineTo(x0 + dx * k - (dy / l) * o, y0 + dy * k + (dx / l) * o);
+  }
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  ctx.restore();
+};
+/** Pointe de cristal sombre à arête lumineuse (obsidienne, cristaux) : pointe vers le haut, tournée de ang. */
+const legCShard = (ctx: Ctx, x: number, y: number, w: number, h: number, ang: number, fill: string, edge: string, glow: string, r: number) => {
+  glowOn(ctx, glow, r * 0.18);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(-w / 2, 0);
+  ctx.lineTo(-w * 0.12, -h * 0.82);
+  ctx.lineTo(0, -h);
+  ctx.lineTo(w / 2, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = Math.max(1, r * 0.03);
+  ctx.stroke();
+  ctx.restore();
+  glowOff(ctx);
+};
+
+Object.assign(VARIANT_FILTERS, {
+  lava_tortoise: 'hue-rotate(185deg) saturate(1.3) brightness(1.0)', // magma → plasma bleu
+  gorilla: 'grayscale(1) brightness(2.5) contrast(0.8)', // dos d'argent complet : pelage blanc
+  masked: 'hue-rotate(165deg) saturate(1.15) brightness(0.9)', // masque violet, cornes et plumes turquoise
+  scorpion: 'saturate(0.45) brightness(0.42) contrast(1.4)', // obsidienne
+  wyvern: 'hue-rotate(-35deg) saturate(1.3) brightness(1.0)', // corps d'or, ailes bleues
+  dragon: 'hue-rotate(255deg) saturate(1.1) brightness(0.62)', // violet du néant
+});
+
+Object.assign(LEGEND_BACK, {
+  lava_tortoise: (ctx: Ctx, r: number, u: UnitLook) => {
+    // halo de chaleur bleu-blanc derrière la carapace
+    const p = pulseOf(u, 2.2), g = ctx.createRadialGradient(0, 0, 0.2 * r, 0, -0.05 * r, 1.45 * r);
+    g.addColorStop(0, `rgba(150,230,255,${0.55 * p})`);
+    g.addColorStop(1, 'rgba(60,140,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, -0.05 * r, 1.45 * r, 1.25 * r, 0, 0, TAU);
+    ctx.fill();
+  },
+  gorilla: (ctx: Ctx, r: number, u: UnitLook) => {
+    // grande grappe de cristaux de glace plantée dans le dos, derrière les épaules
+    const p = pulseOf(u, 2);
+    for (const [x, y, h, a] of [[-0.3, -0.35, 0.7, -0.5], [-0.05, -0.55, 0.95, -0.2], [0.22, -0.62, 0.8, 0.08], [-0.55, -0.1, 0.5, -0.8]] as const) {
+      legCShard(ctx, x * r, y * r, 0.26 * r, h * r * (0.97 + 0.03 * p), a, '#BDEBFF', 'rgba(30,70,110,0.75)', '#8FE0FF', r);
+    }
+  },
+  masked: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 2), t = u.t + u.seed;
+    // aura d'esprit derrière le masque
+    const g = ctx.createRadialGradient(0.04 * r, -0.75 * r, 0.2 * r, 0.04 * r, -0.75 * r, 1.35 * r);
+    g.addColorStop(0, `rgba(120,255,220,${0.35 * p})`);
+    g.addColorStop(1, 'rgba(60,200,170,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0.04 * r, -0.75 * r, 1.35 * r, 0, TAU);
+    ctx.fill();
+    // bois d'os spectraux : une grande ramure de chaque côté du masque
+    glowOn(ctx, '#7FFFD8', r * 0.15);
+    for (const s of [-1, 1]) {
+      const sway = Math.sin(t * 1.8 + s) * 0.03;
+      const beam = bez([s * 0.3 + 0.04, -1.2], [s * 1.1, -1.25], [s * 0.85 + sway + 0.04, -1.8], 10);
+      band(ctx, r, beam, 0.15, 0.05, '#EDE6CE', '#BFB495');
+      for (const [i, len, dir] of [[3, 0.42, 1], [6, 0.38, 1], [8, 0.28, -1]] as const) {
+        const [bx, by] = beam[i];
+        band(ctx, r, bez([bx, by], [bx + s * dir * 0.2, by - 0.1], [bx + s * dir * 0.34, by - len], 4), 0.09, 0.03, '#EDE6CE', '#BFB495');
+      }
+    }
+    glowOff(ctx);
+  },
+  scorpion: (ctx: Ctx, r: number, u: UnitLook) => {
+    // brume de venin qui rampe au sol
+    const p = pulseOf(u, 1.6), g = ctx.createRadialGradient(0, 0.45 * r, 0.1 * r, 0, 0.45 * r, 1.4 * r);
+    g.addColorStop(0, `rgba(90,255,120,${0.3 * p})`);
+    g.addColorStop(1, 'rgba(60,200,80,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, 0.45 * r, 1.4 * r, 0.45 * r, 0, 0, TAU);
+    ctx.fill();
+  },
+  wyvern: (ctx: Ctx, r: number, u: UnitLook) => {
+    // nuage d'orage : halo électrique derrière la bête
+    const p = pulseOf(u, 3), g = ctx.createRadialGradient(0, -0.5 * r, 0.1 * r, 0, -0.5 * r, 1.6 * r);
+    g.addColorStop(0, `rgba(120,190,255,${0.3 * p})`);
+    g.addColorStop(1, 'rgba(60,110,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, -0.5 * r, 1.6 * r, 0, TAU);
+    ctx.fill();
+  },
+  dragon: (ctx: Ctx, r: number, u: UnitLook) => {
+    // brasier du néant : une grande lueur violette derrière les ailes
+    const p = pulseOf(u, 2), g = ctx.createRadialGradient(-0.1 * r, -0.7 * r, 0.2 * r, -0.1 * r, -0.7 * r, 1.9 * r);
+    g.addColorStop(0, `rgba(170,110,255,${0.4 * p})`);
+    g.addColorStop(1, 'rgba(90,40,200,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(-0.1 * r, -0.7 * r, 1.9 * r, 0, TAU);
+    ctx.fill();
+  },
+});
+
+Object.assign(LEGEND_FRONT, {
+  lava_tortoise: (ctx: Ctx, r: number, u: UnitLook) => {
+    if (u.shell) return; // en toupie, la carapace tourne : pas d'effets calés sur la forme debout
+    const t = u.t + u.seed, p = pulseOf(u, 3);
+    // pointes d'obsidienne à arête de plasma tout autour du dôme
+    for (const [a, h] of [[-2.85, 0.28], [-2.5, 0.36], [-2.15, 0.3], [-1.0, 0.3], [-0.7, 0.38], [-0.4, 0.28]] as const) {
+      const x = 0.92 * Math.cos(a) * r, y = (0.28 + 0.82 * Math.sin(a)) * r;
+      legCShard(ctx, x, y + 0.04 * r, 0.2 * r, h * r, a + Math.PI / 2, '#101828', `rgba(140,235,255,${0.6 + 0.4 * p})`, '#5CD8FF', r);
+    }
+    // flammes de plasma qui jaillissent du cratère
+    glowOn(ctx, '#6CD8FF', r * 0.35);
+    for (const [dx, w, h, ph] of [[-0.12, 0.2, 0.42, 0], [0.12, 0.2, 0.46, 2], [0, 0.24, 0.62, 4]] as const) {
+      legCFlame(ctx, dx * r, -0.92 * r, w * r, h * r, t, ph, 'rgba(90,200,255,0.85)', 'rgba(235,252,255,0.95)');
+    }
+    glowOff(ctx);
+    // braises bleues qui montent
+    ctx.fillStyle = 'rgba(190,240,255,0.9)';
+    for (let k = 0; k < 6; k++) {
+      const f = (t * 0.6 + k / 6) % 1;
+      ctx.fillRect((Math.sin(k * 2.7) * 0.8 + Math.sin(t * 2 + k) * 0.05) * r, (-0.5 - f * 1.1) * r, r * 0.035, r * 0.035);
+    }
+    // gouttes de plasma qui perlent du rebord
+    for (const [x, ph] of [[-0.55, 0], [0.3, 1.7]] as const) {
+      const f = (t * 0.8 + ph) % 1;
+      ctx.fillStyle = `rgba(120,225,255,${1 - f})`;
+      ctx.beginPath();
+      ctx.ellipse(x * r, (0.5 + f * 0.25) * r, 0.03 * r, 0.05 * r, 0, 0, TAU);
+      ctx.fill();
+    }
+  },
+  gorilla: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 3), breath = Math.sin(u.t * 2 + u.seed) * r * 0.015;
+    // cristaux le long de l'échine, au-dessus de la crête de poils
+    for (const [a, h] of [[-2.65, 0.22], [-2.35, 0.3], [-2.05, 0.36], [-1.75, 0.34], [-1.45, 0.28]] as const) {
+      const x = 0.15 * r + Math.cos(a) * 0.62 * r, y = -0.22 * r + breath + Math.sin(a) * 0.54 * r;
+      legCShard(ctx, x, y + 0.03 * r, 0.14 * r, h * r, a + Math.PI / 2, '#CFF2FF', 'rgba(30,80,120,0.7)', '#8FE0FF', r);
+    }
+    // rune de glace luisante sur la poitrine
+    ctx.save();
+    ctx.translate(0.46 * r, -0.04 * r + breath);
+    glowOn(ctx, '#7FE8FF', r * 0.3 * p);
+    ctx.strokeStyle = `rgba(150,240,255,${0.5 + 0.5 * p})`;
+    ctx.lineWidth = Math.max(1.5, r * 0.04);
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, -0.12 * r);
+    ctx.lineTo(0.08 * r, 0);
+    ctx.lineTo(0, 0.12 * r);
+    ctx.lineTo(-0.08 * r, 0);
+    ctx.closePath();
+    ctx.moveTo(0, -0.12 * r);
+    ctx.lineTo(0, 0.12 * r);
+    ctx.stroke();
+    glowOff(ctx);
+    ctx.restore();
+    // yeux de glace
+    glowOn(ctx, '#8FE8FF', r * 0.2);
+    ctx.fillStyle = '#E4FBFF';
+    for (const dx of [0.03, 0.17]) {
+      ctx.beginPath();
+      ctx.arc(0.72 * r + dx * r, -0.32 * r + breath - 0.04 * r, 0.04 * r, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+    // givre qui tombe des poings
+    ctx.fillStyle = 'rgba(210,245,255,0.9)';
+    for (let k = 0; k < 6; k++) {
+      const f = (u.t * 0.5 + k / 6) % 1;
+      ctx.fillRect((-0.5 + k * 0.28 + Math.sin(u.t * 2 + k) * 0.05) * r, (-0.7 + f * 1.4) * r, r * 0.03, r * 0.03);
+    }
+  },
+  masked: (ctx: Ctx, r: number, u: UnitLook) => {
+    const t = u.t + u.seed, p = pulseOf(u, 3);
+    // braise d'esprit dans l'orbite noire du masque
+    glowOn(ctx, '#7FFFD8', r * 0.3);
+    ctx.fillStyle = `rgba(190,255,235,${0.6 + 0.4 * p})`;
+    ctx.beginPath();
+    ctx.arc(0.28 * r, -0.82 * r, 0.05 * r, 0, TAU);
+    ctx.fill();
+    // trois feux follets d'esprit qui tournent autour de lui
+    for (let k = 0; k < 3; k++) {
+      const a = t * 1.3 + (k / 3) * TAU, x = Math.cos(a) * 1.0 * r, y = (-0.5 + Math.sin(a) * 0.35) * r;
+      glowOn(ctx, '#5CFFC8', r * 0.3);
+      legCFlame(ctx, x, y + 0.1 * r, 0.16 * r, 0.3 * r, t, k * 2, 'rgba(70,240,190,0.85)', 'rgba(230,255,245,0.95)');
+    }
+    glowOff(ctx);
+    // anneaux d'os spectraux aux poignets : petites lueurs sur les cornes
+    ctx.fillStyle = `rgba(160,255,230,${0.5 + 0.4 * p})`;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(s * 0.6 * r + 0.04 * r, -1.62 * r, 0.035 * r, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+  },
+  scorpion: (ctx: Ctx, r: number, u: UnitLook) => {
+    const t = u.t + u.seed, p = pulseOf(u, 4);
+    const sway = Math.sin(t * 2.4) * 0.06, poised = u.moving ? 0 : Math.sin(t * 5) * 0.03;
+    // cristaux d'émeraude plantés sur la carapace
+    for (let k = 0; k < 5; k++) {
+      const x = -0.55 + k * 0.17, y = 0.05 - 0.32 * Math.sqrt(Math.max(0, 1 - ((x + 0.1) / 0.62) ** 2));
+      legCShard(ctx, x * r, (y + 0.03) * r, 0.14 * r, (0.2 + (k % 2) * 0.1) * r, (x + 0.1) * 0.5, '#0C2A18', `rgba(110,255,140,${0.6 + 0.4 * p})`, '#5CFF8C', r);
+    }
+    // veines de venin le long de la queue, qui battent
+    const seg: [number, number][] = [[-0.55, -0.08], [-0.82, -0.32], [-0.92, -0.62], [-0.8, -0.92], [-0.52 + sway, -1.1 + poised]];
+    glowOn(ctx, '#5CFF8C', r * 0.25);
+    ctx.fillStyle = `rgba(120,255,150,${0.55 + 0.45 * p})`;
+    for (const [x, y] of seg) {
+      ctx.beginPath();
+      ctx.arc(x * r, y * r, 0.05 * r, 0, TAU);
+      ctx.fill();
+    }
+    // le dard vire au vert vif ; une goutte de venin tombe de sa pointe
+    const [bx, by] = seg[4];
+    ctx.fillStyle = `rgba(110,255,130,${0.7 + 0.3 * p})`;
+    ctx.beginPath();
+    ctx.ellipse((bx + 0.2) * r, (by + 0.02) * r, 0.09 * r, 0.07 * r, 0.3, 0, TAU);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo((bx + 0.3) * r, (by - 0.04) * r);
+    ctx.quadraticCurveTo((bx + 0.5) * r, (by + 0.02) * r, (bx + 0.44) * r, (by + 0.24) * r);
+    ctx.lineTo((bx + 0.3) * r, (by + 0.08) * r);
+    ctx.closePath();
+    ctx.fill();
+    for (let k = 0; k < 2; k++) {
+      const f = (t * 1.1 + k * 0.5) % 1;
+      ctx.fillStyle = `rgba(140,255,120,${1 - f})`;
+      ctx.beginPath();
+      ctx.ellipse((bx + 0.44) * r, (by + 0.3 + f * 0.5) * r, 0.03 * r, 0.05 * r, 0, 0, TAU);
+      ctx.fill();
+    }
+    // yeux d'émeraude
+    ctx.fillStyle = '#C8FFD0';
+    for (const [ex, ey] of [[0.5, -0.07], [0.41, -0.09]] as const) {
+      ctx.beginPath();
+      ctx.arc(ex * r, ey * r, 0.03 * r, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+  },
+  wyvern: (ctx: Ctx, r: number, u: UnitLook) => {
+    const t = u.t + u.seed, p = pulseOf(u, 5), sw = Math.sin(t * 2.4) * 0.12;
+    const hy = -0.82 + Math.sin(t * 2) * 0.03;
+    // crête de cristaux électriques le long du cou
+    const neck = bez([0.25, -0.25], [0.35, -0.75], [0.68, hy + 0.04], 8);
+    for (let i = 4; i < neck.length - 1; i += 1) {
+      const [x, y] = neck[i];
+      legCShard(ctx, (x - 0.1) * r, (y - 0.02) * r, 0.1 * r, (0.22 + (i % 2) * 0.08) * r, -0.8, '#CFE8FF', 'rgba(20,50,120,0.7)', '#6CB4FF', r);
+    }
+    // lames de foudre le long de la queue
+    const tl = bez([-0.3, -0.02], [-1.0, 0.25 + sw], [-1.45, -0.3 + sw], 14);
+    for (let i = 3; i <= 11; i += 2) legCShard(ctx, tl[i][0] * r, (tl[i][1] - 0.1 * (1 - i / 14)) * r, 0.1 * r, (0.2 - i * 0.008) * r, -0.5, '#CFE8FF', 'rgba(20,50,120,0.7)', '#6CB4FF', r);
+    // éclairs qui courent sur l'aile repliée (seulement ailes au repos)
+    const folded = !u.wings || u.wings.spread < 0.2;
+    glowOn(ctx, '#8CC8FF', r * 0.3);
+    if (folded) {
+      legCBolt(ctx, -0.42 * r, -1.0 * r, 0.05 * r, -0.55 * r, t, 1, `rgba(200,235,255,${0.55 + 0.45 * p})`, Math.max(1.5, r * 0.04), r * 0.12);
+      legCBolt(ctx, 0.0 * r, -1.15 * r, -0.35 * r, -0.4 * r, t, 7, `rgba(255,255,255,${0.4 + 0.5 * p})`, Math.max(1, r * 0.03), r * 0.1);
+    }
+    // orbe de foudre au bout de la queue
+    const [tx, ty] = tl[14];
+    const g = ctx.createRadialGradient(tx * r, ty * r, 0, tx * r, ty * r, 0.22 * r);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(0.4, `rgba(120,190,255,${0.6 + 0.3 * p})`);
+    g.addColorStop(1, 'rgba(60,120,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(tx * r, ty * r, 0.22 * r, 0, TAU);
+    ctx.fill();
+    for (let k = 0; k < 3; k++) {
+      const a = t * 3 + k * 2.1;
+      legCBolt(ctx, tx * r, ty * r, (tx + Math.cos(a) * 0.25) * r, (ty + Math.sin(a) * 0.25) * r, t, k * 3, 'rgba(210,240,255,0.9)', Math.max(1, r * 0.025), r * 0.05);
+    }
+    // œil d'orage
+    ctx.fillStyle = '#E8F6FF';
+    ctx.beginPath();
+    ctx.arc(0.87 * r, (hy - 0.04) * r, 0.03 * r, 0, TAU);
+    ctx.fill();
+    glowOff(ctx);
+  },
+  dragon: (ctx: Ctx, r: number, u: UnitLook) => {
+    const t = u.t + u.seed, p = pulseOf(u, 3);
+    const beat = Math.sin(t * (u.moving ? 4.5 : 1.4)) * (u.moving ? 0.12 : 0.05), sw = Math.sin(t * 2.2) * 0.1;
+    // flammes du néant sur l'échine et la queue
+    const tail = bez([-0.45, -0.05], [-1.05, 0.12 + sw], [-1.55, -0.18 + sw], 14);
+    const ridge: P2[] = [...bez([0.5, -0.36], [0.0, -0.56], [-0.55, -0.16], 6), ...tail.filter((_, i) => i >= 2 && i <= 12 && i % 2 === 0).map((q): P2 => [q[0], q[1] - 0.12])];
+    glowOn(ctx, '#A060FF', r * 0.4);
+    ridge.forEach(([x, y], i) => legCFlame(ctx, x * r, (y - 0.04) * r, 0.17 * r, (0.34 - i * 0.012) * r, t, i * 1.3, 'rgba(160,90,255,0.8)', 'rgba(240,225,255,0.95)'));
+    // flammes aux pointes des deux ailes
+    for (const [x, y] of [[0.3, -1.15 - beat], [-0.1, -1.6 - beat * 1.4], [-0.62, -1.42 - beat], [-0.98, -0.95], [-0.35, -1.55 - beat * 1.4], [-0.85, -1.3 - beat]] as const) {
+      legCFlame(ctx, x * r, y * r + 0.04 * r, 0.2 * r, 0.36 * r, t, x * 5 + y * 3, 'rgba(150,80,255,0.75)', 'rgba(235,215,255,0.9)');
+    }
+    // œil de néant
+    ctx.fillStyle = `rgba(230,210,255,${0.7 + 0.3 * p})`;
+    ctx.beginPath();
+    ctx.arc(1.03 * r, (-0.88 + Math.sin(t * 1.8) * 0.03) * r, 0.04 * r, 0, TAU);
+    ctx.fill();
+    glowOff(ctx);
+    // cendres violettes qui s'élèvent
+    ctx.fillStyle = 'rgba(200,160,255,0.9)';
+    for (let k = 0; k < 7; k++) {
+      const f = (t * 0.5 + k / 7) % 1;
+      ctx.fillRect((-1.2 + k * 0.38 + Math.sin(t * 2 + k) * 0.05) * r, (-0.4 - f * 1.4) * r, r * 0.035, r * 0.035);
+    }
+  },
+});
+
+
+// ───────── Reprise : crabe-conque et crocodile aux nénuphars ─────────
+const legRLotus = (ctx: Ctx, x: number, y: number, s: number, p: number, hue: [string, string]) => {
+  // fleur de lotus lumineuse : cinq pétales en éventail
+  glowOn(ctx, hue[0], s * 0.8 * p);
+  for (const [a, k] of [[-0.95, 0.8], [0.95, 0.8], [-0.45, 1], [0.45, 1], [0, 1.1]] as const) {
+    ctx.fillStyle = k > 0.9 ? hue[1] : hue[0];
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.quadraticCurveTo(x + Math.sin(a) * s * 0.9, y - s * 0.4, x + Math.sin(a) * s * 0.7, y - s * k);
+    ctx.quadraticCurveTo(x + Math.sin(a) * s * 0.2, y - s * 0.55 * k, x, y);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(40,10,40,0.55)';
+    ctx.lineWidth = Math.max(0.8, s * 0.08);
+    ctx.stroke();
+  }
+  glowOff(ctx);
+  ctx.fillStyle = '#FFE27A';
+  ctx.beginPath();
+  ctx.arc(x, y - s * 0.12, s * 0.12, 0, TAU);
+  ctx.fill();
+};
+
+Object.assign(VARIANT_FILTERS, {
+  croc: 'hue-rotate(40deg) saturate(1.3) brightness(0.6)', // vert-noir des eaux stagnantes
+  crab: 'hue-rotate(205deg) saturate(1.4) brightness(0.68)',
+});
+const legRCoral = (ctx: Ctx, x: number, y: number, len: number, ang: number, depth: number, w: number, col: string, tip: string, r: number, t: number) => {
+  // branche de corail : un trait qui se divise en deux, bout lumineux
+  const sway = Math.sin(t * 1.5 + x * 0.01 + depth) * 0.05;
+  const ex = x + Math.sin(ang + sway) * len, ey = y - Math.cos(ang + sway) * len;
+  ctx.strokeStyle = 'rgba(12,18,16,0.75)';
+  ctx.lineWidth = w + Math.max(1.5, r * 0.04);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+  ctx.strokeStyle = col;
+  ctx.lineWidth = w;
+  ctx.stroke();
+  if (depth > 0) {
+    legRCoral(ctx, ex, ey, len * 0.72, ang - 0.55, depth - 1, w * 0.72, col, tip, r, t);
+    legRCoral(ctx, ex, ey, len * 0.72, ang + 0.5, depth - 1, w * 0.72, col, tip, r, t);
+  } else {
+    glowOn(ctx, tip, r * 0.2);
+    ctx.fillStyle = tip;
+    ctx.beginPath();
+    ctx.arc(ex, ey, w * 0.65, 0, TAU);
+    ctx.fill();
+    glowOff(ctx);
+  }
+};
+
+Object.assign(LEGEND_FRONT, {
+  croc: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 2.5), t = u.t + u.seed;
+    // même repère que le corps (translation et étirement du drawer) : tout s'accroche à la ligne du dos
+    if (!u.inWater) { // à l'eau, le corps n'est qu'une ombre : ni plaques ni nénuphars
+    ctx.save();
+    ctx.translate(0, 0.16 * r);
+    ctx.scale(1.08, 1.25);
+    const top = (x: number) => (0.24 - 0.24 * Math.sqrt(Math.max(0, 1 - (x / 0.72) ** 2))) * r; // dessus du corps
+    // grandes plaques d'os dorées plantées dans le dos
+    for (let k = 0; k < 6; k++) {
+      const x = -0.5 + k * 0.19;
+      spike(ctx, x * r, top(x) + 0.02 * r, 0.17 * r, (0.2 + (k % 2) * 0.05) * r, -0.12, '#E8C660', 'rgba(30,20,5,0.8)', Math.max(1, r * 0.03));
+    }
+    // et sur la queue, de plus en plus petites
+    for (let i = 1; i <= 8; i++) {
+      const k = i / 10, x = -0.62 * r - k * 0.95 * r;
+      const y = 0.24 * r + Math.sin(u.t * 4 + u.seed - k * 2.2) * 0.1 * r * k - (0.2 - 0.17 * k) * r;
+      spike(ctx, x, y + 0.02 * r, 0.12 * r * (1 - k * 0.4), 0.17 * r * (1 - k * 0.7), -0.3, '#E8C660', 'rgba(30,20,5,0.8)', Math.max(1, r * 0.025));
+    }
+    // nénuphars posés sur le dos, au ras de la ligne du dos
+    for (const [x, w] of [[-0.42, 0.3], [-0.02, 0.26]] as const) {
+      const y = top(x) - 0.01 * r;
+      ctx.fillStyle = '#3E8A4A';
+      ctx.beginPath();
+      ctx.ellipse(x * r, y, w * r, w * 0.26 * r, 0, 0.3, TAU - 0.05);
+      ctx.lineTo(x * r, y);
+      ctx.fill();
+      ink(ctx, r * 0.3);
+      ctx.fillStyle = 'rgba(170,240,160,0.4)';
+      ctx.beginPath();
+      ctx.ellipse((x - 0.04) * r, y - 0.015 * r, w * 0.55 * r, w * 0.08 * r, 0, 0, TAU);
+      ctx.fill();
+      // lotus : redressé à l'échelle normale, planté dans le nénuphar
+      ctx.save();
+      ctx.translate(x * r, y - 0.02 * r);
+      ctx.scale(1 / 1.08, 1 / 1.25);
+      legRLotus(ctx, 0, 0, w * 1.1 * r, p, x < -0.2 ? ['#FF8AD2', '#FFD6F0'] : ['#9AE8FF', '#E4FAFF']);
+      ctx.restore();
+    }
+    // yeux d'ambre : un halo sur les bosses des yeux
+    for (const dx of [0.18, 0.36]) {
+      glowOn(ctx, '#FFC040', r * 0.35);
+      ctx.fillStyle = `rgba(255,224,110,${0.55 + 0.4 * p})`;
+      ctx.beginPath();
+      ctx.ellipse(dx * r, -0.15 * r, 0.075 * r, 0.058 * r, 0, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+    ctx.restore();
+    }
+    // lucioles des marais
+    for (let k = 0; k < 5; k++) {
+      const a = t * 0.9 + k * 1.3, x = (-0.4 + Math.cos(a) * 0.9) * r, y = (-0.5 + Math.sin(a * 1.3) * 0.25) * r;
+      glowOn(ctx, '#D8FF6A', r * 0.25);
+      ctx.fillStyle = `rgba(220,255,120,${0.5 + 0.5 * Math.sin(t * 4 + k * 2)})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 0.035, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+  },
+  crab: (ctx: Ctx, r: number, u: UnitLook) => {
+    const p = pulseOf(u, 2.2), t = u.t;
+    ctx.save();
+    ctx.translate(0, 0.12 * r); // le corps est décalé dans le drawer
+    // anneaux de marée sous les pattes
+    for (let k = 0; k < 2; k++) {
+      const f = (t * 0.4 + k * 0.5) % 1;
+      ctx.strokeStyle = `rgba(140,235,255,${0.5 * (1 - f)})`;
+      ctx.lineWidth = Math.max(1, r * 0.04);
+      ctx.beginPath();
+      ctx.ellipse(0, 0.45 * r, (1.1 + f * 0.5) * r, (0.2 + f * 0.1) * r, 0, 0, TAU);
+      ctx.stroke();
+    }
+    // deux massifs de corail plantés sur les épaules (loin des yeux, au centre)
+    legRCoral(ctx, -0.62 * r, -0.22 * r, 0.34 * r, -0.35, 2, r * 0.09, '#FF6FB5', '#FFE0F2', r, t);
+    legRCoral(ctx, -0.8 * r, -0.12 * r, 0.24 * r, -0.9, 1, r * 0.07, '#FF9A6F', '#FFE9C0', r, t + 1);
+    legRCoral(ctx, 0.62 * r, -0.22 * r, 0.34 * r, 0.35, 2, r * 0.09, '#46D8E8', '#E0FDFF', r, t + 2);
+    legRCoral(ctx, 0.8 * r, -0.12 * r, 0.24 * r, 0.9, 1, r * 0.07, '#7FA8FF', '#E4ECFF', r, t + 3);
+    // perles de nacre le long du bord de la carapace
+    for (const [x, y] of [[-0.35, -0.3], [-0.12, -0.36], [0.12, -0.36], [0.35, -0.3], [-0.9, 0.0], [0.9, 0.0]] as const) {
+      ctx.fillStyle = '#FFF6EA';
+      ctx.beginPath();
+      ctx.arc(x * r, y * r, r * 0.045, 0, TAU);
+      ctx.fill();
+      ink(ctx, r * 0.09);
+    }
+    // les yeux luisent : halo cyan et reflet vif sur chaque pédoncule
+    for (const sd of [-1, 1]) {
+      const tx = sd * 0.24 * r, ty = -0.6 * r + Math.sin(u.t * 2 + sd + u.seed) * 0.03 * r;
+      glowOn(ctx, '#7FEFFF', r * 0.45 * p);
+      ctx.strokeStyle = `rgba(150,245,255,${0.6 + 0.4 * p})`;
+      ctx.lineWidth = Math.max(1.2, r * 0.04);
+      ctx.beginPath();
+      ctx.arc(tx, ty, 0.12 * r, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = '#E8FDFF';
+      ctx.beginPath();
+      ctx.arc(tx + sd * 0.025 * r, ty + 0.01 * r, 0.03 * r, 0, TAU);
+      ctx.fill();
+    }
+    // billes d'eau lumineuses entre les doigts des pinces
+    for (const sd of [-1, 1]) {
+      glowOn(ctx, '#7FEFFF', r * 0.4 * p);
+      ctx.fillStyle = `rgba(160,245,255,${0.55 + 0.4 * p})`;
+      ctx.beginPath();
+      ctx.arc(sd * 1.22 * r, -0.82 * r + Math.sin(t * 2 + sd) * 0.04 * r, r * 0.09, 0, TAU);
+      ctx.fill();
+    }
+    glowOff(ctx);
+    ctx.restore();
+  },
+});
