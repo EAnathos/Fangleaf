@@ -26,6 +26,134 @@ Pas de filtre pour : les boss, les sprites à clé forcée (`u.key`) et le flash
 | wisp | `hue-rotate(110deg)` | `hue-rotate(-150deg) saturate(1.3) brightness(1.1)` |
 | _autres (défaut)_ | `hue-rotate(35deg) saturate(1.25) brightness(1.1)` | `hue-rotate(-40deg) saturate(1.5) brightness(0.8) contrast(1.15)` |
 
+## Aperçu
+
+Toutes les espèces (base, Alpha, légendaire) : [variantes-alpha/all.png](variantes-alpha/all.png).
+
+### slime
+
+![slime](variantes-alpha/slime.png)
+
+### wolf
+
+![wolf](variantes-alpha/wolf.png)
+
+### boar
+
+![boar](variantes-alpha/boar.png)
+
+### golem
+
+![golem](variantes-alpha/golem.png)
+
+### sporelin
+
+![sporelin](variantes-alpha/sporelin.png)
+
+### spider
+
+![spider](variantes-alpha/spider.png)
+
+### bear
+
+![bear](variantes-alpha/bear.png)
+
+### wisp
+
+![wisp](variantes-alpha/wisp.png)
+
+### watcher
+
+![watcher](variantes-alpha/watcher.png)
+
+### toad
+
+![toad](variantes-alpha/toad.png)
+
+### serpent
+
+![serpent](variantes-alpha/serpent.png)
+
+### crab
+
+![crab](variantes-alpha/crab.png)
+
+### hare
+
+![hare](variantes-alpha/hare.png)
+
+### snail
+
+![snail](variantes-alpha/snail.png)
+
+### firefly
+
+![firefly](variantes-alpha/firefly.png)
+
+### meerkat
+
+![meerkat](variantes-alpha/meerkat.png)
+
+### sandworm
+
+![sandworm](variantes-alpha/sandworm.png)
+
+### vulture
+
+![vulture](variantes-alpha/vulture.png)
+
+### jackal
+
+![jackal](variantes-alpha/jackal.png)
+
+### treant
+
+![treant](variantes-alpha/treant.png)
+
+### salamander
+
+![salamander](variantes-alpha/salamander.png)
+
+### ash_bat
+
+![ash_bat](variantes-alpha/ash_bat.png)
+
+### lava_tortoise
+
+![lava_tortoise](variantes-alpha/lava_tortoise.png)
+
+### gorilla
+
+![gorilla](variantes-alpha/gorilla.png)
+
+### croc
+
+![croc](variantes-alpha/croc.png)
+
+### masked
+
+![masked](variantes-alpha/masked.png)
+
+### scorpion
+
+![scorpion](variantes-alpha/scorpion.png)
+
+### drake
+
+![drake](variantes-alpha/drake.png)
+
+### wyvern
+
+![wyvern](variantes-alpha/wyvern.png)
+
+### dragon
+
+![dragon](variantes-alpha/dragon.png)
+
+### bigfoot
+
+![bigfoot](variantes-alpha/bigfoot.png)
+
 ## Ajouter une espèce
 
 Ajouter une entrée `[alpha, légendaire]` à `VARIANT_FILTERS`. Sans entrée, `DEFAULT_VARIANT` s'applique.
