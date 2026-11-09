@@ -381,7 +381,6 @@ export class Game {
     else if (action === 'fruit') this.toggleHold();
     else if (action === 'revive') this.setHelp(true);
     else if (code === 'F9' && import.meta.env.DEV) this.net.send({ t: 'cheat' });
-    else if (code === 'KeyV' && import.meta.env.DEV) void import('./devFx.ts').then((m) => m.toggleDevFx((msg) => this.net.send(msg))); // panneau d'essai des effets d'état (HUD)
   }
 
   /** T : tendre un fruit (le gibier passif s'approche, chaque fruit peut l'apprivoiser) ou le ranger. */

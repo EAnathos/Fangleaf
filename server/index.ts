@@ -258,9 +258,6 @@ wss.on('connection', (ws: WebSocket) => {
       });
     }
     else if (msg.t === 'cheat' && process.env.NODE_ENV !== 'production') room.onCheat(player);
-    else if (msg.t === 'cheathurt' && process.env.NODE_ENV !== 'production') room.onCheatHurt(player);
-    else if (msg.t === 'cheatalpha' && process.env.NODE_ENV !== 'production') room.onCheatAlpha(player, String(msg.key), msg.on !== false);
-    else if (msg.t === 'cheatfx' && process.env.NODE_ENV !== 'production') room.onCheatEffects(player, Array.isArray(msg.effects) ? msg.effects.map(Number) : [], +msg.secs);
   });
 
   ws.on('close', () => {

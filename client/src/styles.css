@@ -807,23 +807,6 @@ body.waking #hud { opacity: 0; pointer-events: none; }
 @keyframes fx-float { 0% { opacity: 0; transform: translate(0, 0) scale(0.6) rotate(0); } 18% { opacity: 0.9; } 100% { opacity: 0; transform: translate(var(--dx), -110px) scale(1.1) rotate(var(--rot)); } }
 @media (prefers-reduced-motion: reduce) { .fx-edge { animation: none; } .fx-float { display: none; } }
 
-/* Panneau d'essai des effets d'état (développement : touche V) */
-.dev-fx { position: fixed; z-index: 20; right: 16px; bottom: 16px; width: 250px; padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
-.dev-fx-head { display: flex; justify-content: space-between; align-items: center; font: 700 15px var(--display); }
-.dev-fx-head button { border: none; background: none; font-size: 16px; }
-.dev-fx-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.dev-fx-row small { color: var(--muted); }
-.dev-fx-dot { width: 24px; height: 24px; border-radius: 8px; padding: 3px; background: var(--c); display: grid; place-items: center; }
-.dev-fx-dot svg { width: 100%; height: 100%; }
-.dev-fx-time { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
-.dev-fx-time input { flex: 1; min-width: 0; }
-.dev-fx-btns { display: flex; gap: 6px; }
-.dev-fx-btns button { flex: 1; height: 34px; border-radius: 8px; border: 2px solid var(--line); background: var(--night); font-weight: 600; }
-.dev-fx-btns:first-of-type button:first-child { border-color: var(--amber); color: var(--amber); }
-.dev-fx-alpha { display: flex; align-items: center; gap: 6px; }
-.dev-fx-alpha span { flex: 1; }
-.dev-fx-alpha button { width: 34px; height: 30px; border-radius: 8px; border: 2px solid var(--line); background: var(--night); font-weight: 700; }
-
 /* Fenêtre d'info d'une vignette d'effet (survol ou toucher) */
 .fx-pop { --c: #fff; position: fixed; z-index: 30; width: 230px; padding: 10px 12px; border-radius: 12px; pointer-events: none; font-size: 13px; line-height: 1.35;
   background: linear-gradient(160deg, color-mix(in srgb, var(--c) 28%, #16201E), #16201E 70%); border: 2px solid var(--c);

@@ -55,7 +55,18 @@ export async function myVillages(): Promise<MyVillage[]> {
   });
 }
 
+/** Compte de test d'un Supabase local (VITE_DEV_EMAIL / VITE_DEV_PASSWORD dans .env) : uniquement en développement. */
+const DEV_EMAIL = import.meta.env.DEV ? (import.meta.env.VITE_DEV_EMAIL as string | undefined) : undefined;
+const DEV_PASSWORD = import.meta.env.DEV ? (import.meta.env.VITE_DEV_PASSWORD as string | undefined) : undefined;
+
 export async function signInWithGoogle() {
+  if (DEV_EMAIL && DEV_PASSWORD) {
+    // Pas de Google en local : le même bouton ouvre la session du compte de test.
+    const { error } = await (await sb()).auth.signInWithPassword({ email: DEV_EMAIL, password: DEV_PASSWORD });
+    if (error) throw error;
+    location.reload();
+    return;
+  }
   // Revient sur la même page (garde ?v=CODE d'une invitation).
   await (await sb()).auth.signInWithOAuth({
     provider: 'google',
