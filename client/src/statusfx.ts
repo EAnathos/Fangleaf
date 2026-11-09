@@ -115,9 +115,12 @@ export class StatusBar {
   private floaters: HTMLElement | null;
   private active: number[] = [];
   private timer = 0;
+  private lastList: readonly StatusTuple[] | null = null;
+  private lastSig = '';
 
   /** root : les vignettes ; vignette : le calque plein écran (bord teinté + icônes qui flottent), absent dans certains aperçus. */
   constructor(readonly root: HTMLElement, private vignette: HTMLElement | null = null, private opts: () => StatusHud = () => settings.display.statusHud) {
+    document.addEventListener('pointerdown', () => this.hidePop()); // un toucher ailleurs ferme la fenêtre (celui d'une vignette s'arrête avant)
     this.floaters = vignette ? Object.assign(document.createElement('div'), { className: 'fx-floaters' }) : null;
     if (this.floaters) vignette!.append(this.floaters);
   }
@@ -152,10 +155,10 @@ export class StatusBar {
     const def = STATUS_DEFS[STATUS_IDS[id]], el = document.createElement('span');
     el.className = 'fx-float';
     el.innerHTML = def.icon;
-    const x = { 'top-left': 2, 'top-right': 82, 'bottom-left': 2, bottom: 34 }[o.position] + Math.random() * 16;
+    const x = { 'top-left': 2, 'top-right': 82, 'bottom-left': 2, bottom: 42 }[o.position] + Math.random() * 16; // 'bottom' : centré sur le milieu de l'écran (là où sont les vignettes)
     const y = o.position.startsWith('top') ? 8 + Math.random() * 18 : 66 + Math.random() * 20;
     const size = 22 + Math.random() * 16;
-    el.style.cssText = `--c:${def.color};left:${x}%;top:${y}%;width:${size}px;height:${size}px;--dx:${(Math.random() - 0.5) * 50}px;--rot:${(Math.random() - 0.5) * 50}deg;animation-duration:${2.2 + Math.random() * 1.4}s`;
+    el.style.cssText = `--c:${def.color};left:${x}%;top:${y}%;width:${size}px;height:${size}px;margin-left:${o.position === 'bottom' ? -size / 2 : 0}px;--dx:${(Math.random() - 0.5) * 50}px;--rot:${(Math.random() - 0.5) * 50}deg;animation-duration:${2.2 + Math.random() * 1.4}s`;
     el.onanimationend = () => el.remove();
     box.append(el);
   }
@@ -170,7 +173,10 @@ export class StatusBar {
   }
 
   update(list: readonly StatusTuple[]) {
-    const o = this.opts();
+    const o = this.opts(), sig = `${o.enabled}${o.filter}`;
+    if (list === this.lastList && sig === this.lastSig) return; // rien de neuf depuis le dernier snapshot
+    this.lastList = list;
+    this.lastSig = sig;
     const shown = o.enabled ? list.filter(([id]) => STATUS_DEFS[STATUS_IDS[id]] && (o.filter === 'all' || (o.filter === 'buffs') === (STATUS_DEFS[STATUS_IDS[id]].kind === 'buff'))) : [];
     const live = new Set<number>();
     for (const [id, left, value] of shown) {
@@ -269,18 +275,21 @@ export class StatusBar {
 
   private make(id: number, def: StatusDef): Tile {
     const el = document.createElement('div');
-    el.className = `fx-tile ${def.kind}`;
+    el.className = `fx-tile new ${def.kind}`;
     el.dataset.status = STATUS_IDS[id];
     el.style.setProperty('--c', def.color);
     el.setAttribute('role', 'img');
     el.innerHTML = `${def.icon}<span class="fx-sweep"></span><span class="fx-kind" aria-hidden="true">${def.kind === 'buff' ? '▲' : '▼'}</span><span class="fx-time"></span>`;
-    el.onpointerenter = () => this.showPop(id);
-    el.onpointerleave = () => this.hidePop();
+    // à la souris, le survol suffit ; au doigt, on touche pour ouvrir ou fermer (pointerenter/leave se déclenchent aussi au toucher : ignorés)
+    el.onpointerenter = (e) => e.pointerType === 'mouse' && this.showPop(id);
+    el.onpointerleave = (e) => e.pointerType === 'mouse' && this.hidePop();
     el.onpointerdown = (e) => {
-      if (e.pointerType === 'mouse') return; // à la souris, le survol suffit ; au doigt, on touche pour ouvrir ou fermer
+      if (e.pointerType === 'mouse') return;
+      e.stopPropagation();
       if (this.hover === id) this.hidePop();
       else this.showPop(id);
     };
+    el.onanimationend = (e) => e.target === el && el.classList.remove('new');
     return { value: 0, el, sweep: el.querySelector<HTMLElement>('.fx-sweep')!, time: el.querySelector<HTMLElement>('.fx-time')!, peak: 0, left: -2, key: '' };
   }
 }

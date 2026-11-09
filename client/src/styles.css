@@ -765,8 +765,9 @@ body.waking #hud { opacity: 0; pointer-events: none; }
   background: radial-gradient(circle at 30% 22%, color-mix(in srgb, var(--c) 55%, #fff) 0%, var(--c) 42%, color-mix(in srgb, var(--c) 55%, #000) 100%);
   border: 2px solid color-mix(in srgb, var(--c) 55%, #fff);
   box-shadow: 0 0 14px color-mix(in srgb, var(--c) 75%, transparent), 0 3px 6px rgba(0, 0, 0, 0.45), inset 0 -4px 8px rgba(0, 0, 0, 0.22), inset 0 3px 5px rgba(255, 255, 255, 0.4);
-  display: grid; place-items: center; animation: fx-in 0.28s cubic-bezier(0.2, 1.5, 0.4, 1) backwards;
+  display: grid; place-items: center;
 }
+.fx-tile.new { animation: fx-in 0.28s cubic-bezier(0.2, 1.5, 0.4, 1) backwards; }
 .fx-tile.nerf { outline: 2px solid #E8434F; outline-offset: 2px; }
 .fx-tile.buff { outline: 2px solid #5FE08A; outline-offset: 2px; }
 .fx-tile svg { width: calc(var(--fx) * 0.66); height: calc(var(--fx) * 0.66); overflow: visible; filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.55)); }
@@ -791,6 +792,7 @@ body.waking #hud { opacity: 0; pointer-events: none; }
 /* Bord de l'écran teinté par chaque effet (la couleur de la vignette), avec un foyer plus fort dans le coin choisi ; des icônes en montent et s'effacent. */
 .fx-vignette { position: absolute; inset: 0; overflow: hidden; pointer-events: none; --vig: 1; --cx: 0%; --cy: 0%; }
 #hud > .fx-vignette { zoom: 1; }
+#hud:has(.overlay:not([hidden])) > :is(.fx-vignette, .fx-bar) { visibility: hidden; } /* menu ouvert : ni bord teinté ni icônes qui flottent par-dessus (ils transparaissent sous le voile) */
 .fx-edge {
   --c: #fff; position: absolute; inset: 0; opacity: calc(0.95 * var(--vig)); transition: opacity 0.5s; animation: fx-breathe 3.2s ease-in-out infinite;
   background:
@@ -798,7 +800,7 @@ body.waking #hud { opacity: 0; pointer-events: none; }
     radial-gradient(ellipse at center, transparent var(--es, 42%), color-mix(in srgb, var(--c) 48%, transparent) calc(var(--es, 42%) + (100% - var(--es, 42%)) * 0.55), color-mix(in srgb, var(--c) 85%, transparent) 100%);
 }
 .fx-edge.ending { animation: fx-breathe 0.6s ease-in-out infinite; }
-.fx-edge.out { opacity: 0; }
+.fx-edge.out { opacity: 0; animation: none; }
 .fx-vignette.still .fx-edge { animation: none; }
 .fx-floaters { position: absolute; inset: 0; }
 .fx-float { --c: #fff; position: absolute; opacity: 0; color: #fff; animation: fx-float 3s ease-out forwards; filter: drop-shadow(0 0 6px var(--c)) drop-shadow(0 0 2px var(--c)); }

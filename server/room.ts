@@ -4433,15 +4433,15 @@ export class Room {
    * secondes passées dans le sable (sables mouvants), PV par seconde (repos), part des PV soignée à chaque pouls (Alpha lièvre) ; 0 sinon.
    */
   statusOf(p: Player): StatusTuple[] {
-    const out: StatusTuple[] = [], t = this.time, left = (until: number) => Math.max(0, Math.round((until - t) * 10) / 10);
+    const out: StatusTuple[] = [], t = this.time, left = (until: number) => Math.max(0, Math.round((until - t) * 2) / 2); // au demi-seconde : le HUD n'affiche que des secondes entières
     const id = (k: StatusId) => STATUS_IDS.indexOf(k);
     if (p.poison && p.poison.until > t) out.push([id('poison'), left(p.poison.until), Math.round(p.poison.dps * 10) / 10]);
     if (p.burn && p.burn.until > t) out.push([id('burn'), left(p.burn.until), Math.round(p.burn.dps * 10) / 10]);
     if ((p.curseUntil ?? 0) > t) out.push([id('curse'), left(p.curseUntil!), CURSE_BONUS]);
     if (p.slowUntil > t) out.push([id('slow'), left(p.slowUntil), WEB_SLOW]);
     if (this.rooted(p)) out.push([id('stun'), left(p.rootUntil!), 0]);
-    if (p.sinkSince !== undefined) out.push([id('quicksand'), -1, Math.max(0, Math.round((t - p.sinkSince) * 10) / 10)]);
-    if (this.storm >= STORM_HARM && !this.safe(p.x, p.y) && !this.map.caveAt(p.x, p.y) && this.map.zoneAt(p.x, p.y) === DESERT_ZONE) out.push([id('sandstorm'), -1, Math.round(this.storm * 100) / 100]);
+    if (p.sinkSince !== undefined) out.push([id('quicksand'), -1, Math.max(0, Math.floor(t - p.sinkSince))]);
+    if (this.storm >= STORM_HARM && !this.safe(p.x, p.y) && !this.map.caveAt(p.x, p.y) && this.map.zoneAt(p.x, p.y) === DESERT_ZONE) out.push([id('sandstorm'), -1, 0]);
     const rally = this.buffOf(p, 'rally'), guard = this.buffOf(p, 'guard');
     if (rally) out.push([id('rally'), left(p.rally!.until), rally]);
     if (guard) out.push([id('guard'), left(p.guard!.until), guard]);

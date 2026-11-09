@@ -5,7 +5,7 @@ import {
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
-import { type BoardRow, type Holdings, type PlayerState, type Stats, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
+import { type BoardRow, type Holdings, type PlayerState, type Stats, type StatusTuple, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
 import { type CalendarDate, LUNE_DAYS, LUNES, SEASON_EMBLEMS, SEASON_NAMES, seasonDay, snowAt } from '../../shared/weather.ts';
 import { armorColor, drawElder, drawHatchling, drawPlayer, drawSweat, drawUnit } from './sprites.ts';
@@ -222,6 +222,8 @@ const pct = (n: number) => `${Math.round(n * 100)} %`;
 const pctLabel = (n: number) => `${(Math.round(n * 1000) / 10).toLocaleString('fr-FR')} %`;
 /** 30 → « 30 s », 90 → « 1 min 30 », 120 → « 2 min ». */
 const duration = (sec: number) => (sec < 60 ? `${sec} s` : `${Math.floor(sec / 60)} min${sec % 60 ? ` ${String(sec % 60).padStart(2, '0')}` : ''}`);
+
+const NO_STATUS: StatusTuple[] = []; // même référence d'une image à l'autre : le HUD des effets saute alors le travail
 
 export class Hud {
   private mini = $<HTMLCanvasElement>('minimap').getContext('2d')!;
@@ -853,7 +855,7 @@ export class Hud {
       vignette.style.setProperty('--low', lowKey);
       vignette.style.setProperty('--beat', `${(1.3 - 0.65 * low).toFixed(2)}s`);
     }
-    this.status.update(me.dead ? [] : me.status ?? []);
+    this.status.update(me.dead ? NO_STATUS : me.status ?? NO_STATUS);
     setText($('self-hptext'), `${me.hp} / ${me.maxHp}`); // dans la barre de vie
     setText($('self-gold'), short(me.gold)); // l'icône (pièce) dit ce que c'est
     setText($('self-wood'), short(me.wood)); // l'icône dit ce que c'est
