@@ -1,4 +1,4 @@
-// Dev uniquement : écran de triche, visible tant que F9 reste enfoncée (on clique avec l'autre main).
+// Dev uniquement : écran de triche, un vrai panneau : F9 l'ouvre, et il reste ouvert jusqu'à un nouvel appui sur F9 (ou sa croix).
 // Ajouter ou retirer un monstre, un Alpha, un légendaire ; appliquer un effet d'état pour une durée au choix ; débloquer ou
 // rejoindre une zone ; abattre un géant. Le serveur n'accepte ces messages qu'hors production.
 
@@ -42,7 +42,7 @@ export function initCheat(send: (m: ClientMsg) => void) {
     }).join('');
     const zones = ['<option value="0">Village</option>', ...Array.from({ length: ZONES }, (_, i) => `<option value="${i + 1}">${i + 1} · ${esc(ZONE_NAMES[i])}</option>`)].join('');
     el.innerHTML = `
-      <div class="cheat-head"><b>Triche</b><small>tant que F9 est enfoncée</small></div>
+      <div class="cheat-head"><b>Triche</b><small>F9 : ouvrir ou fermer</small><button type="button" data-a="close" aria-label="Fermer">✕</button></div>
       <section><h4>Monstres</h4>
         <select data-id="mon">${options((i) => !SPECIES[i].boss)}</select>
         ${KINDS.map(([k, n, tip]) => `<div class="cheat-row" title="${esc(tip)}"><span>${n}</span><button type="button" data-a="mob" data-k="${k}" data-on="1">+</button><button type="button" data-a="mob" data-k="${k}" data-on="0">−</button></div>`).join('')}
@@ -71,6 +71,7 @@ export function initCheat(send: (m: ClientMsg) => void) {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-a]');
       const a = b?.dataset.a;
       if (!b || !a) return;
+      if (a === 'close') return show(false);
       if (a === 'mob') send({ t: 'cheatmob', s: val('mon'), kind: b.dataset.k as CheatMob, on: b.dataset.on === '1' });
       else if (a === 'dur') time.value = String((secs = +b.dataset.v!));
       else if (a === 'all' || a === 'clear') {
@@ -100,8 +101,6 @@ export function initCheat(send: (m: ClientMsg) => void) {
   addEventListener('keydown', (e) => {
     if (e.code !== 'F9') return;
     e.preventDefault();
-    show(true);
+    if (!e.repeat) show(!panel || !!panel.hidden);
   });
-  addEventListener('keyup', (e) => e.code === 'F9' && show(false));
-  addEventListener('blur', () => show(false)); // F9 relâchée hors de la fenêtre
 }
