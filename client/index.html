@@ -111,6 +111,7 @@
 
   <!-- ───── HUD ───── -->
   <div id="hud" hidden>
+    <div id="fx-vignette" class="fx-vignette" aria-hidden="true" hidden></div>
     <div id="low-hp" aria-hidden="true"></div>
     <section class="hud-tl">
       <div class="panel self">
@@ -132,6 +133,7 @@
         </div>
       </div>
       <div id="party" class="panel party" hidden></div>
+      <div id="fx-bar" class="fx-bar" aria-label="Effets en cours" hidden></div>
     </section>
 
     <section class="hud-tr">
@@ -343,6 +345,35 @@
             <button class="seg-btn" role="radio" data-value="xl">Très grande</button>
           </div>
           <p class="small muted">Noms au-dessus des dompteurs, dégâts, gains et messages des géants.</p>
+          <h3 class="market-head">Effets en cours (poison, feu, bonus…)</h3>
+          <label class="vol-row mute"><input id="set-fx-enabled" type="checkbox"><span>Afficher les vignettes d'effets</span></label>
+          <div class="row seg" role="radiogroup" aria-label="Position des effets" data-fx="position">
+            <button class="seg-btn" role="radio" data-value="top-left">Haut gauche</button>
+            <button class="seg-btn" role="radio" data-value="top-right">Haut droite</button>
+            <button class="seg-btn" role="radio" data-value="bottom-left">Bas gauche</button>
+            <button class="seg-btn" role="radio" data-value="bottom">Bas centre</button>
+          </div>
+          <div class="row seg" role="radiogroup" aria-label="Taille des effets" data-fx="size">
+            <button class="seg-btn" role="radio" data-value="small">Petite</button>
+            <button class="seg-btn" role="radio" data-value="normal">Normale</button>
+            <button class="seg-btn" role="radio" data-value="large">Grande</button>
+          </div>
+          <div class="row seg" role="radiogroup" aria-label="Effets affichés" data-fx="filter">
+            <button class="seg-btn" role="radio" data-value="all">Tous</button>
+            <button class="seg-btn" role="radio" data-value="buffs">Bonus</button>
+            <button class="seg-btn" role="radio" data-value="nerfs">Altérations</button>
+          </div>
+          <div class="row seg" role="radiogroup" aria-label="Bord de l'écran teinté" data-fx="vignette">
+            <button class="seg-btn" role="radio" data-value="off">Sans bord</button>
+            <button class="seg-btn" role="radio" data-value="soft">Léger</button>
+            <button class="seg-btn" role="radio" data-value="normal">Normal</button>
+            <button class="seg-btn" role="radio" data-value="strong">Fort</button>
+          </div>
+          <label class="vol-row"><span>Opacité du bord</span><input id="set-fx-opacity" type="range" min="10" max="100" step="5"></label>
+          <label class="vol-row"><span>Largeur du bord</span><input id="set-fx-edge" type="range" min="10" max="90" step="2"></label>
+          <label class="vol-row"><span>Foyer du coin</span><input id="set-fx-corner" type="range" min="10" max="100" step="2"></label>
+          <label class="vol-row mute"><input id="set-fx-timers" type="checkbox"><span>Secondes restantes</span></label>
+          <label class="vol-row mute"><input id="set-fx-animations" type="checkbox"><span>Animations des vignettes</span></label>
           <label class="vol-row mute"><input id="set-shake" type="checkbox"><span>Secousses de l'écran</span></label>
           <label class="vol-row mute"><input id="set-ping" type="checkbox"><span>Afficher la latence (ms)</span></label>
           <label class="vol-row mute"><input id="set-weather" type="checkbox"><span>Pluie (image et son)</span></label>

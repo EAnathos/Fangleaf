@@ -14,6 +14,20 @@ export interface Binding {
 export type Quality = 'low' | 'medium' | 'high';
 export type DamageNumbers = 'all' | 'mine' | 'off';
 export type Size = 'small' | 'normal' | 'large' | 'xl';
+export type FxPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom';
+/** HUD des effets d'état (altérations et bonus). */
+export interface StatusHud {
+  enabled: boolean;
+  position: FxPosition;
+  size: 'small' | 'normal' | 'large';
+  timers: boolean; // secondes restantes sur chaque vignette
+  filter: 'all' | 'buffs' | 'nerfs';
+  animations: boolean;
+  opacity: number; // opacité du bord teinté et des icônes qui flottent (10 à 100 %)
+  edge: number; // largeur du bord teinté, du bord de l'écran vers le centre (10 à 90 %)
+  corner: number; // taille du foyer plus fort dans le coin choisi (10 à 100 %)
+  vignette: 'off' | 'soft' | 'normal' | 'strong'; // bord de l'écran teinté par les effets, icônes qui flottent
+}
 export interface Display {
   quality: Quality; // basse : image moins fine et moins de particules (machines modestes)
   damage: DamageNumbers; // chiffres des dégâts : tous (meute, coéquipiers), les siens (soi et sa meute), aucun
@@ -22,6 +36,7 @@ export interface Display {
   weather: boolean; // pluie (la nuit reste : elle fait partie du monde)
   ui: Size; // taille de l'interface (barres, boutons, panneaux)
   text: Size; // taille des textes dans le monde (noms, dégâts, gains)
+  statusHud: StatusHud; // vignettes des effets d'état
 }
 export interface Settings {
   keys: Record<Action, Binding>;
@@ -56,7 +71,7 @@ const DEFAULTS: Settings = {
     chat: { key: 'c', label: 'C' },
   },
   attack: 'auto',
-  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal' },
+  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', statusHud: { enabled: true, position: 'top-left', size: 'normal', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 } },
 };
 
 /** Netteté maximale de l'image (pixels par point d'écran) selon la qualité. */
@@ -91,6 +106,18 @@ function load(): Settings {
       weather: typeof d.weather === 'boolean' ? d.weather : D.weather,
       ui: SIZES.find((q) => q === d.ui) ?? D.ui,
       text: SIZES.find((q) => q === d.text) ?? D.text,
+      statusHud: {
+        enabled: typeof d.statusHud?.enabled === 'boolean' ? d.statusHud.enabled : D.statusHud.enabled,
+        position: (['top-left', 'top-right', 'bottom-left', 'bottom'] as const).find((q) => q === d.statusHud?.position) ?? D.statusHud.position,
+        size: (['small', 'normal', 'large'] as const).find((q) => q === d.statusHud?.size) ?? D.statusHud.size,
+        timers: typeof d.statusHud?.timers === 'boolean' ? d.statusHud.timers : D.statusHud.timers,
+        filter: (['all', 'buffs', 'nerfs'] as const).find((q) => q === d.statusHud?.filter) ?? D.statusHud.filter,
+        animations: typeof d.statusHud?.animations === 'boolean' ? d.statusHud.animations : D.statusHud.animations,
+        vignette: (['off', 'soft', 'normal', 'strong'] as const).find((q) => q === d.statusHud?.vignette) ?? D.statusHud.vignette,
+        opacity: typeof d.statusHud?.opacity === 'number' ? Math.min(100, Math.max(10, Math.round(d.statusHud.opacity))) : D.statusHud.opacity,
+        edge: typeof d.statusHud?.edge === 'number' ? Math.min(90, Math.max(10, Math.round(d.statusHud.edge))) : D.statusHud.edge,
+        corner: typeof d.statusHud?.corner === 'number' ? Math.min(100, Math.max(10, Math.round(d.statusHud.corner))) : D.statusHud.corner,
+      },
     };
     return { keys, attack: saved?.attack === 'click' ? 'click' : 'auto', display };
   } catch {

@@ -3038,7 +3038,7 @@ export class Game {
             if (zage < 1.6 && Math.random() < this.dt * 14) this.fx.burst(x + (Math.random() - 0.5) * 30, y - lift + (Math.random() - 0.5) * 26, Math.random() < 0.6 ? '#DDE8FF' : '#FFE9A0', 2, 110);
           }
           if (p.held) drawDizzy(ctx, x, y - lift - 58, this.time); // saisi, étourdi
-          if (p.buffs) drawBuffs(ctx, x, y - lift - 64, p.buffs, this.time, p.id);
+          if (p.buffs && !isMe) drawBuffs(ctx, x, y - lift - 64, p.buffs, this.time, p.id); // les siens sont dans le HUD des effets ; ceux des coéquipiers restent au-dessus d'eux
           if (p.buffs & UNIT_FLAG_BURN && Math.random() < this.dt * 12) this.fx.burst(x + (Math.random() - 0.5) * 22, y - lift - 18, Math.random() < 0.5 ? '#FFB347' : '#FF6A2A', 2, 60); // il brûle
           if (!isMe && p.hp < p.maxHp) hpBar(ctx, x, y + 26, 34, (100 * p.hp) / p.maxHp, '#7FCB5B');
         },

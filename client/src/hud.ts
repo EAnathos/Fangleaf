@@ -5,7 +5,7 @@ import {
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
-import { type BoardRow, type Holdings, type PlayerState, type Stats, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
+import { type BoardRow, type Holdings, type PlayerState, type Stats, type StatusTuple, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
 import { type CalendarDate, LUNE_DAYS, LUNES, SEASON_EMBLEMS, SEASON_NAMES, seasonDay, snowAt } from '../../shared/weather.ts';
 import { armorColor, drawElder, drawHatchling, drawPlayer, drawSweat, drawUnit } from './sprites.ts';
@@ -14,6 +14,7 @@ import { CHAPTER_TITLES, ELDER_CHAPTERS, ELDER_LEAVES, eggsOf, elderGreeting, el
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { moveSkill, type Skill, type SkillIcon, traitSkills } from './moveInfo.ts';
 import { sound } from './audio.ts';
+import { StatusBar } from './statusfx.ts';
 import { ACTIONS, type Action, applyUi, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
 import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
@@ -221,6 +222,8 @@ const pct = (n: number) => `${Math.round(n * 100)} %`;
 const pctLabel = (n: number) => `${(Math.round(n * 1000) / 10).toLocaleString('fr-FR')} %`;
 /** 30 → « 30 s », 90 → « 1 min 30 », 120 → « 2 min ». */
 const duration = (sec: number) => (sec < 60 ? `${sec} s` : `${Math.floor(sec / 60)} min${sec % 60 ? ` ${String(sec % 60).padStart(2, '0')}` : ''}`);
+
+const NO_STATUS: StatusTuple[] = []; // même référence d'une image à l'autre : le HUD des effets saute alors le travail
 
 export class Hud {
   private mini = $<HTMLCanvasElement>('minimap').getContext('2d')!;
@@ -829,6 +832,17 @@ export class Hud {
     while ($('toasts').children.length > 4) $('toasts').firstElementChild!.remove();
   }
 
+  /** Vignettes des effets d'état (voir statusfx.ts). */
+  readonly status = new StatusBar($('fx-bar'), $('fx-vignette'));
+
+  /** Range les vignettes dans le coin choisi (sous les panneaux en haut à gauche, sous la minicarte en haut à droite) et applique le réglage. */
+  private placeStatusBar() {
+    const bar = this.status.root, pos = settings.display.statusHud.position;
+    const home = pos === 'top-left' ? document.querySelector('.hud-tl') : pos === 'top-right' ? document.querySelector('.hud-tr') : $('hud');
+    if (bar.parentElement !== home) home!.append(bar);
+    this.status.applyOptions();
+  }
+
   update(me: PlayerState, players: PlayerState[], units: UnitTuple[], myPos: { x: number; y: number }, ping: number) {
     // Soi.
     setText($('self-name'), me.name);
@@ -846,6 +860,7 @@ export class Hud {
       vignette.style.setProperty('--low', lowKey);
       vignette.style.setProperty('--beat', `${(1.3 - 0.65 * low).toFixed(2)}s`);
     }
+    this.status.update(me.dead ? NO_STATUS : me.status ?? NO_STATUS);
     setText($('self-hptext'), `${me.hp} / ${me.maxHp}`); // dans la barre de vie
     setText($('self-gold'), short(me.gold)); // l'icône (pièce) dit ce que c'est
     setText($('self-wood'), short(me.wood)); // l'icône dit ce que c'est
@@ -1326,6 +1341,48 @@ export class Hud {
     seg('ui');
     seg('text');
     applyUi();
+    // Effets en cours : réglages appliqués tout de suite (la vignette change de coin, de taille, de filtre…).
+    const fxSeg = (name: 'position' | 'size' | 'filter' | 'vignette') => {
+      const group = document.querySelector<HTMLElement>(`[data-fx="${name}"]`)!;
+      const paint = () => group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === settings.display.statusHud[name])));
+      group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => {
+        (settings.display.statusHud[name] as string) = b.dataset.value!;
+        saveSettings();
+        paint();
+        this.placeStatusBar();
+      }));
+      paint();
+    };
+    fxSeg('position');
+    fxSeg('size');
+    fxSeg('filter');
+    fxSeg('vignette');
+    for (const [id, k] of [['enabled', 'enabled'], ['timers', 'timers'], ['animations', 'animations']] as const) {
+      const box = $<HTMLInputElement>(`set-fx-${id}`);
+      box.checked = settings.display.statusHud[k];
+      box.onchange = () => {
+        settings.display.statusHud[k] = box.checked;
+        saveSettings();
+        this.placeStatusBar();
+      };
+    }
+    const opacity = $<HTMLInputElement>('set-fx-opacity');
+    opacity.value = String(settings.display.statusHud.opacity);
+    opacity.oninput = () => {
+      settings.display.statusHud.opacity = +opacity.value;
+      this.status.applyOptions(); // tout de suite, pour voir l'effet pendant qu'on glisse
+    };
+    opacity.onchange = saveSettings;
+    for (const k of ['edge', 'corner'] as const) {
+      const range = $<HTMLInputElement>(`set-fx-${k}`);
+      range.value = String(settings.display.statusHud[k]);
+      range.oninput = () => {
+        settings.display.statusHud[k] = +range.value;
+        this.status.applyOptions();
+      };
+      range.onchange = saveSettings;
+    }
+    this.placeStatusBar();
     for (const k of ['shake', 'ping', 'weather'] as const) {
       const box = $<HTMLInputElement>(`set-${k}`);
       box.checked = settings.display[k];
