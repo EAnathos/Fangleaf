@@ -36,6 +36,9 @@ export interface BoardRow extends Stats, Holdings {
   online: boolean;
 }
 
+/** Ce que le panneau de triche ajoute ou retire : monstre de meute, Alpha, Alpha légendaire, monstre sauvage près de soi. */
+export type CheatMob = 'mob' | 'alpha' | 'legend' | 'wild';
+
 export type ClientMsg =
   | { t: 'create'; name: string; token?: string } // token : session Supabase (optionnel)
   | { t: 'join'; code: string; name: string; token?: string }
@@ -83,6 +86,10 @@ export type ClientMsg =
   | { t: 'help'; on: boolean } // R maintenu (on) ou relâché : relever un dompteur à terre
   | { t: 'reset' } // fondateur : supprimer le village ; autre membre : effacer sa progression ici
   | { t: 'cheat' } // dev uniquement : +300 or, +30 essences
+  | { t: 'cheatfx'; effects: number[]; secs: number } // dev uniquement (F9 maintenu) : ces effets d'état (numéros de STATUS_IDS) pendant ces secondes ; liste vide : tout retirer
+  | { t: 'cheatmob'; s: number; kind: CheatMob; on: boolean } // dev uniquement : ajouter ou retirer un monstre de meute, un Alpha, un légendaire ou un sauvage (espèce s)
+  | { t: 'cheatzone'; z: number; act: 'unlock' | 'tp' } // dev uniquement : débloquer la zone z (portes, grottes) ou s'y téléporter (0 : village)
+  | { t: 'cheatboss'; s: number } // dev uniquement : abattre ce géant (-1 : tous)
   | { t: 'ping'; ts: number };
 
 export interface PlayerState {

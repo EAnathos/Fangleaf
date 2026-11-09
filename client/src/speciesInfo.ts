@@ -31,6 +31,7 @@ export const SPECIES_DESC: Record<string, string> = {
   gorilla: 'Le seigneur de la jungle. De loin, il te bombarde de bananes (sors du cercle) ; de près, il cogne. Et parfois, il fracasse le sol devant lui (écarte-toi du cercle). Monté, il bombarde les sauvages de loin.',
   croc: 'Il guette dans les marigots de la jungle : on ne voit que ses yeux. Ne longe pas l\'eau de trop près : il en sort pour te poursuivre sur la berge, puis y retourne. Il se monte, dans l\'eau.',
   masked: 'Petit homme de la jungle au grand masque de bois (tireur). Il chasse en bande, à la sarbacane : ses fléchettes filent vite et empoisonnent, esquive de côté.',
+  rufous_coati: 'Rare, il reste caché dans les buissons de la jungle, où un feuillage qui frémit ou une touffe de poils roux le trahissent. Il ne se montre que si on lui tend un fruit (T) : approche avec des baies pour l\'apprivoiser. Dans ta meute, il ne se bat jamais : il cueille les baies pour toi, reste à distance et fuit le danger.',
   bigfoot: 'On ne le croise que l’hiver, dans les sapins enneigés des Bois profonds. Rare et costaud, il cogne lourd : viens avec ta meute. À la fonte des neiges, il disparaît jusqu’à l’hiver suivant.',
 };
 

@@ -258,7 +258,11 @@ wss.on('connection', (ws: WebSocket) => {
         send({ t: 'error', msg: 'Suppression impossible, réessaie.' });
       });
     }
-    else if (msg.t === 'cheat' && process.env.NODE_ENV !== 'production') room.onCheat(player);
+    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheat') room.onCheat(player);
+    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatfx') room.onCheatEffects(player, Array.isArray(msg.effects) ? msg.effects.map(Number) : [], +msg.secs);
+    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatmob') room.onCheatMob(player, +msg.s, msg.kind, !!msg.on);
+    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatzone') room.onCheatZone(player, +msg.z, msg.act);
+    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatboss') room.onCheatBoss(player, +msg.s);
   });
 
   ws.on('close', () => {

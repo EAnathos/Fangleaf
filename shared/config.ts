@@ -719,6 +719,8 @@ export interface Species {
   frail?: number; // renfort : il encaisse les coups multipliés par ceci (un leurre tombe en quelques coups)
   inert?: boolean; // renfort qui ne bouge ni ne frappe (le totem du Grand Masque)
   moves?: BossMove[]; // attaques spéciales d'un monstre ordinaire (le gorille fracasse le sol), sauvage comme apprivoisé
+  bushHide?: boolean; // sauvage, il se cache dans un buisson (intouchable) quand un dompteur sans fruit approche ; un fruit tendu l'en fait sortir (coati)
+  forager?: boolean; // dans une meute, il ne combat jamais : il cueille les baies des buissons alentour pour son dompteur, reste à distance et fuit le danger (coati)
 }
 
 /**
@@ -823,6 +825,9 @@ export const SPECIES: Species[] = [
   { key: 'flame_decoy', name: 'Feu Ancien', color: '#4F8BFF', r: 54, hp: 11380, dmg: 1, speed: 200, atkCd: 99, gold: 0, zone: 4, population: 0, pack: [1, 1], minion: true, mimic: 'old_flame', frail: 30 },
   { key: 'mask_totem', name: 'Totem masqué', color: '#7A5030', r: 24, hp: 2600, dmg: 0, speed: 0, atkCd: 99, gold: 0, zone: 6, population: 0, pack: [1, 1], minion: true, anchored: true, inert: true },
   { key: 'salamander_tail', name: 'Queue de salamandre', color: '#5A4038', r: 18, hp: 8000, dmg: 240, speed: 175, atkCd: 0.8, gold: 0, zone: 8, population: 0, pack: [1, 1], minion: true },
+  // Jungle : le Coati roux se cache dans les buissons à baies (population 0 : il n'en sort qu'en de rares occasions, quand on
+  // cueille, comme le Tréant des sapins). Passif : il ne se bat jamais ; apprivoisé, il cueille les baies pour toi.
+  { key: 'rufous_coati', name: 'Coati roux', color: '#B5562B', r: 17, hp: 420, dmg: 2, speed: 140, atkCd: 1.0, gold: 12, zone: 6, population: 0, pack: [1, 1], passive: true, skittish: true, bushHide: true, forager: true, awaken: 20 }, // rare : éveil moins cher
 ];
 
 export const SPECIES_KEYS = SPECIES.map((s) => s.key);
@@ -840,7 +845,7 @@ export const AFFINITY_WEAK = 0.8;
 const ELEMENT_OF: Record<string, Element> = {
   slime: 'plante', sporelin: 'plante', golem: 'plante', treant: 'plante', snail: 'plante', masked: 'plante', mask_totem: 'plante',
   wisp: 'feu', salamander: 'feu', ash_bat: 'feu', lava_tortoise: 'feu', dragon: 'feu', flame_decoy: 'feu', salamander_tail: 'feu',
-  boar: 'terre', watcher: 'terre', meerkat: 'terre', sandworm: 'terre', scorpion: 'terre',
+  boar: 'terre', rufous_coati: 'terre', watcher: 'terre', meerkat: 'terre', sandworm: 'terre', scorpion: 'terre',
   toad: 'eau', serpent: 'eau', crab: 'eau', croc: 'eau', drake: 'eau', kraken: 'eau', kraken_tentacle: 'eau',
 };
 /** Élément d'une espèce (un géant a celui de son espèce), ou undefined : neutre. */
@@ -932,6 +937,14 @@ export const BUSH_PICK_R = 80; // distance pour cueillir
 export const FEED_CD = 1; // s entre deux fruits donnés
 export const LURE_R = 340; // le gibier passif voit un fruit tendu de cette distance
 export const fruitTameChance = (species: number) => (SPECIES[species].passive ? 0.34 : 0.05);
+/** Jungle : cueillir un buisson fait parfois sortir un Coati roux qui s'y cachait (comme le Tréant des sapins abattus). */
+export const COATI_CHANCE = 0.06;
+export const COATI_MAX = 3; // coatis sauvages en même temps sur l'île
+export const COATI_HIDE_R = 230; // un dompteur sans fruit approche à cette distance : il file se cacher dans le buisson le plus proche
+export const COATI_PEEK_S = 5; // s sans menace avant qu'il sorte de sa cachette
+export const COATI_KEEP_R = 190; // dans une meute, il reste à cette distance de son dompteur
+export const COATI_DANGER_R = 300; // il fuit tout monstre sauvage à cette distance de lui
+export const COATI_BERRY_R = 420; // il cueille les buissons garnis à cette distance de son dompteur
 export const FRUIT_ESSENCE = 0.25; // un fruit mangé par un gibier passif (sans l'apprivoiser) peut laisser une essence
 
 export const WILD_AGGRO_R = 220;
