@@ -89,9 +89,9 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Relever** un coéquipier à terre : **R maintenu** près de lui, pendant le court délai où il reste au sol.
 - **Effets en cours** : sous le panneau du dompteur, une vignette colorée par altération (▼ : poison, brûlure, malédiction,
   toile ou boue, étourdissement, sables mouvants, tempête de sable) ou bonus (▲ : cri de l'Alpha, carapace, repos au
-  village, monture), avec le compte à rebours ; le survol dit ce qu'elle fait. Le bord de l'écran prend la couleur des
+  village, soins de l'Alpha lièvre, monture), avec le compte à rebours ; le survol dit ce qu'elle fait. Le bord de l'écran prend la couleur des
   effets, et leurs icônes montent du coin en s'effaçant. Tout se règle dans Paramètres › Affichage (coin, taille, filtre,
-  bord teinté, secondes, animations).
+  bord teinté (opacité, largeur, foyer du coin), secondes, animations).
 
 ## Meute, apprivoisement et montures
 

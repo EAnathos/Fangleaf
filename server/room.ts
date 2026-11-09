@@ -223,6 +223,7 @@ export interface Player {
   mount: number; // id de l'Alpha chevauché, 0 sinon
   awakening: Map<number, number>; // espèce → heure d'éveil (Date.now en ms)
   villageFound: boolean; // a déjà atteint le village : on y apparaît directement ensuite
+  devFx?: Map<number, number>; // dev : effets affichés seulement (sans effet réel) au HUD, jusqu'à ce temps
   slowUntil: number; // ralenti par une toile jusqu'à
   cls: ClassId | null; // classe choisie à la forge (null : pas encore)
   spec: SpecId | null; // spécialisation de l'arme, choisie à la Grande forge (null : pas encore)
@@ -1390,16 +1391,57 @@ export class Room {
     return u.owner !== 0 && this.players.get(u.owner)?.mount === u.id;
   }
 
-  /** Dev uniquement : tous les effets d'état pendant 12 s, pour voir le HUD (poison, feu, malédiction, toile, étourdissement, cri, carapace). */
-  onCheatEffects(p: Player) {
-    const until = this.time + 12;
-    p.poison = { dps: 1, until, by: p as unknown as Unit };
-    p.burn = { dps: 1, until: until - 3, by: p as unknown as Unit };
-    p.curseUntil = until - 1;
-    p.slowUntil = until - 4;
-    p.rootUntil = this.time + 3;
-    p.rally = { v: 0.3, until: until - 2 };
-    p.guard = { v: 0.2, until };
+  /**
+   * Dev uniquement (panneau V du client) : applique les effets choisis pendant `secs` secondes, ou retire tout (liste vide).
+   * Poison, brûlure, malédiction, ralentissement, étourdissement, cri et carapace sont réels ; sables mouvants, tempête, repos
+   * et monture ne s'affichent qu'au HUD (ils dépendent du terrain, de la météo ou d'une monture).
+   */
+  onCheatEffects(p: Player, effects: number[], secs: number) {
+    const ids = effects.map((e) => STATUS_IDS[e]).filter((e): e is StatusId => !!e), until = this.time + clamp(+secs || 0, 1, 300);
+    p.poison = p.burn = undefined;
+    p.curseUntil = p.rootUntil = undefined;
+    p.slowUntil = 0;
+    p.rally = p.guard = undefined;
+    p.devFx = new Map();
+    const me = p as unknown as Unit;
+    for (const k of ids) {
+      if (k === 'poison') p.poison = { dps: 1, until, by: me };
+      else if (k === 'burn') p.burn = { dps: 1, until, by: me };
+      else if (k === 'curse') p.curseUntil = until;
+      else if (k === 'slow') p.slowUntil = until;
+      else if (k === 'stun') p.rootUntil = until;
+      else if (k === 'rally') p.rally = { v: 0.3, until };
+      else if (k === 'guard') p.guard = { v: 0.2, until };
+      else p.devFx.set(STATUS_IDS.indexOf(k), until);
+    }
+  }
+
+  /** Dev uniquement (panneau V du client) : un Alpha de l'espèce `key` rejoint la meute tout de suite (déjà là : rien), ou la quitte pour de bon (sur le terrain comme à la Tanière). */
+  onCheatAlpha(p: Player, key: string, on = true) {
+    const s = SPECIES.findIndex((sp) => sp.key === key);
+    if (s < 0 || isBoss(s) || p.dead) return;
+    const u = this.fieldAlpha(p, s);
+    if (!on) {
+      if (u) {
+        if (p.mount === u.id) this.dismount(p, true);
+        p.army = p.army.filter((id) => id !== u.id);
+        this.units.delete(u.id);
+      }
+      p.resting = p.resting.filter((r) => r.s !== s);
+      p.awakening.delete(s);
+      this.refreshAlphas(p);
+      p.dirty = true;
+      return;
+    }
+    if (u || p.resting.some((r) => r.s === s)) return;
+    const a = this.spawnAlpha(p, s, 0, false);
+    this.refreshAlphas(p);
+    this.events.push({ e: 'awaken', id: a.id, by: p.id, s: a.s });
+  }
+
+  /** Dev uniquement (panneau V du client) : tombe à la moitié de ses PV, pour voir les soins à l'œuvre. */
+  onCheatHurt(p: Player) {
+    if (!p.dead) p.hp = Math.max(1, Math.min(p.hp, Math.floor(maxHpOf(p) / 2)));
   }
 
   onCheat(p: Player) {
@@ -4442,7 +4484,7 @@ export class Room {
   /**
    * Effets en cours sur un dompteur, pour le HUD : [numéro (STATUS_IDS), secondes restantes (-1 : tant qu'il reste là), valeur].
    * Valeur : PV par seconde (poison, brûlure), part de dégâts en plus ou en moins (malédiction, cri, carapace, monture),
-   * secondes passées dans le sable (sables mouvants), PV par seconde (repos) ; 0 sinon.
+   * secondes passées dans le sable (sables mouvants), PV par seconde (repos), part des PV soignée à chaque pouls (Alpha lièvre) ; 0 sinon.
    */
   statusOf(p: Player): StatusTuple[] {
     const out: StatusTuple[] = [], t = this.time, left = (until: number) => Math.max(0, Math.round((until - t) * 10) / 10);
@@ -4459,6 +4501,9 @@ export class Room {
     if (guard) out.push([id('guard'), left(p.guard!.until), guard]);
     if (!p.dead && p.hp < maxHpOf(p) && this.restsAt(p.x, p.y)) out.push([id('rest'), -1, 30]);
     if (p.mount) out.push([id('mounted'), -1, MOUNT_SHARE]);
+    const heal = p.dead ? null : this.perkAlpha(p, 'heal'); // Alpha lièvre : soigne son dompteur tant qu'il est près de lui
+    if (heal && p.hp < maxHpOf(p) && dist2(p.x, p.y, heal.u.x, heal.u.y) <= ALPHA_HEAL_R ** 2) out.push([id('heal'), -1, heal.value]);
+    for (const [k, until] of p.devFx ?? []) if (until > t && !out.some((o) => o[0] === k)) out.push([k, left(until), [0, 0, 0, 0, 0, 3, 0.7, 0, 0, 30, MOUNT_SHARE, 0.03][k]]);
     return out;
   }
 

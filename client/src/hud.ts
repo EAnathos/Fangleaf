@@ -1358,6 +1358,22 @@ export class Hud {
         this.placeStatusBar();
       };
     }
+    const opacity = $<HTMLInputElement>('set-fx-opacity');
+    opacity.value = String(settings.display.statusHud.opacity);
+    opacity.oninput = () => {
+      settings.display.statusHud.opacity = +opacity.value;
+      this.status.applyOptions(); // tout de suite, pour voir l'effet pendant qu'on glisse
+    };
+    opacity.onchange = saveSettings;
+    for (const k of ['edge', 'corner'] as const) {
+      const range = $<HTMLInputElement>(`set-fx-${k}`);
+      range.value = String(settings.display.statusHud[k]);
+      range.oninput = () => {
+        settings.display.statusHud[k] = +range.value;
+        this.status.applyOptions();
+      };
+      range.onchange = saveSettings;
+    }
     this.placeStatusBar();
     for (const k of ['shake', 'ping', 'weather'] as const) {
       const box = $<HTMLInputElement>(`set-${k}`);

@@ -82,7 +82,9 @@ export type ClientMsg =
   | { t: 'help'; on: boolean } // R maintenu (on) ou relâché : relever un dompteur à terre
   | { t: 'reset' } // fondateur : supprimer le village ; autre membre : effacer sa progression ici
   | { t: 'cheat' } // dev uniquement : +300 or, +30 essences
-  | { t: 'cheatfx' } // dev uniquement : tous les effets d'état pendant 12 s (HUD)
+  | { t: 'cheatalpha'; key: string; on: boolean } // dev uniquement : un Alpha de cette espèce (clé de SPECIES) rejoint la meute (on) ou la quitte pour de bon (sinon)
+  | { t: 'cheathurt' } // dev uniquement : tombe à la moitié de ses PV (pour voir les soins)
+  | { t: 'cheatfx'; effects: number[]; secs: number } // dev uniquement : ces effets d'état (numéros de STATUS_IDS) pendant ces secondes ; liste vide : tout retirer
   | { t: 'ping'; ts: number };
 
 export interface PlayerState {
@@ -134,7 +136,7 @@ export interface PlayerState {
 }
 
 /** Effets d'état du HUD (altérations et bonus), dans l'ordre de leur numéro sur le réseau. */
-export const STATUS_IDS = ['poison', 'burn', 'curse', 'slow', 'stun', 'quicksand', 'sandstorm', 'rally', 'guard', 'rest', 'mounted'] as const;
+export const STATUS_IDS = ['poison', 'burn', 'curse', 'slow', 'stun', 'quicksand', 'sandstorm', 'rally', 'guard', 'rest', 'mounted', 'heal'] as const;
 export type StatusId = (typeof STATUS_IDS)[number];
 /** [numéro de l'effet, secondes restantes (-1 : tant qu'on reste là), valeur : voir statusOf du serveur]. */
 export type StatusTuple = [id: number, left: number, value: number];

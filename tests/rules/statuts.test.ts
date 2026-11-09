@@ -57,4 +57,27 @@ describe('Effets d\'état (HUD)', () => {
     check(seenByA.status.length >= 1, 'lui voit son poison');
     check(seenByB.status.length === 0, 'son coéquipier ne reçoit rien');
   });
+
+  rule('Alpha lièvre : la vignette Soins apparaît près de lui quand on a perdu des PV, et pas loin ou en pleine forme.', () => {
+    const r = room(), p = r.addPlayer('a', noop);
+    r.onCheatAlpha(p, 'hare');
+    const hare = r.units.get(p.army.find((id: number) => r.units.get(id)?.alpha)), has = () => (r.statusOf(p) as number[][]).some((s) => s[0] === id('heal'));
+    check(hare, 'l\'Alpha lièvre est là');
+    hare.x = p.x + 40; hare.y = p.y;
+    p.hp = p.hp - 10;
+    check(has(), 'soigné : blessé et près de lui');
+    hare.x = p.x + 5000;
+    check(!has(), 'trop loin : pas de tuile');
+  });
+
+  rule('Panneau de dev : on ajoute puis on retire un Alpha (escargot) sans laisser de trace.', () => {
+    const r = room(), p = r.addPlayer('a', noop), alphas = () => p.army.filter((id: number) => r.units.get(id)?.alpha).length;
+    r.onCheatAlpha(p, 'snail');
+    check(alphas() === 1, 'l\'Alpha escargot est dans la meute');
+    r.onCheatAlpha(p, 'snail');
+    check(alphas() === 1, 'pas de doublon');
+    r.onCheatAlpha(p, 'snail', false);
+    check(alphas() === 0 && p.resting.length === 0, 'retiré de la meute et de la Tanière');
+    check(![...r.units.values()].some((u: { alpha?: boolean; owner: number }) => u.alpha && u.owner === p.id), 'et du terrain');
+  });
 });

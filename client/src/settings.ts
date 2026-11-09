@@ -23,6 +23,9 @@ export interface StatusHud {
   timers: boolean; // secondes restantes sur chaque vignette
   filter: 'all' | 'buffs' | 'nerfs';
   animations: boolean;
+  opacity: number; // opacité du bord teinté et des icônes qui flottent (10 à 100 %)
+  edge: number; // largeur du bord teinté, du bord de l'écran vers le centre (10 à 90 %)
+  corner: number; // taille du foyer plus fort dans le coin choisi (10 à 100 %)
   vignette: 'off' | 'soft' | 'normal' | 'strong'; // bord de l'écran teinté par les effets, icônes qui flottent
 }
 export interface Display {
@@ -68,7 +71,7 @@ const DEFAULTS: Settings = {
     chat: { key: 'c', label: 'C' },
   },
   attack: 'auto',
-  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', statusHud: { enabled: true, position: 'top-left', size: 'normal', timers: true, filter: 'all', animations: true, vignette: 'normal' } },
+  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', statusHud: { enabled: true, position: 'top-left', size: 'normal', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 } },
 };
 
 /** Netteté maximale de l'image (pixels par point d'écran) selon la qualité. */
@@ -111,6 +114,9 @@ function load(): Settings {
         filter: (['all', 'buffs', 'nerfs'] as const).find((q) => q === d.statusHud?.filter) ?? D.statusHud.filter,
         animations: typeof d.statusHud?.animations === 'boolean' ? d.statusHud.animations : D.statusHud.animations,
         vignette: (['off', 'soft', 'normal', 'strong'] as const).find((q) => q === d.statusHud?.vignette) ?? D.statusHud.vignette,
+        opacity: typeof d.statusHud?.opacity === 'number' ? Math.min(100, Math.max(10, Math.round(d.statusHud.opacity))) : D.statusHud.opacity,
+        edge: typeof d.statusHud?.edge === 'number' ? Math.min(90, Math.max(10, Math.round(d.statusHud.edge))) : D.statusHud.edge,
+        corner: typeof d.statusHud?.corner === 'number' ? Math.min(100, Math.max(10, Math.round(d.statusHud.corner))) : D.statusHud.corner,
       },
     };
     return { keys, attack: saved?.attack === 'click' ? 'click' : 'auto', display };
