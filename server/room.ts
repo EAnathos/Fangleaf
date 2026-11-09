@@ -6,13 +6,13 @@ import {
   ARC_FLIGHT_S, SPLASH_FLAT, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
-  SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, WINGS_LEASH, VENT_R, VENT_WARN_S, VENT_FIRE_S, VENT_HURT, PLATE_R, GEYSER_R, GEYSER_WARN_S, GEYSER_HURT, PLATE_REARM_S, alphaLevelMult, alphaReviveS, alphaUpCost,
+  SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, gateHall, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, WINGS_LEASH, VENT_R, VENT_WARN_S, VENT_FIRE_S, VENT_HURT, PLATE_R, GEYSER_R, GEYSER_WARN_S, GEYSER_HURT, PLATE_REARM_S, alphaLevelMult, alphaReviveS, alphaUpCost,
   treeHp, treeWood, TREE_RESPAWN_S, TREE_STILL_S, TREANT_CHANCE, TREANT_ZONE,
   populationOf, PINCER_HALF, PINCER_R, TORNADO_PULL, TORNADO_PULL_R, TORNADO_R, TORNADO_SPEED, POISON_DPS, BURN_DPS, BURN_S, elementOf, affinity, JUNGLE_ZONE, LAKES_ZONE, LEGEND_SKIPS, HUG_S, ROLL_S, RING_SPEED, RING_W, DRUM_R, ECHO_R, DRUM_GAP, ECHO_STUN_S, LOG_SPEED, RAMPAGE_SPEED, MAW_PULL, MAW_R, CURSE_S, CURSE_BONUS, SHELL_SPEED, DECOY_S, SPARK_JUMPS, SPARK_R, SPARK_FALLOFF, POISON_S,
   armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, ALPHA_SHOUT_AGGRO, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, mineDmg, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
-import type { ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, UnitTuple } from '../shared/protocol.ts';
+import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, UnitTuple } from '../shared/protocol.ts';
 import { STAT_KEYS, STATUS_IDS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { HALL_ID, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
@@ -225,6 +225,7 @@ export interface Player {
   awakening: Map<number, number>; // espèce → heure d'éveil (Date.now en ms)
   villageFound: boolean; // a déjà atteint le village : on y apparaît directement ensuite
   slowUntil: number; // ralenti par une toile jusqu'à
+  devFx?: Map<number, number>; // dev : effets affichés seulement (sans effet réel) au HUD, jusqu'à ce temps
   cls: ClassId | null; // classe choisie à la forge (null : pas encore)
   spec: SpecId | null; // spécialisation de l'arme, choisie à la Grande forge (null : pas encore)
   specs: Partial<Record<ClassId, SpecId>>; // spécialisation retenue pour chaque classe (on la retrouve en y revenant)
@@ -1405,6 +1406,155 @@ export class Room {
   /** Vrai si cette unité est la monture de son dompteur. */
   private isMount(u: Unit) {
     return u.owner !== 0 && this.players.get(u.owner)?.mount === u.id;
+  }
+
+  /**
+   * Dev uniquement (panneau F9) : applique les effets choisis pendant `secs` secondes, ou retire tout (liste vide).
+   * Poison, brûlure, malédiction, ralentissement, étourdissement, cri et carapace sont réels ; sables mouvants, tempête, repos,
+   * monture et soins ne s'affichent qu'au HUD (ils dépendent du terrain, de la météo ou d'une monture).
+   */
+  onCheatEffects(p: Player, effects: number[], secs: number) {
+    const ids = effects.map((e) => STATUS_IDS[e]).filter((e): e is StatusId => !!e), until = this.time + clamp(+secs || 0, 1, 3600);
+    p.poison = p.burn = undefined;
+    p.curseUntil = p.rootUntil = undefined;
+    p.slowUntil = 0;
+    p.rally = p.guard = undefined;
+    p.devFx = new Map();
+    const me = p as unknown as Unit;
+    for (const k of ids) {
+      if (k === 'poison') p.poison = { dps: 1, until, by: me };
+      else if (k === 'burn') p.burn = { dps: 1, until, by: me };
+      else if (k === 'curse') p.curseUntil = until;
+      else if (k === 'slow') p.slowUntil = until;
+      else if (k === 'stun') p.rootUntil = until;
+      else if (k === 'rally') p.rally = { v: 0.3, until };
+      else if (k === 'guard') p.guard = { v: 0.2, until };
+      else p.devFx.set(STATUS_IDS.indexOf(k), until);
+    }
+  }
+
+  /**
+   * Dev uniquement (panneau F9) : ajoute (on) ou retire un monstre de l'espèce s. kind : 'mob' (monstre ordinaire de la meute,
+   * sans limite de meute), 'alpha' (son Alpha, équipé ou rangé), 'legend' (Alpha légendaire : le crée au besoin ; retiré, il redevient
+   * un Alpha ordinaire), 'wild' (un sauvage près de soi ; retiré : tous les sauvages de l'espèce). Pas les géants (voir onCheatBoss).
+   */
+  onCheatMob(p: Player, s: number, kind: CheatMob, on: boolean) {
+    if (!Number.isInteger(s) || !(s in SPECIES) || isBoss(s) || p.dead) return;
+    const alpha = () => this.fieldAlpha(p, s), rest = () => p.resting.find((r) => r.s === s);
+    if (on) p.seen.add(s);
+    if (kind === 'mob') {
+      if (on) {
+        const u = this.createUnit(s as SpeciesId, false, p.x, p.y);
+        this.makeTamed(u, p);
+        this.placeNear(u, p);
+      } else {
+        const id = p.army.find((i) => {
+          const u = this.units.get(i);
+          return u && !u.alpha && u.s === s;
+        });
+        if (id) {
+          this.units.delete(id);
+          p.army = p.army.filter((i) => i !== id);
+        }
+      }
+    } else if (kind === 'alpha' || kind === 'legend') {
+      const legend = kind === 'legend';
+      if (!on && legend) {
+        // il redevient un Alpha ordinaire
+        const u = alpha(), r = rest();
+        if (u?.legend) {
+          u.legend = false;
+          this.setAlphaLevel(u, u.level);
+        } else if (r) r.legend = false;
+      } else if (!on) {
+        const u = alpha();
+        if (u) {
+          if (p.mount === u.id) this.dismount(p, true);
+          p.army = p.army.filter((id) => id !== u.id);
+          this.units.delete(u.id);
+        }
+        p.resting = p.resting.filter((r) => r.s !== s);
+        p.awakening.delete(s);
+        if (p.marked === s) p.marked = -1;
+      } else {
+        let u = alpha();
+        const r = rest();
+        if (!u && !r) {
+          u = this.spawnAlpha(p, s, 0, legend);
+          this.events.push({ e: 'awaken', id: u.id, by: p.id, s });
+        }
+        if (legend) {
+          if (u) {
+            u.legend = true;
+            this.setAlphaLevel(u, u.level);
+          } else if (r) r.legend = true;
+        }
+        p.awakening.delete(s);
+      }
+      this.refreshAlphas(p);
+    } else if (kind === 'wild') {
+      if (on) {
+        const a = Math.random() * Math.PI * 2, at = this.map.freeNear(p.x + Math.cos(a) * 160, p.y + Math.sin(a) * 160);
+        const u = this.createUnit(s as SpeciesId, false, at.x, at.y);
+        u.homeX = u.x;
+        u.homeY = u.y;
+      } else {
+        for (const u of [...this.units.values()]) if (!u.owner && !u.alpha && u.s === s) this.units.delete(u.id);
+      }
+    }
+    p.dirty = true;
+  }
+
+  /**
+   * Dev uniquement (panneau F9) : débloque la zone z pour tout le village (Maison commune assez haute, parchemins des zones d'avant
+   * lus, leurs grottes ouvertes), ou s'y téléporte avec sa meute (z = 0 : le village). L'un et l'autre sont indépendants.
+   */
+  onCheatZone(p: Player, z: number, act: 'unlock' | 'tp') {
+    if (!Number.isInteger(z) || z < 0 || z > ZONES) return;
+    if (act === 'unlock' && z >= 1) {
+      for (let k = 0; k < z; k++) {
+        this.hall = Math.max(this.hall, Math.min(HALL_MAX, gateHall(k)));
+        if (k > 0) for (const b of zoneBosses(k)) if (!this.told.includes(b)) this.told.push(b);
+      }
+      for (const c of this.map.caves) if (c.zone <= z && !this.unlocked.includes(c.id)) this.unlocked.push(c.id);
+      this.saveVillage();
+      this.events.push({ e: 'info', text: `${p.name} débloque la zone ${z} (mode dev)` });
+    } else if (act === 'tp' && !p.dead) {
+      if (this.map.caveAt(p.x, p.y)) return; // d'abord sortir de la grotte
+      const spot = z === 0 ? this.map.village : this.map.spineAt(z === 1 ? this.map.gates[0] + 450 : this.map.zoneFrom(z) + 300);
+      const at = this.map.freeNear(spot.x, spot.y);
+      this.events.push({ e: 'travel', id: p.id, x: Math.round(p.x), y: Math.round(p.y), tx: Math.round(at.x), ty: Math.round(at.y) });
+      p.x = at.x;
+      p.y = at.y;
+      p.send({ t: 'teleport', x: p.x, y: p.y });
+      for (const uid of p.army) {
+        const u = this.units.get(uid);
+        if (u && !u.reviveAt) {
+          this.placeNear(u, p);
+          u.target = 0;
+          u.recalling = false;
+          u.path = null;
+        }
+      }
+    }
+  }
+
+  /** Dev uniquement (panneau F9) : abat le géant s (ou tous, s = -1) comme s'il avait été vaincu ; s'il dort, il compte comme vaincu. */
+  onCheatBoss(p: Player, s: number) {
+    const all = s === -1;
+    if (!all && (!Number.isInteger(s) || !(s in SPECIES) || !isBoss(s))) return;
+    for (const b of all ? SPECIES.map((_, i) => i).filter((i) => isBoss(i)) : [s]) {
+      const u = [...this.units.values()].find((x) => x.s === b && !x.owner && !x.summoner && !x.reviveAt);
+      if (u) {
+        u.hitters.add(p.id);
+        u.hp = 0;
+        this.killUnit(u, p);
+      } else if (!this.beaten.includes(b)) {
+        this.beaten.push(b);
+        this.saveVillage();
+      }
+    }
+    p.dirty = true;
   }
 
   onCheat(p: Player) {
@@ -4564,6 +4714,7 @@ export class Room {
     if (p.mount) out.push([id('mounted'), -1, MOUNT_SHARE]);
     const heal = p.dead ? null : this.perkAlpha(p, 'heal'); // Alpha lièvre : soigne son dompteur tant qu'il est près de lui
     if (heal && p.hp < maxHpOf(p) && dist2(p.x, p.y, heal.u.x, heal.u.y) <= ALPHA_HEAL_R ** 2) out.push([id('heal'), -1, heal.value]);
+    for (const [k, until] of p.devFx ?? []) if (until > t && !out.some((o) => o[0] === k)) out.push([k, left(until), [0, 0, 0, 0, 0, 3, 0.7, 0, 0, 30, MOUNT_SHARE, 0.03][k]]); // triche : effets d'affichage seul
     return out;
   }
 
