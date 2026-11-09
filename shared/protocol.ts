@@ -115,6 +115,7 @@ export interface PlayerState {
   mount: { id: number; species: number; hp: number; legend: boolean } | null; // monture chevauchée (pv en %)
   slowed: boolean; // pris dans une toile
   held: boolean; // saisi par un géant (étreinte, roulade) ou étourdi : il ne peut plus bouger
+  status: StatusTuple[]; // effets en cours sur lui, pour le HUD (envoyé à son seul dompteur)
   buffs: number; // compétences d'Alpha en cours sur lui : UNIT_FLAG_RALLY (cri du suricate), UNIT_FLAG_GUARD (carapace de l'escargot) ; UNIT_FLAG_POISON : empoisonné
   awakening: { species: number; left: number; total: number }[]; // Alphas en cours d'éveil (secondes)
   resting: { species: number; level: number; legend: boolean }[]; // Alphas rangés à la Tanière
@@ -130,6 +131,12 @@ export interface PlayerState {
   readKind: number; // discipline de la leçon en cours
   reading: number; // secondes avant la fin de la leçon en cours (0 : aucune)
 }
+
+/** Effets d'état du HUD (altérations et bonus), dans l'ordre de leur numéro sur le réseau. */
+export const STATUS_IDS = ['poison', 'burn', 'curse', 'slow', 'stun', 'quicksand', 'sandstorm', 'rally', 'guard', 'rest', 'mounted', 'heal'] as const;
+export type StatusId = (typeof STATUS_IDS)[number];
+/** [numéro de l'effet, secondes restantes (-1 : tant qu'on reste là), valeur : voir statusOf du serveur]. */
+export type StatusTuple = [id: number, left: number, value: number];
 
 /** Résumé d'un membre de la meute pour le HUD. */
 export interface ArmySlot {

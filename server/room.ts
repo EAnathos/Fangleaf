@@ -12,8 +12,8 @@ import {
   armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, ALPHA_SHOUT_AGGRO, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, mineDmg, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2 } from '../shared/math.ts';
-import type { ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, UnitTuple } from '../shared/protocol.ts';
-import { STAT_KEYS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
+import type { ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, UnitTuple } from '../shared/protocol.ts';
+import { STAT_KEYS, STATUS_IDS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
 import { HALL_ID, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky, SNOWFALL, WINTER } from '../shared/weather.ts';
@@ -4427,6 +4427,31 @@ export class Room {
     return ((e.curseUntil ?? 0) > this.time ? UNIT_FLAG_CURSE : 0) | (e.burn && e.burn.until > this.time ? UNIT_FLAG_BURN : 0) | (this.buffOf(e, 'rally') ? UNIT_FLAG_RALLY : 0) | (this.buffOf(e, 'guard') ? UNIT_FLAG_GUARD : 0) | (e.poison && e.poison.until > this.time ? UNIT_FLAG_POISON : 0);
   }
 
+  /**
+   * Effets en cours sur un dompteur, pour le HUD : [numéro (STATUS_IDS), secondes restantes (-1 : tant qu'il reste là), valeur].
+   * Valeur : PV par seconde (poison, brûlure), part de dégâts en plus ou en moins (malédiction, cri, carapace, monture),
+   * secondes passées dans le sable (sables mouvants), PV par seconde (repos), part des PV soignée à chaque pouls (Alpha lièvre) ; 0 sinon.
+   */
+  statusOf(p: Player): StatusTuple[] {
+    const out: StatusTuple[] = [], t = this.time, left = (until: number) => Math.max(0, Math.round((until - t) * 2) / 2); // au demi-seconde : le HUD n'affiche que des secondes entières
+    const id = (k: StatusId) => STATUS_IDS.indexOf(k);
+    if (p.poison && p.poison.until > t) out.push([id('poison'), left(p.poison.until), Math.round(p.poison.dps * 10) / 10]);
+    if (p.burn && p.burn.until > t) out.push([id('burn'), left(p.burn.until), Math.round(p.burn.dps * 10) / 10]);
+    if ((p.curseUntil ?? 0) > t) out.push([id('curse'), left(p.curseUntil!), CURSE_BONUS]);
+    if (p.slowUntil > t) out.push([id('slow'), left(p.slowUntil), WEB_SLOW]);
+    if (this.rooted(p)) out.push([id('stun'), left(p.rootUntil!), 0]);
+    if (p.sinkSince !== undefined) out.push([id('quicksand'), -1, Math.max(0, Math.floor(t - p.sinkSince))]);
+    if (this.storm >= STORM_HARM && !this.safe(p.x, p.y) && !this.map.caveAt(p.x, p.y) && this.map.zoneAt(p.x, p.y) === DESERT_ZONE) out.push([id('sandstorm'), -1, 0]);
+    const rally = this.buffOf(p, 'rally'), guard = this.buffOf(p, 'guard');
+    if (rally) out.push([id('rally'), left(p.rally!.until), rally]);
+    if (guard) out.push([id('guard'), left(p.guard!.until), guard]);
+    if (!p.dead && p.hp < maxHpOf(p) && this.restsAt(p.x, p.y)) out.push([id('rest'), -1, 30]);
+    if (p.mount) out.push([id('mounted'), -1, MOUNT_SHARE]);
+    const heal = p.dead ? null : this.perkAlpha(p, 'heal'); // Alpha lièvre : soigne son dompteur tant qu'il est près de lui
+    if (heal && p.hp < maxHpOf(p) && dist2(p.x, p.y, heal.u.x, heal.u.y) <= ALPHA_HEAL_R ** 2) out.push([id('heal'), -1, heal.value]);
+    return out;
+  }
+
   /** Alpha lièvre sur le terrain : de temps en temps, il soigne un peu son dompteur et la meute autour de lui. */
   private alphaHeals() {
     if (this.tick % (ALPHA_HEAL_S * TICK_HZ) !== 0) return;
@@ -4774,6 +4799,7 @@ export class Room {
         slowed: p.slowUntil > this.time,
         held: this.rooted(p),
         buffs: this.buffFlags(p),
+        status: this.statusOf(p),
         resting: p.resting.map((r) => ({ species: r.s, level: r.lvl, legend: r.legend })),
         seen: [...p.seen],
         awakening: [...p.awakening].map(([species, wakeAt]) => ({
@@ -4781,7 +4807,7 @@ export class Room {
         })),
       };
       full.set(p.id, st);
-      light.set(p.id, { ...st, essences: [], army: [], resting: [], seen: [], awakening: [], tomes: [] });
+      light.set(p.id, { ...st, essences: [], army: [], resting: [], seen: [], awakening: [], tomes: [], status: [] });
     }
     const vr2 = VIEW_R * VIEW_R;
     const spots = this.events.map((e) => this.eventSpot(e)), er2 = (VIEW_R + 300) ** 2;
