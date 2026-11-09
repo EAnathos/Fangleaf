@@ -1,6 +1,7 @@
 // Boucle de jeu côté client : prédiction locale du joueur, rendu, événements.
 
 import { initCheat } from './cheat.ts';
+import { drawCoatiClue } from './coati.ts';
 import { ISLE_NAMES, SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
@@ -2829,7 +2830,8 @@ export class Game {
             ctx.restore();
           } });
         } else if (SPECIES[s].bushHide) {
-          // coati caché : aucun indice visible
+          // coati caché : de discrets indices dans le feuillage (frémissement, poils roux, reflet d'yeux)
+          list.push({ y: y + 2, draw: () => drawCoatiClue(ctx, x, y, this.time, id * 1.7) });
         } else {
           list.push({ y, draw: () => drawBurrow(ctx, x, y, r, !!SPECIES[s].burrows, this.time, id) });
           const den = SPECIES[s].shy && sky.light < 0.5 ? this.map.denNear(x, y) : -1;

@@ -172,3 +172,32 @@ function coati(ctx: Ctx, r: number, u: UnitLook, P: Pal) {
 export function drawCoati(ctx: Ctx, r: number, u: UnitLook) {
   coati(ctx, r, u, palette(u));
 }
+
+/**
+ * Indices discrets d'un coati caché dans un buisson de la jungle (x, y : son centre) : de temps en temps le feuillage frémit,
+ * une touffe de poils roux dépasse des feuilles et deux reflets d'yeux brillent un instant. À peine plus qu'un buisson ordinaire.
+ */
+export function drawCoatiClue(ctx: Ctx, x: number, y: number, t: number, seed: number) {
+  const s = t + seed;
+  // frémissement : une courte secousse toutes les quelques secondes (la période varie d'un buisson à l'autre)
+  const period = 4.5 + (seed * 7.3) % 3, k = ((s / period) % 1) * period, shake = k < 0.7 ? Math.sin((k / 0.7) * Math.PI) : 0;
+  if (shake > 0) {
+    const dx = Math.sin(s * 38) * 1.8 * shake, dy = Math.cos(s * 31) * 0.9 * shake;
+    for (const [bx, by, rr, c] of [[-10, -8, 8, '#33584F'], [9, -9, 8, '#24423E'], [1, -15, 7, '#467468']] as const) {
+      ell(ctx, x + bx + dx, y + by + dy, rr, rr * 0.8, 0, c);
+    }
+  }
+  // touffe de poils roux, entre les feuilles
+  ell(ctx, x - 9, y - 8, 3.2, 1.7, -0.5, 'rgba(181,86,43,0.85)');
+  ell(ctx, x - 7, y - 6.6, 2, 1.1, -0.3, 'rgba(219,138,76,0.7)');
+  // reflets d'yeux, rares et brefs
+  const glint = Math.sin(s * 0.7 + seed * 3) > 0.94 ? 1 : 0;
+  if (glint) {
+    ctx.fillStyle = 'rgba(243,226,190,0.85)';
+    for (const ex of [2, 7.5]) {
+      ctx.beginPath();
+      ctx.arc(x + ex, y - 12, 0.9, 0, TAU);
+      ctx.fill();
+    }
+  }
+}
