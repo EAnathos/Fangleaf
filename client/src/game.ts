@@ -2827,6 +2827,8 @@ export class Game {
             drawSoaring(ctx, x, y, r, this.time, id, 4.2 + storm * 3.5);
             ctx.restore();
           } });
+        } else if (SPECIES[s].bushHide) {
+          // coati caché : aucun indice visible
         } else {
           list.push({ y, draw: () => drawBurrow(ctx, x, y, r, !!SPECIES[s].burrows, this.time, id) });
           const den = SPECIES[s].shy && sky.light < 0.5 ? this.map.denNear(x, y) : -1;

@@ -2,7 +2,7 @@
 
 import {
   bossMelee, sleeperBlocks,
-  alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
+  alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
   ARC_FLIGHT_S, SPLASH_FLAT, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
@@ -23,6 +23,7 @@ import type { Profile } from './persist.ts';
 interface Unit {
   kind: 'u';
   eatOre?: number; // golem de la meute : le rocher qu'il est en train de manger (-1 : aucun)
+  bush?: number; // Coati roux de la meute : le buisson à baies qu'il va cueillir (-1 : aucun)
   chopTree?: number; // Tréant de la meute : l'arbre qu'il est en train d'abattre (index dans decor, -1 : aucun)
   id: number;
   s: SpeciesId;
@@ -2176,6 +2177,15 @@ export class Room {
     p.fruits += n;
     p.dirty = true;
     this.events.push({ e: 'pick', by: p.id, bush: b.id, n });
+    // Dans la jungle, un coati s'y cachait parfois : il reste tapi dans le buisson (un fruit tendu l'en fait sortir).
+    if (b.zone === JUNGLE_ZONE && Math.random() < COATI_CHANCE) {
+      const s = SPECIES.findIndex((sp) => sp.key === 'rufous_coati');
+      if (this.wildCount(s as SpeciesId) < COATI_MAX) {
+        const u = this.createUnit(s as SpeciesId, false, b.x, b.y);
+        u.hidden = true;
+        u.surfaceUntil = this.time + COATI_PEEK_S;
+      }
+    }
   }
 
   /** Tendre un fruit (s'il en a) ou le ranger. */
@@ -3878,6 +3888,7 @@ export class Room {
     }
     if (SPECIES[u.s].shy && this.hideAI(u)) return;
     if (sp.shell && this.shellAI(u)) return;
+    if (sp.bushHide && this.bushHideAI(u)) return;
     if (SPECIES[u.s].passive) return this.grazeAI(u);
     // Priorité au plus proche, dompteurs et monstres de meute confondus (réévalué à chaque tick).
     let t: Ent | undefined = this.nearest(u.x, u.y, this.aggroOf(u), this.isAllyOfPlayers);
@@ -4043,6 +4054,93 @@ export class Room {
   }
 
   /**
+   * Coati roux sauvage : un dompteur sans fruit en main approche (ou un coup), et il file se cacher dans le buisson le plus
+   * proche (intouchable, on n'en voit que le museau) ; il en sort quand la voie est libre, ou dès qu'on lui tend un fruit.
+   * Vrai : il est caché (ou court se cacher).
+   */
+  private bushHideAI(u: Unit) {
+    const near = (x: number, y: number, r: number) => dist2(x, y, u.x, u.y) < r * r;
+    const ps = [...this.players.values()].filter((p) => !p.dead);
+    if (this.time - u.lastHitAt < 1 || ps.some((p) => !p.holding && near(p.x, p.y, COATI_HIDE_R))) u.surfaceUntil = Math.max(u.surfaceUntil ?? 0, this.time + COATI_PEEK_S);
+    else if (u.hidden && ps.some((p) => p.holding && p.fruits > 0 && near(p.x, p.y, LURE_R))) u.surfaceUntil = 0; // un fruit : il sort
+    if (this.time >= (u.surfaceUntil ?? 0)) {
+      u.hidden = false;
+      return false;
+    }
+    u.target = u.lastAttacker = 0;
+    if (u.hidden) return true;
+    let best: { x: number; y: number } | undefined, bd = 320 ** 2;
+    for (const b of this.map.bushes) {
+      const d = dist2(b.x, b.y, u.x, u.y);
+      if (d < bd) [bd, best] = [d, b];
+    }
+    if (!best) return false; // pas de buisson : il détale comme le lièvre
+    if (bd < 22 ** 2) {
+      u.hidden = true;
+      [u.x, u.y] = [best.x, best.y];
+    } else this.navTo(u, best.x, best.y, u.speed * 1.4, 10);
+    return true;
+  }
+
+  /**
+   * Coati roux de la meute (ordinaire ou Alpha) : il ne se bat jamais. Il fuit les monstres sauvages (derrière son dompteur),
+   * cueille de lui-même les buissons garnis autour de son dompteur (les baies lui reviennent), et sinon se tient à distance.
+   */
+  private coatiAI(u: Unit, o: Player, hx: number, hy: number, bank: boolean) {
+    u.target = u.lastAttacker = 0;
+    if (o.dead) return;
+    const foe = this.nearest(u.x, u.y, COATI_DANGER_R, this.isWild);
+    if (foe) {
+      // il s'éloigne du monstre ; s'il s'écarte trop de son dompteur, il passe derrière lui
+      const ax = u.x - foe.x, ay = u.y - foe.y, ad = Math.hypot(ax, ay) || 1;
+      let bx = u.x + (ax / ad) * 150, by = u.y + (ay / ad) * 150;
+      if (dist2(bx, by, o.x, o.y) > (COATI_KEEP_R * 2) ** 2) {
+        const dx = o.x - foe.x, dy = o.y - foe.y, d = Math.hypot(dx, dy) || 1;
+        [bx, by] = [o.x + (dx / d) * 90, o.y + (dy / d) * 90];
+      }
+      const spot = this.blockedFor(u, bx, by) ? { x: hx, y: hy } : { x: bx, y: by };
+      this.navTo(u, spot.x, spot.y, Math.max(u.speed, PLAYER_SPEED * 1.5), 8, bank);
+      u.bush = -1;
+      return;
+    }
+    const ok = (i: number) => {
+      const b = this.map.bushes[i];
+      return !!b && this.bushBack[i] <= this.time && dist2(o.x, o.y, b.x, b.y) < COATI_BERRY_R ** 2;
+    };
+    if (o.fruits < MAX_BERRIES) {
+      if (u.bush === undefined || u.bush < 0 || !ok(u.bush)) {
+        u.bush = -1;
+        if (this.tick % 5 === 0) {
+          let bd = Infinity;
+          for (const b of this.map.bushes) {
+            const d = dist2(u.x, u.y, b.x, b.y);
+            if (d < bd && ok(b.id) && !this.nearest(b.x, b.y, COATI_DANGER_R * 0.7, this.isWild)) [bd, u.bush] = [d, b.id];
+          }
+        }
+      }
+      if (u.bush >= 0) {
+        const b = this.map.bushes[u.bush];
+        this.navTo(u, b.x, b.y + 14, u.speed, 12, bank);
+        if (dist2(u.x, u.y, b.x, b.y + 14) < 28 ** 2) {
+          const n = Math.min(BERRIES_PICKED, MAX_BERRIES - o.fruits);
+          this.bushBack[b.id] = this.time + BUSH_REGROW_S;
+          o.fruits += n;
+          o.dirty = true;
+          this.events.push({ e: 'pick', by: o.id, bush: b.id, n });
+          u.bush = -1;
+        }
+        return;
+      }
+    }
+    // rien à cueillir : il reste à distance, en cercle élargi autour de son dompteur
+    const i = o.army.indexOf(u.id), ang = i * 2.39996, rad = COATI_KEEP_R + 14 * Math.sqrt(i);
+    const sx = hx + Math.cos(ang) * rad, sy = hy + Math.sin(ang) * rad;
+    if (dist2(u.x, u.y, sx, sy) < 50 ** 2) return;
+    const slot = this.blockedFor(u, sx, sy) ? { x: hx, y: hy } : { x: sx, y: sy };
+    this.navTo(u, slot.x, slot.y, Math.max(u.speed, PLAYER_SPEED * 1.1), 3, bank);
+  }
+
+  /**
    * Vautour (sauvage) : il plane au-dessus de sa cible, hors d'atteinte, puis pique là où tombe son ombre
    * (cercle annoncé au sol) ; posé, on peut le frapper, jusqu'à ce qu'il redécolle.
    */
@@ -4203,6 +4301,7 @@ export class Room {
       }
     }
 
+    if (SPECIES[u.s].forager) return this.coatiAI(u, o, hx, hy, !!bank); // le coati ne combat pas
     const prey = this.preyOf(u); // un vautour de la meute attaque aussi les vautours sauvages en plein vol
     let t = this.getEnt(u.target);
     const anchorX = o.dead ? u.x : o.x, anchorY = o.dead ? u.y : o.y;
