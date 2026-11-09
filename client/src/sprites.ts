@@ -72,11 +72,32 @@ const CROWN_X: Record<string, number> = { drake: 0.7, wyvern: 0.7, dragon: 0.8, 
 /** … et vers le bas, en rayons, pour celles dont la tête est plus basse que le haut du corps. */
 const CROWN_Y: Record<string, number> = { drake: -0.15, wyvern: -0.55, dragon: -0.35, scorpion: 0.05, gorilla: 0.25, croc: 0.82, masked: -0.95, kraken: -0.6, crab: -0.05, boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, rufous_coati: 0.2, bigfoot: -0.35, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
 
-/** Teinte des espèces qui n'ont pas (encore) de robe propre. */
-const DEFAULT_VARIANT = 'hue-rotate(35deg) saturate(1.25) brightness(1.1)';
-/** Filtre CSS de la robe de l'Alpha (et du légendaire, qui a la même), ou '' pour la forme de base. */
-export const variantFilter = (key: string, alpha: boolean, legend: boolean) =>
-  alpha || legend ? (VARIANT_FILTERS[key] ?? DEFAULT_VARIANT) : '';
+/** Filtre CSS de la robe de l'Alpha (et du légendaire, qui a la même), ou '' pour la forme de base. Une espèce sans entrée n'a pas de robe (voir tests/rules/sprites.test.ts). */
+export const variantFilter = (key: string, alpha: boolean) => (alpha ? (VARIANT_FILTERS[key] ?? '') : '');
+
+let tintLayer: HTMLCanvasElement | null = null;
+/**
+ * Dessine le corps dans un calque à part, puis le recopie une seule fois avec le filtre (au lieu d'un filtre par tracé).
+ * Le calque finit avec la même transformation que le contexte : les drawers qui laissent un translate actif (saut du
+ * sporelin, du vautour) le transmettent comme avant à ce qui est dessiné ensuite (couronne, effets).
+ */
+function drawTinted(ctx: Ctx, tint: string, draw: (g: Ctx) => void) {
+  const cv = ctx.canvas as HTMLCanvasElement;
+  const layer = (tintLayer ??= document.createElement('canvas'));
+  if (layer.width !== cv.width || layer.height !== cv.height) [layer.width, layer.height] = [cv.width, cv.height];
+  const g = layer.getContext('2d')!;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, layer.width, layer.height);
+  g.setTransform(ctx.getTransform());
+  draw(g);
+  const after = g.getTransform();
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.filter = tint;
+  ctx.drawImage(layer, 0, 0);
+  ctx.restore();
+  ctx.setTransform(after);
+}
 
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
@@ -147,12 +168,11 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
   if (hop?.tilt) ctx.rotate(hop.tilt); // museau vers le haut au décollage, vers le sol à l'arrivée
   const base = u.color ?? SPECIES[u.species].color;
   const fill = u.flash ? '#FFFFFF' : base;
-  const tint = u.flash || u.key || SPECIES[u.species]?.boss ? '' : variantFilter(key, u.alpha, !!u.legend);
+  const tint = u.flash || u.key || SPECIES[u.species]?.boss ? '' : variantFilter(key, u.alpha || !!u.legend);
   const effects = u.legend && !u.flash; // légendaire : des effets propres à l'espèce, qui ne prennent pas la teinte du corps
   if (effects) LEGEND_BACK[key]?.(ctx, r, u);
-  if (tint) ctx.filter = tint; // Alpha et légendaire : robe d'une autre couleur que la forme de base
-  (DRAWERS[key] ?? golem)(ctx, r, fill, u);
-  if (tint) ctx.filter = 'none';
+  if (tint) drawTinted(ctx, tint, (g) => (DRAWERS[key] ?? golem)(g, r, fill, u)); // Alpha et légendaire : robe d'une autre couleur que la forme de base
+  else (DRAWERS[key] ?? golem)(ctx, r, fill, u);
   if (effects) LEGEND_FRONT[key]?.(ctx, r, u);
   if (SPECIES[u.species]?.boss && !u.key) {
     // Mini-boss : grande couronne dorée.
@@ -2987,12 +3007,13 @@ function vulture(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
  * Vautour en vol (hors d'atteinte), vu de dessus : grandes ailes ouvertes, couvertures brunes, rémiges sombres
  * en doigts écartés, queue en éventail, collerette et tête rose ; haut au-dessus de son ombre.
  */
-export function drawSoaring(ctx: Ctx, x: number, y: number, r: number, t: number, seed: number, height = 4.2, beat = 0, heading?: number) {
+export function drawSoaring(ctx: Ctx, x: number, y: number, r: number, t: number, seed: number, height = 4.2, beat = 0, heading?: number, tint = '') {
   // il plane, et de temps en temps (ou au décollage et à l'atterrissage : beat) il bat franchement des ailes
   const cyc = (t * 0.23 + seed * 0.37) % 1, burst = Math.max(beat, cyc < 0.18 ? Math.sin((cyc / 0.18) * Math.PI) : 0);
   const flap = Math.sin(t * 2.2 + seed) * 0.12 + Math.sin(t * 11 + seed) * 0.5 * burst, h = r * height + Math.sin(t * 1.3 + seed) * r * 0.3;
   const span = r * 2.1 * (1 - 0.12 * burst * Math.abs(Math.sin(t * 11 + seed))), tilt = Math.sin(t * 0.9 + seed) * 0.08; // il penche dans les virages
   ctx.save();
+  if (tint) ctx.filter = tint; // robe de l'Alpha (voir variantFilter)
   ctx.translate(x, y - h);
   ctx.rotate(tilt + (heading === undefined ? 0 : heading + Math.PI / 2)); // la tête vers où il va
   // queue en éventail
@@ -8204,8 +8225,8 @@ function drawMagma(ctx: Ctx, x: number, y: number, t: number, gx: number, gy: nu
 // Alpha et légendaire partagent la même robe (VARIANT_FILTERS, un filtre de couleur sur le corps de l'espèce). Le légendaire y
 // ajoute des effets visuels propres à l'espèce, dessinés derrière (LEGEND_BACK) ou devant (LEGEND_FRONT) le corps, sans filtre.
 // Les espèces sans géant n'ont pas de légendaire : seule leur robe d'Alpha est définie ici.
-const VARIANT_FILTERS: Record<string, string> = {
-  // espèces sans géant (pas de légendaire) : la robe de l'Alpha seulement
+export const VARIANT_FILTERS: Record<string, string> = {
+  // espèces sans géant (pas de légendaire) : hare … rufous_coati ; puis slime, wolf, spider, drake, qui ont un géant (effets plus bas)
   hare: 'hue-rotate(220deg) saturate(1.5) brightness(1.05)',
   snail: 'hue-rotate(100deg) saturate(1.3) brightness(1.15)',
   firefly: 'hue-rotate(120deg)',
@@ -8260,7 +8281,7 @@ const LEGEND_BACK: Record<string, (ctx: Ctx, r: number, u: UnitLook) => void> = 
   },
 };
 
-const LEGEND_FRONT: Record<string, (ctx: Ctx, r: number, u: UnitLook) => void> = {
+export const LEGEND_FRONT: Record<string, (ctx: Ctx, r: number, u: UnitLook) => void> = {
   slime: (ctx, r, u) => {
     const p = pulseOf(u);
     // noyau d'or qui bat au fond du corps
@@ -8299,8 +8320,8 @@ const LEGEND_FRONT: Record<string, (ctx: Ctx, r: number, u: UnitLook) => void> =
   wolf: (ctx, r, u) => {
     const p = pulseOf(u);
     // cristaux de glace le long de l'échine
+    glowOn(ctx, '#7FE8FF', r * 0.2);
     for (const [x, h, a] of [[-0.62, 0.22, -0.5], [-0.42, 0.3, -0.3], [-0.2, 0.34, -0.1], [0.02, 0.3, 0.1], [0.22, 0.24, 0.25]] as const) {
-      glowOn(ctx, '#7FE8FF', r * 0.2);
       spike(ctx, x * r, -0.4 * r, 0.14 * r, h * r, a, '#BFF4FF', 'rgba(20,60,80,0.7)', Math.max(1, r * 0.03));
     }
     glowOff(ctx);
@@ -8621,9 +8642,9 @@ Object.assign(LEGEND_FRONT, {
     }
   },
   sporelin: (ctx: Ctx, r: number, u: UnitLook) => {
-    const p = pulseOf(u, 3), hop = Math.max(0, Math.sin(u.t * 7 + u.seed)) * r * 0.25;
+    const p = pulseOf(u, 3);
     ctx.save();
-    ctx.translate(0, -hop); // même saut que le champignon (extras dessinés hors du translate de base)
+    // (le drawer du sporelin laisse son translate de saut actif : les extras sautent déjà avec le champignon)
     // lueur bioluminescente : halo sur les taches du chapeau
     glowOn(ctx, '#8DFFE0', r * 0.4 * p);
     ctx.fillStyle = `rgba(150,255,225,${0.55 + 0.35 * p})`;
@@ -8671,7 +8692,7 @@ Object.assign(LEGEND_FRONT, {
       const a = u.t * 0.9 + (k / 7) * TAU, rx = 1.25 * r, ry = 0.35 * r;
       ctx.fillStyle = `rgba(170,255,235,${0.5 + 0.4 * Math.sin(u.t * 3 + k)})`;
       ctx.beginPath();
-      ctx.arc(Math.cos(a) * rx, -0.2 * r - hop + Math.sin(a) * ry, r * 0.045, 0, TAU);
+      ctx.arc(Math.cos(a) * rx, -0.2 * r + Math.sin(a) * ry, r * 0.045, 0, TAU);
       ctx.fill();
     }
     glowOff(ctx);
@@ -8809,8 +8830,8 @@ Object.assign(LEGEND_FRONT, {
   toad: (ctx: Ctx, r: number, u: UnitLook) => {
     const p = pulseOf(u, 3);
     // crête de pointes venimeuses le long du dos
+    glowOn(ctx, '#38F0D0', r * 0.2 * p);
     for (const [x, y, h, a] of [[-0.72, -0.5, 0.2, -0.7], [-0.52, -0.6, 0.27, -0.45], [-0.3, -0.66, 0.31, -0.2], [-0.08, -0.69, 0.3, 0.05], [0.14, -0.67, 0.26, 0.25]] as const) {
-      glowOn(ctx, '#38F0D0', r * 0.2 * p);
       spike(ctx, x * r, (y + 0.05) * r, 0.14 * r, h * r, a, '#3CE8C8', 'rgba(8,40,40,0.9)', Math.max(1.2, r * 0.04));
     }
     glowOff(ctx);
@@ -8921,7 +8942,7 @@ Object.assign(LEGEND_FRONT, {
     }
     // nageoire dorsale dorée, le long du corps puis du cou
     glowOn(ctx, '#FFD34A', r * 0.2);
-    for (let i = 1; i < 13; i++) {
+    for (let i = 1; i < 13 && !u.inWater; i++) { // à l'eau, le corps est sous la surface : pas de nageoire
       const [x, y] = pts[i], hgt = (0.34 - i * 0.018) * r;
       spike(ctx, x, y - (0.22 - i * 0.012) * r, 0.16 * r, hgt, -0.25, i % 2 ? '#FFD34A' : '#F0B64A', 'rgba(30,10,50,0.8)', Math.max(1, r * 0.03));
     }
@@ -8993,9 +9014,7 @@ Object.assign(LEGEND_FRONT, {
   },
   vulture: (ctx: Ctx, r: number, u: UnitLook) => {
     const p = pulseOf(u, 4), t = u.t;
-    const hop = u.moving ? Math.abs(Math.sin(u.t * 9 + u.seed)) * r * 0.08 : 0;
-    ctx.save();
-    ctx.translate(0, -hop);
+    ctx.save(); // (le drawer du vautour laisse son translate de saut actif : les extras sautent déjà avec lui)
     // flammes d'or au bout des rémiges et de la queue
     glowOn(ctx, '#FFB02A', r * 0.3);
     for (let k = 0; k < 5; k++) legBFlame(ctx, (-0.62 - k * 0.09) * r, (0.3 + k * 0.06) * r, 0.1 * r, 0.45 * r, t, 'rgba(255,170,40,0.9)', 'rgba(255,240,170,0.95)', k * 1.3);
@@ -9317,6 +9336,7 @@ Object.assign(LEGEND_BACK, {
 
 Object.assign(LEGEND_FRONT, {
   lava_tortoise: (ctx: Ctx, r: number, u: UnitLook) => {
+    if (u.shell) return; // en toupie, la carapace tourne : pas d'effets calés sur la forme debout
     const t = u.t + u.seed, p = pulseOf(u, 3);
     // pointes d'obsidienne à arête de plasma tout autour du dôme
     for (const [a, h] of [[-2.85, 0.28], [-2.5, 0.36], [-2.15, 0.3], [-1.0, 0.3], [-0.7, 0.38], [-0.4, 0.28]] as const) {
@@ -9474,7 +9494,7 @@ Object.assign(LEGEND_FRONT, {
       legCBolt(ctx, 0.0 * r, -1.15 * r, -0.35 * r, -0.4 * r, t, 7, `rgba(255,255,255,${0.4 + 0.5 * p})`, Math.max(1, r * 0.03), r * 0.1);
     }
     // orbe de foudre au bout de la queue
-    const tail = bez([-0.3, -0.02], [-1.0, 0.25 + sw], [-1.45, -0.3 + sw], 14), [tx, ty] = tail[14];
+    const [tx, ty] = tl[14];
     const g = ctx.createRadialGradient(tx * r, ty * r, 0, tx * r, ty * r, 0.22 * r);
     g.addColorStop(0, 'rgba(255,255,255,0.95)');
     g.addColorStop(0.4, `rgba(120,190,255,${0.6 + 0.3 * p})`);
@@ -9579,6 +9599,7 @@ Object.assign(LEGEND_FRONT, {
   croc: (ctx: Ctx, r: number, u: UnitLook) => {
     const p = pulseOf(u, 2.5), t = u.t + u.seed;
     // même repère que le corps (translation et étirement du drawer) : tout s'accroche à la ligne du dos
+    if (!u.inWater) { // à l'eau, le corps n'est qu'une ombre : ni plaques ni nénuphars
     ctx.save();
     ctx.translate(0, 0.16 * r);
     ctx.scale(1.08, 1.25);
@@ -9624,6 +9645,7 @@ Object.assign(LEGEND_FRONT, {
     }
     glowOff(ctx);
     ctx.restore();
+    }
     // lucioles des marais
     for (let k = 0; k < 5; k++) {
       const a = t * 0.9 + k * 1.3, x = (-0.4 + Math.cos(a) * 0.9) * r, y = (-0.5 + Math.sin(a * 1.3) * 0.25) * r;

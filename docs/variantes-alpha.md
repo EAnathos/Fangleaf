@@ -5,7 +5,7 @@ Une espèce existe en deux ou trois apparences :
 | Variante | Condition | Rendu |
 | --- | --- | --- |
 | Base | `alpha = false` | Couleur de l'espèce, aucun filtre |
-| Alpha | `alpha = true` | **Robe de l'espèce** (filtre de couleur sur le corps), yeux violets, couronne violette |
+| Alpha | `alpha = true` | **Robe de l'espèce** (filtre de couleur sur le corps, yeux compris : le violet des yeux prend la teinte de la robe), couronne violette |
 | Légendaire (double éveil) | `legend = true` | **La même robe que l'Alpha**, plus des **effets visuels propres à l'espèce** (parties ajoutées, lueurs, particules), couronne et halo dorés |
 
 La forme légendaire n'existe que pour les espèces qui ont un géant (`bossOf(s) >= 0`). Le tréant, le lièvre, l'escargot, la luciole, le suricate, le coati roux et le bigfoot n'ont donc que base et Alpha.
@@ -14,7 +14,7 @@ La forme légendaire n'existe que pour les espèces qui ont un géant (`bossOf(s
 
 Tout est dans [`client/src/sprites.ts`](../client/src/sprites.ts), en fin de fichier :
 
-- `VARIANT_FILTERS` : le filtre de couleur de chaque espèce (Alpha et légendaire). `variantFilter` le renvoie, avec une teinte par défaut pour une espèce sans entrée.
+- `VARIANT_FILTERS` : le filtre de couleur de chaque espèce (Alpha et légendaire). `variantFilter` le renvoie (une espèce sans entrée n'a pas de robe : `tests/rules/sprites.test.ts` vérifie que chaque espèce en a une). Le corps est dessiné dans un calque, recopié une seule fois avec le filtre.
 - `LEGEND_BACK` / `LEGEND_FRONT` : les effets du légendaire, dessinés derrière / devant le corps, **sans** le filtre de couleur (ils gardent leurs vraies couleurs). Ils partagent le repère du corps ; `drawUnit` les appelle quand `u.legend` est vrai (sauf au flash de dégât).
 - Pas de filtre pour les boss, les sprites à clé forcée (`u.key`) et le flash de dégât.
 
@@ -59,8 +59,6 @@ Tout est dans [`client/src/sprites.ts`](../client/src/sprites.ts), en fin de fic
 | Tréant (`treant`) | `hue-rotate(170deg) saturate(1.2) brightness(1.2)` |
 | Bigfoot (`bigfoot`) | `hue-rotate(160deg) saturate(0.3) brightness(1.6)` |
 | Coati roux (`rufous_coati`) | `hue-rotate(160deg) saturate(1.1) brightness(1.15)` |
-
-Une espèce sans entrée dans `VARIANT_FILTERS` prend la teinte `DEFAULT_VARIANT`.
 
 ## Aperçu
 

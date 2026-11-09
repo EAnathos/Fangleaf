@@ -18,7 +18,7 @@ import { buildingNear, Hud } from './hud.ts';
 import { aim, initInput, moveDir, stick } from './input.ts';
 import { actionOf, keyLabel, matches, maxDpr, settings, textScale, touchOnly } from './settings.ts';
 import type { Net } from './net.ts';
-import { drawShadowRun, drawLurkEyes, drawStinger, drawDizzy, drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawBambooStump, drawSweat, drawSkyBolt, drawStruck, STRUCK_S, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, drawTornado, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, drawZap, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
+import { drawShadowRun, drawLurkEyes, drawStinger, drawDizzy, drawBrokenEgg, drawElder, drawQuestMark, drawStump, drawHatchling, drawBambooStump, drawSweat, drawSkyBolt, drawStruck, STRUCK_S, drawPlantedSword, drawScroll, drawWholeEgg, drawBurrow, drawSoaring, drawSoaringShadow, drawTorch, drawBuffs, drawBush, drawChest, drawHazard, drawLaser, drawTornado, type Laser, rgbOf, drawOre, drawPlayer, drawShot, drawUnit, variantFilter, drawZap, drawWebbed, hops, hpBar, type Tool, type UnitLook } from './sprites.ts';
 import { GLOW, SkyFx } from './sky.ts';
 import { Ambient } from './ambient.ts';
 import { desertMix, drawQuicksand, jungleMix, lakesMix, World } from './world.ts';
@@ -2826,7 +2826,7 @@ export class Game {
           air.push({ y, draw: () => { // en pleine tempête : il monte très haut, à peine visible dans le sable
             ctx.save();
             ctx.globalAlpha = 1 - storm * 0.6;
-            drawSoaring(ctx, x, y, r, this.time, id, 4.2 + storm * 3.5);
+            drawSoaring(ctx, x, y, r, this.time, id, 4.2 + storm * 3.5, 0, undefined, variantFilter('vulture', alpha));
             ctx.restore();
           } });
         } else if (SPECIES[s].bushHide) {
@@ -2883,7 +2883,7 @@ export class Game {
           const k = w.k, beat = k < 1 ? 1 : 0; // il bat des ailes pour monter ou se poser
           list.push({ y, draw: () => drawSoaringShadow(ctx, x, y, r * (0.6 + 0.4 * k)) });
           air.push({ y, draw: () => {
-            drawSoaring(ctx, x, y, r, this.time, id, 0.4 + k * 1.6, beat, w.ang);
+            drawSoaring(ctx, x, y, r, this.time, id, 0.4 + k * 1.6, beat, w.ang, variantFilter('vulture', alpha));
             if (hp < 100) hpBar(ctx, x, y - r * (2.6 + k * 1.6), alpha ? 46 : 28, hp, '#7FCB5B');
           } });
           continue;
@@ -3013,7 +3013,7 @@ export class Game {
             if (aloft) {
               // à dos de vautour : son ombre au sol, l'oiseau ailes ouvertes, le cavalier sur son dos
               drawSoaringShadow(ctx, x, y, mr);
-              drawSoaring(ctx, x, y, mr, this.time, p.mount.id, FLY_HEIGHT);
+              drawSoaring(ctx, x, y, mr, this.time, p.mount.id, FLY_HEIGHT, 0, undefined, variantFilter('vulture', true));
               lift = mr * (FLY_HEIGHT - 0.3) + Math.sin(this.time * 1.3 + p.mount.id) * mr * 0.3;
             } else this.drawUnitCached(ctx, p.mount.id, {
               x, y, r: mr, species: p.mount.species, alpha: true, wild: false, ownerColor: p.color, legend: p.mount.legend,
