@@ -71,6 +71,25 @@ const CROWN_X: Record<string, number> = { drake: 0.7, wyvern: 0.7, dragon: 0.8, 
 /** … et vers le bas, en rayons, pour celles dont la tête est plus basse que le haut du corps. */
 const CROWN_Y: Record<string, number> = { drake: -0.15, wyvern: -0.55, dragon: -0.35, scorpion: 0.05, gorilla: 0.25, croc: 0.82, masked: -0.95, kraken: -0.6, crab: -0.05, boar: 0.45, firefly: 0.1, sandworm: -0.45, vulture: 0.0, jackal: 0.0, meerkat: -0.45, bigfoot: -0.35, salamander: 0.55, lava_tortoise: 0.55, ash_bat: 0.15 };
 
+/**
+ * Robe de l'Alpha et du légendaire (double éveil) : un filtre de couleur appliqué au corps de l'espèce, [Alpha, légendaire].
+ * Le loup Alpha est blanc, le légendaire noir bleuté ; les espèces absentes d'ici suivent la teinte par défaut.
+ */
+const VARIANT_FILTERS: Record<string, [string, string]> = {
+  slime: ['hue-rotate(80deg) brightness(1.1)', 'hue-rotate(-70deg) saturate(1.4) brightness(1.1)'],
+  wolf: ['grayscale(1) brightness(1.9) contrast(0.9)', 'saturate(2.2) hue-rotate(-15deg) brightness(0.5) contrast(1.25)'],
+  boar: ['saturate(0.4) brightness(1.6)', 'brightness(0.5) saturate(1.3)'],
+  golem: ['hue-rotate(100deg) brightness(1.2)', 'hue-rotate(-80deg) saturate(1.6) brightness(1.05)'],
+  sporelin: ['hue-rotate(200deg)', 'hue-rotate(40deg) brightness(1.15) saturate(1.2)'],
+  spider: ['hue-rotate(110deg) brightness(1.2)', 'hue-rotate(-90deg) saturate(1.6) brightness(0.85)'],
+  bear: ['saturate(0.2) brightness(1.9)', 'hue-rotate(-20deg) brightness(0.6) saturate(1.5)'],
+  wisp: ['hue-rotate(110deg)', 'hue-rotate(-150deg) saturate(1.3) brightness(1.1)'],
+};
+const DEFAULT_VARIANT: [string, string] = ['hue-rotate(35deg) saturate(1.25) brightness(1.1)', 'hue-rotate(-40deg) saturate(1.5) brightness(0.8) contrast(1.15)'];
+/** Filtre CSS de la robe de cette espèce (apparence), ou '' pour la forme de base. */
+export const variantFilter = (key: string, alpha: boolean, legend: boolean) =>
+  legend ? (VARIANT_FILTERS[key] ?? DEFAULT_VARIANT)[1] : alpha ? (VARIANT_FILTERS[key] ?? DEFAULT_VARIANT)[0] : '';
+
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
   const key = u.key ?? SPECIES[u.species].sprite ?? SPECIES[u.species].key;
@@ -140,7 +159,10 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
   if (hop?.tilt) ctx.rotate(hop.tilt); // museau vers le haut au décollage, vers le sol à l'arrivée
   const base = u.color ?? SPECIES[u.species].color;
   const fill = u.flash ? '#FFFFFF' : base;
+  const tint = u.flash || u.key || SPECIES[u.species]?.boss ? '' : variantFilter(key, u.alpha, !!u.legend);
+  if (tint) ctx.filter = tint; // Alpha et légendaire : robe d'une autre couleur que la forme de base
   (DRAWERS[key] ?? golem)(ctx, r, fill, u);
+  if (tint) ctx.filter = 'none';
   if (SPECIES[u.species]?.boss && !u.key) {
     // Mini-boss : grande couronne dorée.
     ctx.fillStyle = '#F0B64A';
