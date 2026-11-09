@@ -85,6 +85,7 @@ const VARIANT_FILTERS: Record<string, [string, string]> = {
   spider: ['hue-rotate(110deg) brightness(1.2)', 'hue-rotate(-90deg) saturate(1.6) brightness(0.85)'],
   bear: ['saturate(0.2) brightness(1.9)', 'hue-rotate(-20deg) brightness(0.6) saturate(1.5)'],
   wisp: ['hue-rotate(110deg)', 'hue-rotate(-150deg) saturate(1.3) brightness(1.1)'],
+  rufous_coati: ['hue-rotate(160deg) saturate(1.1) brightness(1.15)', 'hue-rotate(-40deg) saturate(1.5) brightness(0.8) contrast(1.15)'], // pas de géant : seul l'Alpha existe
 };
 const DEFAULT_VARIANT: [string, string] = ['hue-rotate(35deg) saturate(1.25) brightness(1.1)', 'hue-rotate(-40deg) saturate(1.5) brightness(0.8) contrast(1.15)'];
 /** Filtre CSS de la robe de cette espèce (apparence), ou '' pour la forme de base. */

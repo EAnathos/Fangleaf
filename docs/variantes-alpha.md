@@ -1,6 +1,6 @@
 # Variantes de robe : base, Alpha, légendaire
 
-Une espèce existe en deux ou trois apparences : la forme légendaire (double éveil) n'existe que pour les espèces qui ont un géant (`bossOf(s) >= 0`). Le tréant, le lièvre, l'escargot, la luciole, le suricate et le bigfoot n'ont donc que base et Alpha. Le filtre est appliqué au corps de l'espèce
+Une espèce existe en deux ou trois apparences : la forme légendaire (double éveil) n'existe que pour les espèces qui ont un géant (`bossOf(s) >= 0`). Le tréant, le lièvre, l'escargot, la luciole, le suricate, le coati roux et le bigfoot n'ont donc que base et Alpha. Le filtre est appliqué au corps de l'espèce
 (`variantFilter` dans [`client/src/sprites.ts`](../client/src/sprites.ts)), après quoi
 l'aura Alpha (violette) ou légendaire (dorée, avec couronne) se dessine par-dessus.
 
@@ -24,6 +24,7 @@ Pas de filtre pour : les boss, les sprites à clé forcée (`u.key`) et le flash
 | spider | `hue-rotate(110deg) brightness(1.2)` | `hue-rotate(-90deg) saturate(1.6) brightness(0.85)` |
 | bear | `saturate(0.2) brightness(1.9)` | `hue-rotate(-20deg) brightness(0.6) saturate(1.5)` |
 | wisp | `hue-rotate(110deg)` | `hue-rotate(-150deg) saturate(1.3) brightness(1.1)` |
+| rufous_coati | `hue-rotate(160deg) saturate(1.1) brightness(1.15)` | _aucun (pas de géant)_ |
 | _autres (défaut)_ | `hue-rotate(35deg) saturate(1.25) brightness(1.1)` | `hue-rotate(-40deg) saturate(1.5) brightness(0.8) contrast(1.15)` |
 
 ## Aperçu
@@ -149,6 +150,10 @@ Toutes les espèces (base, Alpha, et légendaire quand elle existe) : [variantes
 ### dragon
 
 ![dragon](variantes-alpha/dragon.png)
+
+### rufous_coati
+
+![rufous_coati](variantes-alpha/rufous_coati.png)
 
 ### bigfoot
 
