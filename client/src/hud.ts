@@ -236,6 +236,7 @@ export class Hud {
   private promptAfter = 0; // passage de grotte : pas de bouton d'action avant cette date (le double clic ne fait rien)
   onUpgrade = (_what: Gear) => {};
   onAlphaUp = (_species: number) => {};
+  onAlphaMark = (_species: number) => {};
   onAlphaEquip = (_species: number, _equip: boolean) => {};
   onAlphaCreate = (_species: number) => {};
   onHelp = (_on: boolean) => {};
@@ -485,6 +486,8 @@ export class Hud {
       if (eq?.dataset.s) this.onAlphaEquip(Number(eq.dataset.s), eq.dataset.equip === '1');
       const leg = (e.target as HTMLElement).closest<HTMLButtonElement>('button.legend-btn');
       if (leg?.dataset.legend) this.onLegend(Number(leg.dataset.legend));
+      const mk = (e.target as HTMLElement).closest<HTMLButtonElement>('button.mark');
+      if (mk?.dataset.s) this.onAlphaMark(Number(mk.dataset.s));
     });
   }
 
@@ -945,6 +948,7 @@ export class Hud {
 
     // Monture.
     setHidden($('mount-row'), !me.mount);
+    this.updateMark(me);
     if (me.mount) {
       setText($('mount-name'), 'Monture');
       setStyle($('mount-hp'), 'width', `${me.mount.hp}%`);
@@ -1995,7 +1999,7 @@ export class Hud {
   }
 
   private updateDen(me: PlayerState) {
-    const key = JSON.stringify([this.hall, this.beaten, me.mount?.id, me.awakening, me.essences, me.resting, me.seen, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
+    const key = JSON.stringify([this.hall, this.beaten, me.mount?.id, me.awakening, me.essences, me.resting, me.marked, me.seen, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
     if (key !== this.last.den) {
       this.last.den = key;
       this.buildDen(me);
@@ -2106,6 +2110,14 @@ export class Hud {
           leg.title = why;
           el.querySelector('.actions')!.append(leg);
         }
+        // Marquer : suit les essences de cette espèce dans le HUD (une seule à la fois).
+        const mk = document.createElement('button');
+        mk.className = `mark${me.marked === s ? ' on' : ''}`;
+        mk.dataset.s = String(s);
+        mk.setAttribute('aria-pressed', String(me.marked === s));
+        mk.title = 'Suivre les essences de cet Alpha dans le HUD';
+        mk.textContent = me.marked === s ? '★ Marqué' : '☆ Marquer';
+        el.querySelector('.actions')!.append(mk);
         // Équiper (5 au maximum sur le terrain, 6 avec le tome du volcan) ou ranger à la Tanière.
         if (a) {
           const eq = document.createElement('button');
@@ -2119,6 +2131,33 @@ export class Hud {
         return el;
       }),
     );
+  }
+
+  /** Barre d'essence de l'Alpha marqué : coût d'éveil s'il dort, compte à rebours pendant l'éveil, coût de renforcement ensuite. */
+  private updateMark(me: PlayerState) {
+    const s = me.marked;
+    setHidden($('mark-row'), s < 0);
+    if (s < 0) return;
+    const sp = SPECIES[s];
+    const waking = me.awakening.find((w) => w.species === s);
+    const a = me.army.find((x) => x.alpha && x.species === s) ?? me.resting.find((r) => r.species === s);
+    const lvl = a?.level ?? 0;
+    const have = me.essences[s] ?? 0;
+    let pct: number, text: string;
+    if (waking) {
+      pct = (100 * (waking.total - waking.left)) / waking.total;
+      text = `S'éveille dans ${Math.floor(waking.left / 60)}:${String(waking.left % 60).padStart(2, '0')}`;
+    } else if (a && lvl >= ALPHA_LVL_MAX) {
+      pct = 100;
+      text = `${have} essences · niveau maximum`;
+    } else {
+      const cost = a ? alphaUpCost(s, lvl) : alphaCreateCost(s);
+      pct = Math.min(100, (100 * have) / cost);
+      text = `${have} / ${cost} essences`;
+    }
+    setText($('mark-name'), `${sp.name} alpha · ${waking ? 'éveil' : a ? 'renfort' : 'à éveiller'}`);
+    setText($('mark-text'), text);
+    setStyle($('mark-fill'), 'width', `${pct}%`);
   }
 
   /** Fond de la minicarte (zones + lacs), calculé une seule fois à partir de la carte. */

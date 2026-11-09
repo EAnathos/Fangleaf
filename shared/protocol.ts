@@ -44,6 +44,7 @@ export type ClientMsg =
   | { t: 'profile'; color: number; hat: number } // profil : couleur (PLAYER_COLORS) et chapeau (HATS)
   | { t: 'upgrade'; what: Gear }
   | { t: 'alphaUp'; s: number } // renforcer l'Alpha de cette espèce (équipé ou au repos)
+  | { t: 'alphaMark'; s: number } // marquer cette espèce (barre d'essence dans le HUD) ; la même une 2e fois démarque
   | { t: 'alphaEquip'; s: number; equip: boolean } // l'emmener sur le terrain, ou le ranger à la Tanière
   | { t: 'alphaCreate'; s: number }
   | { t: 'class'; cls: ClassId } // choisir sa classe à la forge
@@ -118,6 +119,7 @@ export interface PlayerState {
   buffs: number; // compétences d'Alpha en cours sur lui : UNIT_FLAG_RALLY (cri du suricate), UNIT_FLAG_GUARD (carapace de l'escargot) ; UNIT_FLAG_POISON : empoisonné
   awakening: { species: number; left: number; total: number }[]; // Alphas en cours d'éveil (secondes)
   resting: { species: number; level: number; legend: boolean }[]; // Alphas rangés à la Tanière
+  marked: number; // espèce d'Alpha marquée (barre d'essence du HUD), -1 : aucune
   seen: number[]; // espèces déjà croisées (bestiaire de la Tanière ; sans les géants)
   dead: boolean;
   respawnIn: number; // secondes, 0 si vivant

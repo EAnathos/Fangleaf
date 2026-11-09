@@ -37,6 +37,7 @@ export interface Profile {
   seat?: number | null; // place dans le village (sa couleur, PLAYER_COLORS) ; absente avant la migration 024
   hat?: number; // chapeau porté (HATS) ; absent avant la migration 026
   hats?: number[]; // chapeaux achetés
+  alpha_mark?: number; // espèce d'Alpha marquée (-1 : aucune) ; absent avant la migration 027
 }
 
 let db: SupabaseClient | null = null;
@@ -152,7 +153,7 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   if (!db) return null;
   const { data, error } = await db
     .from('progress')
-    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, saddle, armed, scrolls, essences, alphas, village_found, class, spec, specs, pack, seen, stats, tomes, learned, read_at, read_kind, seat, hat, hats')
+    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, saddle, armed, scrolls, essences, alphas, village_found, class, spec, specs, pack, seen, stats, tomes, learned, read_at, read_kind, seat, hat, hats, alpha_mark')
     .eq('user_id', userId)
     .eq('village_code', code)
     .maybeSingle();

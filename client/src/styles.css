@@ -362,6 +362,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .alpha-card .equip:hover:not(:disabled) { border-color: var(--ally); color: var(--ally); }
 .alpha-card .equip:disabled { color: var(--muted); cursor: not-allowed; }
 .alpha-card .equip.full { background: rgba(169, 179, 166, 0.12); border-color: rgba(169, 179, 166, 0.25); color: rgba(169, 179, 166, 0.6); }
+.alpha-card .mark { height: 34px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--line); background: transparent; color: var(--text-2); font: 600 13px var(--body); white-space: nowrap; }
+.alpha-card .mark:hover { border-color: var(--alpha); color: var(--alpha); }
+.alpha-card .mark.on { border-color: var(--alpha); color: var(--alpha); background: rgba(180, 140, 255, 0.12); }
 .alpha-card .legend-btn { height: 36px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--amber); background: rgba(240, 182, 74, 0.15); color: var(--amber); font: 700 13px var(--display); white-space: nowrap; }
 .alpha-card .legend-btn:disabled { border-color: var(--line); background: transparent; color: var(--muted); cursor: not-allowed; }
 .alphas .empty { color: var(--muted); padding: 16px; text-align: center; background: var(--night); border-radius: 12px; }

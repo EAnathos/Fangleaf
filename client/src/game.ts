@@ -175,6 +175,7 @@ export class Game {
     };
     this.hud.onUpgrade = (what) => net.send({ t: 'upgrade', what });
     this.hud.onAlphaUp = (s) => net.send({ t: 'alphaUp', s });
+    this.hud.onAlphaMark = (s) => net.send({ t: 'alphaMark', s });
     this.hud.onAlphaEquip = (s, equip) => net.send({ t: 'alphaEquip', s, equip });
     this.hud.onAlphaCreate = (s) => net.send({ t: 'alphaCreate', s });
     this.hud.onHelp = (on) => this.setHelp(on);
