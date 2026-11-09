@@ -1,6 +1,6 @@
 # Variantes de robe : base, Alpha, légendaire
 
-Une espèce existe en trois apparences. Le filtre est appliqué au corps de l'espèce
+Une espèce existe en deux ou trois apparences : la forme légendaire (double éveil) n'existe que pour les espèces qui ont un géant (`bossOf(s) >= 0`). Le tréant, le lièvre, l'escargot, la luciole, le suricate et le bigfoot n'ont donc que base et Alpha. Le filtre est appliqué au corps de l'espèce
 (`variantFilter` dans [`client/src/sprites.ts`](../client/src/sprites.ts)), après quoi
 l'aura Alpha (violette) ou légendaire (dorée, avec couronne) se dessine par-dessus.
 
@@ -28,7 +28,7 @@ Pas de filtre pour : les boss, les sprites à clé forcée (`u.key`) et le flash
 
 ## Aperçu
 
-Toutes les espèces (base, Alpha, légendaire) : [variantes-alpha/all.png](variantes-alpha/all.png).
+Toutes les espèces (base, Alpha, et légendaire quand elle existe) : [variantes-alpha/all.png](variantes-alpha/all.png).
 
 ### slime
 
