@@ -14,6 +14,7 @@ import { CHAPTER_TITLES, ELDER_CHAPTERS, ELDER_LEAVES, eggsOf, elderGreeting, el
 import { BOSS_LINES, SPECIES_DESC } from './speciesInfo.ts';
 import { moveSkill, type Skill, type SkillIcon, traitSkills } from './moveInfo.ts';
 import { sound } from './audio.ts';
+import { StatusBar } from './statusfx.ts';
 import { ACTIONS, type Action, applyUi, keyLabel, labelOf, resetKeys, saveSettings, settings, touchOnly } from './settings.ts';
 import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
@@ -824,6 +825,17 @@ export class Hud {
     while ($('toasts').children.length > 4) $('toasts').firstElementChild!.remove();
   }
 
+  /** Vignettes des effets d'état (voir statusfx.ts). */
+  readonly status = new StatusBar($('fx-bar'), $('fx-vignette'));
+
+  /** Range les vignettes dans le coin choisi (sous les panneaux en haut à gauche, sous la minicarte en haut à droite) et applique le réglage. */
+  private placeStatusBar() {
+    const bar = this.status.root, pos = settings.display.statusHud.position;
+    const home = pos === 'top-left' ? document.querySelector('.hud-tl') : pos === 'top-right' ? document.querySelector('.hud-tr') : $('hud');
+    if (bar.parentElement !== home) home!.append(bar);
+    this.status.applyOptions();
+  }
+
   update(me: PlayerState, players: PlayerState[], units: UnitTuple[], myPos: { x: number; y: number }, ping: number) {
     // Soi.
     setText($('self-name'), me.name);
@@ -841,6 +853,7 @@ export class Hud {
       vignette.style.setProperty('--low', lowKey);
       vignette.style.setProperty('--beat', `${(1.3 - 0.65 * low).toFixed(2)}s`);
     }
+    this.status.update(me.dead ? [] : me.status ?? []);
     setText($('self-hptext'), `${me.hp} / ${me.maxHp}`); // dans la barre de vie
     setText($('self-gold'), short(me.gold)); // l'icône (pièce) dit ce que c'est
     setText($('self-wood'), short(me.wood)); // l'icône dit ce que c'est
@@ -1320,6 +1333,32 @@ export class Hud {
     seg('ui');
     seg('text');
     applyUi();
+    // Effets en cours : réglages appliqués tout de suite (la vignette change de coin, de taille, de filtre…).
+    const fxSeg = (name: 'position' | 'size' | 'filter' | 'vignette') => {
+      const group = document.querySelector<HTMLElement>(`[data-fx="${name}"]`)!;
+      const paint = () => group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === settings.display.statusHud[name])));
+      group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => {
+        (settings.display.statusHud[name] as string) = b.dataset.value!;
+        saveSettings();
+        paint();
+        this.placeStatusBar();
+      }));
+      paint();
+    };
+    fxSeg('position');
+    fxSeg('size');
+    fxSeg('filter');
+    fxSeg('vignette');
+    for (const [id, k] of [['enabled', 'enabled'], ['timers', 'timers'], ['animations', 'animations']] as const) {
+      const box = $<HTMLInputElement>(`set-fx-${id}`);
+      box.checked = settings.display.statusHud[k];
+      box.onchange = () => {
+        settings.display.statusHud[k] = box.checked;
+        saveSettings();
+        this.placeStatusBar();
+      };
+    }
+    this.placeStatusBar();
     for (const k of ['shake', 'ping', 'weather'] as const) {
       const box = $<HTMLInputElement>(`set-${k}`);
       box.checked = settings.display[k];

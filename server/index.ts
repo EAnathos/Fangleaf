@@ -258,6 +258,7 @@ wss.on('connection', (ws: WebSocket) => {
       });
     }
     else if (msg.t === 'cheat' && process.env.NODE_ENV !== 'production') room.onCheat(player);
+    else if (msg.t === 'cheatfx' && process.env.NODE_ENV !== 'production') room.onCheatEffects(player);
   });
 
   ws.on('close', () => {
