@@ -157,6 +157,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tr-buttons { gap: 8px; }
 .mount-row { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid var(--line); }
 .fill.mount { background: var(--alpha); }
+#mark-row { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 10px; }
+#mark-row[hidden] { display: none; }
+#mark-row .portrait { width: 48px; height: 48px; flex: none; border-radius: 10px; border: 2px solid rgba(180, 140, 255, 0.45); background: radial-gradient(circle at 50% 60%, rgba(180, 140, 255, 0.16), transparent 70%); }
+#mark-row .portrait.asleep { opacity: 0.45; filter: grayscale(0.6); }
+.mark-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+#mark-row .row { gap: 8px; }
+#mark-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#mark-text { white-space: nowrap; }
 .modal.quit { width: min(440px, calc(100vw - 32px)); }
 /* Profil : couleur et chapeau */
 .modal.profile { width: min(480px, calc(100vw - 32px)); gap: 12px; }

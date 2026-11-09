@@ -230,6 +230,8 @@ export class Hud {
   private beastOpen: number | null = null; // fiche ouverte au bestiaire (espèce), ou la grille
   private form: BestiaryForm = 'wild'; // forme montrée par le bestiaire
   private beasts: Portrait[] = [];
+  private markPortrait: Portrait | null = null; // portrait de l'Alpha marqué (HUD)
+  private markKey = '';
   private portraits: Portrait[] = []; // Alphas de la Tanière
   private wares: Portrait[] = []; // monstres du Marché
   panel: Panel = null;
@@ -2146,16 +2148,25 @@ export class Hud {
     let pct: number, text: string;
     if (waking) {
       pct = (100 * (waking.total - waking.left)) / waking.total;
-      text = `S'éveille dans ${Math.floor(waking.left / 60)}:${String(waking.left % 60).padStart(2, '0')}`;
+      text = `${Math.floor(waking.left / 60)}:${String(waking.left % 60).padStart(2, '0')}`;
     } else if (a && lvl >= ALPHA_LVL_MAX) {
       pct = 100;
-      text = `${have} essences · niveau maximum`;
+      text = 'niveau max';
     } else {
       const cost = a ? alphaUpCost(s, lvl) : alphaCreateCost(s);
       pct = Math.min(100, (100 * have) / cost);
-      text = `${have} / ${cost} essences`;
+      text = `${have} / ${cost}`;
     }
-    setText($('mark-name'), `${sp.name} alpha · ${waking ? 'éveil' : a ? 'renfort' : 'à éveiller'}`);
+    const key = `${s}|${!!a?.legend}|${!!a}`;
+    if (key !== this.markKey) {
+      this.markKey = key;
+      const canvas = $('mark-portrait') as HTMLCanvasElement;
+      canvas.classList.toggle('asleep', !a);
+      this.markPortrait = { canvas, s, seen: true, alpha: true, legend: !!a?.legend };
+      paintPortraits([this.markPortrait], true);
+    }
+    setText($('mark-name'), sp.name);
+    $('mark-row').title = `${sp.name} alpha · ${waking ? 'éveil en cours' : a ? `essences pour le renforcer (niv. ${lvl})` : 'essences pour l\'éveiller'}`;
     setText($('mark-text'), text);
     setStyle($('mark-fill'), 'width', `${pct}%`);
   }
