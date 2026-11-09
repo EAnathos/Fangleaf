@@ -169,12 +169,24 @@ $('tab-join').onclick = () => setMode('join');
 codeInput.addEventListener('input', () => (codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '')));
 (nameInput.value ? (invited && !codeInput.value ? codeInput : $('go')) : nameInput).focus();
 
+// Invité (dev uniquement, sans Supabase) : rien n'est sauvegardé ; le serveur doit être lancé avec ALLOW_GUESTS=1.
+let guestMode = false;
+$('guest').onclick = () => {
+  guestMode = true;
+  $('guest').hidden = true;
+  $('guest-note').textContent = 'Mode invité (dev) : rien n\'est sauvegardé.';
+  $('play').hidden = false;
+  setMode('create');
+  if (!nameInput.value) nameInput.value = 'Invité';
+};
+
 // Compte Google (si Supabase est configuré).
 // Compte obligatoire : le formulaire de jeu n'apparaît qu'une fois connecté.
 async function refreshAccount() {
   if (!authEnabled) {
     $('google').hidden = true;
     $('guest-note').textContent = 'Connexion indisponible : Supabase n\'est pas configuré sur ce serveur.';
+    $('guest').hidden = !import.meta.env.DEV || guestMode; // dev : on peut jouer en invité (serveur lancé avec ALLOW_GUESTS=1)
     return;
   }
   // Rien n'est affiché tant qu'on ne sait pas qui est connecté et quel est son village :
@@ -224,12 +236,12 @@ $('lobby-form').addEventListener('submit', async (e) => {
   const go = $<HTMLButtonElement>('go');
   go.disabled = true;
   $('lobby-error').textContent = '';
-  const account = await currentAccount().catch(() => null);
-  if (!account) {
+  const account = guestMode ? null : await currentAccount().catch(() => null);
+  if (!account && !guestMode) {
     $('lobby-error').textContent = 'Session expirée : reconnecte-toi.';
     return refreshAccount();
   }
-  const token = account.token;
+  const token = account?.token;
   const net = new Net();
   let Game: (typeof import('./game.ts'))['Game'];
   try {
