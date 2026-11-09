@@ -18,7 +18,7 @@ const keyOf = (e: KeyboardEvent) => (e.key.length === 1 ? e.key.toLowerCase() : 
  */
 export function initInput(canvas: HTMLCanvasElement, onAction: (code: string, key: string) => void, onRelease: (code: string, key: string) => void = () => {}) {
   addEventListener('keydown', (e) => {
-    if (e.target instanceof HTMLInputElement) return;
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
     codes.add(e.code);
     typed.add(keyOf(e));
     if (!e.repeat) onAction(e.code, keyOf(e));

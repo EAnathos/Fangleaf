@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { DT, mountSpeedOf, BERRIES_PICKED, fruitTameChance, BUSH_REGROW_S, SPECIES, SPLASH_FLAT } from '../../shared/config.ts';
+import { DT, mountSpeedOf, alphaCreateCost, MAX_BERRIES, BERRIES_PICKED, fruitTameChance, BUSH_REGROW_S, SPECIES, SPLASH_FLAT } from '../../shared/config.ts';
 import { calendar, DAY_MS, LUNE_DAYS, LUNES, SEASON_MS, season, sky, snowAt, WINTER } from '../../shared/weather.ts';
 
 describe('Faune : tireurs, gibier, baies, bestiaire', () => {
@@ -436,5 +436,56 @@ describe('Faune : tireurs, gibier, baies, bestiaire', () => {
     check(land(0, 0), 'au centre : touché');
     check(!land(0, 60 * SPLASH_FLAT + p.r * SPLASH_FLAT + 4), 'juste sous l\'ellipse (dans l\'ancien cercle) : épargné');
     check(land(60, 0), 'sur le bord, de côté : touché');
+  });
+  rule('Coati roux : tapi dans un buisson de la jungle (rare, à la cueillette), il sort pour un fruit ; dans la meute, il cueille les baies, ne se bat pas et fuit.', () => {
+    const r = room();
+    r.units.clear();
+    const C = SPECIES.findIndex((sp) => sp.key === 'rufous_coati'), W = SPECIES.findIndex((sp) => sp.key === 'wolf');
+    const sp = SPECIES[C];
+    check(sp.passive && sp.bushHide && sp.forager && sp.zone === 6 && sp.population === 0 && C === SPECIES.length - 1, 'coati : passif, caché, cueilleur, jungle, sans population, ajouté en fin de liste');
+    check(alphaCreateCost(C) === 20, 'son Alpha coûte 20 essences, comme le Tréant (28 pour un gibier de la zone)');
+    const jungle = r.map.bushes.filter((b: any) => b.zone === 6);
+    check(jungle.length >= 2, `des buissons dans la jungle (${jungle.length})`);
+    const bush = jungle[0], p = r.addPlayer('a', noop);
+    p.hp = 1e6;
+    [p.x, p.y] = [bush.x, bush.y + 40];
+    p.fruits = 0;
+    const rnd = Math.random;
+    Math.random = () => 0;
+    r.onPick(p);
+    Math.random = rnd;
+    const wild = () => [...r.units.values()].filter((u: any) => u.s === C && !u.owner) as any[];
+    check(wild().length === 1 && wild()[0].hidden && Math.hypot(wild()[0].x - bush.x, wild()[0].y - bush.y) < 1, 'cueillir (hasard favorable) : un coati est tapi dans le buisson');
+    Math.random = () => 0.99;
+    r.bushBack[bush.id] = 0;
+    r.onPick(p);
+    Math.random = rnd;
+    check(wild().length === 1, 'hasard défavorable : pas de coati de plus');
+    const c = wild()[0];
+    for (let i = 0; i < 40; i++) r.step(), (p.atkCd = 999);
+    check(c.hidden, 'les mains vides à côté du buisson : il reste caché (intouchable)');
+    p.fruits = 3;
+    r.onHold(p, true);
+    for (let i = 0; i < 40; i++) r.step(), (p.atkCd = 999);
+    check(!c.hidden, 'un fruit tendu : il sort');
+    // apprivoisé : il cueille de lui-même, sans jamais se battre
+    r.makeTamed(c, p);
+    r.onHold(p, false);
+    p.fruits = 0;
+    const other = jungle.find((b: any) => b.id !== bush.id) ?? bush;
+    [p.x, p.y] = [other.x + 60, other.y + 60];
+    [c.x, c.y] = [p.x + 100, p.y];
+    for (const b of r.map.bushes) r.bushBack[b.id] = b === other ? 0 : r.time + 9999;
+    for (let i = 0; i < 20 * 12 && p.fruits === 0; i++) r.step(), (p.atkCd = 999);
+    check(p.fruits >= 1 && p.fruits <= MAX_BERRIES, `il cueille un buisson garni pour son dompteur (${p.fruits} baies)`);
+    // il fuit le danger sans jamais attaquer
+    for (const b of r.map.bushes) r.bushBack[b.id] = r.time + 9999;
+    const wolf = r.createUnit(W, false, c.x + 150, c.y);
+    wolf.homeX = wolf.x;
+    wolf.homeY = wolf.y;
+    const hp0 = wolf.hp;
+    for (let i = 0; i < 60; i++) r.step(), (p.atkCd = 999), (wolf.target = p.id);
+    check(c.hp > 0 && c.target === 0 && wolf.hp === hp0, 'face à un loup : il ne se bat pas');
+    check(Math.hypot(c.x - wolf.x, c.y - wolf.y) > 150, 'il garde ses distances avec le monstre');
   });
 });
