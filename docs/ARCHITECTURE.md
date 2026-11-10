@@ -37,6 +37,7 @@ server/    index.ts       HTTP (build statique en prod), WebSocket /ws, salons, 
            room.ts        simulation d'un village : IA, combat, meutes, géants, économie
            grid.ts        hash spatial (voisinage sans O(n²))
            persist.ts     sauvegarde Supabase : villages et progression par (compte, village)
+           static.ts      fichiers du build servis en HTTP (URL malformée refusée, rien hors de dist/)
 client/    index.html     lobby, HUD et panneaux
            og.html        page de dev qui produit l'aperçu des liens (public/og.jpg)
            src/main.ts    lobby : créer ou rejoindre un village
