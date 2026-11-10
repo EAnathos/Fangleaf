@@ -391,6 +391,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .alpha-card .mark { height: 34px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--line); background: transparent; color: var(--text-2); font: 600 13px var(--body); white-space: nowrap; }
 .alpha-card .mark:hover { border-color: var(--alpha); color: var(--alpha); }
 .alpha-card .mark.on { border-color: var(--alpha); color: var(--alpha); background: rgba(180, 140, 255, 0.12); }
+.alpha-card .rename { height: 34px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--line); background: transparent; color: var(--text-2); font: 600 13px var(--body); white-space: nowrap; }
+.alpha-card .rename:hover { border-color: var(--alpha); color: var(--alpha); }
+.alpha-card input.alpha-name { width: 100%; max-width: 240px; height: 30px; padding: 0 10px; border-radius: 8px; border: 2px solid var(--alpha); background: rgba(0, 0, 0, 0.25); color: var(--text); font: 600 14px var(--body); }
 .alpha-card .legend-btn { height: 36px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--amber); background: rgba(240, 182, 74, 0.15); color: var(--amber); font: 700 13px var(--display); white-space: nowrap; }
 .alpha-card .legend-btn:disabled { border-color: var(--line); background: transparent; color: var(--muted); cursor: not-allowed; }
 .alphas .empty { color: var(--muted); padding: 16px; text-align: center; background: var(--night); border-radius: 12px; }

@@ -1,7 +1,7 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  alphaEquipMax, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, LESSONS_PER_TOME, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
+  alphaEquipMax, ALPHA_NAME_MAX, alphaName, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, LESSONS_PER_TOME, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, hatBonus, HAT_WEAPON_BONUS, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
@@ -245,6 +245,7 @@ export class Hud {
   onUpgrade = (_what: Gear) => {};
   onAlphaUp = (_species: number) => {};
   onAlphaMark = (_species: number) => {};
+  onAlphaName = (_species: number, _name: string) => {};
   onAlphaEquip = (_species: number, _equip: boolean) => {};
   onAlphaCreate = (_species: number) => {};
   onHelp = (_on: boolean) => {};
@@ -504,6 +505,8 @@ export class Hud {
       if (leg?.dataset.legend) this.onLegend(Number(leg.dataset.legend));
       const mk = (e.target as HTMLElement).closest<HTMLButtonElement>('button.mark');
       if (mk?.dataset.s) this.onAlphaMark(Number(mk.dataset.s));
+      const rn = (e.target as HTMLElement).closest<HTMLButtonElement>('button.rename');
+      if (rn?.dataset.s) this.editAlphaName(rn.closest('.alpha-card')!, Number(rn.dataset.s), rn.dataset.name ?? '');
     });
   }
 
@@ -2151,8 +2154,9 @@ export class Hud {
   }
 
   private updateDen(me: PlayerState) {
-    const key = JSON.stringify([this.hall, this.beaten, me.mount?.id, me.awakening, me.essences, me.resting, me.marked, me.seen, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
-    if (key !== this.last.den) {
+    const key = JSON.stringify([this.hall, this.beaten, me.mount?.id, me.awakening, me.essences, me.resting, me.marked, me.names, me.seen, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
+    const typing = document.activeElement instanceof HTMLInputElement && $('alphas').contains(document.activeElement); // on nomme un Alpha : pas de reconstruction
+    if (key !== this.last.den && !typing) {
       this.last.den = key;
       this.buildDen(me);
     }
@@ -2200,8 +2204,9 @@ export class Hud {
         canvas.setAttribute('role', 'img');
         canvas.setAttribute('aria-label', `${sp.name} alpha`);
         this.portraits.push({ canvas, s, seen: true, alpha: true, legend: !!a?.legend });
+        const named = a ? new Map(me.names ?? []).get(s) : undefined;
         el.querySelector('.title')!.textContent = a
-          ? `${a.legend ? `${sp.name} légendaire` : `${sp.name} alpha`} · niv. ${lvl}${a.reviveIn ? ' (ressuscite…)' : ''}${rest ? ' · au repos' : ''}`
+          ? `${named ? `« ${named} » · ` : ''}${a.legend ? `${sp.name} légendaire` : `${sp.name} alpha`} · niv. ${lvl}${a.reviveIn ? ' (ressuscite…)' : ''}${rest ? ' · au repos' : ''}`
           : `${sp.name} alpha`;
         const now = stat(lvl), nxt = stat(lvl + 1);
         // Une ligne par statistique, avec la valeur au niveau suivant quand on peut renforcer.
@@ -2279,10 +2284,45 @@ export class Hud {
           eq.disabled = !!rest && equipped >= equipMax;
           eq.textContent = rest ? (equipped >= equipMax ? `${equipMax}/${equipMax} équipés` : 'Équiper') : 'Déséquiper';
           el.querySelector('.actions')!.append(eq);
+          // Nommer son Alpha : le nom s'affiche sous ses pattes, pour tout le village.
+          const rn = document.createElement('button');
+          rn.className = 'rename';
+          rn.dataset.s = String(s);
+          rn.dataset.name = named ?? '';
+          rn.title = 'Donner un nom à cet Alpha (vide : lui retirer son nom)';
+          rn.textContent = '✎ Renommer';
+          el.querySelector('.actions')!.append(rn);
         }
         return el;
       }),
     );
+  }
+
+  /** Champ de saisie du nom d'un Alpha, à la place du titre de sa carte : Entrée valide, Échap annule. */
+  private editAlphaName(card: Element, s: number, current: string) {
+    const title = card.querySelector<HTMLElement>('.title');
+    if (!title || card.querySelector('input.alpha-name')) return;
+    const input = Object.assign(document.createElement('input'), { className: 'alpha-name', value: current, maxLength: ALPHA_NAME_MAX, placeholder: `Nom de ton ${SPECIES[s].name} alpha`, autocomplete: 'off', spellcheck: false });
+    let done = false;
+    const close = (save: boolean) => {
+      if (done) return;
+      done = true;
+      const n = alphaName(input.value);
+      if (save && n !== current) this.onAlphaName(s, n);
+      this.last.den = ''; // la carte se reconstruit (avec le nouveau nom quand le serveur l'aura pris)
+      input.remove();
+      title.hidden = false;
+    };
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation(); // les touches restent au champ (Échap ne ferme pas la Tanière)
+      if (e.key === 'Enter') close(true);
+      else if (e.key === 'Escape') close(false);
+    });
+    input.addEventListener('blur', () => close(true));
+    title.hidden = true;
+    title.after(input);
+    input.focus();
+    input.select();
   }
 
   /** Barre d'essence de l'Alpha marqué : coût d'éveil s'il dort, compte à rebours pendant l'éveil, coût de renforcement ensuite. */
