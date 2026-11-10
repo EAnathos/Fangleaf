@@ -1,14 +1,15 @@
 // Point d'entrée : HTTP (build statique en prod) + WebSocket /ws + boucle de simulation.
 
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { extname, join, normalize } from 'node:path';
+import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { MAX_PLAYERS, MAX_VILLAGES, TICK_HZ } from '../shared/config.ts';
 import type { ClientMsg, ServerMsg } from '../shared/protocol.ts';
 import { countVillages, createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, leaveVillage, loadMembers, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
 import { makeCode, Room, type Player } from './room.ts';
+import { staticFile } from './static.ts';
 
 try {
   process.loadEnvFile();
@@ -23,18 +24,33 @@ const MIME: Record<string, string> = {
   '.webmanifest': 'application/manifest+json',
 };
 
+/** Réponse texte courte (erreurs) : jamais deux fois, même si l'en-tête est déjà parti. */
+const fail = (res: import('node:http').ServerResponse, code: number, text: string) => {
+  if (res.headersSent) return void res.destroy();
+  res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8' });
+  res.end(text);
+};
+
 const http = createServer((req, res) => {
-  if (!existsSync(DIST)) {
-    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
-    res.end('Serveur Fangleaf actif. En dev, ouvre le client Vite (http://localhost:5173).');
-    return;
+  // Une requête, quelle qu'elle soit, ne doit jamais faire tomber le serveur (et tous les villages avec lui).
+  try {
+    if (!existsSync(DIST)) {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Serveur Fangleaf actif. En dev, ouvre le client Vite (http://localhost:5173).');
+      return;
+    }
+    const file = staticFile(DIST, req.url ?? '/');
+    if (!file) return fail(res, 400, 'Requête invalide.');
+    const stream = createReadStream(file);
+    stream.on('error', () => fail(res, 500, 'Erreur du serveur.')); // fichier disparu entre-temps, droits…
+    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
+    stream.pipe(res);
+  } catch (e) {
+    console.error('Requête HTTP en erreur :', req.url, e);
+    fail(res, 500, 'Erreur du serveur.');
   }
-  const url = new URL(req.url ?? '/', 'http://x');
-  let file = normalize(join(DIST, decodeURIComponent(url.pathname)));
-  if (!file.startsWith(DIST) || !existsSync(file) || statSync(file).isDirectory()) file = join(DIST, 'index.html');
-  res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
-  createReadStream(file).pipe(res);
 });
+http.on('clientError', (_e, socket) => socket.writable ? socket.end('HTTP/1.1 400 Bad Request\r\n\r\n') : socket.destroy()); // requête HTTP illisible
 
 const rooms = new Map<string, Room>();
 // Messages compressés (snapshots JSON ~3 fois plus petits), au niveau le plus rapide : peu de CPU pour beaucoup de bande passante.
