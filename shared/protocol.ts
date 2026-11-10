@@ -85,6 +85,7 @@ export type ClientMsg =
   | { t: 'kickAway'; user: string } // fondateur : expulser ce membre déconnecté (banni du village)
   | { t: 'transfer'; id?: number; user?: string } // fondateur : transmettre le village à ce dompteur en ligne (id) ou à ce membre déconnecté (user)
   | { t: 'unban'; user: string } // fondateur : lever le bannissement d'un compte
+  | { t: 'ability' } // capacité active de la classe (guerrier : Ruée), visée vers le regard
   | { t: 'mode'; manual: boolean } // attaque au clic (PC) au lieu de l'attaque automatique
   | { t: 'attack'; x: number; y: number } // attaque au clic : frapper vers ce point // vider son sac (bois, pierre) dans la réserve du village, à l'entrepôt
   | { t: 'unlock'; cave: number } // débloquer une grotte (pour tout le village)
@@ -97,6 +98,8 @@ export type ClientMsg =
   | { t: 'cheatmob'; s: number; kind: CheatMob; on: boolean } // dev uniquement : ajouter ou retirer un monstre de meute, un Alpha, un légendaire ou un sauvage (espèce s)
   | { t: 'cheatzone'; z: number; act: 'unlock' | 'tp' } // dev uniquement : débloquer la zone z (portes, grottes) ou s'y téléporter (0 : village)
   | { t: 'cheatboss'; s: number } // dev uniquement : abattre ce géant (-1 : tous)
+  | { t: 'cheatgear'; cls: ClassId; spec?: SpecId } // dev uniquement : s'équiper pour tester (classe, spécialisation, arme et armure au max, armé)
+  | { t: 'cheatdummy' } // dev uniquement : poser un mannequin de test (slime immobile, 0 dégât, PV infinis)
   | { t: 'ping'; ts: number };
 
 export interface PlayerState {
@@ -148,6 +151,7 @@ export interface PlayerState {
   learned: number[]; // leçons apprises à l'École des dompteurs, par discipline
   readKind: number; // discipline de la leçon en cours
   reading: number; // secondes avant la fin de la leçon en cours (0 : aucune)
+  ability: number; // capacité de classe (envoyé à son seul dompteur) : -1 aucune pour sa classe, 0 prête, sinon secondes avant qu'elle recharge
 }
 
 /** Effets d'état du HUD (altérations et bonus), dans l'ordre de leur numéro sur le réseau. */
@@ -253,7 +257,7 @@ export type GameEvent =
   | { e: 'mend'; from: number; to: number; n: number } // un totem soigne un allié du Grand Masque (n : PV rendus)
   | { e: 'zap'; pts: number[]; by?: number } // la décharge du Grand Drake rebondit : x, y de chaque cible touchée, dans l'ordre (by : dompteur de son Alpha légendaire)
   | { e: 'legend'; id: number; by: number; s: number } // un Alpha devient légendaire
-  | { e: 'shot'; by: number; x: number; y: number; tx: number; ty: number; cls: ClassId } // flèche ou orbe
+  | { e: 'shot'; by: number; x: number; y: number; tx: number; ty: number; cls: ClassId; drop?: 1 } // flèche ou orbe ; drop : part de (x,y) tel quel (pluie de flèches qui tombe du ciel), sans recaler sur le lanceur
   | { e: 'class'; id: number; cls: ClassId }
   | { e: 'spec'; id: number; spec: SpecId }
   | { e: 'awaken'; id: number; by: number; s: number } // Alpha éveillé à la tanière
@@ -270,6 +274,7 @@ export type GameEvent =
   | { e: 'full'; to: number }
   | { e: 'seen'; to: number; s: number } // nouvelle espèce croisée : elle entre au bestiaire
   | { e: 'charge'; id: number } // un tireur charge son tir (il est immobile pendant windup)
+  | { e: 'ability'; id: number; spec: SpecId; x: number; y: number } // capacité de spé lancée (flash coloré en (x,y))
   | { e: 'camp'; site: number; by: number } // un camp vient d'être établi
   | { e: 'built'; b: BuildingId; by: number } // un bâtiment du village vient d'être construit
   | { e: 'hall'; lvl: number; by: number } // Maison commune améliorée

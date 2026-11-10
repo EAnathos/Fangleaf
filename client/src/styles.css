@@ -553,6 +553,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* sous le bouton baie, même forme : il n'apparaît qu'avec une monture */
 .mount-btn { position: absolute; right: 16px; bottom: 28px; width: 56px; height: 56px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border-color: #B8743A; background: rgba(27, 38, 36, 0.92); }
 .mount-btn.on { border-color: var(--amber); background: rgba(240, 182, 74, 0.18); }
+/* Capacité de classe (guerrier : Ruée) : bouton tactile et indicateur de recharge (visible aussi sur PC). */
+.ability-btn { position: absolute; right: 16px; bottom: 164px; width: 56px; height: 56px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border-color: var(--amber); background: rgba(27, 38, 36, 0.92); }
+.ability-btn .ability-ico { display: flex; transition: transform 0.12s; }
+.ability-btn:active .ability-ico { transform: scale(0.9); }
+.ability-btn .cd-label { position: absolute; font: 700 20px var(--body); color: #EADBB8; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+.ability-btn .ability-name { position: absolute; top: -17px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 700 11px var(--body); color: #EADBB8; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85); pointer-events: none; }
+.ability-btn.cooling { border-color: #6B7A77; }
+.ability-btn.cooling .ability-ico { opacity: 0.22; }
+.ability-btn.cooling .ability-name { opacity: 0.55; }
+@media (pointer: fine) { .ability-btn { bottom: 28px; } } /* sur PC, hold-btn et mount-btn sont cachés : la capacité prend la place basse */
 .prompt.pick { border-color: #C8323C; color: #F3A3AA; }
 
 /* Paramètres. */
