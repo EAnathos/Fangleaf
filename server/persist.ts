@@ -22,7 +22,7 @@ export interface Profile {
   scrolls?: number[]; // parchemins portés (géant de chacun), pas encore donnés au vieil homme
   armed?: boolean; // épée déterrée (absent dans les sauvegardes d'avant la migration 017 : armé)
   essences: number[];
-  alphas: { s: number; lvl: number; wakeAt?: number; legend?: boolean; rest?: boolean }[]; // rest : rangé à la Tanière // wakeAt : éveil en cours (horodatage ms)
+  alphas: { s: number; lvl: number; wakeAt?: number; legend?: boolean; rest?: boolean; name?: string }[]; // name : nom donné par son dompteur // rest : rangé à la Tanière // wakeAt : éveil en cours (horodatage ms)
   village_found: boolean; // village déjà découvert : on y apparaît directement
   class: string | null; // classe choisie à la forge
   spec?: string | null; // spécialisation de l'arme (Grande forge ; absente avant la migration 019)
@@ -38,6 +38,7 @@ export interface Profile {
   hat?: number; // chapeau porté (HATS) ; absent avant la migration 026
   hats?: number[]; // chapeaux achetés
   alpha_mark?: number; // espèce d'Alpha marquée (-1 : aucune) ; absent avant la migration 027
+  boss_wins?: number[]; // victoires sur chaque géant (par espèce) : ses essences augmentent avec ; absent avant la migration 028
 }
 
 let db: SupabaseClient | null = null;
@@ -153,12 +154,27 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   if (!db) return null;
   const { data, error } = await db
     .from('progress')
-    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, saddle, armed, scrolls, essences, alphas, village_found, class, spec, specs, pack, seen, stats, tomes, learned, read_at, read_kind, seat, hat, hats, alpha_mark')
+    .select('name, gold, wood, stone, fruits, weapon, armor, torch, boots, saddle, armed, scrolls, essences, alphas, village_found, class, spec, specs, pack, seen, stats, tomes, learned, read_at, read_kind, seat, hat, hats, alpha_mark, boss_wins')
     .eq('user_id', userId)
     .eq('village_code', code)
     .maybeSingle();
   if (error) throw new Error(`Lecture de la progression impossible : ${error.message}`);
   return data as Profile | null;
+}
+
+/** Comptes membres d'un village (ceux qui y ont une progression, connectés ou non). */
+export async function memberIds(code: string): Promise<string[]> {
+  if (!db) return [];
+  const { data, error } = await db.from('progress').select('user_id').eq('village_code', code);
+  if (error) throw new Error(`Lecture des membres impossible : ${error.message}`);
+  return (data ?? []).map((d) => String(d.user_id));
+}
+
+/** Nouveau chef du village (transmission par l'ancien). */
+export async function setFounder(code: string, userId: string) {
+  if (!db) return;
+  const { error } = await db.from('villages').update({ created_by: userId }).eq('code', code);
+  if (error) console.error('Transmission du village impossible :', error.message);
 }
 
 /** Nombre de villages où ce compte a une progression. */

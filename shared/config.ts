@@ -538,6 +538,24 @@ export const alphaCreateCost = (species: number) => {
 /** Temps d'éveil d'un Alpha après avoir payé ses essences : plus l'espèce est forte, plus c'est long. */
 export const alphaAwakenS = (species: number) => 30 * SPECIES[species].zone;
 export const ESSENCE_DROP = 0.35; // chance, pour chaque dompteur proche, qu'un monstre vaincu lâche une essence
+/**
+ * Géant vaincu : chaque dompteur qui l'a combattu reçoit aussi quelques essences de l'espèce dont il est la version
+ * géante (le Loup pour Croc-d'Ombre), un peu plus à chaque nouvelle victoire sur lui : 2 la première fois, +1 toutes les
+ * 2 victoires, 6 au plus (dès la 9e). +15 % par zone après la Lisière, comme le prix des renforcements. Un géant
+ * revient toutes les BOSS_RESPAWN_S : c'est un appoint, la chasse reste la vraie source d'essences.
+ */
+export const BOSS_ESSENCE_MIN = 2;
+export const BOSS_ESSENCE_MAX = 6;
+/** Essences données par la `wins`-ième victoire d'un dompteur sur ce géant (1 : la première), 0 sans espèce de base. */
+export const bossEssence = (boss: number, wins: number) => {
+  const sp = SPECIES[boss];
+  if (!sp?.boss || !SPECIES.some((b) => !b.boss && b.key === sp.base)) return 0; // le Kraken : pas d'espèce à nourrir
+  const n = Math.min(BOSS_ESSENCE_MAX, BOSS_ESSENCE_MIN + Math.floor(Math.max(0, wins - 1) / 2));
+  return Math.round(n * (1 + 0.15 * (sp.zone - 1)));
+};
+/** Nom donné à un Alpha : sans caractères de contrôle, espaces réduits, ALPHA_NAME_MAX caractères au plus ('' : aucun). */
+export const ALPHA_NAME_MAX = 16;
+export const alphaName = (s: unknown) => String(s ?? '').replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, ALPHA_NAME_MAX);
 export const alphaLevelMult = (lvl: number) => 1 + 0.15 * lvl; // +15 % de PV et de dégâts par niveau
 /** Résurrection d'un Alpha : plus son espèce est forte (zone), plus elle est longue. Le niveau n'y change rien. */
 export const alphaReviveS = (species: number) => 10 + 8 * SPECIES[species].zone;

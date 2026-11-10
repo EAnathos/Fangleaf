@@ -549,6 +549,66 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     check(again.isBanned('x'), 'bannis rechargés avec le village');
   });
 
+  rule('Membres : 4 au plus, connectés ou non ; le chef expulse aussi un membre déconnecté.', () => {
+    const r: any = new Room('TEST', undefined, {});
+    r.founder = 'chef';
+    let saved: { banned: { id: string; name: string }[] } = { banned: [] };
+    r.onVillage = (v: typeof saved) => (saved = v);
+    const chef = r.addPlayer('Chef', noop, { userId: 'chef', profile: null });
+    const bob = r.addPlayer('Bob', noop, { userId: 'bob', profile: null });
+    const prof = r.profileOf(bob);
+    r.removePlayer(bob.id); // Bob se déconnecte : il dort au village
+    r.addSleeper('lou', { ...prof, name: 'Lou' });
+    check(r.hasRoomFor('max') && r.players.size === 1, '3 membres (1 en ligne, 2 endormis) : une place pour un 4e');
+    r.addPlayer('Max', noop, { userId: 'max', profile: null });
+    check(!r.hasRoomFor('zoe') && !r.full, '4 membres, dont 2 déconnectés : pas de 5e, même avec des places en ligne');
+    check(r.hasRoomFor('bob') && r.hasRoomFor('lou'), 'un membre déconnecté a toujours sa place');
+    check(!r.hasRoomFor('zoe', ['ana']), 'les comptes enregistrés (pas encore chargés au village) comptent aussi');
+    const max = [...r.players.values()].find((p: { name: string }) => p.name === 'Max');
+    r.onKickAway(max, 'lou');
+    check(r.sleepers.has('lou'), 'un membre ordinaire ne peut pas expulser');
+    r.onKickAway(chef, 'chef');
+    r.onKickAway(chef, 'lou');
+    check(!r.sleepers.has('lou') && r.isBanned('lou') && saved.banned.some((b) => b.id === 'lou'), 'le chef expulse Lou, déconnectée : bannie, sauvegardé, elle ne dort plus au village');
+    check(r.hasRoomFor('zoe'), 'sa place se libère (une bannie ne compte plus)');
+    const board: { t: string; rows?: { name: string; user?: string; founder?: boolean }[] }[] = [];
+    chef.send = (m: (typeof board)[number]) => board.push(m);
+    r.onBoard(chef);
+    max.send = (m: (typeof board)[number]) => board.push(m);
+    r.onBoard(max);
+    const [forChef, forMax] = board.map((m) => m.rows!);
+    check(forChef.find((x) => x.name === 'Bob')?.user === 'bob' && forMax.every((x) => !x.user), 'seul le chef reçoit les comptes des absents');
+    check(forMax.find((x) => x.name === 'Chef')?.founder === true && !forMax.find((x) => x.name === 'Max')?.founder, 'tous voient qui est le chef');
+  });
+
+  rule('Transmission : le chef donne le village à un membre, en ligne ou déconnecté ; il redevient un membre ordinaire.', () => {
+    const r: any = new Room('TEST', undefined, {});
+    r.founder = 'chef';
+    let stored = '';
+    r.onFounder = (id: string) => (stored = id);
+    const chef = r.addPlayer('Chef', noop, { userId: 'chef', profile: null });
+    const bob = r.addPlayer('Bob', noop, { userId: 'bob', profile: null });
+    const guest = r.addPlayer('Invité', noop);
+    r.onTransfer(bob, chef.id);
+    check(r.founder === 'chef' && !stored, 'un membre ordinaire ne peut pas transmettre le village');
+    r.onTransfer(chef, guest.id);
+    check(r.founder === 'chef', 'pas à un invité sans compte');
+    r.onTransfer(chef, bob.id);
+    check(r.founder === 'bob' && stored === 'bob' && r.isFounder(bob) && !r.isFounder(chef), 'transmis à Bob, en ligne : il est le chef, c\'est sauvegardé');
+    check(r.events.some((e: { e: string; text?: string }) => e.e === 'info' && e.text?.includes('nouveau chef')), 'le village est prévenu');
+    const sent: { t: string; founder?: boolean }[] = [];
+    chef.send = (m: (typeof sent)[number]) => sent.push(m);
+    r.broadcast();
+    check(sent.find((m) => m.t === 's')?.founder === false, 'l\'ancien chef le sait (snapshot)');
+    r.onKick(chef, bob.id);
+    check(!r.isBanned('bob'), 'l\'ancien chef n\'a plus ses droits');
+    r.removePlayer(chef.id); // l'ancien chef se déconnecte : il dort au village
+    r.onTransfer(bob, undefined, 'chef');
+    check(r.founder === 'chef' && stored === 'chef', 'Bob le rend à Chef, déconnecté');
+    r.onTransfer({ ...bob, userId: 'chef' }, undefined, 'inconnu');
+    check(r.founder === 'chef', 'pas à un compte qui n\'est pas membre');
+  });
+
   rule('Chat : une ligne nettoyée, 200 caractères au plus, pas de rafale.', () => {
     const r = room();
     const said: string[] = [];

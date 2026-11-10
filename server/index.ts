@@ -1,14 +1,15 @@
 // Point d'entrée : HTTP (build statique en prod) + WebSocket /ws + boucle de simulation.
 
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { extname, join, normalize } from 'node:path';
+import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { MAX_PLAYERS, MAX_VILLAGES, TICK_HZ } from '../shared/config.ts';
 import type { ClientMsg, ServerMsg } from '../shared/protocol.ts';
-import { countVillages, createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, leaveVillage, loadMembers, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
+import { countVillages, createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, leaveVillage, loadMembers, loadProgress, memberIds, persistenceEnabled, saveProgress, saveVillage, setFounder, verifyToken, type Profile } from './persist.ts';
 import { makeCode, Room, type Player } from './room.ts';
+import { staticFile } from './static.ts';
 
 try {
   process.loadEnvFile();
@@ -23,18 +24,33 @@ const MIME: Record<string, string> = {
   '.webmanifest': 'application/manifest+json',
 };
 
+/** Réponse texte courte (erreurs) : jamais deux fois, même si l'en-tête est déjà parti. */
+const fail = (res: import('node:http').ServerResponse, code: number, text: string) => {
+  if (res.headersSent) return void res.destroy();
+  res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8' });
+  res.end(text);
+};
+
 const http = createServer((req, res) => {
-  if (!existsSync(DIST)) {
-    res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
-    res.end('Serveur Fangleaf actif. En dev, ouvre le client Vite (http://localhost:5173).');
-    return;
+  // Une requête, quelle qu'elle soit, ne doit jamais faire tomber le serveur (et tous les villages avec lui).
+  try {
+    if (!existsSync(DIST)) {
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('Serveur Fangleaf actif. En dev, ouvre le client Vite (http://localhost:5173).');
+      return;
+    }
+    const file = staticFile(DIST, req.url ?? '/');
+    if (!file) return fail(res, 400, 'Requête invalide.');
+    const stream = createReadStream(file);
+    stream.on('error', () => fail(res, 500, 'Erreur du serveur.')); // fichier disparu entre-temps, droits…
+    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
+    stream.pipe(res);
+  } catch (e) {
+    console.error('Requête HTTP en erreur :', req.url, e);
+    fail(res, 500, 'Erreur du serveur.');
   }
-  const url = new URL(req.url ?? '/', 'http://x');
-  let file = normalize(join(DIST, decodeURIComponent(url.pathname)));
-  if (!file.startsWith(DIST) || !existsSync(file) || statSync(file).isDirectory()) file = join(DIST, 'index.html');
-  res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
-  createReadStream(file).pipe(res);
 });
+http.on('clientError', (_e, socket) => socket.writable ? socket.end('HTTP/1.1 400 Bad Request\r\n\r\n') : socket.destroy()); // requête HTTP illisible
 
 const rooms = new Map<string, Room>();
 // Messages compressés (snapshots JSON ~3 fois plus petits), au niveau le plus rapide : peu de CPU pour beaucoup de bande passante.
@@ -160,6 +176,10 @@ wss.on('connection', (ws: WebSocket) => {
     // Progression propre à ce compte DANS ce village : ailleurs, on repart de zéro.
     let profile = user ? await loadProgress(user.userId, r.code) : null;
     if (user && !profile && msg.t === 'join' && (await countVillages(user.userId)) >= MAX_VILLAGES) return send({ t: 'error', msg: tooMany });
+    // un nouveau venu : MAX_PLAYERS membres au plus, connectés ou non
+    if (!profile && msg.t === 'join' && !r.hasRoomFor(user?.userId ?? null, persistenceEnabled() ? await memberIds(r.code) : [])) {
+      return send({ t: 'error', msg: `Ce village a déjà ${MAX_PLAYERS} membres (connectés ou non) : son chef peut en expulser un pour te faire une place.` });
+    }
     if (user && activeUsers.has(user.userId)) {
       // connecté ailleurs pendant le chargement : on le déloge, puis on relit sa progression tout juste sauvegardée
       await evict(user.userId);
@@ -168,6 +188,7 @@ wss.on('connection', (ws: WebSocket) => {
     if (ws.readyState !== ws.OPEN || (user && activeUsers.has(user.userId))) return;
     rooms.set(r.code, r);
     r.onVillage ??= (v) => void saveVillage(r.code, v);
+    r.onFounder ??= (id) => void setFounder(r.code, id);
     room = r;
     if (user) {
       activeUsers.set(user.userId, kick);
@@ -215,6 +236,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'upgrade') room.onUpgrade(player, msg.what);
     else if (msg.t === 'alphaUp') room.onAlphaUp(player, +msg.s);
     else if (msg.t === 'alphaMark') room.onAlphaMark(player, +msg.s);
+    else if (msg.t === 'alphaName') room.onAlphaName(player, +msg.s, msg.name);
     else if (msg.t === 'alphaEquip') room.onAlphaEquip(player, +msg.s, !!msg.equip);
     else if (msg.t === 'alphaCreate') room.onAlphaCreate(player, +msg.s);
     else if (msg.t === 'mount') room.onMount(player, +msg.id);
@@ -231,6 +253,8 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'profile') room.onProfile(player, +msg.color, +msg.hat);
     else if (msg.t === 'board') room.onBoard(player);
     else if (msg.t === 'kick') room.onKick(player, +msg.id);
+    else if (msg.t === 'kickAway') room.onKickAway(player, String(msg.user));
+    else if (msg.t === 'transfer') room.onTransfer(player, msg.id === undefined ? undefined : +msg.id, msg.user === undefined ? undefined : String(msg.user));
     else if (msg.t === 'unban') room.onUnban(player, String(msg.user));
     else if (msg.t === 'mode') room.onMode(player, !!msg.manual);
     else if (msg.t === 'attack') room.onAttack(player, +msg.x, +msg.y);

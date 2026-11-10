@@ -37,12 +37,14 @@ server/    index.ts       HTTP (build statique en prod), WebSocket /ws, salons, 
            room.ts        simulation d'un village : IA, combat, meutes, géants, économie
            grid.ts        hash spatial (voisinage sans O(n²))
            persist.ts     sauvegarde Supabase : villages et progression par (compte, village)
+           static.ts      fichiers du build servis en HTTP (URL malformée refusée, rien hors de dist/)
 client/    index.html     lobby, HUD et panneaux
            og.html        page de dev qui produit l'aperçu des liens (public/og.jpg)
            src/main.ts    lobby : créer ou rejoindre un village
            src/game.ts    boucle de jeu : prédiction locale, rendu, événements
            src/net.ts     WebSocket et interpolation
            src/hud.ts     HUD et panneaux (forge, Tanière, marché, Hôtel de ville…)
+           src/changelog.ts   nouveautés du jeu et numéro de version, affichés dans le lobby
            src/world.ts, sprites.ts, caves.ts, volcano.ts, voyage.ts, fx.ts, anim.ts, sky.ts, fog.ts   rendu
            src/audio.ts, music.ts, sfx.ts                                      son
 supabase/  migrations SQL (npm run db:migrate)

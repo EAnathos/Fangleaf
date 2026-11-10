@@ -136,6 +136,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   parmi ceux de tous les membres (en ligne ou endormis), et la sélection ne change que quand une place se libère (un Alpha part) : ceux déjà montrés restent, un arrivant ne prend la place de personne.
 - **Marquer un Alpha** (bouton ☆ de sa carte, éveillé ou non) : une barre d'essences s'affiche alors dans le HUD, vers son
   coût d'éveil, puis de renforcement. Un seul à la fois ; marquer le même à nouveau le démarque.
+- **Nommer un Alpha** (bouton ✎ Renommer de sa carte, équipé ou au repos) : son nom s'affiche sous ses pattes, à la
+  couleur de son dompteur, pour tout le village. Un nom vide le lui retire.
 - **Bonus de collection** : chaque Alpha éveillé renforce tous les autres.
 - **Alphas à pouvoir** : le Lièvre soigne son dompteur et la meute proche (dans la meute, il ne va pas au contact :
   il reste en retrait, derrière son dompteur). Le Suricate et l'Escargot ont une
@@ -204,6 +206,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   III : Lacs brumeux et Mer de sable). On n'a qu'**un exemplaire de chaque tome** : il enseigne une leçon de sa
   discipline, et les tomes se lisent dans l'ordre (trois leçons par discipline, soit trois places de meute en plus au
   total). À l'école, **E** pour lire une leçon : elle prend un moment (même hors ligne), une seule à la fois. Un coffre ne donne jamais un tome qu'on a déjà, ni un tome déjà lu.
+  L'onglet **Inventaire** de l'école montre les livres de son sac (celui en lecture, celui prêt à lire, ceux qui
+  attendent le tome d'avant) et ceux déjà lus.
 
 ## Grottes et géants
 
@@ -268,6 +272,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   Le dernier géant d'une zone que le village bat (une fois tous vaincus) laisse le **parchemin de la zone** pour le
   vieil homme. Il revient après un délai. Si tout le monde sort, il se
   rendort, guéri.
+- Chaque dompteur qui l'a combattu reçoit aussi quelques **essences de son espèce** (des essences de Loup pour
+  Croc-d'Ombre) : un peu plus à chaque nouvelle victoire sur ce géant, jusqu'à un plafond, et un peu plus dans les zones lointaines.
 
 ## Le volcan et le cœur volcanique
 
@@ -349,12 +355,20 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 
 ## Jouer à plusieurs
 
-- Jusqu'à **4 dompteurs** par village. **Menu › Paramètres › Village › Inviter des amis** copie le lien d'invitation (`?v=CODE`).
+- Jusqu'à **4 membres** par village, **connectés ou non** : un membre déconnecté garde sa place. **Menu › Paramètres › Village › Inviter des amis** copie le lien d'invitation (`?v=CODE`).
 - La progression est rattachée au **compte dans un village** : un autre village, c'est repartir de zéro. Un compte
   a au plus 3 villages, listés dans le lobby.
 - L'or et les essences des monstres vaincus se partagent entre dompteurs proches.
+- Quand un coéquipier **réveille un géant**, tout le village en est prévenu, et une petite **flèche** autour de soi
+  indique le chemin du combat (la sortie de la grotte où l'on est, puis l'entrée de la sienne) tant que le géant est debout.
 - Un membre **déconnecté** dort près du feu du village, sa meute autour de lui.
 - **Chat** : **C** ou le bouton 💬 ; chaque message s'affiche aussi dans une bulle au-dessus de son auteur.
 - **Menu › Profil** : choisir sa couleur (une par membre du village) et un chapeau, acheté une fois en or. Chaque chapeau débloqué renforce l'arme de 10 %.
 - Se connecter sur un autre appareil déconnecte la session en cours (sa progression est sauvegardée d'abord).
-- Le **fondateur** peut expulser (et réintégrer) un membre, et supprimer le village.
+- Le **chef** du village (au départ, son fondateur) peut expulser (et réintégrer) un membre, connecté ou non, et
+  supprimer le village. Il peut aussi le **transmettre** à un autre membre (Paramètres › Village › Transmettre) : ce
+  membre devient le chef, et l'ancien redevient un membre ordinaire. Un chef qui quitte le village le transmet de
+  lui-même au membre le plus récemment actif.
+- **Nouveautés** : le lobby montre, à gauche, ce qu'apporte la dernière mise à jour du jeu et son numéro de version
+  (« nouveau » tant qu'on ne l'avait pas vue) ; les versions précédentes se déplient en dessous. Sur téléphone, la
+  pastille « Nouveautés » en haut à gauche l'ouvre.
