@@ -9,7 +9,7 @@ import {
   SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, gateHall, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, WINGS_LEASH, VENT_R, VENT_WARN_S, VENT_FIRE_S, VENT_HURT, PLATE_R, GEYSER_R, GEYSER_WARN_S, GEYSER_HURT, PLATE_REARM_S, alphaLevelMult, alphaReviveS, alphaUpCost,
   treeHp, treeWood, TREE_RESPAWN_S, TREE_STILL_S, TREANT_CHANCE, TREANT_ZONE,
   populationOf, PINCER_HALF, PINCER_R, TORNADO_PULL, TORNADO_PULL_R, TORNADO_R, TORNADO_SPEED, POISON_DPS, BURN_DPS, BURN_S, elementOf, affinity, JUNGLE_ZONE, LAKES_ZONE, LEGEND_SKIPS, HUG_S, ROLL_S, RING_SPEED, RING_W, DRUM_R, ECHO_R, DRUM_GAP, ECHO_STUN_S, LOG_SPEED, RAMPAGE_SPEED, MAW_PULL, MAW_R, CURSE_S, CURSE_BONUS, SHELL_SPEED, DECOY_S, SPARK_JUMPS, SPARK_R, SPARK_FALLOFF, POISON_S,
-  armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, ALPHA_SHOUT_AGGRO, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, mineDmg, weaponDmg, type SpeciesId,
+  armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, ALPHA_SHOUT_AGGRO, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, gatherDmg, hatBonus, weaponDmg, type SpeciesId,
 } from '../shared/config.ts';
 import { clamp, dist2, pickCapped } from '../shared/math.ts';
 import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, UnitTuple } from '../shared/protocol.ts';
@@ -199,6 +199,7 @@ export interface Player {
   stone: number;
   fruits: number; // baies cueillies
   holding: boolean; // tend un fruit : il nourrit au lieu de frapper
+  harvest: boolean; // son Tréant et son Golem récoltent au lieu de se battre
   movedAt: number; // dernier déplacement (temps de simulation) : on n'abat un arbre qu'arrêté devant
   manual: boolean; // attaque au clic : il ne frappe (ni ne récolte) que sur ordre
   orderUntil: number; // attaque au clic : ordre valable jusqu'à ce temps de simulation
@@ -490,7 +491,7 @@ export class Room {
     const p: Player = {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
-      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, saddle: 0, hat: 0, hats: [], gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, movedAt: 0, stats: statsOf(), manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
+      hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, saddle: 0, hat: 0, hats: [], gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, harvest: false, movedAt: 0, stats: statsOf(), manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
       userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
       sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], marked: -1, seen: new Set(), tomes: Array(BOOKS).fill(0), learned: LESSON_KINDS.map(() => 0), readAt: 0, readKind: 0,
     };
@@ -2346,7 +2347,7 @@ export class Room {
     const t = this.nearest(p.x, p.y, reach + 50, prey) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (reach + t.r) ** 2) return this.mine(p);
     p.atkCd = cls.cd;
-    const dmg = weaponDmg(p.weapon) * cls.dmg;
+    const dmg = weaponDmg(p.weapon) * cls.dmg * hatBonus(p.hats.length);
     if (p.cls === 'archer' || p.cls === 'mage') this.events.push({ e: 'shot', by: p.id, x: p.x, y: p.y, tx: t.x, ty: t.y, cls: p.cls });
     if (cls.splash) {
       // Mage : l'orbe explose et touche tous les monstres sauvages autour de la cible.
@@ -2369,7 +2370,7 @@ export class Room {
     const cls = heroOf(p.cls, p.spec);
     const reach = PLAYER_R + cls.range;
     const d = Math.hypot(p.aimX - p.x, p.aimY - p.y) || 1, ux = (p.aimX - p.x) / d, uy = (p.aimY - p.y) / d;
-    const dmg = weaponDmg(p.weapon) * cls.dmg;
+    const dmg = weaponDmg(p.weapon) * cls.dmg * hatBonus(p.hats.length); // (chaque chapeau débloqué : +10 %)
     const wild = this.preyOf(p), prey = (e: Ent) => wild(e) && this.alive(e); // jamais le gibier passif, même au clic
     if (p.cls === 'mage') {
       p.atkCd = cls.cd;
@@ -2436,6 +2437,11 @@ export class Room {
     }
   }
 
+  /** Touche de récolte : son Tréant et son Golem abattent les arbres et mangent les pierres autour de lui, sans se battre. */
+  onHarvest(p: Player, on: boolean) {
+    p.harvest = on;
+  }
+
   /** Tendre un fruit (s'il en a) ou le ranger. */
   onHold(p: Player, on: boolean) {
     p.holding = on && p.fruits > 0;
@@ -2499,7 +2505,7 @@ export class Room {
     if (best < 0) return;
     const o = this.map.ores[best];
     p.atkCd = PLAYER_ATK_CD;
-    this.oreHp[best] -= mineDmg(p.weapon);
+    this.oreHp[best] -= gatherDmg(p.weapon, p.cls);
     const done = this.oreHp[best] <= 0;
     this.events.push({ e: 'mine', by: p.id, id: best, done });
     if (!done) return;
@@ -2523,7 +2529,7 @@ export class Room {
   private chop(p: Player, i: number) {
     const d = this.map.decor[i], full = treeHp(d.zone) * this.map.treeScale(d); // un grand arbre résiste plus
     p.atkCd = PLAYER_ATK_CD;
-    const hp = (this.treeHp.get(i) ?? full) - mineDmg(p.weapon);
+    const hp = (this.treeHp.get(i) ?? full) - gatherDmg(p.weapon, p.cls);
     this.treeHp.set(i, Math.max(0, hp));
     const done = hp <= 0;
     this.events.push({ e: 'chop', by: p.id, id: i, done });
@@ -2572,8 +2578,9 @@ export class Room {
   /**
    * Tréant de la meute (ordinaire ou Alpha), sans ennemi à combattre : comme le golem avec la pierre, il va abattre
    * l'arbre le plus proche, pas trop loin de son dompteur, en quelques coups de branche ; le bois revient à son dompteur.
+   * focus : touche de récolte (il cherche autour de son dompteur, plus loin, même s'il y a des monstres).
    */
-  private treantChops(u: Unit, o: Player) {
+  private treantChops(u: Unit, o: Player, focus = false) {
     const ok = (i: number) => {
       if (this.map.treeDown.has(i)) return false;
       const t = this.map.trunkOf(this.map.decor[i]);
@@ -2583,7 +2590,7 @@ export class Room {
       u.chopTree = -1;
       if (this.tick % 5 !== 0) return false;
       let bd = Infinity;
-      for (const i of this.map.treesNear(u.x, u.y, GOLEM_EAT_R)) {
+      for (const i of this.map.treesNear(focus ? o.x : u.x, focus ? o.y : u.y, focus ? FOLLOW_MAX_R * 0.8 : GOLEM_EAT_R)) {
         const t = this.map.trunkOf(this.map.decor[i]), d = dist2(u.x, u.y, t.x, t.y);
         if (d < bd && ok(i)) [bd, u.chopTree] = [d, i];
       }
@@ -3761,7 +3768,8 @@ export class Room {
     u.atkCd -= DT;
     if (u.atkCd > 0) return;
     const sp = SPECIES[u.s], rg = sp.ranged;
-    const t = this.nearest(u.x, u.y, u.r + (rg ? rg.range : 70), this.preyOf(u)) as Unit | undefined;
+    const reach = u.r + (rg ? rg.range : 70), prey = this.preyOf(u);
+    const t = (this.totemNear(u.x, u.y, reach, prey, u) ?? this.nearest(u.x, u.y, reach, prey)) as Unit | undefined; // le totem du Grand Masque d'abord
     if (!t) return;
     const close = dist2(u.x, u.y, t.x, t.y) <= (u.r + t.r + 14) ** 2;
     if ((close || rg) && sp.moves && this.legendMove(u, t)) return; // le gorille monté fracasse le sol
@@ -4175,6 +4183,16 @@ export class Room {
     this.wander(u);
   }
 
+  /** Totem (soigneur des siens, comme celui du Grand Masque). */
+  private healer(e: Ent) {
+    return e.kind === 'u' && !!SPECIES[e.s].inert;
+  }
+
+  /** Totem sauvage le plus proche de by, à moins de r du dompteur (x, y) et en vue : la cible prioritaire de la meute. */
+  private totemNear(x: number, y: number, r: number, prey: (e: Ent) => boolean, by: Unit) {
+    return this.nearest(x, y, r, (e) => this.healer(e) && prey(e), by.x, by.y);
+  }
+
   /** Totem du Grand Masque : chaque seconde, il soigne les siens autour de lui (un peu son géant, beaucoup ses Petits Masqués). */
   private totemAI(u: Unit) {
     if (this.tick % TICK_HZ !== 0) return;
@@ -4553,6 +4571,14 @@ export class Room {
     }
 
     if (SPECIES[u.s].forager) return this.coatiAI(u, o, hx, hy, !!bank); // le coati ne combat pas
+    // touche de récolte : le Tréant abat les arbres, le Golem mange les pierres, sans s'occuper des monstres
+    if (o.harvest && !o.dead) {
+      const key = SPECIES[u.s].key;
+      if ((key === 'golem' && this.golemEats(u, o, true)) || (key === 'treant' && this.treantChops(u, o, true))) {
+        u.target = 0;
+        return;
+      }
+    }
     const prey = this.preyOf(u); // un vautour de la meute attaque aussi les vautours sauvages en plein vol
     let t = this.getEnt(u.target);
     const anchorX = o.dead ? u.x : o.x, anchorY = o.dead ? u.y : o.y;
@@ -4567,6 +4593,8 @@ export class Room {
       u.lastAttacker = 0;
     }
     if (!t) t = this.nearest(anchorX, anchorY, o.dead ? 120 : FOLLOW_ENGAGE_R, prey, u.x, u.y);
+    // un totem du Grand Masque le soigne, lui et les siens : la meute l'abat avant tout le reste
+    if (!o.dead && !(t && this.healer(t))) t = this.totemNear(anchorX, anchorY, leash, prey, u) ?? t;
     if (t && SPECIES[u.s].backline && !o.dead) {
       // il ne va pas au contact : il se tient derrière son dompteur, à l'opposé de l'ennemi
       u.target = 0;
@@ -4618,8 +4646,9 @@ export class Room {
   /**
    * Golem de mousse de la meute (ordinaire ou Alpha), sans ennemi à combattre : il va manger le rocher le plus proche, pas
    * trop loin de son dompteur, en quelques bouchées ; la pierre revient à son dompteur.
+   * focus : touche de récolte (il cherche autour de son dompteur, plus loin, même s'il y a des monstres).
    */
-  private golemEats(u: Unit, o: Player) {
+  private golemEats(u: Unit, o: Player, focus = false) {
     const ok = (i: number) => {
       const ore = this.map.ores[i];
       return !!ore && ore.res === 'stone' && this.oreHp[i] > 0 && dist2(o.x, o.y, ore.x, ore.y) < (FOLLOW_MAX_R * 0.8) ** 2;
@@ -4627,9 +4656,9 @@ export class Room {
     if (u.eatOre === undefined || u.eatOre < 0 || !ok(u.eatOre)) {
       u.eatOre = -1;
       if (this.tick % 5 !== 0) return false;
-      let bd = GOLEM_EAT_R ** 2;
+      let bd = (focus ? FOLLOW_MAX_R * 0.8 : GOLEM_EAT_R) ** 2;
       for (const ore of this.map.ores) {
-        const d = dist2(u.x, u.y, ore.x, ore.y);
+        const d = focus ? dist2(o.x, o.y, ore.x, ore.y) : dist2(u.x, u.y, ore.x, ore.y);
         if (d < bd && ok(ore.id)) [bd, u.eatOre] = [d, ore.id];
       }
       if (u.eatOre < 0) return false;
@@ -4828,15 +4857,21 @@ export class Room {
       if (!h) continue;
       const near = (x: number, y: number) => dist2(x, y, h.u.x, h.u.y) <= ALPHA_HEAL_R ** 2;
       const max = maxHpOf(p);
+      let n = 0;
       if (p.hp < max && near(p.x, p.y)) {
-        const n = Math.max(1, Math.min(max - Math.ceil(p.hp), Math.round(max * h.value)));
+        n = Math.max(1, Math.min(max - Math.ceil(p.hp), Math.round(max * h.value)));
         p.hp = Math.min(max, p.hp + n);
-        this.events.push({ e: 'heal', id: p.id, n });
       }
+      const ids: number[] = [];
       for (const id of p.army) {
         const u = this.units.get(id);
-        if (u && !u.reviveAt && u.hp > 0 && u.hp < u.maxHp && near(u.x, u.y)) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * h.value);
+        if (u && u !== h.u && !u.reviveAt && u.hp > 0 && u.hp < u.maxHp && near(u.x, u.y)) {
+          u.hp = Math.min(u.maxHp, u.hp + u.maxHp * h.value);
+          ids.push(u.id);
+        }
       }
+      // des cœurs s'envolent du lièvre vers ceux qu'il soigne
+      if (n || ids.length) this.events.push({ e: 'heal', id: p.id, n, by: h.u.id, ...(ids.length ? { ids } : {}) });
     }
   }
 
@@ -5156,7 +5191,7 @@ export class Room {
     for (const p of this.players.values()) {
       const st: PlayerState = {
         id: p.id, name: p.name, color: p.color, x: Math.round(p.x), y: Math.round(p.y), fx: Math.round(p.fx * 100) / 100, fy: Math.round(p.fy * 100) / 100,
-        hat: p.hat, hats: p.hats, hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, saddle: p.saddle, sword: p.sword, scrolls: new Set(p.scrolls.map((b) => SPECIES[b].zone)).size, cls: p.cls, spec: p.spec, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding,
+        hat: p.hat, hats: p.hats, hp: Math.ceil(Math.max(0, p.hp)), maxHp: maxHpOf(p), weapon: p.weapon, armor: p.armor, torch: p.torch, boots: p.boots, saddle: p.saddle, sword: p.sword, scrolls: new Set(p.scrolls.map((b) => SPECIES[b].zone)).size, cls: p.cls, spec: p.spec, gold: p.gold, wood: p.wood, stone: p.stone, fruits: p.fruits, holding: p.holding, harvest: p.harvest || undefined,
         essences: p.essences, saved: !!p.userId, dead: p.dead,
         respawnIn: p.dead ? Math.max(0, Math.ceil(p.respawnAt - this.time)) : 0,
         revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),

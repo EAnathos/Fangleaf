@@ -7009,24 +7009,36 @@ export function drawTorch(ctx: Ctx, x: number, y: number, lvl: number, t: number
   ctx.fillRect(x - 0.6, y - 12.5, 1.2, 8.5);
 }
 
-/** Souche d'un arbre abattu : il repoussera. */
-export function drawStump(ctx: Ctx, x: number, y: number, r: number) {
-  const w = Math.max(9, r * 0.9);
-  ctx.fillStyle = '#5B3F2C';
-  ctx.fillRect(x - w, y - w * 0.55, w * 2, w * 0.6);
+/**
+ * Souche d'un arbre abattu (il repoussera), posée au pied (x, y) de l'arbre dessiné et à sa taille s (celle du dessin :
+ * un géant de la jungle laisse une grosse souche) : le tronc coupé net, ses racines évasées (flare : leur portée, en s).
+ */
+export function drawStump(ctx: Ctx, x: number, y: number, s: number, flare = 0.36) {
+  const w = Math.max(6, s * 0.2), h = s * 0.3, top = y - h, root = s * flare;
+  // les racines, qui s'étalent au sol
+  ctx.fillStyle = '#4A3424';
   ctx.beginPath();
-  ctx.ellipse(x, y + 0.05 * w, w, w * 0.4, 0, 0, TAU);
+  ctx.moveTo(x - w, top + h * 0.3);
+  ctx.quadraticCurveTo(x - w * 1.1, y - h * 0.15, x - root, y + 1);
+  ctx.lineTo(x + root, y + 1);
+  ctx.quadraticCurveTo(x + w * 1.1, y - h * 0.15, x + w, top + h * 0.3);
+  ctx.closePath();
   ctx.fill();
+  // le tronc coupé
+  ctx.fillStyle = '#5B3F2C';
+  ctx.fillRect(x - w, top, w * 2, h * 0.85);
+  ctx.fillStyle = 'rgba(255,230,200,0.12)';
+  ctx.fillRect(x - w * 0.55, top + w * 0.3, w * 0.25, h * 0.55);
   // le dessus, coupé net, et ses cernes
   ctx.fillStyle = '#C9A36E';
   ctx.beginPath();
-  ctx.ellipse(x, y - w * 0.55, w, w * 0.4, 0, 0, TAU);
+  ctx.ellipse(x, top, w, w * 0.42, 0, 0, TAU);
   ctx.fill();
   ctx.strokeStyle = 'rgba(110,75,45,0.7)';
   ctx.lineWidth = 1;
   for (const k of [0.65, 0.35]) {
     ctx.beginPath();
-    ctx.ellipse(x, y - w * 0.55, w * k, w * 0.4 * k, 0, 0, TAU);
+    ctx.ellipse(x, top, w * k, w * 0.42 * k, 0, 0, TAU);
     ctx.stroke();
   }
 }

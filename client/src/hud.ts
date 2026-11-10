@@ -3,7 +3,7 @@
 import {
   alphaEquipMax, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
-  armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
+  armorReduction, weaponCost, weaponDmg, hatBonus, HAT_WEAPON_BONUS, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
 import { type BoardRow, type Holdings, type PlayerState, type Stats, type StatusTuple, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
@@ -123,7 +123,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     ...(v.buildings.includes('bridge') ? [] : [{ ...offer('bridge', map.bridge.a, 'Réparer'), reach: 150 }]),
     { panel: 'hall', pos: map.hall, label: `E — Hôtel de ville · niv. ${v.hall}` },
     { deposit: true, pos: map.store, label: 'E — Entrepôt : déposer ton bois et ta pierre' },
-    building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Forge' }),
+    building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Armurerie' }),
     building('den', map.den, { panel: 'den', pos: map.den, label: 'E — Tanière' }),
     building('market', map.market, { panel: 'market', pos: map.market, label: 'E — Marché' }),
     { panel: 'board', pos: map.board, reach: 55, label: 'E — Tableau du village' }, // petit : la Tanière d'à côté passe avant
@@ -1503,6 +1503,8 @@ export class Hud {
     }));
     // du moins cher au plus cher (tête nue d'abord)
     const byPrice = HATS.map((_, i) => i).sort((a, b) => HAT_PRICES[a] - HAT_PRICES[b]);
+    const n = me.hats?.length ?? 0;
+    $('profile-hat-bonus').textContent = `Chaque chapeau débloqué renforce ton arme de ${Math.round(HAT_WEAPON_BONUS * 100)} %${n ? ` : +${Math.round(HAT_WEAPON_BONUS * 100 * n)} % aujourd'hui (${n} chapeau${n > 1 ? 'x' : ''})` : '.'}`;
     $('profile-hats').replaceChildren(...byPrice.map((i) => {
       const name = HATS[i];
       const b = document.createElement('button');
@@ -1848,7 +1850,7 @@ export class Hud {
     };
 
     const w = me.weapon, wMax = w >= WEAPON_MAX, hero = heroOf(me.cls, me.spec);
-    const k = hero.dmg, locked = w >= SPEC_LVL && !me.spec; // au-delà du niveau 10 : une spécialisation d'abord
+    const k = hero.dmg * hatBonus(me.hats?.length ?? 0), locked = w >= SPEC_LVL && !me.spec; // au-delà du niveau 10 : une spécialisation d'abord ; chaque chapeau débloqué : +10 %
     $('weapon-name').textContent = `${weaponName(me.cls, me.spec, w)} · niv. ${w}`;
     $('weapon-dmg').innerHTML = next(String(Math.round(weaponDmg(w) * k)), String(Math.round(weaponDmg(w + 1) * k)), wMax || locked);
     $('weapon-next').textContent = wMax ? '—' : locked ? 'Spécialisation à choisir' : weaponName(me.cls, me.spec, w + 1);
@@ -1862,7 +1864,7 @@ export class Hud {
     if (locked && !wMax) {
       const btn = $<HTMLButtonElement>('weapon-buy');
       btn.disabled = true;
-      btn.textContent = this.buildings.includes('forge2') ? 'Choisis une spécialisation' : 'Grande forge requise';
+      btn.textContent = this.buildings.includes('forge2') ? 'Choisis une spécialisation' : 'Grande armurerie requise';
     }
 
     const a = me.armor, aMax = a >= ARMOR_MAX;
@@ -1922,7 +1924,7 @@ export class Hud {
       this.costChips('forge2-cost', funds, cost);
       const btn = $<HTMLButtonElement>('forge2-go');
       btn.disabled = this.hall < b.hall || !canPay(funds, cost);
-      btn.textContent = this.hall < b.hall ? `Hôtel de ville niv. ${b.hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : 'Améliorer la forge pour le village';
+      btn.textContent = this.hall < b.hall ? `Hôtel de ville niv. ${b.hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : "Améliorer l'armurerie pour le village";
       return;
     }
     const price = me.spec === null ? 0 : SPEC_CHANGE_COST, ready = !!me.cls && me.weapon >= SPEC_LVL;
