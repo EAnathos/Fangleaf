@@ -73,6 +73,7 @@ export type ClientMsg =
   | { t: 'sword' } // tirer sur l'épée plantée dans le sable (SWORD_PULLS fois)
   | { t: 'pick' } // cueillir les baies du buisson garni le plus proche
   | { t: 'hold'; on: boolean } // tendre un fruit (ou le ranger) : le gibier passif s'approche
+  | { t: 'harvest'; on: boolean } // Tréant et Golem de la meute : récolte (ils abattent les arbres et mangent les pierres, au lieu de se battre)
   | { t: 'deposit' }
   | { t: 'chat'; text: string } // message pour tout le village
   | { t: 'board' } // demander le tableau du village
@@ -116,6 +117,7 @@ export interface PlayerState {
   gold: number;
   fruits: number; // baies dans son sac
   holding: boolean; // tend un fruit (il ne se bat plus, il nourrit)
+  harvest?: boolean; // son Tréant et son Golem récoltent (touche de récolte)
   wood: number; // dans son sac (à déposer à l'entrepôt)
   stone: number;
   essences: number[]; // par espèce
@@ -249,7 +251,7 @@ export type GameEvent =
   | { e: 'spec'; id: number; spec: SpecId }
   | { e: 'awaken'; id: number; by: number; s: number } // Alpha éveillé à la tanière
   | { e: 'revive'; id: number }
-  | { e: 'heal'; id: number; n: number } // un Alpha lièvre soigne son dompteur
+  | { e: 'heal'; id: number; n: number; by?: number; ids?: number[] } // un Alpha lièvre (by) soigne son dompteur (n PV, 0 s'il était déjà au max) et sa meute (ids)
   | { e: 'pet'; id: number; with: number; act: 'chase' | 'play' } // deux Alphas au repos se mettent à jouer
   | { e: 'shout'; id: number; kind: 'rally' | 'guard'; r: number } // un Alpha suricate pousse son cri (rally), un escargot dresse sa carapace (guard) : les alliés à r en profitent
   | { e: 'pdie'; id: number; gold: number; wood?: number; stone?: number } // or, bois et pierre perdus dans la chute
@@ -308,6 +310,7 @@ export interface Snapshot {
   hazards: HazardTuple[]; // attaques spéciales visibles
   shots: ShotTuple[]; // projectiles des tireurs (esquivables)
   sands: SandTuple[]; // sables mouvants ouverts, près de lui
+  doors?: number[]; // herses du donjon sous le volcan (seulement pour qui s'y trouve) : 1 baissée, 0 levée, par couloir (index de map.links)
   traps: number[]; // pièges du donjon sous le volcan, près de lui, à l'œuvre : [index dans map.traps, état]… (évent : 1 rougeoie, 2 crache ; dalle : 1 geyser annoncé, 2 enfoncée)
   bolts: [number, number, number, number][]; // coups de foudre annoncés près de lui : [id, x, y, dixièmes de seconde avant qu'elle tombe]
   ev: GameEvent[];

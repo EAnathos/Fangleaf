@@ -26,26 +26,30 @@ describe('Le volcan et ses entrailles', () => {
     check(m.traps.some((t: { kind: string }) => t.kind === 'vent') && m.traps.some((t: { kind: string }) => t.kind === 'plate'), 'des évents de flammes et des dalles piégées');
     const lairs = m.caves.filter((c: { zone: number }) => c.zone === VOLCANO_ZONE);
     check(lairs.length === zoneBosses(VOLCANO_ZONE).length && lairs.length === 3, 'trois antres, un par géant du volcan');
+    check(m.doors.length === m.links.length, 'une herse par couloir');
     const sides = new Set<string>();
     for (const c of lairs) {
-      const k = m.roomAt(c.entrance.x, c.entrance.y);
+      const k = c.room;
       check(k >= 0 && m.rooms[k].kind === 'lair' && m.links.filter(([a, b]: number[]) => a === k || b === k).length === 1, `antre de ${SPECIES[c.boss].name} : au bout d'un cul-de-sac`);
-      check(!m.blocked(c.entrance.x, c.entrance.y + 70), '… son entrée dégagée');
-      // de la sortie à l'antre : un chemin de salle en salle, droit d'un point à l'autre
-      const path = m.findPath(d.exit.x, d.exit.y, c.entrance.x, c.entrance.y + 70);
+      check(m.arenaAt(m.rooms[k].x, m.rooms[k].y + 60)?.id === c.id && !m.blocked(c.home.x, c.home.y), '… le géant s\'y tient, à l\'air libre : la salle est son arène');
+      const door = m.doors.findIndex((q: { lair: number }) => q.lair === c.id);
+      check(door >= 0 && Math.hypot(m.doors[door].x - c.entrance.x, m.doors[door].y - c.entrance.y) < 1, '… derrière une herse, où l\'on paie l\'entrée');
+      // de la sortie à l'antre (herses levées) : un chemin de salle en salle, droit d'un point à l'autre
+      m.doorShut.fill(0);
+      const path = m.findPath(d.exit.x, d.exit.y, c.home.x, c.home.y + 70);
       let cur = d.exit, ok = !!path;
       for (const q of path ?? []) {
         ok &&= m.clearLine(cur.x, cur.y, q.x, q.y);
         cur = q;
       }
       check(ok, '… et on y va depuis la sortie');
-      sides.add(c.entrance.x < h.x - 1500 ? 'gauche' : c.entrance.x > h.x + 1500 ? 'droite' : 'haut');
+      sides.add(c.home.x < h.x - 1500 ? 'gauche' : c.home.x > h.x + 1500 ? 'droite' : 'haut');
     }
     check(sides.size === 3, 'un antre à gauche, un à droite, un en haut');
     check(m.blocked(d.exit.x, d.exit.y + 400), 'hors des salles : la roche');
   });
 
-  rule('Les pièges du donjon : l\'évent brûle à son rythme, la dalle fait jaillir un geyser (pas en vol).', () => {
+  rule('Les pièges du donjon : l\'évent brûle à son rythme, la dalle fait jaillir un geyser.', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r: any = room(), m = r.map, p = r.addPlayer('a', noop);
     const vi = m.traps.findIndex((t: { kind: string }) => t.kind === 'vent'), v = m.traps[vi];
@@ -87,14 +91,113 @@ describe('Le volcan et ses entrailles', () => {
     check(!m.caveAt(p.x, p.y) && Math.hypot(p.x - mo.x, p.y - mo.y) < 200, '… et on remonte devant la bouche');
   });
 
-  rule('Les créatures de lave n\'apparaissent que dans les entrailles, une fois le volcan ouvert.', () => {
-    const r = room(), m = r.map;
+  rule('Les créatures de lave gardent les salles des entrailles : elles apparaissent quand on peut y entrer, jamais au hasard.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
     r.units.clear();
     const lava = SPECIES.map((sp, i) => (sp.zone === VOLCANO_ZONE && !sp.boss && !sp.minion ? i : -1)).filter((i) => i >= 0);
     check(lava.length === 3, 'trois espèces dans les entrailles');
     for (const s of lava) for (let k = 0; k < 5; k++) r.spawnPack(s);
+    check(![...r.units.values()].some((u: { s: number }) => lava.includes(u.s)), 'rien n\'apparaît au hasard');
+    const p = r.addPlayer('a', noop);
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y - 40];
+    r.tick = 0;
+    r.updateDepths();
     const wild = [...r.units.values()].filter((u: { s: number; owner: number }) => lava.includes(u.s) && !u.owner);
-    check(wild.length > 0 && wild.every((u: { x: number; y: number }) => m.caveAt(u.x, u.y) === m.depths && !m.blocked(u.x, u.y)), `${wild.length} créatures de lave, toutes dans la salle`);
+    const entry = m.rooms.findIndex((q: { kind: string }) => q.kind === 'entry');
+    const next = new Set(m.links.flatMap(([a, b]: number[]) => (a === entry ? [b] : b === entry ? [a] : [])));
+    check(wild.length > 0 && wild.every((u: { x: number; y: number; room: number }) => m.caveAt(u.x, u.y) === m.depths && !m.blocked(u.x, u.y) && next.has(u.room) && m.roomAt(u.x, u.y) === u.room),
+      `${wild.length} créatures de lave, dans les salles qui touchent l'entrée (et seulement elles)`);
+  });
+
+  rule('Les herses : vider une salle ouvre les voisines ; un antre ne s\'ouvre qu\'une fois son entrée payée.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = new Room('TEST', undefined, { buildings: [...BUILDING_IDS], unlocked: [], hall: HALL_MAX, beaten: [] });
+    const m = r.map, p = r.addPlayer('a', noop);
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y - 40];
+    r.tick = 0;
+    r.updateDepths();
+    const entry = m.rooms.findIndex((q: { kind: string }) => q.kind === 'entry');
+    const touches = (i: number, k: number) => m.links[i][0] === k || m.links[i][1] === k;
+    check(m.links.every((_: unknown, i: number) => !!m.doorShut[i] === !touches(i, entry)), 'au départ : seules les herses de la salle d\'entrée sont levées');
+    const door = m.links.findIndex((_: unknown, i: number) => touches(i, entry));
+    const k = m.links[door][0] === entry ? m.links[door][1] : m.links[door][0];
+    const shut = m.doors.find((_: unknown, i: number) => !touches(i, entry) && touches(i, k));
+    check(!shut || m.blocked(shut.x, shut.y), 'une herse baissée barre le couloir');
+    // la garnison de la salle voisine tombe : ses autres herses se lèvent
+    for (const u of [...r.units.values()]) if (u.room === k) r.units.delete(u.id);
+    r.updateDepths();
+    check(r.cleared.has(k) && m.links.every((_: unknown, i: number) => !touches(i, k) || !m.doorShut[i] || m.doors[i].lair >= 0), 'salle vidée : les herses de ses couloirs se lèvent');
+    // un antre : il faut que la salle d'à côté soit vidée, et que l'entrée soit payée
+    const lair = m.caves.find((c: { room?: number }) => c.room !== undefined), li = m.doors.findIndex((q: { lair: number }) => q.lair === lair.id);
+    const [a, b] = m.links[li], before = a === lair.room ? b : a;
+    r.cleared.add(before);
+    r.updateDepths();
+    check(m.doorShut[li] === 1, 'salle d\'à côté vidée, entrée pas payée : la herse de l\'antre reste baissée');
+    p.gold = 1e6;
+    [p.x, p.y] = [lair.entrance.x - m.doors[li].ux * 60, lair.entrance.y - m.doors[li].uy * 60];
+    if (m.doors[li].lair >= 0 && m.rooms[a] === m.rooms[lair.room]) [p.x, p.y] = [lair.entrance.x + m.doors[li].ux * 60, lair.entrance.y + m.doors[li].uy * 60];
+    r.onUnlock(p, lair.id);
+    r.updateDepths();
+    check(r.unlocked.includes(lair.id) && m.doorShut[li] === 0, 'entrée payée devant la herse : elle se lève');
+    r.onCave(p, lair.id, true);
+    check(m.caveAt(p.x, p.y) === m.depths, 'pas d\'intérieur à part : le géant attend dans sa salle');
+  });
+
+  rule('Dans le donjon, on ne tire pas d\'une salle à l\'autre : la roche et les herses arrêtent la vue.', () => {
+    const r = room(), m = r.map;
+    const [a, b] = m.links[0], A = m.rooms[a], B = m.rooms[b];
+    m.doorShut.fill(0);
+    check(m.inSight(A.x, A.y, B.x, B.y) || !m.clearLine(A.x, A.y, B.x, B.y), 'herse levée : on voit d\'un bout du couloir à l\'autre (s\'il est dégagé)');
+    m.doorShut[0] = 1;
+    check(!m.inSight(A.x, A.y, B.x, B.y), 'herse baissée : on ne voit plus au travers');
+    // une salle proche, sans couloir entre les deux : la roche coupe la vue
+    const far = m.rooms.findIndex((q: { x: number; y: number }, i: number) => i !== a && Math.hypot(q.x - A.x, q.y - A.y) < 1600 && !m.links.some(([x, y]: number[]) => (x === a && y === i) || (x === i && y === a)));
+    check(far >= 0, 'deux salles proches sans couloir entre elles');
+    const F = m.rooms[far];
+    check(!m.inSight(A.x, A.y, F.x, F.y), 'à travers la roche : rien');
+    // un archer au bord de sa salle, un monstre de l'autre côté de la roche, à portée : il ne le touche pas
+    r.units.clear();
+    const p = r.addPlayer('arc', noop);
+    p.cls = 'archer';
+    p.hp = 1e6;
+    const d = Math.hypot(F.x - A.x, F.y - A.y), ux = (F.x - A.x) / d, uy = (F.y - A.y) / d;
+    const edge = m.sightReach(A.x, A.y, ux, uy, d);
+    [p.x, p.y] = [A.x + ux * (edge - 40), A.y + uy * (edge - 40)];
+    const lava = SPECIES.findIndex((sp) => sp.key === 'salamander');
+    let spot = edge + 40;
+    while (spot < d && m.blocked(A.x + ux * spot, A.y + uy * spot)) spot += 16;
+    const u = r.createUnit(lava, false, A.x + ux * spot, A.y + uy * spot);
+    const hp = u.hp;
+    for (let i = 0; i < 20; i++) r.step();
+    check(Math.hypot(u.x - p.x, u.y - p.y) > 500 || u.hp === hp, 'derrière la roche : l\'archer ne le touche pas');
+  });
+
+  rule('Les flammes des pièges brûlent aussi à dos de vautour, et la meute qui n\'est pas de feu.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    const vi = m.traps.findIndex((t: { kind: string }) => t.kind === 'vent'), v = m.traps[vi];
+    [p.x, p.y] = [v.x, v.y];
+    const vul = SPECIES.findIndex((sp) => sp.key === 'vulture'), wolf = SPECIES.findIndex((sp) => sp.key === 'wolf'), bat = SPECIES.findIndex((sp) => sp.key === 'ash_bat');
+    const mount = r.spawnAlpha(p, vul, 0, false);
+    [mount.x, mount.y] = [p.x, p.y];
+    r.onMount(p, mount.id);
+    check(r.airborne(p), 'en vol');
+    const w = r.spawnAlpha(p, wolf, 0, false), f = r.spawnAlpha(p, bat, 0, false);
+    for (const u of [w, f]) [u.x, u.y] = [v.x + 10, v.y];
+    const hp = p.hp, whp = w.hp, fhp = f.hp;
+    for (let i = 0; i < TICK_HZ * 8; i++) {
+      r.tick++;
+      r.time += 1 / TICK_HZ;
+      for (const u of [w, f]) [u.x, u.y] = [v.x + 10, v.y];
+      p.hp = Math.max(p.hp, 1);
+      r.updateTraps();
+    }
+    check(p.hp < hp, 'à dos de vautour : on brûle quand même');
+    check(w.hp < whp, 'le loup de la meute brûle');
+    check(f.hp === fhp, 'la chauve-souris de cendre (feu) ne craint rien');
   });
 
   rule('Le cœur volcanique : scellé tant qu\'un géant du volcan est debout, pris une fois, puis installé dans le bateau rebâti.', () => {

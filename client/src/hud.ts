@@ -3,7 +3,7 @@
 import {
   alphaEquipMax, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
-  armorReduction, weaponCost, weaponDmg, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
+  armorReduction, weaponCost, weaponDmg, hatBonus, HAT_WEAPON_BONUS, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
 import { type BoardRow, type Holdings, type PlayerState, type Stats, type StatusTuple, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
@@ -95,7 +95,7 @@ const BOARD: { title: string; stats: { k: keyof Stats | keyof Holdings; label: s
 export const purchaseOf = (map: WorldMap, buy: Purchase): { name: string; cost: Cost; hall: number } =>
   'b' in buy
     ? { name: BUILDINGS[buy.b].name, cost: buildingCost(buy.b), hall: BUILDINGS[buy.b].hall }
-    : { name: `Grotte de ${SPECIES[map.caves[buy.cave].boss].name}`, cost: { gold: caveUnlockCost(map.caves[buy.cave].zone), wood: 0, stone: 0 }, hall: 0 };
+    : { name: `${map.caves[buy.cave].room !== undefined ? 'Salle' : 'Grotte'} de ${SPECIES[map.caves[buy.cave].boss].name}`, cost: { gold: caveUnlockCost(map.caves[buy.cave].zone), wood: 0, stone: 0 }, hall: 0 };
 /** Ce qu'on peut dépenser : son or, et le bois et la pierre de la réserve du village. */
 type Funds = { gold: number; wood: number; stone: number };
 const canPay = (f: Funds, c: Cost) => f.gold >= c.gold && f.wood >= c.wood && f.stone >= c.stone;
@@ -123,7 +123,7 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     ...(v.buildings.includes('bridge') ? [] : [{ ...offer('bridge', map.bridge.a, 'Réparer'), reach: 150 }]),
     { panel: 'hall', pos: map.hall, label: `E — Hôtel de ville · niv. ${v.hall}` },
     { deposit: true, pos: map.store, label: 'E — Entrepôt : déposer ton bois et ta pierre' },
-    building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Forge' }),
+    building('forge', map.forge, { panel: 'forge', pos: map.forge, label: 'E — Armurerie' }),
     building('den', map.den, { panel: 'den', pos: map.den, label: 'E — Tanière' }),
     building('market', map.market, { panel: 'market', pos: map.market, label: 'E — Marché' }),
     { panel: 'board', pos: map.board, reach: 55, label: 'E — Tableau du village' }, // petit : la Tanière d'à côté passe avant
@@ -167,7 +167,10 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
         ? { pos: map.depths.inside, reach: HEART_REACH + 40, label: `Scellé : encore ${left} géant${left > 1 ? 's' : ''} du volcan à vaincre` }
         : { heart: true, pos: map.depths.inside, reach: HEART_REACH, label: 'E — Prendre le cœur volcanique' }];
     })(),
-    ...map.caves.filter((c) => c.zone !== VOYAGE_ZONE && c.open === undefined).flatMap((c): Spot[] => [
+    // géants du volcan : dans leur salle du donjon, derrière une herse qu'on lève en payant l'entrée
+    ...map.caves.filter((c) => c.room !== undefined && !v.unlocked.includes(c.id))
+      .map((c): Spot => ({ panel: 'buy', pos: c.entrance, reach: 150, buy: { cave: c.id }, label: `E — Payer l'entrée de la salle · ${SPECIES[c.boss].name}` })),
+    ...map.caves.filter((c) => c.zone !== VOYAGE_ZONE && c.open === undefined && c.room === undefined).flatMap((c): Spot[] => [
       v.unlocked.includes(c.id)
         ? {
           cave: { id: c.id, enter: true }, pos: c.entrance,
@@ -1500,6 +1503,8 @@ export class Hud {
     }));
     // du moins cher au plus cher (tête nue d'abord)
     const byPrice = HATS.map((_, i) => i).sort((a, b) => HAT_PRICES[a] - HAT_PRICES[b]);
+    const n = me.hats?.length ?? 0;
+    $('profile-hat-bonus').textContent = `Chaque chapeau débloqué renforce ton arme de ${Math.round(HAT_WEAPON_BONUS * 100)} %${n ? ` : +${Math.round(HAT_WEAPON_BONUS * 100 * n)} % aujourd'hui (${n} chapeau${n > 1 ? 'x' : ''})` : '.'}`;
     $('profile-hats').replaceChildren(...byPrice.map((i) => {
       const name = HATS[i];
       const b = document.createElement('button');
@@ -1845,7 +1850,7 @@ export class Hud {
     };
 
     const w = me.weapon, wMax = w >= WEAPON_MAX, hero = heroOf(me.cls, me.spec);
-    const k = hero.dmg, locked = w >= SPEC_LVL && !me.spec; // au-delà du niveau 10 : une spécialisation d'abord
+    const k = hero.dmg * hatBonus(me.hats?.length ?? 0), locked = w >= SPEC_LVL && !me.spec; // au-delà du niveau 10 : une spécialisation d'abord ; chaque chapeau débloqué : +10 %
     $('weapon-name').textContent = `${weaponName(me.cls, me.spec, w)} · niv. ${w}`;
     $('weapon-dmg').innerHTML = next(String(Math.round(weaponDmg(w) * k)), String(Math.round(weaponDmg(w + 1) * k)), wMax || locked);
     $('weapon-next').textContent = wMax ? '—' : locked ? 'Spécialisation à choisir' : weaponName(me.cls, me.spec, w + 1);
@@ -1859,7 +1864,7 @@ export class Hud {
     if (locked && !wMax) {
       const btn = $<HTMLButtonElement>('weapon-buy');
       btn.disabled = true;
-      btn.textContent = this.buildings.includes('forge2') ? 'Choisis une spécialisation' : 'Grande forge requise';
+      btn.textContent = this.buildings.includes('forge2') ? 'Choisis une spécialisation' : 'Grande armurerie requise';
     }
 
     const a = me.armor, aMax = a >= ARMOR_MAX;
@@ -1919,7 +1924,7 @@ export class Hud {
       this.costChips('forge2-cost', funds, cost);
       const btn = $<HTMLButtonElement>('forge2-go');
       btn.disabled = this.hall < b.hall || !canPay(funds, cost);
-      btn.textContent = this.hall < b.hall ? `Hôtel de ville niv. ${b.hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : 'Améliorer la forge pour le village';
+      btn.textContent = this.hall < b.hall ? `Hôtel de ville niv. ${b.hall} requis` : !canPay(funds, cost) ? 'Il manque des ressources' : "Améliorer l'armurerie pour le village";
       return;
     }
     const price = me.spec === null ? 0 : SPEC_CHANGE_COST, ready = !!me.cls && me.weapon >= SPEC_LVL;
@@ -2345,6 +2350,8 @@ export class Hud {
     // zoom : le décor est agrandi, les repères gardent leur taille à l'écran (u : un pixel CSS, à l'échelle du zoom)
     const v = this.mapView, u = dpr / v.z;
     ctx.setTransform(v.z, 0, 0, v.z, S * (0.5 - v.x * v.z), S * (0.5 - v.y * v.z));
+    // dans les entrailles du volcan : la carte du donjon, pas celle de l'île
+    if (this.map.caveAt(myPos.x, myPos.y) === this.map.depths) return this.drawDungeonMap(me, players, myPos, ctx, S, 2.2 * u);
     const k = S / (WORLD_HALF * 2), m = (v: number) => (v + WORLD_HALF) * k;
     ctx.imageSmoothingEnabled = true;
     ctx.fillStyle = '#0B1210';
@@ -2546,27 +2553,30 @@ export class Hud {
   private explored = new Set<number>(); // salles du donjon déjà vues (cette session)
 
   /**
-   * Minicarte du donjon sous le volcan : les salles déjà vues et leurs couloirs, le cœur au centre, les antres une fois
-   * découverts (barrés quand leur géant est vaincu), les dompteurs.
+   * Carte du donjon sous le volcan (minicarte, et grande carte quand on y est) : les salles déjà vues et leurs couloirs
+   * (herse baissée : couloir sombre), le cœur au centre, les antres une fois découverts (barrés quand leur géant est
+   * vaincu), les dompteurs. z : taille des repères (1 sur la minicarte).
    */
-  private drawDungeonMap(me: PlayerState, players: PlayerState[], myPos: { x: number; y: number }) {
-    const ctx = this.mini, S = 180, map = this.map, h = map.depths.inside, k = S / (2 * HALL_RX);
+  private drawDungeonMap(me: PlayerState, players: PlayerState[], myPos: { x: number; y: number }, ctx = this.mini, S = 180, z = 1) {
+    const map = this.map, h = map.depths.inside, k = S / (2 * HALL_RX);
     const m = (x: number, y: number): [number, number] => [S / 2 + (x - h.x) * k, S / 2 + (y - h.y) * k];
     map.rooms.forEach((r, i) => {
       if (Math.hypot(r.x - myPos.x, r.y - myPos.y) < Math.max(r.rx, r.ry) + 420) this.explored.add(i);
     });
     ctx.fillStyle = '#120C0A';
     ctx.fillRect(0, 0, S, S);
-    ctx.strokeStyle = '#6A4A3A';
-    ctx.lineWidth = 3;
     ctx.lineCap = 'round';
-    ctx.beginPath();
-    for (const [a, b] of map.links) {
-      if (!this.explored.has(a) && !this.explored.has(b)) continue;
-      ctx.moveTo(...m(map.rooms[a].x, map.rooms[a].y));
-      ctx.lineTo(...m(map.rooms[b].x, map.rooms[b].y));
+    for (const shut of [1, 0]) {
+      ctx.strokeStyle = shut ? '#3A2A22' : '#6A4A3A';
+      ctx.lineWidth = 3 * z;
+      ctx.beginPath();
+      map.links.forEach(([a, b], i) => {
+        if ((!this.explored.has(a) && !this.explored.has(b)) || map.doorShut[i] !== shut) return;
+        ctx.moveTo(...m(map.rooms[a].x, map.rooms[a].y));
+        ctx.lineTo(...m(map.rooms[b].x, map.rooms[b].y));
+      });
+      ctx.stroke();
     }
-    ctx.stroke();
     const lairs = map.caves.filter((c) => c.zone === VOLCANO_ZONE);
     map.rooms.forEach((r, i) => {
       if (!this.explored.has(i)) return;
@@ -2575,24 +2585,30 @@ export class Hud {
       ctx.beginPath();
       ctx.ellipse(x, y, r.rx * k, r.ry * k, 0, 0, Math.PI * 2);
       ctx.fill();
-      if (r.kind === 'heart') this.star(ctx, x, y, 5, 1);
+      if (r.kind === 'heart') this.star(ctx, x, y, 5 * z, z);
       if (r.kind === 'entry') {
         ctx.fillStyle = '#EEE7D7';
-        ctx.fillRect(x - 3, y + 2, 6, 3);
+        ctx.fillRect(x - 3 * z, y + 2 * z, 6 * z, 3 * z);
       }
       if (r.kind === 'lair') {
-        const c = lairs.find((q) => map.roomAt(q.entrance.x, q.entrance.y) === i), done = !!c && this.beaten.includes(c.boss);
+        const c = lairs.find((q) => q.room === i), done = !!c && this.beaten.includes(c.boss);
         ctx.fillStyle = done ? '#A9B3A6' : '#E8693F';
         ctx.beginPath();
-        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+        ctx.arc(x, y, 4.5 * z, 0, Math.PI * 2);
         ctx.fill();
         if (done) {
           ctx.strokeStyle = '#120C0A';
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.5 * z;
           ctx.beginPath();
-          ctx.moveTo(x - 3, y - 3);
-          ctx.lineTo(x + 3, y + 3);
+          ctx.moveTo(x - 3 * z, y - 3 * z);
+          ctx.lineTo(x + 3 * z, y + 3 * z);
           ctx.stroke();
+        }
+        if (c && z > 1) {
+          ctx.font = `700 ${11 * z}px Outfit, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillStyle = done ? '#A9B3A6' : '#F0B64A';
+          ctx.fillText(SPECIES[c.boss].name, x, y - 9 * z);
         }
       }
     });
@@ -2601,9 +2617,9 @@ export class Hud {
       if (x < 0 || y < 0 || x > S || y > S) continue;
       ctx.fillStyle = p.dead ? '#A9B3A6' : p.color;
       ctx.strokeStyle = '#10181A';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2 * z;
       ctx.beginPath();
-      ctx.arc(x, y, p.id === me.id ? 4.5 : 3.5, 0, Math.PI * 2);
+      ctx.arc(x, y, (p.id === me.id ? 4.5 : 3.5) * z, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }

@@ -1,7 +1,7 @@
 // Réglages du joueur (gardés dans ce navigateur) : affichage, et sur PC touches et façon d'attaquer.
 // Au doigt, rien ne change pour les touches : on glisse pour se déplacer et l'attaque reste automatique.
 
-export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'map' | 'revive' | 'chat';
+export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'harvest' | 'map' | 'revive' | 'chat';
 /**
  * Une touche : par code physique (déplacements : ZQSD en AZERTY = WASD en QWERTY) ou par lettre tapée
  * (raccourcis : sinon M ne marche pas en AZERTY). Une touche choisie par le joueur est toujours gardée par code.
@@ -52,6 +52,7 @@ export const ACTIONS: { id: Action; name: string }[] = [
   { id: 'interact', name: 'Interagir (bâtiment, grotte, coffre, baies)' },
   { id: 'fruit', name: 'Tendre un fruit' },
   { id: 'mount', name: 'Monter / descendre' },
+  { id: 'harvest', name: 'Tréant et Golem : récolter (arbres, pierres)' },
   { id: 'map', name: 'Carte' },
   { id: 'revive', name: 'Relever un coéquipier (maintenir)' },
   { id: 'chat', name: 'Ouvrir le chat' },
@@ -66,6 +67,7 @@ const DEFAULTS: Settings = {
     interact: { key: 'e', label: 'E' },
     fruit: { key: 't', label: 'T' },
     mount: { key: 'f', label: 'F' },
+    harvest: { key: 'g', label: 'G' },
     map: { key: 'm', label: 'M' },
     revive: { key: 'r', label: 'R' },
     chat: { key: 'c', label: 'C' },

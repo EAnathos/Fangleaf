@@ -153,7 +153,7 @@ export const SFX: Record<Sfx, SfxDef> = {
     play: (s) => { s.thump(70, 38, 0.35, 0.8); s.thump(95, 50, 0.2, 0.4, 0.09); s.hiss('lowpass', 500, 0.3, 0.25, 120); },
   },
   screech: {
-    label: 'Cri strident', when: 'Le Seigneur des cendres lance son écholocation.',
+    label: 'Cri strident', when: 'Titus Veillafandre lance son écholocation.',
     play: (s) => { s.tone(2400, 3600, 0.25, 0.12, 'square'); s.tone(3200, 2100, 0.35, 0.1, 'sawtooth', 0.12); s.hiss('highpass', 6000, 0.4, 0.15, 3000, 0, 6); },
   },
   chomp: {

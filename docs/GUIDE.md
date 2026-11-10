@@ -72,11 +72,12 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 
 - L'attaque est **automatique** sur l'ennemi le plus proche à portée. Sur PC, on peut passer à l'**attaque au clic**
   (Échap › Paramètres) : on frappe alors le monstre visé.
-- **Classes**, choisies à la forge (le premier choix est gratuit, les suivants payants) :
+- **Classes**, choisies à l'armurerie (le premier choix est gratuit, les suivants payants) :
   **Guerrier** (corps à corps, plus de PV), **Archer** (tir de loin), **Mage** (orbe qui touche aussi autour de la cible).
-- **Spécialisations** : au-delà d'un certain niveau d'arme, la **Grande forge** permet de spécialiser sa classe :
+  Archers et mages abattent les arbres et cassent les pierres 30 % moins vite.
+- **Spécialisations** : au-delà d'un certain niveau d'arme, la **Grande armurerie** permet de spécialiser sa classe :
   Berserker ou Gardien (guerrier), Tireur d'élite ou Rôdeur (archer), Pyromancien ou Druide (mage).
-- La forge améliore séparément l'**arme** (dégâts) et l'**armure** (PV max et réduction des dégâts), ainsi que la
+- L'armurerie améliore séparément l'**arme** (dégâts) et l'**armure** (PV max et réduction des dégâts), ainsi que la
   **torche** (rayon de lumière la nuit), les **bottes** (vitesse) et la **selle** (vitesse des montures). Chaque
   amélioration coûte de l'or et du **bois** : celui du sac d'abord, puis celui de l'entrepôt du village.
 - **Tireurs** (Guetteur, Crapaud-mortier, Serpent, Gorille, Petit Masqué) : ils s'immobilisent pour charger leur tir. On s'écarte de la
@@ -100,7 +101,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - La meute ordinaire est sauvegardée avec la progression, mais se disperse à la mort.
 - Au village et dans les camps, la meute se promène librement autour de son dompteur.
 - **Montures** (**F**) : certains Alphas se chevauchent (Loup, Sanglier, Ours, Escargot, Serpent, Vautour), à
-  condition d'avoir une **selle** (achetée à la forge, plus rapide en l'améliorant). La monture encaisse une partie
+  condition d'avoir une **selle** (achetée à l'armurerie, plus rapide en l'améliorant). La monture encaisse une partie
   des coups ; si elle tombe, on est désarçonné.
   - Le **Serpent des brumes** ne va qu'en eau : on embarque près de l'eau, on descend au bord d'une rive, et
     s'il tombe en pleine eau, on se noie.
@@ -109,7 +110,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   - Le **Vautour** vole : il passe au-dessus de l'eau, des rochers et des arbres. En vol, les monstres ne l'atteignent
     pas au corps à corps, ni le dard du scorpion (seuls leurs tirs et les géants), mais on ne récolte ni bois ni pierre de là-haut. Dans la meute
     aussi, il suit son dompteur en volant, se pose quand il s'arrête, et pique sur sa proie pour se poser à côté et la
-    frapper. Pendant une tempête de sable, le vent le cloue au sol (monture comprise) : on ne vole plus dans le désert.
+    frapper. Pendant une tempête de sable, le vent le cloue au sol : dans le désert, impossible de le monter, et un
+    cavalier qui y entre met pied à terre.
   - L'**Escargot** se monte… mais ralentit.
 
 ## Alphas et Tanière
@@ -145,7 +147,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Foudre** : sous la pluie, abattre un arbre attire parfois la foudre sur le bûcheron : il perd un peu de PV (elle
   ne l'achève jamais) et reste étourdi un instant.
 - Dans la meute, le **Golem de mousse** croque les rochers alentour et le **Tréant** abat les arbres : la pierre et le
-  bois reviennent à leur dompteur.
+  bois reviennent à leur dompteur. **G** (touche de récolte) : ils ne s'occupent plus que de ça, autour de leur
+  dompteur, sans se battre ; **G** à nouveau pour les ramener au combat.
 - **Baies** : **E** près d'un buisson garni pour cueillir. **T** pour tendre un fruit ; fruit en main, on ne se bat plus.
 - **Gibier passif** (Escargot, Lièvre, Luciole, Suricate) : il n'attaque jamais et vient manger aux buissons.
   Fruit tendu, il s'approche peu à peu, et chaque fruit mangé peut l'apprivoiser (bien plus rarement pour un
@@ -161,7 +164,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Au départ, ce n'est qu'un camp : on monte la **palissade**, puis on **défriche** chaque emplacement avant d'y
   bâtir. Chaque bâtiment se construit **une fois pour tout le village**, avec l'or de celui qui le paie et le bois
   et la pierre de la réserve commune :
-  - **Forge** : classe, arme, armure, torche, bottes ; plus tard la **Grande forge** et ses spécialisations.
+  - **Armurerie** : classe, arme, armure, torche, bottes ; plus tard la **Grande armurerie** et ses spécialisations.
   - **Tanière** : Alphas et bestiaire.
   - **Marché** : vendre les monstres de sa meute, acheter ceux des espèces déjà croisées.
   - **Pierre de passage** : voyage instantané vers les camps établis.
@@ -218,7 +221,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
     brèches) et **lancer de tronc** (il roule droit devant lui).
   - **Crocodile Ancien** : **coup de queue** (vers là où il y a le plus de monde, même dans son dos), **roulade de la
     mort** (il happe et tournoie) et **embuscade** (il plonge, file sous sa cible et surgit).
-  - **Grand Masque** : **totems** (ils soignent ses Petits Masqués : casse-les) et **malédiction** (sors de la marque,
+  - **Grand Masque** : **totems** (ils le soignent, lui et ses Petits Masqués : la meute les vise en priorité) et **malédiction** (sors de la marque,
     sinon tu subis plus de dégâts).
   - **Reine des sables** : **gueules des dunes** (le sable s'ouvre sous les dompteurs, aspire, puis se referme en mordant).
   - **Chacal lunaire** : **éclipse** (la nuit tombe sur l'arène, on ne voit plus qu'autour de soi, ses chacals sortent
@@ -227,7 +230,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
     sous sa cible).
   - **Salamandre-Mère** : **mue** (sa vieille peau reste et explose, elle file) ; sa **queue** tombe deux fois et se bat
     seule.
-  - **Seigneur des cendres** : **écholocation** (des anneaux qui étourdissent) et **suspendu** (il s'accroche au plafond,
+  - **Titus Veillafandre**, seigneur des cendres : **écholocation** (des anneaux qui étourdissent) et **suspendu** (il s'accroche au plafond,
     hors d'atteinte ; braises et nuée, puis il fond sur quelqu'un).
   - **Tortue-Montagne** : **toupie de lave** (rentrée dans sa carapace, elle rebondit dans l'arène en semant la lave).
 - L'**Œil des Ruines** tire des salves qui traversent la meute, et maintient un **rayon runique** qui tourne
@@ -261,15 +264,21 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Un grand volcan se dresse dans la Mer de sable. Sa bouche, à son pied, reste scellée par une croûte d'obsidienne
   tant que le village n'a pas vaincu les trois géants de la Mer de sable ; ensuite, **E** pour y descendre, de jour
   comme de nuit et par tous les temps.
-- Les **entrailles du volcan** sont un donjon (zone 7) : un labyrinthe de salles reliées par des couloirs, différent
-  d'un village à l'autre. On arrive en bas ; le cœur est au centre ; les trois antres de géants (à débloquer, deux fois
-  plus cher que les grottes de la Mer de sable) sont au bout de culs-de-sac — un à gauche, un à droite, un en haut —
-  et il faut fouiller pour les trouver. Dedans, la minicarte montre les salles déjà vues.
-- Dans les salles, des mares de lave infranchissables à pied (à dos de vautour, on les survole) et des créatures de
-  lave. Et des **pièges** (en vol, on passe au-dessus) :
+- Les **entrailles du volcan** sont un donjon (zone 7) : un labyrinthe de grandes salles reliées par de longs couloirs,
+  différent d'un village à l'autre. On arrive en bas ; le cœur est au centre ; les trois géants du volcan attendent
+  chacun dans sa salle, au bout d'un cul-de-sac — un à gauche, un à droite, un en haut — et il faut fouiller pour les
+  trouver. Dedans, la minicarte et la carte (**M**) montrent le donjon et les salles déjà vues.
+- Chaque couloir est fermé par une **herse**. Chaque salle a sa garnison de créatures de lave : **vider une salle**
+  lève les herses de ses couloirs et débloque les salles voisines. La herse d'une salle de géant porte un sceau d'or :
+  il faut en plus **payer l'entrée** (**E** devant la herse, une fois pour tout le village). Si plus personne n'est
+  dans le donjon pendant deux minutes, les salles se regarnissent et les herses retombent.
+- La roche et les herses arrêtent la vue : on ne tire pas d'une salle à l'autre (archers, mages, tortues-volcans…).
+- Dans les salles, des mares de lave infranchissables à pied (à dos de vautour, on les survole) et des **pièges** :
   - les **évents de flammes**, en travers des couloirs : ils rougeoient, puis crachent du feu, chacun à son rythme ;
+    les flammes montent haut, à dos de vautour on s'y brûle aussi, et la meute qui n'est pas de feu également ;
   - les **dalles piégées**, gravées d'une rune : marcher dessus fait jaillir un geyser de lave peu après (le cercle
-    s'allume : on s'écarte). La dalle se réarme au bout de quelques secondes.
+    s'allume : on s'écarte). En vol, on ne l'enfonce pas, mais son geyser brûle quiconque est dessus, cavalier,
+    meute (sauf les créatures de feu) compris. La dalle se réarme au bout de quelques secondes.
 - **Le feu brûle** : flammes, lave, cratères, boules de feu, roches en fusion et coups des créatures de feu mettent
   le feu ; on brûle quelques secondes (une flamme au-dessus de la tête). Plonger dans l'eau l'éteint.
 - Au centre, l'**autel du cœur** : une flamme brûle par géant du volcan encore debout. Les trois vaincus, le cœur
@@ -336,6 +345,6 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - L'or et les essences des monstres vaincus se partagent entre dompteurs proches.
 - Un membre **déconnecté** dort près du feu du village, sa meute autour de lui.
 - **Chat** : **C** ou le bouton 💬 ; chaque message s'affiche aussi dans une bulle au-dessus de son auteur.
-- **Menu › Profil** : choisir sa couleur (une par membre du village) et un chapeau, acheté une fois en or, sans effet en jeu.
+- **Menu › Profil** : choisir sa couleur (une par membre du village) et un chapeau, acheté une fois en or. Chaque chapeau débloqué renforce l'arme de 10 %.
 - Se connecter sur un autre appareil déconnecte la session en cours (sa progression est sauvegardée d'abord).
 - Le **fondateur** peut expulser (et réintégrer) un membre, et supprimer le village.

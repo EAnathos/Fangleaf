@@ -215,6 +215,7 @@ describe('Géants et grottes', () => {
     for (const c of r.map.caves) {
       if (SPECIES[c.boss].anchored) continue; // le Kraken ne quitte pas l'eau : ses coups de tentacule portent sur tout le pont
       if (c.open !== undefined) continue; // géant d'un îlot : son îlot est trop petit pour reculer 500 px (on fuit à la nage)
+      if (c.room !== undefined) continue; // géant du volcan : sa salle du donjon est son arène (en sortir le rendort)
       const boss = r.units.get(r.caveBoss[c.id]);
       boss.moveCd = boss.moveCd.map(() => 99); // on mesure la poursuite, pas les attaques spéciales
       boss.dormant = false;
