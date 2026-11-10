@@ -230,7 +230,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
     sous sa cible).
   - **Salamandre-Mère** : **mue** (sa vieille peau reste et explose, elle file) ; sa **queue** tombe deux fois et se bat
     seule.
-  - **Seigneur des cendres** : **écholocation** (des anneaux qui étourdissent) et **suspendu** (il s'accroche au plafond,
+  - **Titus Veillafandre**, seigneur des cendres : **écholocation** (des anneaux qui étourdissent) et **suspendu** (il s'accroche au plafond,
     hors d'atteinte ; braises et nuée, puis il fond sur quelqu'un).
   - **Tortue-Montagne** : **toupie de lave** (rentrée dans sa carapace, elle rebondit dans l'arène en semant la lave).
 - L'**Œil des Ruines** tire des salves qui traversent la meute, et maintient un **rayon runique** qui tourne

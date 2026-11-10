@@ -273,7 +273,7 @@ describe('Attaques propres des géants', () => {
     check(tails() === 2, 'sous le tiers : une deuxième (pas plus)');
   });
 
-  rule('Seigneur des cendres : écholocation (les anneaux étourdissent) et suspendu au plafond (braises, nuée, puis il fond sur quelqu\'un).', () => {
+  rule('Titus Veillafandre (seigneur des cendres) : écholocation (les anneaux étourdissent) et suspendu au plafond (braises, nuée, puis il fond sur quelqu\'un).', () => {
     const { r, p, b } = arena('ash_lord', 200);
     cast(r, 'ash_lord', 'echo', b, p);
     run(r, 0.6 + 200 / RING_SPEED + 0.1);
