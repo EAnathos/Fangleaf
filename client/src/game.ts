@@ -764,6 +764,7 @@ export class Game {
       this.me.y = m.y;
     } else if (m.t === 's') {
       this.shotsAt = this.time;
+      if (m.doors) m.doors.forEach((v, i) => (this.map.doorShut[i] = v)); // herses du donjon (pour la prédiction et le dessin)
       for (const e of m.ev) this.onEvent(e, m.players);
       const st = m.players.find((p) => p.id === this.myId);
       if (st && !st.dead && Math.hypot(st.x - this.me.x, st.y - this.me.y) > 220) {
@@ -1436,7 +1437,8 @@ export class Game {
       case 'unlock': {
         const c = this.map.caves[e.cave];
         this.fx.ring(c.entrance.x, c.entrance.y, '#F0B64A', 10, 120, 1.2);
-        this.hud.toast(e.by === this.myId ? `Grotte de ${SPECIES[c.boss].name} débloquée !` : `${name(e.by)} a débloqué la grotte de ${SPECIES[c.boss].name}`, 'good');
+        const what = c.room !== undefined ? 'la salle' : 'la grotte';
+        this.hud.toast(e.by === this.myId ? `${what === 'la salle' ? 'Salle' : 'Grotte'} de ${SPECIES[c.boss].name} débloquée !` : `${name(e.by)} a débloqué ${what} de ${SPECIES[c.boss].name}`, 'good');
         if (e.by === this.myId) this.hud.setPanel(null);
         break;
       }
@@ -2547,14 +2549,14 @@ export class Game {
     if (here === this.map.depths) {
       // les entrailles du volcan : dessinées à chaque image (la lave bouge), avec les sceaux de l'autel
       const sealed = this.map.caves.filter((c) => c.zone === VOLCANO_ZONE).map((c) => !this.hud.beaten.includes(c.boss));
-      drawDepths(ctx, this.map, this.time, sealed, !!this.hud.heart, this.net.latest?.traps ?? [], { x0: camX - hw, y0: camY - hh, x1: camX + hw, y1: camY + hh });
+      drawDepths(ctx, this.map, this.time, sealed, !!this.hud.heart, this.net.latest?.traps ?? [], { x0: camX - hw, y0: camY - hh, x1: camX + hw, y1: camY + hh }, this.hud.unlocked);
     } else if (here?.zone === VOYAGE_ZONE) drawVoyage(ctx, here, this.time, camX, camY, hw, hh);
     else if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
     if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id]);
     // géants des îlots, à l'air libre : le cercle de leur retour, sur leur îlot
     for (const c of this.map.caves) {
       const home = c.home ?? c.inside;
-      if (!here && c.open !== undefined && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id]);
+      if ((here ? here === this.map.depths && c.room !== undefined : c.open !== undefined) && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id]);
     }
     const br = this.map.bridge;
     if (!here && inView((br.a.x + br.b.x) / 2, (br.a.y + br.b.y) / 2, Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y) / 2 + 120)) this.world.drawBridge(ctx, this.hud.buildings.includes('bridge'), this.time);
@@ -2610,7 +2612,7 @@ export class Game {
     const list = this.drawList; // réutilisée d'une image à l'autre
     list.length = 0;
     for (const c of this.map.caves) {
-      if (c.zone === VOYAGE_ZONE || c.open !== undefined || !inView(c.entrance.x, c.entrance.y, 160)) continue; // le large : on y part depuis le bateau ; un géant d'îlot : à l'air libre
+      if (c.zone === VOYAGE_ZONE || c.open !== undefined || c.room !== undefined || !inView(c.entrance.x, c.entrance.y, 160)) continue; // le large : on y part depuis le bateau ; un géant d'îlot ou du volcan : à l'air libre, dans son arène
       list.push({ y: c.entrance.y + 20, draw: () => this.world.drawCaveEntrance(ctx, c, this.time, !this.hud.caves[c.id]) });
     }
     const sc = this.map.school, [plan, wait] = this.hud.school;
@@ -2899,7 +2901,7 @@ export class Game {
         if (w.k > 0.05 && pose.air <= r * 0.6) {
           const k = w.k;
           air.push({ y, draw: () => {
-            drawUnit(ctx, { ...look(), inWater: false, x, y: y - Math.sin(this.time * 4 + id) * 3 * k, air: r * 1.6 * k });
+            drawUnit(ctx, { ...look(), inWater: false, flying: k > 0.5, x, y: y - Math.sin(this.time * 4 + id) * 3 * k, air: r * 1.6 * k });
             if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6 - r * 1.6 * k, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
           } });
           continue;

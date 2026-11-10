@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { DESERT_ZONE, JUNGLE_ZONE, ZONES, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, QUICKSAND_LIFE_S, QUICKSAND_OPEN_S, quicksandSink, TICK_HZ, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF } from '../../shared/config.ts';
+import { DESERT_ZONE, JUNGLE_ZONE, ZONES, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, QUICKSAND_LIFE_S, QUICKSAND_OPEN_S, quicksandSink, TICK_HZ, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF, VOLCANO_ZONE } from '../../shared/config.ts';
 import { BEACH, SEA_SHALLOW, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { sky } from '../../shared/weather.ts';
 import { maxHpOf, Room } from '../../server/room.ts';
@@ -12,7 +12,7 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     const r = room();
     const seen = new Set([...r.units.values()].map((u: { s: number }) => u.s));
     const night = r.isNight(); // le ciel dépend de la graine du village : de jour, les bêtes de nuit sont absentes ; de nuit, celles de jour
-    check(SPECIES.every((sp, i) => seen.has(i) || (sp.night && !night) || (sp.day && night) || (sp.season !== undefined && sp.season !== r.sky().season) || (!sp.boss && !sp.population)), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement (sauf, selon l'heure et la saison, les bêtes de nuit, de jour ou d'une autre saison, et le Tréant, caché dans les arbres)`);
+    check(SPECIES.every((sp, i) => seen.has(i) || (sp.night && !night) || (sp.day && night) || (sp.season !== undefined && sp.season !== r.sky().season) || (!sp.boss && !sp.population) || (!sp.boss && sp.zone === VOLCANO_ZONE)), `les ${SPECIES.length} espèces (dont ${SPECIES.filter((sp) => sp.boss).length} géants) sont présentes au lancement (sauf, selon l'heure et la saison, les bêtes de nuit, de jour ou d'une autre saison, le Tréant, caché dans les arbres, et les créatures de lave, qui gardent les salles du volcan)`);
     const zones = new Map<number, number>();
     for (const sp of SPECIES) if (!sp.boss && !sp.passive && sp.population && !sp.isle && sp.season === undefined) zones.set(sp.zone, (zones.get(sp.zone) ?? 0) + 1);
     check([1, 2, 3].every((z) => zones.get(z) === 2) && zones.get(4) === 3 && zones.get(5) === 3, 'deux espèces hostiles par zone, trois en zones 4 et 5');

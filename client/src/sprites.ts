@@ -61,6 +61,7 @@ export interface UnitLook {
   leap?: Leap; // en plein bond (rempli par drawUnit) : de quoi poser les pattes
   lids?: number; // Kraken : ouverture des yeux (1 : ouverts ; moins : la paupière couvre l'œil, pour sa cinématique)
   wings?: Wings; // wyverne en pleine attaque (bond, charge) : ailes déployées, rabattues, battantes
+  flying?: boolean; // wyverne, dragonnet en vol : pattes repliées sous le ventre (elles ne marchent pas dans le vide)
 }
 
 /** Pose d'un bond : ext (0 → 1) pattes arrière détendues, reach (0 → 1) pattes avant tendues vers le sol, crouch (0 → 1) ramassé. */
@@ -1147,6 +1148,7 @@ const trot = (u: UnitLook, speed = 9) => Math.sin(u.t * speed + u.seed) * 0.32;
  * (en avant), et lift, de 0 à 1, le pied levé pendant qu'il revient vers l'avant. Immobile : tout à 0.
  */
 const gait = (u: UnitLook, rate: number) => [0, 0.25, 0.5, 0.75].map((k) => {
+  if (u.flying) return { a: -0.7, lift: 1 }; // en vol : pattes ramenées en arrière et repliées, immobiles
   if (!u.moving) return { a: 0, lift: 0 };
   const p = u.t * rate + u.seed - k * TAU;
   return { a: Math.sin(p), lift: Math.max(0, Math.cos(p)) };
@@ -5215,8 +5217,10 @@ function wyvern(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
   const bone = W(boss ? '#3A4430' : '#6A7A48'), horn = W('#D8D0B8'), venom = boss ? '#9FE84A' : '#C8E86A';
   const g = gait(u, 8), t = u.t + u.seed, flap = Math.sin(t * (u.moving ? 5 : 1.5)) * (u.moving ? 0.06 : 0.03);
   // ailes : repliées en voile au repos ; en attaque, déployées, rabattues vers le sol, ou qui battent (vers l'avant : la charge)
+  // en vol (sans attaque en cours) : ailes déployées qui battent, au lieu d'être repliées en voile
+  const soar: Wings | undefined = u.flying && !u.wings ? { spread: 0.85, down: 0, beat: Math.sin(t * 4.5), fwd: 0 } : undefined;
   const wing = (fold: P2[], open: P2[], low: P2[]): P2[] => {
-    const w = u.wings;
+    const w = u.wings ?? soar;
     if (!w) return fold;
     return fold.map((p, i) => {
       const mid = lerpP(p, open[i], w.spread), at = lerpP(mid, low[i], w.down), reach = i ? 1 : 0.4; // le poignet bouge moins que les bouts
@@ -9470,7 +9474,7 @@ Object.assign(LEGEND_FRONT, {
     const tl = bez([-0.3, -0.02], [-1.0, 0.25 + sw], [-1.45, -0.3 + sw], 14);
     for (let i = 3; i <= 11; i += 2) legCShard(ctx, tl[i][0] * r, (tl[i][1] - 0.1 * (1 - i / 14)) * r, 0.1 * r, (0.2 - i * 0.008) * r, -0.5, '#CFE8FF', 'rgba(20,50,120,0.7)', '#6CB4FF', r);
     // éclairs qui courent sur l'aile repliée (seulement ailes au repos)
-    const folded = !u.wings || u.wings.spread < 0.2;
+    const folded = !u.flying && (!u.wings || u.wings.spread < 0.2);
     glowOn(ctx, '#8CC8FF', r * 0.3);
     if (folded) {
       legCBolt(ctx, -0.42 * r, -1.0 * r, 0.05 * r, -0.55 * r, t, 1, `rgba(200,235,255,${0.55 + 0.45 * p})`, Math.max(1.5, r * 0.04), r * 0.12);

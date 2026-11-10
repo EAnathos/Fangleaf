@@ -1,9 +1,9 @@
 // Le volcan de la Mer de sable (sur la carte) et ses entrailles (la salle de lave, hors du monde) : le cœur volcanique
 // sur son autel, scellé par une flamme par géant du volcan encore debout.
 
-import { CORRIDOR_R, GEYSER_R, PLATE_R, VENT_R, VOLCANO_R, VOLCANO_RY } from '../../shared/config.ts';
+import { CORRIDOR_R, DOOR_T, GEYSER_R, PLATE_R, VENT_R, VOLCANO_R, VOLCANO_RY } from '../../shared/config.ts';
 import { hash2 } from '../../shared/math.ts';
-import { type Room, type WorldMap } from '../../shared/worldmap.ts';
+import { type Door, type Room, type WorldMap } from '../../shared/worldmap.ts';
 
 type Ctx = CanvasRenderingContext2D;
 const TAU = Math.PI * 2;
@@ -160,8 +160,9 @@ export function drawVolcano(ctx: Ctx, map: WorldMap, t: number, open: boolean) {
  * flammes et dalles piégées, la sortie et, au centre, l'autel du cœur et ses sceaux (une flamme par géant encore debout).
  * sealed[i] : le géant de l'antre i n'est pas encore vaincu. taken : le cœur a déjà été emporté.
  * traps : état des pièges proches ([index, état]…, voir le snapshot). view : le rectangle visible.
+ * unlocked : grottes débloquées par le village (la herse d'un antre ne se lève qu'une fois son entrée payée).
  */
-export function drawDepths(ctx: Ctx, map: WorldMap, t: number, sealed: boolean[], taken: boolean, traps: number[], view: { x0: number; y0: number; x1: number; y1: number }) {
+export function drawDepths(ctx: Ctx, map: WorldMap, t: number, sealed: boolean[], taken: boolean, traps: number[], view: { x0: number; y0: number; x1: number; y1: number }, unlocked: number[] = []) {
   const c = map.depths, { x: cx, y: cy } = c.inside;
   const seen = (x: number, y: number, m: number) => x > view.x0 - m && x < view.x1 + m && y > view.y0 - m && y < view.y1 + m;
   ctx.fillStyle = '#0E0907';
@@ -283,6 +284,10 @@ export function drawDepths(ctx: Ctx, map: WorldMap, t: number, sealed: boolean[]
     if (tr.kind === 'vent') drawVent(ctx, tr.x, tr.y, st, t, i);
     else drawPlate(ctx, tr.x, tr.y, st, t);
   });
+  // les herses, en travers des couloirs
+  map.doors.forEach((d, i) => {
+    if (seen(d.x, d.y, CORRIDOR_R + 60)) drawDoor(ctx, d, !!map.doorShut[i], d.lair >= 0 && !unlocked.includes(d.lair), t);
+  });
   // la sortie : un rai de lumière du jour
   const ex = c.exit.x, ey = c.exit.y;
   if (seen(ex, ey, 200)) {
@@ -301,6 +306,70 @@ export function drawDepths(ctx: Ctx, map: WorldMap, t: number, sealed: boolean[]
     drawAltar(ctx, map, t, sealed, taken);
     ctx.restore();
   }
+}
+
+/**
+ * Herse de basalte en travers d'un couloir : baissée, des barreaux sombres veinés de lave ; levée, il n'en reste que les
+ * deux montants contre la paroi. Celle d'un antre pas encore payé porte un sceau d'or (on paie l'entrée devant).
+ */
+function drawDoor(ctx: Ctx, d: Door, shut: boolean, paid: boolean, t: number) {
+  const w = CORRIDOR_R + 14, px = d.uy, py = -d.ux; // en travers du couloir
+  ctx.save();
+  ctx.translate(d.x, d.y);
+  // les deux montants, contre la paroi
+  for (const s of [-1, 1]) {
+    ctx.fillStyle = '#2A1E1A';
+    ctx.beginPath();
+    ctx.arc(px * w * s, py * w * s, 15, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#4A3A32';
+    ctx.beginPath();
+    ctx.arc(px * w * s, py * w * s - 4, 11, 0, TAU);
+    ctx.fill();
+  }
+  if (shut) {
+    const glow = 0.55 + 0.45 * Math.sin(t * 2.2 + d.x * 0.01);
+    ctx.lineCap = 'round';
+    const bars = 7;
+    for (let k = 0; k < bars; k++) {
+      const f = ((k + 0.5) / bars) * 2 - 1, bx = px * w * f, by = py * w * f;
+      ctx.strokeStyle = '#1C1412';
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.moveTo(bx - d.ux * DOOR_T, by - d.uy * DOOR_T - 34);
+      ctx.lineTo(bx + d.ux * DOOR_T, by + d.uy * DOOR_T + 4);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(240,120,50,${0.35 + 0.4 * glow})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(bx - d.ux * DOOR_T * 0.6, by - d.uy * DOOR_T * 0.6 - 26);
+      ctx.lineTo(bx + d.ux * DOOR_T * 0.6, by + d.uy * DOOR_T * 0.6);
+      ctx.stroke();
+    }
+    // la traverse
+    ctx.strokeStyle = '#3A2A24';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(-px * w, -py * w - 22);
+    ctx.lineTo(px * w, py * w - 22);
+    ctx.stroke();
+    if (paid) {
+      // le sceau d'or d'un antre : on paie l'entrée pour lever la herse
+      ctx.fillStyle = '#F0B64A';
+      ctx.strokeStyle = '#5A3A10';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(0, -22, 14, 0, TAU);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#5A3A10';
+      ctx.fillRect(-4, -26, 8, 10);
+      ctx.beginPath();
+      ctx.arc(0, -27, 4, Math.PI, 0);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 /** Évent de flammes, en travers d'un couloir : une grille de fer ; il rougeoit (st 1), puis crache une colonne de feu (st 2). */

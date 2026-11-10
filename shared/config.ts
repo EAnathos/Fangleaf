@@ -899,13 +899,21 @@ export const VOLCANO_R = 460; // le volcan, sur l'île : demi-largeur de sa base
 export const VOLCANO_RY = 0.55;
 // Le donjon sous le volcan : une grille de salles reliées par des couloirs (un labyrinthe tiré de la graine), le cœur au
 // centre, l'entrée en bas, les trois antres au bout de culs-de-sac (un à gauche, un à droite, un en haut).
-export const HALL_RX = 2800; // demi-largeur de la boîte du donjon
-export const HALL_RY = 1750;
+// Les salles sont grandes et les couloirs longs : d'une salle à l'autre, la roche coupe la vue (pas de tir à travers).
+export const HALL_RX = 4300; // demi-largeur de la boîte du donjon
+export const HALL_RY = 2700;
 export const DUNGEON_COLS = 7;
 export const DUNGEON_ROWS = 5;
-export const DUNGEON_DX = 760; // d'une salle à la suivante
-export const DUNGEON_DY = 640;
+export const DUNGEON_DX = 1160; // d'une salle à la suivante
+export const DUNGEON_DY = 980;
+export const ROOM_SCALE = 1.35; // taille des salles (par rapport aux premières salles du donjon)
 export const CORRIDOR_R = 72; // demi-largeur d'un couloir
+// Portes du donjon : une herse de basalte au milieu de chaque couloir. Elle se lève quand l'une des deux salles qu'il relie
+// a été vidée de ses monstres (la salle d'entrée l'est d'office) ; celle d'un antre, quand en plus le village a payé l'entrée.
+export const DOOR_T = 16; // demi-épaisseur d'une herse
+export const ROOM_PACKS: [number, number] = [2, 3]; // meutes gardant chaque salle (au moins, au plus)
+export const HEART_PACKS = 4; // celles qui gardent la salle du cœur
+export const DEPTHS_RESET_S = 120; // personne dans le donjon depuis ce temps-là : salles regarnies, herses rabaissées
 // Pièges du donjon : évents de flammes en travers des couloirs (un rythme à lire), dalles piégées dans les salles (un geyser de lave).
 export const VENT_R = 84;
 export const VENT_WARN_S = 1; // l'évent rougeoie, puis crache

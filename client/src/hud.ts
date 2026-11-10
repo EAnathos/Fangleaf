@@ -95,7 +95,7 @@ const BOARD: { title: string; stats: { k: keyof Stats | keyof Holdings; label: s
 export const purchaseOf = (map: WorldMap, buy: Purchase): { name: string; cost: Cost; hall: number } =>
   'b' in buy
     ? { name: BUILDINGS[buy.b].name, cost: buildingCost(buy.b), hall: BUILDINGS[buy.b].hall }
-    : { name: `Grotte de ${SPECIES[map.caves[buy.cave].boss].name}`, cost: { gold: caveUnlockCost(map.caves[buy.cave].zone), wood: 0, stone: 0 }, hall: 0 };
+    : { name: `${map.caves[buy.cave].room !== undefined ? 'Salle' : 'Grotte'} de ${SPECIES[map.caves[buy.cave].boss].name}`, cost: { gold: caveUnlockCost(map.caves[buy.cave].zone), wood: 0, stone: 0 }, hall: 0 };
 /** Ce qu'on peut dépenser : son or, et le bois et la pierre de la réserve du village. */
 type Funds = { gold: number; wood: number; stone: number };
 const canPay = (f: Funds, c: Cost) => f.gold >= c.gold && f.wood >= c.wood && f.stone >= c.stone;
@@ -167,7 +167,10 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
         ? { pos: map.depths.inside, reach: HEART_REACH + 40, label: `Scellé : encore ${left} géant${left > 1 ? 's' : ''} du volcan à vaincre` }
         : { heart: true, pos: map.depths.inside, reach: HEART_REACH, label: 'E — Prendre le cœur volcanique' }];
     })(),
-    ...map.caves.filter((c) => c.zone !== VOYAGE_ZONE && c.open === undefined).flatMap((c): Spot[] => [
+    // géants du volcan : dans leur salle du donjon, derrière une herse qu'on lève en payant l'entrée
+    ...map.caves.filter((c) => c.room !== undefined && !v.unlocked.includes(c.id))
+      .map((c): Spot => ({ panel: 'buy', pos: c.entrance, reach: 150, buy: { cave: c.id }, label: `E — Payer l'entrée de la salle · ${SPECIES[c.boss].name}` })),
+    ...map.caves.filter((c) => c.zone !== VOYAGE_ZONE && c.open === undefined && c.room === undefined).flatMap((c): Spot[] => [
       v.unlocked.includes(c.id)
         ? {
           cave: { id: c.id, enter: true }, pos: c.entrance,
@@ -2345,6 +2348,8 @@ export class Hud {
     // zoom : le décor est agrandi, les repères gardent leur taille à l'écran (u : un pixel CSS, à l'échelle du zoom)
     const v = this.mapView, u = dpr / v.z;
     ctx.setTransform(v.z, 0, 0, v.z, S * (0.5 - v.x * v.z), S * (0.5 - v.y * v.z));
+    // dans les entrailles du volcan : la carte du donjon, pas celle de l'île
+    if (this.map.caveAt(myPos.x, myPos.y) === this.map.depths) return this.drawDungeonMap(me, players, myPos, ctx, S, 2.2 * u);
     const k = S / (WORLD_HALF * 2), m = (v: number) => (v + WORLD_HALF) * k;
     ctx.imageSmoothingEnabled = true;
     ctx.fillStyle = '#0B1210';
@@ -2546,27 +2551,30 @@ export class Hud {
   private explored = new Set<number>(); // salles du donjon déjà vues (cette session)
 
   /**
-   * Minicarte du donjon sous le volcan : les salles déjà vues et leurs couloirs, le cœur au centre, les antres une fois
-   * découverts (barrés quand leur géant est vaincu), les dompteurs.
+   * Carte du donjon sous le volcan (minicarte, et grande carte quand on y est) : les salles déjà vues et leurs couloirs
+   * (herse baissée : couloir sombre), le cœur au centre, les antres une fois découverts (barrés quand leur géant est
+   * vaincu), les dompteurs. z : taille des repères (1 sur la minicarte).
    */
-  private drawDungeonMap(me: PlayerState, players: PlayerState[], myPos: { x: number; y: number }) {
-    const ctx = this.mini, S = 180, map = this.map, h = map.depths.inside, k = S / (2 * HALL_RX);
+  private drawDungeonMap(me: PlayerState, players: PlayerState[], myPos: { x: number; y: number }, ctx = this.mini, S = 180, z = 1) {
+    const map = this.map, h = map.depths.inside, k = S / (2 * HALL_RX);
     const m = (x: number, y: number): [number, number] => [S / 2 + (x - h.x) * k, S / 2 + (y - h.y) * k];
     map.rooms.forEach((r, i) => {
       if (Math.hypot(r.x - myPos.x, r.y - myPos.y) < Math.max(r.rx, r.ry) + 420) this.explored.add(i);
     });
     ctx.fillStyle = '#120C0A';
     ctx.fillRect(0, 0, S, S);
-    ctx.strokeStyle = '#6A4A3A';
-    ctx.lineWidth = 3;
     ctx.lineCap = 'round';
-    ctx.beginPath();
-    for (const [a, b] of map.links) {
-      if (!this.explored.has(a) && !this.explored.has(b)) continue;
-      ctx.moveTo(...m(map.rooms[a].x, map.rooms[a].y));
-      ctx.lineTo(...m(map.rooms[b].x, map.rooms[b].y));
+    for (const shut of [1, 0]) {
+      ctx.strokeStyle = shut ? '#3A2A22' : '#6A4A3A';
+      ctx.lineWidth = 3 * z;
+      ctx.beginPath();
+      map.links.forEach(([a, b], i) => {
+        if ((!this.explored.has(a) && !this.explored.has(b)) || map.doorShut[i] !== shut) return;
+        ctx.moveTo(...m(map.rooms[a].x, map.rooms[a].y));
+        ctx.lineTo(...m(map.rooms[b].x, map.rooms[b].y));
+      });
+      ctx.stroke();
     }
-    ctx.stroke();
     const lairs = map.caves.filter((c) => c.zone === VOLCANO_ZONE);
     map.rooms.forEach((r, i) => {
       if (!this.explored.has(i)) return;
@@ -2575,24 +2583,30 @@ export class Hud {
       ctx.beginPath();
       ctx.ellipse(x, y, r.rx * k, r.ry * k, 0, 0, Math.PI * 2);
       ctx.fill();
-      if (r.kind === 'heart') this.star(ctx, x, y, 5, 1);
+      if (r.kind === 'heart') this.star(ctx, x, y, 5 * z, z);
       if (r.kind === 'entry') {
         ctx.fillStyle = '#EEE7D7';
-        ctx.fillRect(x - 3, y + 2, 6, 3);
+        ctx.fillRect(x - 3 * z, y + 2 * z, 6 * z, 3 * z);
       }
       if (r.kind === 'lair') {
-        const c = lairs.find((q) => map.roomAt(q.entrance.x, q.entrance.y) === i), done = !!c && this.beaten.includes(c.boss);
+        const c = lairs.find((q) => q.room === i), done = !!c && this.beaten.includes(c.boss);
         ctx.fillStyle = done ? '#A9B3A6' : '#E8693F';
         ctx.beginPath();
-        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+        ctx.arc(x, y, 4.5 * z, 0, Math.PI * 2);
         ctx.fill();
         if (done) {
           ctx.strokeStyle = '#120C0A';
-          ctx.lineWidth = 1.5;
+          ctx.lineWidth = 1.5 * z;
           ctx.beginPath();
-          ctx.moveTo(x - 3, y - 3);
-          ctx.lineTo(x + 3, y + 3);
+          ctx.moveTo(x - 3 * z, y - 3 * z);
+          ctx.lineTo(x + 3 * z, y + 3 * z);
           ctx.stroke();
+        }
+        if (c && z > 1) {
+          ctx.font = `700 ${11 * z}px Outfit, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.fillStyle = done ? '#A9B3A6' : '#F0B64A';
+          ctx.fillText(SPECIES[c.boss].name, x, y - 9 * z);
         }
       }
     });
@@ -2601,9 +2615,9 @@ export class Hud {
       if (x < 0 || y < 0 || x > S || y > S) continue;
       ctx.fillStyle = p.dead ? '#A9B3A6' : p.color;
       ctx.strokeStyle = '#10181A';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2 * z;
       ctx.beginPath();
-      ctx.arc(x, y, p.id === me.id ? 4.5 : 3.5, 0, Math.PI * 2);
+      ctx.arc(x, y, (p.id === me.id ? 4.5 : 3.5) * z, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
     }

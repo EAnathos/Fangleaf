@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost,
-  ARC_FLIGHT_S, SPLASH_FLAT, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT,
+  ARC_FLIGHT_S, SPLASH_FLAT, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT, ROOM_PACKS, HEART_PACKS, DEPTHS_RESET_S,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, PET_CAP, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, gateHall, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, WINGS_LEASH, VENT_R, VENT_WARN_S, VENT_FIRE_S, VENT_HURT, PLATE_R, GEYSER_R, GEYSER_WARN_S, GEYSER_HURT, PLATE_REARM_S, alphaLevelMult, alphaReviveS, alphaUpCost,
@@ -77,6 +77,7 @@ interface Unit {
   emerging?: boolean; // ver : sa sortie est annoncée au sol
   surfaceUntil?: number; // ver sorti, vautour posé : exposé jusqu'à ; suricate : reste à la tanière jusqu'à
   diveAt?: number; // vautour : il pique à ce moment
+  room?: number; // garnison d'une salle du donjon (index dans map.rooms) : la vider lève les herses autour
   perched?: boolean; // vautour de la meute : posé près de sa proie (il a piqué sur elle), il frappe au sol
   rootUntil?: number; // saisi (étreinte, roulade) ou étourdi : il ne bouge plus jusque-là
   curseUntil?: number; // maudit par le Grand Masque : il subit plus de dégâts jusque-là
@@ -816,6 +817,12 @@ export class Room {
     const flying = !!mounted && this.airborne(p); // à dos de vautour : par-dessus l'eau et les obstacles (pas dans la tempête de sable)
     const allowed = (PLAYER_SPEED * slow * (mounted ? rideSpeed(mounted.s, p.saddle) : bootsSpeed(p.boots)) * 1.35 + STORM_PUSH * this.storm) * Math.min(0.5, (now - p.lastPosMs) / 1000) + 12; // (le vent de la tempête pousse en plus)
     p.lastPosMs = now;
+    if (!swimming && !this.map.passable(p.x, p.y, false, flying) && this.map.blocked(p.x, p.y)) {
+      // coincé là où il ne peut pas être (monture perdue au-dessus de l'eau, arbre repoussé dessus…) : sinon plus aucun pas
+      // n'est accepté et le client se fait ramener en arrière sans fin. On le pose sur la terre ferme la plus proche.
+      const land = this.map.freeNear(p.x, p.y);
+      return this.moveTo(p, land.x, land.y);
+    }
     let dx = x - p.x, dy = y - p.y;
     const d = Math.hypot(dx, dy);
     if (d > allowed) {
@@ -1356,6 +1363,7 @@ export class Room {
     if (p.dead || !u || !u.alpha || u.owner !== p.id || u.reviveAt || mountSpeedOf(u.s) === 1) return;
     if (dist2(u.x, u.y, p.x, p.y) > MOUNT_REACH ** 2) return;
     if (!p.saddle) return p.send({ t: 'error', msg: 'Il te faut une selle pour monter ton Alpha.' });
+    if (flyMount(u.s) && this.stormy(p.x, p.y)) return p.send({ t: 'error', msg: `Pas de vol dans la tempête de sable : ton ${SPECIES[u.s].name.toLowerCase()} refuse de décoller.` });
     const water = swimMount(u.s) ? this.map.waterNear(p.x, p.y, SHORE_R) : null;
     if (swimMount(u.s) && !water) return p.send({ t: 'error', msg: `Approche-toi de l'eau pour monter ton ${SPECIES[u.s].name.toLowerCase()} : il ne va qu'en eau.` });
     if (p.mount && !this.dismount(p)) return; // sur l'eau, loin de la rive : on garde le serpent
@@ -1363,6 +1371,7 @@ export class Room {
     p.mount = u.id;
     u.target = 0;
     u.recalling = false;
+    u.perched = false; // un vautour posé près de sa proie redécolle avec son cavalier (sinon client et serveur ne s'accordent plus sur le vol)
     this.events.push({ e: 'mount', by: p.id, id: u.id, on: true });
   }
 
@@ -1601,6 +1610,7 @@ export class Room {
     this.updateSands();
     this.updateBolts();
     this.quicksandDamage();
+    this.updateDepths();
     this.updateTraps();
     this.updateSeen();
 
@@ -1982,6 +1992,12 @@ export class Room {
   private stormDamage() {
     if (this.storm < STORM_HARM || this.tick % TICK_HZ !== 0) return;
     for (const p of this.players.values()) {
+      // pas de vautour dans la tempête : le cavalier est jeté à terre (et ne peut pas remonter tant qu'elle souffle)
+      const m = p.mount ? this.units.get(p.mount) : undefined;
+      if (m && flyMount(m.s) && this.stormy(p.x, p.y)) {
+        this.dismount(p, true);
+        p.send({ t: 'error', msg: `La tempête de sable cloue ton ${SPECIES[m.s].name.toLowerCase()} au sol : tu mets pied à terre.` });
+      }
       if (p.dead || this.safe(p.x, p.y) || this.map.caveAt(p.x, p.y) || this.map.zoneAt(p.x, p.y) !== DESERT_ZONE) continue;
       this.damage(p, maxHpOf(p) * STORM_DPS * this.storm, p);
     }
@@ -2034,25 +2050,94 @@ export class Room {
     return t < VENT_FIRE_S ? 2 : t > v.period - VENT_WARN_S ? 1 : 0;
   }
   private plateAt = new Map<number, number>(); // dalle piégée → réarmée à ce moment
+  private cleared = new Set<number>(); // salles du donjon vidées de leur garnison (l'entrée l'est d'office)
+  private garrisoned = new Set<number>(); // salles dont la garnison est apparue
+  private depthsSeenAt = -Infinity; // dernier instant où un dompteur était dans le donjon
   private geysers: { i: number; at: number }[] = []; // geysers annoncés (dalle foulée)
 
   /**
    * Pièges du donjon, pour les dompteurs à pied (en vol, on passe au-dessus) : les évents brûlent qui se tient dans leurs
    * flammes, une dalle foulée fait jaillir un geyser de lave peu après (le temps de s'écarter), puis se réarme.
    */
+  /**
+   * Salles du donjon : chaque salle a sa garnison, qui apparaît dès qu'on peut y entrer (une herse de ses couloirs levée).
+   * Une salle vidée lève les herses de ses couloirs (on débloque les salles voisines) ; celle d'un antre se lève en plus
+   * une fois l'entrée payée par le village. Personne dans le donjon pendant DEPTHS_RESET_S : tout se regarnit.
+   */
+  private updateDepths() {
+    if (this.tick % 10 !== 0 || !this.map.rooms.length) return;
+    const map = this.map;
+    const inside = [...this.players.values()].some((p) => !p.dead && map.caveAt(p.x, p.y) === map.depths);
+    if (inside) this.depthsSeenAt = this.time;
+    else if (this.time - this.depthsSeenAt > DEPTHS_RESET_S && this.garrisoned.size) {
+      for (const u of [...this.units.values()]) if (u.room !== undefined && !u.owner) this.units.delete(u.id);
+      this.garrisoned.clear();
+      this.cleared.clear();
+    }
+    map.rooms.forEach((r, k) => {
+      if (r.kind === 'entry') this.cleared.add(k);
+    });
+    // salle vidée : plus aucun monstre de sa garnison debout (apprivoisés compris : ils ont changé de camp)
+    const alive = new Set<number>();
+    for (const u of this.units.values()) if (u.room !== undefined && !u.owner && !u.reviveAt && u.hp > 0) alive.add(u.room);
+    for (const k of this.garrisoned) if (!alive.has(k)) this.cleared.add(k);
+    map.links.forEach(([a, b], i) => {
+      const d = map.doors[i];
+      const open = (this.cleared.has(a) || this.cleared.has(b)) && (d.lair < 0 || this.unlocked.includes(d.lair));
+      map.doorShut[i] = open ? 0 : 1;
+      if (!open || !inside) return;
+      for (const k of [a, b]) if (!this.garrisoned.has(k) && !this.cleared.has(k)) this.garrison(k);
+    });
+  }
+
+  /** La garnison d'une salle du donjon (pas l'entrée, ni un antre : son géant y est déjà). */
+  private garrison(k: number) {
+    this.garrisoned.add(k);
+    const r = this.map.rooms[k];
+    if (r.kind === 'entry' || r.kind === 'lair') return;
+    const kinds = SPECIES.map((_, i) => i).filter((i) => SPECIES[i].zone === VOLCANO_ZONE && SPECIES[i].population > 0);
+    const total = kinds.reduce((n, i) => n + SPECIES[i].population, 0);
+    const packs = r.kind === 'heart' ? HEART_PACKS : ROOM_PACKS[0] + Math.floor(Math.random() * (ROOM_PACKS[1] - ROOM_PACKS[0] + 1));
+    for (let n = 0; n < packs; n++) {
+      let roll = Math.random() * total, s = kinds[0];
+      for (const i of kinds) if ((roll -= SPECIES[i].population) < 0) {
+        s = i;
+        break;
+      }
+      const sp = SPECIES[s], count = sp.pack[0] + Math.floor(Math.random() * (sp.pack[1] - sp.pack[0] + 1));
+      for (let tries = 0; tries < 20; tries++) {
+        const a = Math.random() * Math.PI * 2, f = 0.25 + Math.sqrt(Math.random()) * 0.45;
+        const cx = r.x + Math.cos(a) * r.rx * f, cy = r.y + Math.sin(a) * r.ry * f;
+        if (this.map.blocked(cx, cy) || this.map.roomAt(cx, cy) !== k) continue;
+        for (let i = 0; i < count; i++) {
+          const x = cx + (Math.random() - 0.5) * 120, y = cy + (Math.random() - 0.5) * 120;
+          if (!this.map.blocked(x, y) && this.map.roomAt(x, y) === k) this.createUnit(s as SpeciesId, false, x, y).room = k;
+        }
+        break;
+      }
+    }
+  }
+
   private updateTraps() {
     const traps = this.map.traps;
-    const here = [...this.players.values()].filter((p) => !p.dead && !this.airborne(p) && this.map.caveAt(p.x, p.y) === this.map.depths);
+    // les flammes montent haut : à dos de vautour aussi, on s'y brûle
+    const here = [...this.players.values()].filter((p) => !p.dead && this.map.caveAt(p.x, p.y) === this.map.depths);
     if (!here.length) return void (this.geysers = []);
+    // la meute et les Alphas aussi (la monture partage les coups de son cavalier) ; les créatures de feu n'y craignent rien
+    const pack = [...this.units.values()].filter((u) => u.owner && !u.reviveAt && u.hp > 0 && !this.isMount(u) && elementOf(u.s) !== 'feu' && this.map.caveAt(u.x, u.y) === this.map.depths);
+    const burn = (x: number, y: number, r: number, hurt: number) => {
+      for (const p of here) if (dist2(p.x, p.y, x, y) < (r + p.r * 0.5) ** 2) this.damage(p, maxHpOf(p) * hurt, p);
+      for (const u of pack) if (u.hp > 0 && dist2(u.x, u.y, x, y) < (r + u.r * 0.5) ** 2) this.damage(u, u.maxHp * hurt, u);
+    };
     if (this.tick % (TICK_HZ / 4) === 0) {
       traps.forEach((v, i) => {
-        if (v.kind !== 'vent' || this.ventState(i) !== 2) return;
-        for (const p of here) if (dist2(p.x, p.y, v.x, v.y) < (VENT_R + p.r * 0.5) ** 2) this.damage(p, maxHpOf(p) * VENT_HURT, p);
+        if (v.kind === 'vent' && this.ventState(i) === 2) burn(v.x, v.y, VENT_R, VENT_HURT);
       });
     }
     traps.forEach((d, i) => {
       if (d.kind !== 'plate' || this.time < (this.plateAt.get(i) ?? 0)) return;
-      if (!here.some((p) => dist2(p.x, p.y, d.x, d.y) < (PLATE_R + p.r * 0.6) ** 2)) return;
+      // la dalle s'enfonce sous un pas : pas sous un vautour qui passe au-dessus
+      if (!here.some((p) => !this.airborne(p) && dist2(p.x, p.y, d.x, d.y) < (PLATE_R + p.r * 0.6) ** 2)) return;
       this.plateAt.set(i, this.time + PLATE_REARM_S);
       this.geysers.push({ i, at: this.time + GEYSER_WARN_S });
     });
@@ -2060,7 +2145,7 @@ export class Room {
       if (this.time < g.at) continue;
       const d = traps[g.i];
       this.events.push({ e: 'boom', x: Math.round(d.x), y: Math.round(d.y), r: GEYSER_R, kind: 'trap' });
-      for (const p of here) if (dist2(p.x, p.y, d.x, d.y) < (GEYSER_R + p.r * 0.5) ** 2) this.damage(p, maxHpOf(p) * GEYSER_HURT, p);
+      burn(d.x, d.y, GEYSER_R, GEYSER_HURT);
     }
     this.geysers = this.geysers.filter((g) => this.time < g.at);
   }
@@ -2121,11 +2206,8 @@ export class Room {
         const den = map.dens[Math.floor(Math.random() * map.dens.length)];
         [cx, cy] = [den.x + (Math.random() - 0.5) * 60, den.y + (Math.random() - 0.5) * 60];
       } else if (sp.zone === VOLCANO_ZONE) {
-        // créature de lave : dans une salle ordinaire du donjon (ni l'entrée, ni le cœur, ni un antre)
-        const rooms = map.rooms.filter((r) => r.kind === 'room');
-        if (!rooms.length) return false;
-        const r = rooms[Math.floor(Math.random() * rooms.length)], a = Math.random() * Math.PI * 2, k = Math.sqrt(Math.random()) * 0.6;
-        [cx, cy] = [r.x + Math.cos(a) * r.rx * k, r.y + Math.sin(a) * r.ry * k];
+        // créature de lave : elles gardent les salles du donjon (garnisons, voir updateDepths), rien n'apparaît au hasard
+        return false;
       } else if (sp.isle) {
         // créature d'un îlot du large : sur la terre de l'îlot de son géant
         const t = map.islets.find((q) => q.boss >= 0 && SPECIES[q.boss].base === sp.key);
@@ -2200,7 +2282,7 @@ export class Room {
       if (!ok(e) || !this.alive(e)) return;
       if (dist2(x, y, e.x, e.y) > r2) return;
       const d = dist2(fromX, fromY, e.x, e.y);
-      if (d < bestD) {
+      if (d < bestD && this.map.inSight(fromX, fromY, e.x, e.y)) { // (dans le donjon, ni à travers la roche ni à travers une herse)
         bestD = d;
         best = e;
       }
@@ -2212,6 +2294,10 @@ export class Room {
   private isWild = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !e.hidden && !SPECIES[e.s].passive;
   /** Tempête de sable sur ce point de la Mer de sable (hors des grottes) : les vautours y sont cloués au sol. */
   private grounded(x: number, y: number) {
+    return this.stormy(x, y);
+  }
+  /** Tempête de sable assez forte pour blesser, sur ce point (Mer de sable, hors des grottes). */
+  private stormy(x: number, y: number) {
     return this.storm >= STORM_HARM && !this.map.caveAt(x, y) && this.map.zoneAt(x, y) === DESERT_ZONE;
   }
 
@@ -2221,9 +2307,10 @@ export class Room {
    */
   private airborne(e: Ent) {
     if (this.grounded(e.x, e.y) && this.map.passable(e.x, e.y, false)) return false;
-    if (e.kind === 'u' && e.owner && SPECIES[e.s].flies) return !e.perched;
+    // la monture d'abord : cavalier et monture volent ensemble (un vautour monté n'est jamais « posé »)
     const mount = e.kind === 'p' ? (e.mount ? this.units.get(e.mount) : undefined) : this.isMount(e) ? e : undefined;
-    return !!mount && flyMount(mount.s);
+    if (mount) return flyMount(mount.s);
+    return e.kind === 'u' && !!e.owner && !!SPECIES[e.s].flies && !e.perched;
   }
   /** Proie de cet attaquant : un monstre sauvage, ou, depuis le dos d'un vautour, aussi ceux qui volent hors d'atteinte du sol. */
   private preyOf(by: Ent) {
@@ -2286,7 +2373,7 @@ export class Room {
     const wild = this.preyOf(p), prey = (e: Ent) => wild(e) && this.alive(e); // jamais le gibier passif, même au clic
     if (p.cls === 'mage') {
       p.atkCd = cls.cd;
-      const k = Math.min(d, reach), bx = p.x + ux * k, by = p.y + uy * k;
+      const k = this.map.sightReach(p.x, p.y, ux, uy, Math.min(d, reach)), bx = p.x + ux * k, by = p.y + uy * k; // l'orbe s'écrase sur la roche
       this.events.push({ e: 'shot', by: p.id, x: p.x, y: p.y, tx: Math.round(bx), ty: Math.round(by), cls: 'mage' });
       this.events.push({ e: 'boom', x: Math.round(bx), y: Math.round(by), r: cls.splash!, kind: 'orb' });
       const hit: Ent[] = [];
@@ -2297,7 +2384,7 @@ export class Room {
     if (p.cls === 'archer') {
       // flèche en ligne droite : le premier monstre dont elle frôle le corps
       p.atkCd = cls.cd;
-      let best: Ent | undefined, bt = reach;
+      let best: Ent | undefined, bt = this.map.sightReach(p.x, p.y, ux, uy, reach); // la flèche se plante dans la roche
       this.grid.query(p.x + ux * reach * 0.5, p.y + uy * reach * 0.5, reach * 0.5 + 60, (e) => {
         if (!prey(e)) return;
         const t = (e.x - p.x) * ux + (e.y - p.y) * uy;
@@ -3639,7 +3726,7 @@ export class Room {
   /** Entrer dans une grotte (depuis son entrée) ou en sortir (depuis sa sortie), avec sa meute. */
   onCave(p: Player, id: number, enter: boolean) {
     const c = this.caveById(id);
-    if (!c || p.dead) return;
+    if (!c || p.dead || c.room !== undefined) return; // un géant du volcan se tient dans sa salle : on y entre à pied
     if (this.swimming(p)) return; // pas de grotte à la nage
     // grotte pas encore débloquée ; le volcan, lui, s'ouvre une fois vaincus les géants de la Mer de sable
     // le large, lui, s'ouvre quand le bateau est prêt (rebâti, son cœur volcanique installé)
@@ -3799,12 +3886,15 @@ export class Room {
     const rg = SPECIES[u.s].ranged!;
     if (u.windup > 0) {
       u.windup -= DT;
-      if (u.windup <= 0) this.fire(u, this.getEnt(u.shotAt) ?? t);
+      const aim = this.getEnt(u.shotAt) ?? t;
+      if (u.windup <= 0 && this.map.inSight(u.x, u.y, aim.x, aim.y)) this.fire(u, aim); // passée derrière la roche : le tir est perdu
       return;
     }
     u.atkCd -= DT;
-    if (dist2(u.x, u.y, t.x, t.y) > (rg.range * 0.9) ** 2) {
-      this.navTo(u, t.x, t.y, u.speed, rg.range * 0.8);
+    // hors de portée, ou cachée derrière la roche (le donjon) : il s'approche
+    const seen = this.map.inSight(u.x, u.y, t.x, t.y);
+    if (dist2(u.x, u.y, t.x, t.y) > (rg.range * 0.9) ** 2 || !seen) {
+      this.navTo(u, t.x, t.y, u.speed, seen ? rg.range * 0.8 : 40);
       return;
     }
     if (u.atkCd > 0) return;
@@ -5159,7 +5249,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ...(this.map.caveAt(viewer.x, viewer.y) === this.map.depths ? { doors: [...this.map.doorShut] } : {}), ev });
     }
   }
 }
