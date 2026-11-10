@@ -59,6 +59,8 @@ Si `main` a avancé pendant la revue, on rattrape avec `git merge origin/main` (
 
 - Un titre clair, et dans la description : **ce qui change**, **pourquoi**, et **comment le tester** (où aller, quoi faire en jeu).
 - Un changement visible (sprite, HUD, effet) : une capture ou une courte vidéo.
+- Un changement pour le joueur : une entrée en tête de [client/src/changelog.ts](client/src/changelog.ts) (les
+  nouveautés affichées à chaque connexion), en quelques lignes, avec un `id` nouveau.
 - Une PR par sujet : si elle devient énorme, on la découpe.
 
 ## Ce qu'on vérifie en revue

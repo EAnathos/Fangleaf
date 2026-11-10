@@ -1,7 +1,8 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
+import { CHANGELOG } from './changelog.ts';
 import {
-  alphaEquipMax, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
+  alphaEquipMax, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, LESSONS_PER_TOME, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, hatBonus, HAT_WEAPON_BONUS, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
 } from '../../shared/config.ts';
@@ -20,7 +21,7 @@ import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 import { clamp } from '../../shared/math.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | 'news' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
@@ -296,6 +297,8 @@ export class Hud {
   onRename = (_name: string) => {};
   onAttackMode = () => {};
   onKick = (_id: number) => {};
+  onKickAway = (_user: string) => {};
+  onTransfer = (_to: { id?: number; user?: string }) => {};
   onUnban = (_user: string) => {};
   capturing: Action | null = null; // réglages : action dont on attend la nouvelle touche
   banned: { id: string; name: string }[] = []; // bannis du village (vu par le fondateur)
@@ -382,11 +385,8 @@ export class Hud {
     $('date').onclick = () => this.setPanel('calendar');
     $('quit-confirm').onclick = () => this.onQuit();
     // Repartir de zéro, avec une confirmation dans le même panneau.
-    $('reset-ask').textContent = founder ? 'Supprimer le village' : 'Effacer ma progression ici';
-    $('reset-go').textContent = founder ? 'Oui, supprimer le village' : 'Oui, tout effacer';
-    $('reset-text').innerHTML = founder
-      ? `Supprimer définitivement le village <b>${code}</b> ? La carte, les camps et la progression de <b>tous ses membres</b> (or, équipement, essences, Alphas) seront effacés. C'est irréversible.`
-      : `Effacer définitivement <b>ta</b> progression dans le village <b>${code}</b> (or, équipement, essences, Alphas) ? Seul son fondateur peut supprimer le village. C'est irréversible.`;
+    this.code = code;
+    this.setFounder(founder, true);
     const confirmStep = (on: boolean) => {
       $('reset-main').hidden = on;
       $('reset-confirm').hidden = !on;
@@ -430,7 +430,7 @@ export class Hud {
       this.npcAt++;
       this.showNpc();
     };
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'calendar', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile', 'victory'] as const) {
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'calendar', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile', 'victory', 'news'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -456,6 +456,15 @@ export class Hud {
       if (btn.dataset.sell) this.onSell(Number(btn.dataset.sell));
       else this.onBuy(Number(btn.dataset.buy));
     });
+    // École des dompteurs : onglets Leçons / Inventaire (les livres du sac).
+    for (const tab of ['lessons', 'bag'] as const) {
+      $(`school-tab-${tab}`).onclick = () => {
+        $('school-tab-lessons').setAttribute('aria-selected', String(tab === 'lessons'));
+        $('school-tab-bag').setAttribute('aria-selected', String(tab === 'bag'));
+        $('school-lessons').hidden = tab !== 'lessons';
+        $('school-bag').hidden = tab !== 'bag';
+      };
+    }
     // Tanière : onglets Alphas / Bestiaire.
     for (const tab of ['alphas', 'bestiary'] as const) {
       $(`den-tab-${tab}`).onclick = () => {
@@ -615,7 +624,7 @@ export class Hud {
     }));
     this.victoryPortrait = [{ canvas: $<HTMLCanvasElement>('victory-portrait'), s: v.s, seen: true }];
     const open = () => {
-      if (this.panel && this.panel !== 'victory') return void setTimeout(open, 800); // un panneau ouvert : il attend
+      if (this.panel && this.panel !== 'victory' && this.panel !== 'news') return void setTimeout(open, 800); // un panneau ouvert : il attend
       this.setPanel('victory');
       sound.play('fanfare', 0.6);
     };
@@ -657,6 +666,7 @@ export class Hud {
     }
     $('hall').hidden = panel !== 'hall';
     $('victory').hidden = panel !== 'victory';
+    $('news').hidden = panel !== 'news';
     $('settings').hidden = panel !== 'settings';
     $('profile').hidden = panel !== 'profile';
     if (panel === 'profile') {
@@ -880,7 +890,7 @@ export class Hud {
     setHidden(ride, !me.mount && !me.army.some((a) => a.alpha && MOUNTS[SPECIES[a.species].key]));
     setText($('self-army'), `${me.army.filter((a) => !a.alpha).length} / ${armyCap(me.learned)}`); // meute ordinaire, en bas à gauche
     setText($('ping'), ping && settings.display.ping ? `${ping} ms` : '');
-    setHidden($('invite'), players.length >= MAX_PLAYERS); // village complet : plus personne à inviter
+    setHidden($('invite'), Math.max(players.length, this.roster.length) >= MAX_PLAYERS); // village complet (membres connectés ou non) : plus personne à inviter
     // au doigt, « Tendre un fruit » seulement près d'un gibier passif (ou si on en tend déjà un) ; pas pour des suricates
     // qui dorment dans leur tanière (la nuit, ils ne sortiront pas)
     const prey = units.some((u) => !u[6] && SPECIES[u[1]].passive && !(this.night && SPECIES[u[1]].shy && u[2] & UNIT_FLAG_HIDDEN) && Math.hypot(u[3] - myPos.x, u[4] - myPos.y) < LURE_R);
@@ -920,7 +930,7 @@ export class Hud {
       const act = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.heart ? this.onHeart() : b.plan ? this.onPlan() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
       onTap(prompt, act);
     }
-    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board', 'profile', 'victory'].includes(this.panel);
+    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board', 'profile', 'victory', 'news'].includes(this.panel);
     if (building && b?.panel !== this.panel) this.setPanel(null);
     if (b?.buy) this.buying = b.buy;
     if (b?.at !== undefined && b.at !== this.spotAt) {
@@ -1032,10 +1042,50 @@ export class Hud {
     if (key !== this.last.school) this.buildSchool(me, key);
     const reading = me.reading ? $('school-list').querySelector<HTMLButtonElement>(`button[data-kind="${me.readKind}"]`) : null;
     if (reading) setText(reading, `En lecture · ${clock(me.reading)}`);
+    const inBag = me.reading ? $('school-books').querySelector<HTMLElement>('.reading-now') : null;
+    if (inBag) setText(inBag, `En lecture · ${clock(me.reading)}`);
+  }
+
+  /**
+   * Inventaire de l'école : les livres du sac (celui en lecture, celui à lire ensuite, ceux qui attendent le tome
+   * d'avant), puis ceux déjà lus en entier (le livre fini ne reste pas dans le sac).
+   */
+  private buildSchoolBag(me: PlayerState) {
+    const owned: HTMLElement[] = [], read: HTMLElement[] = [];
+    const card = (title: string, sub: string, tag: string, tagClass = '') => {
+      const row = document.createElement('div');
+      row.className = 'stone-row book-row';
+      row.innerHTML = '<div class="col"><b></b><span class="small muted"></span></div><span class="book-tag"></span>';
+      row.querySelector('b')!.textContent = title;
+      row.querySelector('.small')!.textContent = sub;
+      const t = row.querySelector<HTMLElement>('.book-tag')!;
+      t.textContent = tag;
+      if (tagClass) t.classList.add(tagClass);
+      return row;
+    };
+    LESSON_KINDS.forEach((kind, k) => {
+      const d = DISCIPLINES[kind], n = me.learned[k] ?? 0, next = tomeForLesson(n, k);
+      d.tomes.forEach((name, t) => {
+        const label = d.tomes.length === 1 ? d.name : `${d.name} ${ROMAN[t]}`;
+        if (n >= LESSONS_PER_TOME * (t + 1)) read.push(card(name, label, 'Lu', 'done'));
+        else if (me.tomes[bookIndex(k, t)]) {
+          const now = !!me.reading && me.readKind === k && next === t;
+          owned.push(card(name, `${label} · ${d.desc}`, now ? `En lecture · ${clock(me.reading)}` : next === t ? (me.reading ? 'À lire ensuite' : 'Prêt à lire') : `Après le tome ${ROMAN[next] ?? ''}`, now ? 'reading-now' : next === t ? 'ready' : ''));
+        }
+      });
+    });
+    $('school-bag-count').innerHTML = `<b>${owned.length}</b> livre${owned.length > 1 ? 's' : ''} dans ton sac · <b>${read.length}</b> déjà lu${read.length > 1 ? 's' : ''}`;
+    const head = (text: string) => Object.assign(document.createElement('h3'), { className: 'market-head', textContent: text });
+    $('school-books').replaceChildren(
+      head('Dans ton sac'),
+      ...(owned.length ? owned : [Object.assign(document.createElement('p'), { className: 'small muted', textContent: 'Aucun livre pour l\'instant : les coffres des géants vaincus en renferment parfois.' })]),
+      ...(read.length ? [head('Déjà lus'), ...read] : []),
+    );
   }
 
   private buildSchool(me: PlayerState, key: string) {
     this.last.school = key;
+    this.buildSchoolBag(me);
     // où trouver chaque tome : les coffres des géants de deux zones chacun ; le livre à part, ceux du volcan
     const where = (label: string, place: string) => {
       const li = document.createElement('li');
@@ -1287,10 +1337,58 @@ export class Hud {
     btn.textContent = this.hall < hall ? `Hôtel de ville niv. ${hall} requis` : unloaded ? 'Dépose d\'abord ton sac à l\'entrepôt' : !canPay(funds, cost) ? 'Il manque des ressources' : `${'b' in buy ? (buy.b === 'bridge' ? 'Réparer' : 'Construire') : 'Débloquer'} pour le village`;
   }
 
+  /**
+   * Chef du village ou non : il peut changer en cours de partie (le chef transmet le village). Les boutons du chef
+   * (expulser, transmettre, supprimer le village) suivent.
+   */
+  setFounder(founder: boolean, force = false) {
+    if (founder === this.founder && !force) return;
+    const was = this.founder;
+    this.founder = founder;
+    const code = this.code;
+    $('reset-ask').textContent = founder ? 'Supprimer le village' : 'Effacer ma progression ici';
+    $('reset-go').textContent = founder ? 'Oui, supprimer le village' : 'Oui, tout effacer';
+    $('reset-text').innerHTML = founder
+      ? `Supprimer définitivement le village <b>${code}</b> ? La carte, les camps et la progression de <b>tous ses membres</b> (or, équipement, essences, Alphas) seront effacés. C'est irréversible.`
+      : `Effacer définitivement <b>ta</b> progression dans le village <b>${code}</b> (or, équipement, essences, Alphas) ? Seul son chef peut supprimer le village. C'est irréversible.`;
+    this.last.members = '';
+    if (!force) {
+      this.onBoard(); // qui est chef désormais : le tableau du village le dit
+      if (founder && !was) this.toast('Le village t\'a été transmis : tu en es le nouveau chef.', 'good');
+    }
+  }
+
+  /**
+   * Nouveautés du jeu (changelog.ts) : à chaque connexion, et depuis le menu. Ce que le joueur n'avait pas encore vu
+   * (d'après ce navigateur) porte la mention « Nouveau ».
+   */
+  showNews() {
+    const KEY = 'fangleaf.news.seen';
+    let seen = new Set<string>();
+    try {
+      seen = new Set(JSON.parse(localStorage.getItem(KEY) ?? '[]') as string[]);
+      localStorage.setItem(KEY, JSON.stringify(CHANGELOG.map((c) => c.id)));
+    } catch { /* stockage indisponible : rien n'est marqué nouveau */ seen = new Set(CHANGELOG.map((c) => c.id)); }
+    const date = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+    $('news-list').replaceChildren(...CHANGELOG.map((c) => {
+      const el = document.createElement('section');
+      el.className = `news-entry${seen.has(c.id) ? '' : ' fresh'}`;
+      el.innerHTML = '<div class="news-head"><b></b><span class="small muted"></span></div><ul class="small"></ul>';
+      el.querySelector('b')!.textContent = c.title;
+      el.querySelector('.news-head .small')!.textContent = seen.has(c.id) ? date(c.date) : `Nouveau · ${date(c.date)}`;
+      el.querySelector('ul')!.replaceChildren(...c.items.map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+      return el;
+    }));
+    this.setPanel('news');
+    $('news-list').scrollTop = 0;
+  }
+
   /** Paramètres : mode d'attaque et touches (PC), membres du village (expulsion par le fondateur). */
   private initSettings(founder: boolean) {
     this.founder = founder;
     $('settings-open').onclick = () => this.setPanel('settings');
+    $('news-open').onclick = () => this.showNews();
+    $('news-ok').onclick = () => this.setPanel(null);
     $('profile-open').onclick = () => this.setPanel('profile');
     onTap($('menu-open'), () => this.setPanel(this.panel === 'quit' ? null : 'quit'));
     onTap($('chat-open'), () => this.setPanel(this.panel === 'chat' ? null : 'chat'));
@@ -1463,7 +1561,8 @@ export class Hud {
     }, true);
   }
   private founder = false;
-  private offline: { name: string; color: string }[] = []; // membres déconnectés (d'après le tableau du village)
+  private code = '';
+  private roster: BoardRow[] = []; // membres du village, en ligne ou non (d'après le tableau du village)
   private keymap = () => {};
   onQuality = () => {};
 
@@ -1473,7 +1572,7 @@ export class Hud {
   /** Profil : aperçu du dompteur, couleurs (celles des autres membres sont prises) et chapeaux. */
   private updateProfile(me: PlayerState, players: PlayerState[]) {
     // couleurs déjà prises par un autre membre (en ligne ou endormi au village) : on ne peut pas les choisir
-    const takenBy = new Map<string, string>([...this.offline.filter((o) => o.name !== me.name), ...players.filter((p) => p.id !== me.id)].map((o) => [o.color, o.name]));
+    const takenBy = new Map<string, string>([...this.roster.filter((o) => !o.online && o.name !== me.name), ...players.filter((p) => p.id !== me.id)].map((o) => [o.color, o.name]));
     const taken = new Set(takenBy.keys());
     const owned = (h: number) => h === 0 || (me.hats ?? []).includes(h);
     const key = JSON.stringify([me.color, me.hat, me.hats, me.armor, me.cls, [...taken], HAT_PRICES.map((c) => me.gold >= c)]);
@@ -1529,50 +1628,68 @@ export class Hud {
     }));
   }
 
+  /** Bouton du chef à confirmer d'un second clic (3 s pour le faire). */
+  private sureButton(label: string, sure: string, act: () => void) {
+    const btn = document.createElement('button');
+    btn.className = 'kick';
+    btn.textContent = label;
+    btn.onclick = () => {
+      if (!btn.classList.contains('sure')) {
+        btn.classList.add('sure');
+        btn.textContent = sure;
+        setTimeout(() => {
+          btn.classList.remove('sure');
+          btn.textContent = label;
+        }, 3000);
+        return;
+      }
+      act();
+      setTimeout(() => this.onBoard(), 300); // la liste des membres se met à jour
+    };
+    return btn;
+  }
+
   private updateMembers(me: PlayerState, players: PlayerState[]) {
-    const key = JSON.stringify([players.map((p) => [p.id, p.name]), this.offline, this.banned]);
+    const key = JSON.stringify([players.map((p) => [p.id, p.name]), this.roster.map((r) => [r.name, r.online, r.founder, r.user]), this.banned, this.founder]);
     if (key === this.last.members) return;
     this.last.members = key;
-    const away = this.offline.filter((o) => !players.some((p) => p.name === o.name)).map((o) => {
-      const row = document.createElement('div');
-      row.className = 'stone-row';
-      row.innerHTML = '<div class="col"><b></b><span class="small muted">Hors ligne</span></div>';
-      const b = row.querySelector('b')!;
-      b.textContent = o.name;
-      b.style.color = o.color;
-      return row;
+    const row = (name: string, color: string, status: string, actions: HTMLButtonElement[] = []) => {
+      const el = document.createElement('div');
+      el.className = 'stone-row';
+      el.innerHTML = '<div class="col"><b></b><span class="small muted"></span></div>';
+      const b = el.querySelector('b')!;
+      b.textContent = name;
+      b.style.color = color;
+      el.querySelector('.small')!.textContent = status;
+      if (actions.length) {
+        const box = document.createElement('div');
+        box.className = 'member-actions';
+        box.append(...actions);
+        el.append(box);
+      }
+      return el;
+    };
+    const chief = (r?: BoardRow) => (r?.founder ? ' · chef' : '');
+    // Le chef peut expulser (bannir) et transmettre le village, à un membre en ligne comme à un membre déconnecté.
+    const online = players.map((p) => {
+      const r = this.roster.find((x) => x.online && x.id === p.id);
+      if (p.id === me.id) return row(p.name, p.color, this.founder ? 'Toi · chef' : 'Toi');
+      const acts = !this.founder ? [] : [
+        ...(p.saved ? [this.sureButton('Transmettre', 'Confirmer : il devient chef', () => this.onTransfer({ id: p.id }))] : []),
+        this.sureButton('Expulser', 'Confirmer : bannir', () => this.onKick(p.id)),
+      ];
+      return row(p.name, p.color, `En ligne${chief(r)}`, acts);
     });
-    $('members').replaceChildren(
-      ...players.map((p) => {
-        const row = document.createElement('div');
-        row.className = 'stone-row';
-        row.innerHTML = '<div class="col"><b></b><span class="small muted"></span></div>';
-        const b = row.querySelector('b')!;
-        b.textContent = p.name;
-        b.style.color = p.color;
-        row.querySelector('.small')!.textContent = p.id === me.id ? (this.founder ? 'Toi · fondateur' : 'Toi') : 'En ligne';
-        if (this.founder && p.id !== me.id) {
-          const kick = document.createElement('button');
-          kick.className = 'kick';
-          kick.textContent = 'Expulser';
-          kick.onclick = () => {
-            if (!kick.classList.contains('sure')) {
-              kick.classList.add('sure');
-              kick.textContent = 'Confirmer : bannir';
-              setTimeout(() => {
-                kick.classList.remove('sure');
-                kick.textContent = 'Expulser';
-              }, 3000);
-              return;
-            }
-            this.onKick(p.id);
-          };
-          row.append(kick);
-        }
-        return row;
-      }),
-      ...away,
-    );
+    const away = this.roster.filter((r) => !r.online && !players.some((p) => p.name === r.name)).map((r) => {
+      const user = r.user;
+      const acts = this.founder && user && !user.startsWith('invité:') ? [
+        this.sureButton('Transmettre', 'Confirmer : il devient chef', () => this.onTransfer({ user })),
+        this.sureButton('Expulser', 'Confirmer : bannir', () => this.onKickAway(user)),
+      ] : [];
+      return row(r.name, r.color, `Hors ligne${chief(r)}`, acts);
+    });
+    $('members').replaceChildren(...online, ...away);
+    $('members-count').textContent = `${online.length + away.length}/${MAX_PLAYERS} membres, connectés ou non`;
     $('banned-box').hidden = !this.founder || !this.banned.length;
     $('banned').replaceChildren(
       ...this.banned.map((u) => {
@@ -1588,7 +1705,7 @@ export class Hud {
 
   /** Tableau du village reçu du serveur : une colonne par membre, une ligne par exploit, couronne pour le premier de chaque ligne. */
   board(rows: BoardRow[]) {
-    this.offline = rows.filter((r) => !r.online).map((r) => ({ name: r.name, color: r.color })); // pour la liste des membres
+    this.roster = rows.map((r) => ({ ...r })); // pour la liste des membres
     rows.sort((a, b) => b.bosses - a.bosses || b.kills - a.kills || b.tamed - a.tamed || b.given - a.given);
     const head = document.createElement('tr'), corner = document.createElement('th');
     head.append(corner);

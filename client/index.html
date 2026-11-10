@@ -272,7 +272,19 @@
           <button id="quit-confirm" class="cta">Retour au lobby</button>
           <button id="profile-open" class="btn">Profil</button>
           <button id="settings-open" class="btn">Paramètres</button>
+          <button id="news-open" class="btn">Nouveautés</button>
         </div>
+      </div>
+    </div>
+
+    <div id="news" class="overlay dim" hidden>
+      <div class="panel modal news" role="dialog" aria-modal="true" aria-labelledby="news-title">
+        <div class="row between">
+          <h2 id="news-title">Nouveautés</h2>
+          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div id="news-list" class="col news-list"></div>
+        <button id="news-ok" class="cta">C'est parti !</button>
       </div>
     </div>
 
@@ -399,6 +411,7 @@
         <section id="set-village" class="col set-page" role="tabpanel" hidden>
           <button id="invite" class="btn">Inviter des amis · <span id="code-label"></span></button>
           <h3 class="market-head">Membres du village</h3>
+          <p id="members-count" class="small muted"></p>
           <div id="members" class="stones"></div>
           <div id="banned-box" class="col" hidden>
             <h3 class="market-head">Bannis</h3>
@@ -494,12 +507,22 @@
           <h2 id="school-title">École des dompteurs</h2>
           <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
         </div>
-        <div class="tome-where">
-          <b>Où trouver les livres</b>
-          <span class="small muted">Dans les coffres des géants vaincus, parfois. Un exemplaire de chaque tome, à lire dans l'ordre ; la lecture continue même quand tu es déconnecté.</span>
-          <ul id="school-where" class="small"></ul>
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" id="school-tab-lessons" aria-selected="true" aria-controls="school-lessons">Leçons</button>
+          <button type="button" role="tab" id="school-tab-bag" aria-selected="false" aria-controls="school-bag">Inventaire</button>
         </div>
-        <div id="school-list" class="col school-list"></div>
+        <div id="school-lessons" class="col" role="tabpanel">
+          <div class="tome-where">
+            <b>Où trouver les livres</b>
+            <span class="small muted">Dans les coffres des géants vaincus, parfois. Un exemplaire de chaque tome, à lire dans l'ordre ; la lecture continue même quand tu es déconnecté.</span>
+            <ul id="school-where" class="small"></ul>
+          </div>
+          <div id="school-list" class="col school-list"></div>
+        </div>
+        <div id="school-bag" class="col" role="tabpanel" hidden>
+          <p id="school-bag-count" class="collection"></p>
+          <div id="school-books" class="col school-list"></div>
+        </div>
       </div>
     </div>
 

@@ -430,6 +430,7 @@ export class Room {
   readonly stock = { wood: 0, stone: 0 }; // réserve commune de l'entrepôt
   banned: { id: string; name: string }[] = []; // comptes expulsés par le fondateur (leur progression est gardée)
   onVillage?: (v: VillageState) => void; // sauvegarde, appelée quand le village change (camp, bâtiment, grotte)
+  onFounder?: (userId: string) => void; // sauvegarde du nouveau chef (transmission du village)
   founder: string | null = null; // compte qui a fondé le village (seul à pouvoir le supprimer)
   deleted = false; // supprimé : plus aucune sauvegarde
 
@@ -476,6 +477,18 @@ export class Room {
 
   get full() {
     return this.players.size >= MAX_PLAYERS;
+  }
+
+  /**
+   * Place pour ce compte parmi les membres du village : MAX_PLAYERS au plus, connectés ou non (comptes enregistrés,
+   * stored, plus ceux qui sont là ou endormis au village ; les bannis ne comptent pas). Un membre a toujours sa place.
+   */
+  hasRoomFor(userId: string | null, stored: readonly string[] = []) {
+    const members = new Set(stored);
+    for (const p of this.players.values()) members.add(p.userId ?? `invité:${p.id}`);
+    for (const key of this.sleepers.keys()) members.add(key);
+    for (const b of this.banned) members.delete(b.id);
+    return (!!userId && members.has(userId)) || members.size < MAX_PLAYERS;
   }
 
   addPlayer(name: string, send: (m: ServerMsg) => void, account?: { userId: string; profile: Profile | null }): Player {
@@ -750,9 +763,10 @@ export class Room {
 
   /** Tableau du village : chaque membre (en ligne ou endormi au village), géants battus, apprivoisements, dons. */
   onBoard(p: Player) {
+    const chief = this.isFounder(p) && p.userId !== null; // le chef reçoit les comptes des absents (expulsion, transmission)
     const rows: BoardRow[] = [
-      ...[...this.players.values()].map((q) => ({ name: q.name, color: q.color, online: true, ...q.stats, ...holdingsOf(this.profileOf(q)) })),
-      ...[...this.sleepers.values()].map((z) => ({ name: z.name, color: z.color, online: false, ...z.stats, ...z.holdings })),
+      ...[...this.players.values()].map((q) => ({ name: q.name, color: q.color, online: true, id: q.id, founder: !!q.userId && q.userId === this.founder, ...q.stats, ...holdingsOf(this.profileOf(q)) })),
+      ...[...this.sleepers].map(([key, z]) => ({ name: z.name, color: z.color, online: false, founder: key === this.founder, ...(chief ? { user: key } : {}), ...z.stats, ...z.holdings })),
     ];
     p.send({ t: 'board', rows });
   }
@@ -771,6 +785,31 @@ export class Room {
     this.events.push({ e: 'info', text: `${t.name} a été expulsé du village` });
     t.send({ t: 'closed', msg: 'Tu as été expulsé de ce village par son fondateur.' });
     t.close?.();
+  }
+
+  /** Fondateur : expulser un membre déconnecté (endormi au village). Banni comme les autres, sa place se libère. */
+  onKickAway(p: Player, userId: string) {
+    const z = this.sleepers.get(userId);
+    if (!z || !this.isFounder(p) || p.userId === null || userId === p.userId || userId.startsWith('invité:')) return;
+    if (!this.isBanned(userId)) this.banned.push({ id: userId, name: z.name });
+    this.removeSleeper(userId);
+    this.saveVillage();
+    this.events.push({ e: 'info', text: `${z.name} a été expulsé du village` });
+  }
+
+  /**
+   * Fondateur : transmettre le village (ses droits de chef : expulser, débannir, supprimer, transmettre) à un autre
+   * membre, en ligne (id) ou déconnecté (user). Lui reste membre, comme les autres.
+   */
+  onTransfer(p: Player, id?: number, user?: string) {
+    if (!this.isFounder(p) || p.userId === null) return;
+    const online = id !== undefined ? this.players.get(id) : undefined;
+    const to = online ? online.userId : typeof user === 'string' && this.sleepers.has(user) ? user : null;
+    if (!to || to === p.userId || to.startsWith('invité:') || this.isBanned(to)) return;
+    const name = online?.name ?? this.sleepers.get(to)!.name;
+    this.founder = to;
+    this.onFounder?.(to);
+    this.events.push({ e: 'info', text: `${p.name} a transmis le village à ${name} : c'est le nouveau chef` });
   }
 
   /** Fondateur : lever un bannissement ; le compte pourra revenir, avec sa progression. */
@@ -5284,7 +5323,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ...(this.map.caveAt(viewer.x, viewer.y) === this.map.depths ? { doors: [...this.map.doorShut] } : {}), ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], founder: this.isFounder(viewer), caves, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ...(this.map.caveAt(viewer.x, viewer.y) === this.map.depths ? { doors: [...this.map.doorShut] } : {}), ev });
     }
   }
 }

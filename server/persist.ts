@@ -161,6 +161,21 @@ export async function loadProgress(userId: string, code: string): Promise<Profil
   return data as Profile | null;
 }
 
+/** Comptes membres d'un village (ceux qui y ont une progression, connectés ou non). */
+export async function memberIds(code: string): Promise<string[]> {
+  if (!db) return [];
+  const { data, error } = await db.from('progress').select('user_id').eq('village_code', code);
+  if (error) throw new Error(`Lecture des membres impossible : ${error.message}`);
+  return (data ?? []).map((d) => String(d.user_id));
+}
+
+/** Nouveau chef du village (transmission par l'ancien). */
+export async function setFounder(code: string, userId: string) {
+  if (!db) return;
+  const { error } = await db.from('villages').update({ created_by: userId }).eq('code', code);
+  if (error) console.error('Transmission du village impossible :', error.message);
+}
+
 /** Nombre de villages où ce compte a une progression. */
 export async function countVillages(userId: string): Promise<number> {
   if (!db) return 0;

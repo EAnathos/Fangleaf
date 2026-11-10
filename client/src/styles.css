@@ -548,6 +548,17 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .key-row button.wait { border-color: var(--amber); color: var(--amber); }
 .stone-row .kick { height: 36px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--enemy); background: transparent; color: #FF9B78; font-weight: 600; flex: none; }
 .stone-row .kick.sure { background: var(--enemy); color: var(--amber-ink); }
+.news-list { gap: 10px; max-height: min(60vh, 520px); overflow-y: auto; padding-right: 4px; }
+.news-entry { padding: 10px 12px; border-radius: 12px; border: 2px solid var(--line); background: rgba(0, 0, 0, 0.15); }
+.news-entry.fresh { border-color: var(--amber); }
+.news-entry .news-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; align-items: baseline; }
+.news-entry.fresh .news-head .small { color: var(--amber); }
+.news-entry ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.stone-row .member-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex: none; }
+.book-row .book-tag { flex: none; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.book-row .book-tag.ready { border-color: var(--amber); color: var(--amber); }
+.book-row .book-tag.reading-now { border-color: var(--alpha); color: var(--alpha); }
+.book-row .book-tag.done { border-color: transparent; color: var(--muted); opacity: 0.8; }
 
 /* Chat (comme dans Minecraft) : n'apparaît que lorsqu'on l'ouvre. */
 .army-badge { position: absolute; left: 16px; bottom: 16px; height: 44px; padding: 0 14px 0 10px; display: flex; align-items: center; gap: 8px; border-radius: 22px; font: 700 16px var(--body); color: var(--text); font-variant-numeric: tabular-nums; }
