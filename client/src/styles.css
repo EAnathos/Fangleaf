@@ -677,8 +677,8 @@ body.waking #hud { opacity: 0; pointer-events: none; }
    monte du bas de l'écran : compte, carrousel des villages (on glisse de l'un à l'autre), gros bouton pour jouer. */
 @media (max-width: 600px) and (orientation: portrait) {
   .lobby-news-toggle {
-    display: block; position: fixed; top: calc(env(safe-area-inset-top) + 10px); left: 10px; z-index: 2; padding: 6px 12px;
-    border-radius: 999px; border: 1px solid var(--line); background: rgba(23, 33, 31, 0.85); color: var(--text-2); font: 600 13px var(--body);
+    display: block; margin-top: 8px; padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line);
+    background: rgba(23, 33, 31, 0.85); color: var(--text-2); font: 600 13px var(--body);
   }
   .lobby-news-toggle b { color: var(--amber); }
   .lobby-news { display: none; }
@@ -686,6 +686,7 @@ body.waking #hud { opacity: 0; pointer-events: none; }
     display: flex; position: fixed; z-index: 3; inset: calc(env(safe-area-inset-top) + 50px) 10px auto; max-height: 75dvh; overflow-y: auto; text-align: left;
   }
   .lobby-news.open .close { display: inline-flex; }
+  .lobby-news h2 { font-size: 17px; }
   #lobby { overflow: hidden; background: radial-gradient(ellipse at 50% 42%, #2A4A33 0%, #172A21 40%, var(--night) 80%); }
   #lobby-scene { opacity: 1; }
   .lobby-inner { height: 100%; min-height: 100dvh; padding: calc(env(safe-area-inset-top) + 18px) 0 0; gap: 0; justify-content: flex-start; align-items: stretch; }
