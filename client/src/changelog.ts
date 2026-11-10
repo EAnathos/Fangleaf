@@ -11,6 +11,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.0',
+    date: '2026-11-10',
+    title: 'Le retour de tes Alphas',
+    items: [
+      'Sur ordinateur, quand un Alpha équipé tombe, le HUD dit dans combien de temps il ressuscite (face à un géant : après le combat).',
+      'Au choix dans Paramètres › Affichage : une ligne sous le sac, ou une vignette à son portrait près des effets en cours.',
+    ],
+  },
+  {
     version: '0.6.0',
     date: '2026-11-10',
     title: 'Chef du village, membres et inventaire de l\'école',

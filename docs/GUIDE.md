@@ -119,7 +119,9 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Il n'y a **pas d'Alpha sauvage**. Chaque monstre vaincu peut laisser une **essence** de son espèce ; avec assez
   d'essences, on **éveille** l'Alpha de cette espèce à la Tanière. L'éveil prend un moment, même hors ligne.
 - Un Alpha par espèce, hors limite de meute. Tombé, il ressuscite après un délai (plus long pour les espèces fortes) ;
-  pendant un combat de géant, ou si son dompteur est à terre, il attend la fin.
+  pendant un combat de géant, ou si son dompteur est à terre, il attend la fin. Sur ordinateur, le HUD dit dans combien
+  de temps il revient : une ligne sous le sac, ou une vignette à son portrait près des effets en cours (au choix dans
+  Paramètres › Affichage).
 - On le **renforce** avec des essences, de plus en plus cher à chaque niveau, et un peu plus dans les zones lointaines.
 - Seuls quelques Alphas sont **équipés** à la fois ; les autres se reposent à la Tanière et se promènent sur l'îlot du village.
   Pour que le jeu reste fluide, **30 Alphas au repos au plus** sont montrés en même temps : au-delà, ils sont tirés au hasard

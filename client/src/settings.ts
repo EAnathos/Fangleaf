@@ -37,6 +37,7 @@ export interface Display {
   ui: Size; // taille de l'interface (barres, boutons, panneaux)
   text: Size; // taille des textes dans le monde (noms, dégâts, gains)
   statusHud: StatusHud; // vignettes des effets d'état
+  alphaRevive: 'text' | 'pills'; // Alpha équipé tombé (ordinateur) : temps avant sa résurrection, en texte sous le sac ou en vignette à son portrait
 }
 export interface Settings {
   keys: Record<Action, Binding>;
@@ -73,7 +74,7 @@ const DEFAULTS: Settings = {
     chat: { key: 'c', label: 'C' },
   },
   attack: 'auto',
-  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', statusHud: { enabled: true, position: 'top-left', size: 'normal', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 } },
+  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', statusHud: { enabled: true, position: 'top-left', size: 'normal', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 }, alphaRevive: 'text' },
 };
 
 /** Netteté maximale de l'image (pixels par point d'écran) selon la qualité. */
@@ -120,6 +121,7 @@ function load(): Settings {
         edge: typeof d.statusHud?.edge === 'number' ? Math.min(90, Math.max(10, Math.round(d.statusHud.edge))) : D.statusHud.edge,
         corner: typeof d.statusHud?.corner === 'number' ? Math.min(100, Math.max(10, Math.round(d.statusHud.corner))) : D.statusHud.corner,
       },
+      alphaRevive: (['text', 'pills'] as const).find((q) => q === d.alphaRevive) ?? D.alphaRevive,
     };
     return { keys, attack: saved?.attack === 'click' ? 'click' : 'auto', display };
   } catch {
