@@ -1,8 +1,8 @@
-// Petites règles : gibier apprivoisé, baies, lave du volcan, embarquement, brûlure. Lancer : npm run test:rules
+// Petites règles : gibier apprivoisé, baies, lave du volcan, embarquement, brûlure, vautour et tempête, récolte, chapeaux. Lancer : npm run test:rules
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { armyCap, BOAT_STAGES, HEART_IN_BOAT, SPECIES } from '../../shared/config.ts';
+import { armyCap, BOAT_STAGES, DESERT_ZONE, HEART_IN_BOAT, HAT_WEAPON_BONUS, RANGED_GATHER, SPECIES, STORM_HARM, TICK_HZ, treeHp } from '../../shared/config.ts';
 
 const S = (key: string) => SPECIES.findIndex((sp) => sp.key === key);
 
@@ -91,5 +91,105 @@ describe('Petites règles', () => {
     const wy0 = r.createUnit(S('wyvern'), false, wx, wy), dr = r.createUnit(S('drake'), false, wx, wy);
     check(!r.blockedFor(wy0, wx, wy) && r.blockedFor(dr, wx, wy), 'la wyverne survole l\'eau, pas le drake');
     check(!!SPECIES[S('dragon')].wings && !SPECIES[S('drake')].wings, 'le dragonnet a des ailes, le drake non');
+  });
+
+  rule('Tempête de sable : on ne monte pas son vautour, et un cavalier qui y entre met pied à terre.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    const at = m.spineAt(m.zoneFrom(DESERT_ZONE) + 900);
+    [p.x, p.y] = [at.x, at.y];
+    const vul = r.spawnAlpha(p, S('vulture'), 0, false);
+    [vul.x, vul.y] = [p.x + 20, p.y];
+    r.storm = 1;
+    r.onMount(p, vul.id);
+    check(p.mount === 0, 'en pleine tempête : il refuse de décoller');
+    r.storm = 0;
+    r.onMount(p, vul.id);
+    check(p.mount === vul.id, 'le calme revenu : en selle');
+    r.storm = STORM_HARM + 0.1;
+    r.tick = TICK_HZ * 10;
+    r.stormDamage();
+    check(p.mount === 0, 'la tempête se lève : il met pied à terre');
+  });
+
+  rule('Un vautour posé près de sa proie redécolle quand on le monte : on vole au-dessus de l\'eau sans se bloquer.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    const vul = r.spawnAlpha(p, S('vulture'), 0, false);
+    [vul.x, vul.y] = [p.x + 20, p.y];
+    vul.perched = true;
+    r.onMount(p, vul.id);
+    check(r.airborne(p) && r.airborne(vul), 'cavalier et monture volent ensemble (le client ne le voit plus « posé »)');
+    // perdu au-dessus de l'eau sans monture (elle est tombée) : il est reposé sur la terre ferme au lieu de rester coincé
+    const w = m.deepWater.find((a: number[]) => a?.length);
+    [p.x, p.y] = [w[0], w[1]];
+    p.mount = 0;
+    p.lastPosMs = Date.now() - 100;
+    r.onPos(p, p.x + 10, p.y, 1, 0);
+    check(!m.blocked(p.x, p.y), 'coincé dans l\'eau : remis à terre');
+  });
+
+  rule('Archers et mages récoltent 30 % moins vite que les guerriers.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    const i = m.decor.findIndex((d: { kind: number; zone: number }) => d.kind === 0 && d.zone === 1);
+    const d = m.decor[i], full = treeHp(d.zone) * m.treeScale(d);
+    const hit = (cls: string | null) => {
+      const p = r.addPlayer(cls ?? 'g', noop);
+      p.cls = cls;
+      r.treeHp.delete(i);
+      r.chop(p, i);
+      r.removePlayer(p.id);
+      return full - r.treeHp.get(i);
+    };
+    const war = hit('warrior');
+    check(Math.abs(hit('archer') - war * RANGED_GATHER) < 1e-6 && Math.abs(hit('mage') - war * RANGED_GATHER) < 1e-6, `archer et mage : ${RANGED_GATHER * 100} % des coups d'un guerrier`);
+  });
+
+  rule('Chaque chapeau débloqué renforce l\'arme de 10 %.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room();
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    p.cls = 'warrior';
+    const hit = (hats: number[]) => {
+      p.hats = hats;
+      const u = r.createUnit(S('slime'), false, p.x + 30, p.y);
+      u.hp = u.maxHp = 1e6;
+      r.grid.clear();
+      r.grid.insert(p);
+      r.grid.insert(u);
+      p.atkCd = 0;
+      r.playerAttack(p);
+      r.units.delete(u.id);
+      return 1e6 - u.hp;
+    };
+    const bare = hit([]), two = hit([1, 2]);
+    check(bare > 0 && Math.abs(two / bare - (1 + 2 * HAT_WEAPON_BONUS)) < 0.02, `deux chapeaux : ×${(two / bare).toFixed(2)}`);
+  });
+
+  rule('Touche de récolte : le Tréant de la meute abat les arbres même avec des monstres autour.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    const tree = m.decor.find((d: { kind: number; zone: number; id: number }) => d.kind === 0 && d.zone === 1 && !m.treeDown.has(d.id));
+    const t = m.trunkOf(tree);
+    [p.x, p.y] = [t.x + 120, t.y];
+    const tr = r.createUnit(S('treant'), false, t.x + 60, t.y);
+    r.makeTamed(tr, p);
+    const foe = r.createUnit(S('slime'), false, p.x + 60, p.y);
+    foe.hp = foe.maxHp = 1e6;
+    r.onHarvest(p, true);
+    for (let i = 0; i < TICK_HZ * 6; i++) {
+      p.hp = 1e6;
+      r.step();
+    }
+    check(r.treeHp.has(m.decor.indexOf(tree)) || m.treeDown.has(m.decor.indexOf(tree)), 'il s\'occupe de l\'arbre');
+    check(tr.target === 0, '… sans prendre le monstre pour cible');
   });
 });

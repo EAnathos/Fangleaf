@@ -19,7 +19,7 @@
 // - Des filons d'or éparpillés, plus riches dans les zones dangereuses.
 // - Arbres, rochers, palissade, bâtiments : obstacles solides (même grille : 1 = eau, 2 = solide, 3 = mer profonde).
 
-import { CAMP_R, CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, DUNGEON_COLS, DUNGEON_ROWS, DUNGEON_DX, DUNGEON_DY, CORRIDOR_R, PLATE_R, VENT_R, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, SCHOOL_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, LAKES_ZONE, JUNGLE_ZONE, DESERT_ZONE, type BuildingId, type Resource } from './config.ts';
+import { CAMP_R, CAVE_RX, CAVE_RY, DECK_RX, DECK_RY, SEA_RX, SEA_RY, VOYAGE_ZONE, HALL_RX, HALL_RY, DUNGEON_COLS, DUNGEON_ROWS, DUNGEON_DX, DUNGEON_DY, CORRIDOR_R, DOOR_T, ROOM_SCALE, PLATE_R, VENT_R, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONE_WEIGHTS, BOARD_OFFSET, DEN_OFFSET, ELDER_OFFSET, FORGE_OFFSET, HALL_OFFSET, MARKET_OFFSET, SCHOOL_OFFSET, STORE_OFFSET, SPECIES, VILLAGE_R, VILLAGE_STONE_OFFSET, WORLD_HALF, ZONES, LAKES_ZONE, JUNGLE_ZONE, DESERT_ZONE, type BuildingId, type Resource } from './config.ts';
 import { clamp, dist2, fbm, hash2, rng } from './math.ts';
 
 export const MAP_CELL = 16; // résolution de la grille d'obstacles
@@ -96,6 +96,7 @@ export interface Cave {
   home?: Pt; // où se tient son géant, s'il n'est pas au fond (le Kraken, dans l'eau contre le bateau)
   spots?: Pt[]; // d'autres places où il peut resurgir (le Kraken, entre deux phases : bâbord, tribord, proue)
   open?: number; // géant à l'air libre, sur un îlot du large (index dans islets) : pas d'intérieur, l'îlot est son arène
+  room?: number; // géant du volcan, dans sa salle du donjon (index dans rooms) : pas d'intérieur, la salle est son arène ; entrance : la herse de son couloir
 }
 /**
  * Îlot du large : une petite île dans la mer peu profonde, qu'on rejoint à dos de serpent. Il garde un géant (à l'air
@@ -122,6 +123,8 @@ export const HALL_ID = -1;
 export interface Room { x: number; y: number; rx: number; ry: number; kind: 'entry' | 'heart' | 'lair' | 'room' }
 /** Piège du donjon : évent de flammes en travers d'un couloir (il crache à son rythme), ou dalle piégée dans une salle. */
 export interface Trap { kind: 'vent' | 'plate'; x: number; y: number; period: number; phase: number }
+/** Herse du donjon, en travers d'un couloir (une par couloir, dans l'ordre de links) : centre, direction du couloir, antre derrière (-1 : aucun). */
+export interface Door { x: number; y: number; ux: number; uy: number; lair: number }
 const DCELL = 16; // grille du sol du donjon
 
 export interface Ore {
@@ -263,6 +266,9 @@ export class WorldMap {
   readonly rooms: Room[] = []; // salles du donjon sous le volcan
   readonly links: [number, number][] = []; // couloirs (droits, d'un centre de salle à l'autre)
   readonly traps: Trap[] = [];
+  readonly doors: Door[] = []; // herses, une par couloir (même index que links)
+  /** Herses baissées (1) ou levées (0), par couloir : tenu par le serveur, reçu par le client avec le snapshot. */
+  doorShut = new Uint8Array(0);
   private floor = new Uint8Array(0); // sol du donjon (1), roche (0), par cases de DCELL depuis le coin de sa boîte
   private floorW = 0;
   school: Pt = { x: 0, y: 0 }; // École des dompteurs, au village
@@ -943,6 +949,11 @@ export class WorldMap {
    */
   arenaAt(x: number, y: number, margin = 60): Cave | undefined {
     const c = this.caveAt(x, y);
+    if (c === this.depths) {
+      // dans le donjon : la salle d'un géant du volcan est son arène
+      const k = this.roomAt(x, y);
+      return k >= 0 && this.rooms[k].kind === 'lair' ? this.caves.find((q) => q.room === k) ?? c : c;
+    }
     if (c) return c;
     const t = this.isletAt(x, y, margin);
     return t && t.cave >= 0 ? this.caves[t.cave] : undefined;
@@ -1489,11 +1500,47 @@ export class WorldMap {
     if (!this.onFloor(x, y)) return true; // la roche, hors des salles et des couloirs
     if (dist2(x, y, h.x, h.y) < 34 ** 2) return true; // l'autel
     if (this.lavaPools.some((p) => dist2(x, y, p.x, p.y) < p.r * p.r)) return true;
-    return this.caves.some((c) => {
-      if (c.zone !== VOLCANO_ZONE) return false;
-      const { x: ex, y: ey } = c.entrance;
-      return dist2(x, y, ex - 68, ey - 20) < 42 ** 2 || dist2(x, y, ex + 68, ey - 20) < 42 ** 2 || (x > ex - 60 && x < ex + 60 && y > ey - 88 && y < ey - 42);
-    });
+    return this.doorAt(x, y) >= 0;
+  }
+
+  /** Herse baissée sur ce point (son index), ou -1. */
+  doorAt(x: number, y: number) {
+    for (let i = 0; i < this.doors.length; i++) {
+      if (!this.doorShut[i]) continue;
+      const d = this.doors[i], dx = x - d.x, dy = y - d.y, along = dx * d.ux + dy * d.uy;
+      if (Math.abs(along) < DOOR_T && Math.abs(dx * d.uy - dy * d.ux) < CORRIDOR_R + 14) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Jusqu'où porte la vue de (ax, ay) dans la direction (ux, uy), au plus max : dans le donjon, la roche et les herses
+   * baissées l'arrêtent (on ne tire pas d'une salle à l'autre) ; ailleurs, rien (max).
+   */
+  sightReach(ax: number, ay: number, ux: number, uy: number, max: number) {
+    if (this.caveAt(ax, ay) !== this.depths) return max;
+    // les herses baissées : là où le trait croise leur ligne, en travers du couloir
+    for (let i = 0; i < this.doors.length; i++) {
+      if (!this.doorShut[i]) continue;
+      const d = this.doors[i], dot = ux * d.ux + uy * d.uy;
+      if (Math.abs(dot) < 1e-6) continue;
+      const t = ((d.x - ax) * d.ux + (d.y - ay) * d.uy - Math.sign(dot) * DOOR_T) / dot;
+      if (t < 0 || t >= max) continue;
+      const x = ax + ux * t, y = ay + uy * t;
+      if (Math.abs((x - d.x) * d.uy - (y - d.y) * d.ux) < CORRIDOR_R + 14) max = t;
+    }
+    for (let t = DCELL; t < max; t += DCELL) {
+      if (!this.onFloor(ax + ux * t, ay + uy * t)) return Math.max(0, t - DCELL);
+    }
+    return max;
+  }
+
+  /** On voit (et on peut tirer sur) (bx, by) depuis (ax, ay) : pas de roche ni de herse baissée entre les deux (seulement dans le donjon). */
+  inSight(ax: number, ay: number, bx: number, by: number) {
+    if (ax < WORLD_HALF && bx < WORLD_HALF) return true;
+    const d = Math.hypot(bx - ax, by - ay);
+    if (d < DCELL) return true;
+    return this.sightReach(ax, ay, (bx - ax) / d, (by - ay) / d, d) >= d - DCELL;
   }
 
   /** Dans la base du volcan (l'obstacle lui-même). */
@@ -1621,7 +1668,7 @@ export class WorldMap {
     for (const k of [...seen, ...lairs]) {
       const i = k % C, j = (k - i) / C;
       const kind: Room['kind'] = k === heart ? 'heart' : k === entry ? 'entry' : lairs.includes(k) ? 'lair' : 'room';
-      const [rx, ry] = kind === 'heart' ? [380, 290] : kind === 'lair' ? [330, 250] : kind === 'entry' ? [250, 190] : [200 + rand() * 90, 150 + rand() * 70];
+      const [rx, ry] = (kind === 'heart' ? [380, 290] : kind === 'lair' ? [330, 250] : kind === 'entry' ? [250, 190] : [200 + rand() * 90, 150 + rand() * 70]).map((v) => v * ROOM_SCALE);
       const jx = kind === 'heart' ? 0 : (rand() - 0.5) * 140, jy = kind === 'heart' ? 0 : (rand() - 0.5) * 110;
       index.set(k, this.rooms.length);
       this.rooms.push({ x: h.x + (i - mi) * DUNGEON_DX + jx, y: h.y + (j - mj) * DUNGEON_DY + jy, rx, ry, kind });
@@ -1629,11 +1676,28 @@ export class WorldMap {
     for (const [a, b] of cellLinks) this.links.push([index.get(a)!, index.get(b)!]);
     const ent = this.rooms[index.get(entry)!];
     this.depths = { ...this.depths, exit: { x: ent.x, y: ent.y + ent.ry * 0.5 } };
-    // les antres : une butte de roche au milieu de leur salle
+    // les herses : au milieu de chaque couloir ; celle d'un antre, juste devant sa salle (on paie l'entrée là)
+    const lairCave = new Map<number, number>();
+    lairs.forEach((k, n) => lairCave.set(index.get(k)!, this.caves.length + n));
+    for (const [a, b] of this.links) {
+      const A = this.rooms[a], B = this.rooms[b], l = Math.hypot(B.x - A.x, B.y - A.y) || 1, ux = (B.x - A.x) / l, uy = (B.y - A.y) / l;
+      const lr = lairCave.has(a) ? a : lairCave.has(b) ? b : -1;
+      if (lr < 0) {
+        this.doors.push({ x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, ux, uy, lair: -1 });
+        continue;
+      }
+      // du centre de l'antre vers l'autre salle : son bord, puis un peu dans le couloir
+      const L = this.rooms[lr], O = lr === a ? B : A, d = Math.hypot(O.x - L.x, O.y - L.y) || 1;
+      const ang = Math.atan2((O.y - L.y) / L.ry, (O.x - L.x) / L.rx), e = this.roomEdge(L, ang), out = Math.min(70, (d - Math.hypot(Math.cos(ang) * L.rx * e, Math.sin(ang) * L.ry * e)) * 0.3);
+      const px = L.x + Math.cos(ang) * L.rx * e, py = L.y + Math.sin(ang) * L.ry * e;
+      this.doors.push({ x: px + ((O.x - L.x) / d) * out, y: py + ((O.y - L.y) / d) * out, ux, uy, lair: lairCave.get(lr)! });
+    }
+    this.doorShut = new Uint8Array(this.links.length).fill(1);
+    // les antres : le géant se tient au milieu de sa salle, à l'air libre (la salle est son arène, la herse son entrée)
     lairs.forEach((k, n) => {
-      const r = this.rooms[index.get(k)!], entrance = { x: r.x, y: r.y + 20 };
-      const id = this.caves.length, inside = { x: WORLD_HALF + 1400 + id * CAVE_GAP, y: 0 };
-      this.caves.push({ id, zone: VOLCANO_ZONE, boss: bosses[n], entrance, inside, exit: { x: inside.x, y: inside.y + CAVE_RY - 90 } });
+      const ri = index.get(k)!, r = this.rooms[ri], at = { x: r.x, y: r.y };
+      const door = this.doors.find((d) => d.lair === this.caves.length)!;
+      this.caves.push({ id: this.caves.length, zone: VOLCANO_ZONE, boss: bosses[n], entrance: { x: door.x, y: door.y }, inside: at, exit: at, home: { x: r.x, y: r.y - 20 }, room: ri });
     });
     this.carveFloor();
     // mares de lave : dans les salles ordinaires et autour de l'autel, jamais sur l'axe d'un couloir
@@ -1655,7 +1719,8 @@ export class WorldMap {
     for (const [a, b] of this.links) {
       if (this.rooms[a].kind === 'entry' || this.rooms[b].kind === 'entry' || rand() < 0.6) continue;
       const A = this.rooms[a], B = this.rooms[b];
-      this.traps.push({ kind: 'vent', x: (A.x + B.x) / 2, y: (A.y + B.y) / 2, period: 3.5 + rand() * 2, phase: rand() * 10 });
+      const f = rand() < 0.5 ? 0.3 : 0.7; // à l'écart de la herse, au milieu
+      this.traps.push({ kind: 'vent', x: A.x + (B.x - A.x) * f, y: A.y + (B.y - A.y) * f, period: 3.5 + rand() * 2, phase: rand() * 10 });
     }
     // dalles piégées : dans les salles ordinaires, à l'écart des mares
     for (const r of this.rooms) {

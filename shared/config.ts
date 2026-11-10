@@ -36,15 +36,15 @@ export const BUILDINGS: Record<BuildingId, { name: string; cost: number; wood: n
   // est de l'autre côté), avant tout le reste
   bridge: { name: 'Pont de bois', cost: 0, wood: 12, stone: 6, hall: 0, desc: 'Le vieux pont qui mène à l\'îlot du village est cassé. Répare-le avec le bois et la pierre de ton sac.' },
   palisade: { name: 'Palissade', cost: 0, wood: 15, stone: 0, hall: 0, desc: 'Les pieux du village, et ses quatre portes. Il la faut pour bâtir l\'Hôtel de ville.' },
-  plot_forge: { name: 'Emplacement de la forge', cost: 0, wood: 4, stone: 4, hall: 0, desc: 'Défricher et aplanir le terrain de la forge.' },
+  plot_forge: { name: "Emplacement de l'armurerie", cost: 0, wood: 4, stone: 4, hall: 0, desc: "Défricher et aplanir le terrain de l'armurerie." },
   plot_den: { name: 'Emplacement de la Tanière', cost: 0, wood: 8, stone: 4, hall: 0, desc: 'Défricher le terrain de la Tanière.' },
   plot_market: { name: 'Emplacement du marché', cost: 0, wood: 8, stone: 6, hall: 0, desc: 'Défricher le terrain du marché.' },
-  forge: { name: 'Forge', cost: 10, wood: 5, stone: 0, hall: 0, desc: 'Choisis ta classe, améliore ton arme et ton armure.', needs: 'plot_forge' },
+  forge: { name: 'Armurerie', cost: 10, wood: 5, stone: 0, hall: 0, desc: 'Choisis ta classe, améliore ton arme et ton armure.', needs: 'plot_forge' },
   den: { name: 'Tanière', cost: 20, wood: 20, stone: 15, hall: 0, desc: 'Éveille, renforce et range tes Alphas. Bestiaire des espèces croisées.', needs: 'plot_den' },
   market: { name: 'Marché', cost: 50, wood: 25, stone: 10, hall: 1, desc: 'Vends les monstres de ta meute, achète des monstres des espèces déjà croisées.', needs: 'plot_market' },
   stone: { name: 'Pierre de passage', cost: 200, wood: 10, stone: 40, hall: 2, desc: 'Voyage instantané entre le village et les camps établis.' },
   // amélioration de la forge (à la forge, pas d'emplacement à part) : au-delà du niveau 10, l'arme suit une spécialisation
-  forge2: { name: 'Grande forge', cost: 2500, wood: 400, stone: 450, hall: 4, desc: 'Au-delà du niveau 10, choisis la spécialisation de ton arme.', needs: 'forge' },
+  forge2: { name: 'Grande armurerie', cost: 2500, wood: 400, stone: 450, hall: 4, desc: 'Au-delà du niveau 10, choisis la spécialisation de ton arme.', needs: 'forge' },
   // au village, mais bâtie par Aubin : il faut d'abord trouver son plan, dans le coffre du Camp avancé (une fois le camp établi)
   // près de l'épave, au bout de l'île : elle se construit dès que la porte de la Mer de sable (zone 7) est ouverte
   dock: { name: 'Pierre de passage du bateau', cost: 50000, wood: 60, stone: 150, hall: 0, zone: 7, desc: 'Voyage instantané jusqu\'à l\'épave du bateau, au bout de l\'île. Se construit dès que la Mer de sable est ouverte.' },
@@ -66,7 +66,7 @@ export const HALL: (Cost & { unlock: string })[] = [
   { gold: 20, wood: 15, stone: 10, unlock: 'Porte du village : la suite de la Lisière (zone 1) · Marché' },
   { gold: 200, wood: 60, stone: 50, unlock: 'Porte des Bois profonds (zone 2) · Pierre de passage' },
   { gold: 500, wood: 160, stone: 140, unlock: 'Porte des Landes (zone 3)' },
-  { gold: 1500, wood: 350, stone: 300, unlock: 'Porte des Ruines moussues (zone 4) · Grande forge' },
+  { gold: 1500, wood: 350, stone: 300, unlock: 'Porte des Ruines moussues (zone 4) · Grande armurerie' },
   { gold: 3000, wood: 600, stone: 550, unlock: 'Porte des Lacs brumeux (zone 5)' },
   { gold: 4500, wood: 800, stone: 700, unlock: 'Porte de la Jungle (zone 6)' },
   { gold: 6000, wood: 1000, stone: 900, unlock: 'Porte de la Mer de sable (zone 7)' },
@@ -282,6 +282,12 @@ export const WEAPON_NAMES = [
 export const weaponDmg = (lvl: number) => Math.round(7.5 * Math.pow(1.23, lvl)); // 8, 9, 11, 14… 59 (niv. 10)… 473 (niv. 20)
 /** Pioche : elle ne profite pas de la spécialisation (sinon les filons tomberaient d'un coup). */
 export const mineDmg = (lvl: number) => weaponDmg(Math.min(lvl, SPEC_LVL));
+/** Chaque chapeau débloqué (acheté une fois) renforce l'arme de 10 % : ×(1 + 0,1 × chapeaux). */
+export const HAT_WEAPON_BONUS = 0.1;
+export const hatBonus = (hats: number) => 1 + HAT_WEAPON_BONUS * hats;
+/** Archers et mages abattent les arbres et cassent les pierres moins vite que les guerriers (×0,7 : 30 % moins vite). */
+export const RANGED_GATHER = 0.7;
+export const gatherDmg = (lvl: number, cls: string | null) => mineDmg(lvl) * (cls === 'archer' || cls === 'mage' ? RANGED_GATHER : 1);
 // Prix : ×1,6 par niveau jusqu'au 10, puis ×1,12 (l'or des monstres augmente moins vite que leur force) ; arrondi à 5.
 export const weaponCost = (lvl: number) => Math.round((40 * Math.pow(1.6, Math.min(lvl, 9)) * Math.pow(1.12, Math.max(0, lvl - 9))) / 5) * 5;
 
@@ -392,7 +398,7 @@ export const gearCost = (what: Gear, lvl: number): Cost => ({
 // (1 essence par monstre de l'espèce vaincu), puis on le renforce, de plus en plus cher.
 // Montures : certains Alphas éveillés se chevauchent. Vitesse multipliée, et la monture encaisse
 // une partie des coups (elle peut tomber : on est désarçonné, elle ressuscite comme tout Alpha).
-export const MOUNTS: Record<string, number> = { wolf: 1.6, boar: 1.4, bear: 1.25, snail: 0.6, serpent: 1.5, vulture: 1.5, gorilla: 1.35, croc: 1.45 }; // l'escargot se monte, mais ralentit
+export const MOUNTS: Record<string, number> = { wolf: 1.5, boar: 1.4, bear: 1.25, snail: 0.6, serpent: 1.5, vulture: 1.5, gorilla: 1.35, croc: 1.45 }; // l'escargot se monte, mais ralentit
 /**
  * Montures nageuses (le serpent) : on ne va qu'en eau avec elles. On embarque près de l'eau (à SHORE_R au plus) :
  * on est posé sur l'eau. On ne descend que près d'une rive (posé sur la terre ferme). Si la monture tombe sur l'eau, on se noie.
@@ -797,7 +803,7 @@ export const SPECIES: Species[] = [
   { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 2800, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 8, population: 14, pack: [3, 5] },
   { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 9000, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 8, population: 10, pack: [1, 1], ranged: { kind: 'magma', range: 360, windup: 0.7, speed: 0, splash: 60 } },
   { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'salamander', base: 'salamander' },
-  { key: 'ash_lord', name: 'Seigneur des cendres', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'ash_bat', base: 'ash_bat' },
+  { key: 'ash_lord', name: 'Titus Veillafandre', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'ash_bat', base: 'ash_bat' },
   { key: 'mountain_tortoise', name: 'Tortue-Montagne', color: '#40342E', r: 70, hp: 170000, dmg: 520, speed: 185, atkCd: 1.5, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'lava_tortoise', base: 'lava_tortoise' },
   // Haute mer : le Kraken attaque le bateau sur la route du Colisée ; ses tentacules s'accrochent au pont.
   { key: 'kraken_tentacle', name: 'Tentacule du Kraken', color: '#7A4A8A', r: 32, hp: 9000, dmg: 260, speed: 0, atkCd: 1.3, gold: 0, zone: 9, population: 0, pack: [1, 1], anchored: true, minion: true },
@@ -899,13 +905,21 @@ export const VOLCANO_R = 460; // le volcan, sur l'île : demi-largeur de sa base
 export const VOLCANO_RY = 0.55;
 // Le donjon sous le volcan : une grille de salles reliées par des couloirs (un labyrinthe tiré de la graine), le cœur au
 // centre, l'entrée en bas, les trois antres au bout de culs-de-sac (un à gauche, un à droite, un en haut).
-export const HALL_RX = 2800; // demi-largeur de la boîte du donjon
-export const HALL_RY = 1750;
+// Les salles sont grandes et les couloirs longs : d'une salle à l'autre, la roche coupe la vue (pas de tir à travers).
+export const HALL_RX = 4300; // demi-largeur de la boîte du donjon
+export const HALL_RY = 2700;
 export const DUNGEON_COLS = 7;
 export const DUNGEON_ROWS = 5;
-export const DUNGEON_DX = 760; // d'une salle à la suivante
-export const DUNGEON_DY = 640;
+export const DUNGEON_DX = 1160; // d'une salle à la suivante
+export const DUNGEON_DY = 980;
+export const ROOM_SCALE = 1.35; // taille des salles (par rapport aux premières salles du donjon)
 export const CORRIDOR_R = 72; // demi-largeur d'un couloir
+// Portes du donjon : une herse de basalte au milieu de chaque couloir. Elle se lève quand l'une des deux salles qu'il relie
+// a été vidée de ses monstres (la salle d'entrée l'est d'office) ; celle d'un antre, quand en plus le village a payé l'entrée.
+export const DOOR_T = 16; // demi-épaisseur d'une herse
+export const ROOM_PACKS: [number, number] = [2, 3]; // meutes gardant chaque salle (au moins, au plus)
+export const HEART_PACKS = 4; // celles qui gardent la salle du cœur
+export const DEPTHS_RESET_S = 120; // personne dans le donjon depuis ce temps-là : salles regarnies, herses rabaissées
 // Pièges du donjon : évents de flammes en travers des couloirs (un rythme à lire), dalles piégées dans les salles (un geyser de lave).
 export const VENT_R = 84;
 export const VENT_WARN_S = 1; // l'évent rougeoie, puis crache

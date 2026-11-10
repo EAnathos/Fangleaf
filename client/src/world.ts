@@ -1890,7 +1890,7 @@ export class World {
     ctx.font = '700 16px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#F0B64A';
-    ctx.fillText(grand ? 'Grande forge' : 'Forge', fx - 36, grand ? fy - 78 : fy - 50);
+    ctx.fillText(grand ? 'Grande armurerie' : 'Armurerie', fx - 36, grand ? fy - 78 : fy - 50);
   }
 
   /**

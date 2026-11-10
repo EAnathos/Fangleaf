@@ -382,8 +382,19 @@ export class Game {
     else if (action === 'chat' && !this.hud.panel) this.hud.setPanel('chat');
     else if (action === 'map') this.hud.setPanel(this.hud.panel === 'map' ? null : 'map');
     else if (action === 'mount') this.toggleMount();
+    else if (action === 'harvest') this.toggleHarvest();
     else if (action === 'fruit') this.toggleHold();
     else if (action === 'revive') this.setHelp(true);
+  }
+
+  /** G : le Tréant et le Golem de la meute récoltent (arbres, pierres) au lieu de se battre, ou reviennent au combat. */
+  private toggleHarvest() {
+    const st = this.self();
+    if (!st || st.dead) return;
+    const mine = (this.net.latest?.units ?? []).filter((u) => u[6] === this.myId).map((u) => SPECIES[u[1]].key);
+    if (!st.harvest && !mine.includes('treant') && !mine.includes('golem')) return this.hud.toast('Il te faut un Tréant ou un Golem dans ta meute pour récolter.');
+    this.net.send({ t: 'harvest', on: !st.harvest });
+    this.hud.toast(st.harvest ? 'Récolte finie : ton Tréant et ton Golem reviennent au combat.' : 'Récolte : ton Tréant abat les arbres, ton Golem mange les pierres autour de toi.', st.harvest ? '' : 'good');
   }
 
   /** T : tendre un fruit (le gibier passif s'approche, chaque fruit peut l'apprivoiser) ou le ranger. */
@@ -462,9 +473,9 @@ export class Game {
     if (area === 'camp') this.hud.banner(first && this.hud.sword < SWORD_PULLS ? 'Une plage inconnue' : 'Plage du naufrage', first ? (this.hud.sword < SWORD_PULLS ? 'Quelque chose brille dans le sable' : 'Suis le chemin de cailloux jusqu\'au pont') : 'De retour sur la plage');
     else if (area === 'village') this.hud.banner('Village', '');
     else if (area.startsWith('isle')) {
-      // une île des dragons : son nom, et qui y règne
+      // une île des dragons : juste son nom
       const t = this.map.islets[isle];
-      this.hud.banner(ISLE_NAMES[SPECIES[t.boss]?.key] ?? 'Îlot du large', `Îlot du large · ${SPECIES[t.boss]?.name ?? ''}`, true);
+      this.hud.banner(ISLE_NAMES[SPECIES[t.boss]?.key] ?? 'Îlot du large', '', true);
     }
     else if (area.startsWith('site')) {
       this.hud.banner(campName(site), ''); // juste le nom du camp, établi ou non
@@ -764,6 +775,7 @@ export class Game {
       this.me.y = m.y;
     } else if (m.t === 's') {
       this.shotsAt = this.time;
+      if (m.doors) m.doors.forEach((v, i) => (this.map.doorShut[i] = v)); // herses du donjon (pour la prédiction et le dessin)
       for (const e of m.ev) this.onEvent(e, m.players);
       const st = m.players.find((p) => p.id === this.myId);
       if (st && !st.dead && Math.hypot(st.x - this.me.x, st.y - this.me.y) > 220) {
@@ -1347,7 +1359,17 @@ export class Game {
       }
       case 'heal': {
         const p = this.posOf(e.id, players);
-        if (p && e.id === this.myId) this.fx.text(p.x, p.y - 34, `+${e.n}`, '#7FCB5B', 15, 0.9); // (seulement les siens)
+        if (p && e.n && e.id === this.myId) this.fx.text(p.x, p.y - 34, `+${e.n}`, '#7FCB5B', 15, 0.9); // (seulement les siens)
+        // le lièvre soigne : des cœurs montent de lui, et un cœur sur chacun de ceux qu'il soigne
+        const hare = e.by !== undefined ? this.posOf(e.by, players) : undefined;
+        if (hare) {
+          for (let k = 0; k < 3; k++) this.fx.text(hare.x + (k - 1) * 9, hare.y - 26 - k * 7, '♥', k === 1 ? '#FF8FB1' : '#F2B8D0', 13 + k * 2, 1 + k * 0.15);
+          this.fx.ring(hare.x, hare.y, 'rgba(255,143,177,0.8)', 8, 46, 0.6);
+        }
+        for (const id of [...(e.n ? [e.id] : []), ...(e.ids ?? [])]) {
+          const q = this.posOf(id, players);
+          if (q) this.fx.text(q.x, q.y - 30, '♥', '#FF8FB1', 14, 1.1);
+        }
         break;
       }
       case 'pet': {
@@ -1373,8 +1395,8 @@ export class Game {
         break;
       }
       case 'pdie':
+        // (un coéquipier à terre : son anneau et l'invite « Maintiens R » suffisent, pas de notification en plus)
         if (e.id === this.myId) this.hud.deathLoss(e.gold, e.wood ?? 0, e.stone ?? 0);
-        if (e.id !== this.myId) this.hud.toast(`${name(e.id)} est tombé ! Maintiens R près de lui pour le relever.`);
         break;
       case 'previve': {
         if (e.id === this.myId) this.hud.toast(`${name(e.by)} t'a relevé !`, 'good');
@@ -1436,7 +1458,8 @@ export class Game {
       case 'unlock': {
         const c = this.map.caves[e.cave];
         this.fx.ring(c.entrance.x, c.entrance.y, '#F0B64A', 10, 120, 1.2);
-        this.hud.toast(e.by === this.myId ? `Grotte de ${SPECIES[c.boss].name} débloquée !` : `${name(e.by)} a débloqué la grotte de ${SPECIES[c.boss].name}`, 'good');
+        const what = c.room !== undefined ? 'la salle' : 'la grotte';
+        this.hud.toast(e.by === this.myId ? `${what === 'la salle' ? 'Salle' : 'Grotte'} de ${SPECIES[c.boss].name} débloquée !` : `${name(e.by)} a débloqué ${what} de ${SPECIES[c.boss].name}`, 'good');
         if (e.by === this.myId) this.hud.setPanel(null);
         break;
       }
@@ -2547,14 +2570,14 @@ export class Game {
     if (here === this.map.depths) {
       // les entrailles du volcan : dessinées à chaque image (la lave bouge), avec les sceaux de l'autel
       const sealed = this.map.caves.filter((c) => c.zone === VOLCANO_ZONE).map((c) => !this.hud.beaten.includes(c.boss));
-      drawDepths(ctx, this.map, this.time, sealed, !!this.hud.heart, this.net.latest?.traps ?? [], { x0: camX - hw, y0: camY - hh, x1: camX + hw, y1: camY + hh });
+      drawDepths(ctx, this.map, this.time, sealed, !!this.hud.heart, this.net.latest?.traps ?? [], { x0: camX - hw, y0: camY - hh, x1: camX + hw, y1: camY + hh }, this.hud.unlocked);
     } else if (here?.zone === VOYAGE_ZONE) drawVoyage(ctx, here, this.time, camX, camY, hw, hh);
     else if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
     if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id]);
     // géants des îlots, à l'air libre : le cercle de leur retour, sur leur îlot
     for (const c of this.map.caves) {
       const home = c.home ?? c.inside;
-      if (!here && c.open !== undefined && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id]);
+      if ((here ? here === this.map.depths && c.room !== undefined : c.open !== undefined) && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id]);
     }
     const br = this.map.bridge;
     if (!here && inView((br.a.x + br.b.x) / 2, (br.a.y + br.b.y) / 2, Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y) / 2 + 120)) this.world.drawBridge(ctx, this.hud.buildings.includes('bridge'), this.time);
@@ -2610,7 +2633,7 @@ export class Game {
     const list = this.drawList; // réutilisée d'une image à l'autre
     list.length = 0;
     for (const c of this.map.caves) {
-      if (c.zone === VOYAGE_ZONE || c.open !== undefined || !inView(c.entrance.x, c.entrance.y, 160)) continue; // le large : on y part depuis le bateau ; un géant d'îlot : à l'air libre
+      if (c.zone === VOYAGE_ZONE || c.open !== undefined || c.room !== undefined || !inView(c.entrance.x, c.entrance.y, 160)) continue; // le large : on y part depuis le bateau ; un géant d'îlot ou du volcan : à l'air libre, dans son arène
       list.push({ y: c.entrance.y + 20, draw: () => this.world.drawCaveEntrance(ctx, c, this.time, !this.hud.caves[c.id]) });
     }
     const sc = this.map.school, [plan, wait] = this.hud.school;
@@ -2671,8 +2694,10 @@ export class Game {
     const trees = all.filter((d) => !this.map.treeDown.has(d.id));
     for (const d of all) {
       if (!this.map.treeDown.has(d.id)) continue;
-      const t = this.map.trunkOf(d), z = this.map.styleZone(d.x, d.y);
-      list.push({ y: t.y, draw: () => (z === JUNGLE_ZONE && this.world.isBamboo(d.x, d.y) ? drawBambooStump(ctx, t.x, t.y, t.r, d.id) : drawStump(ctx, t.x, t.y, t.r)) });
+      // à la taille de l'arbre dessiné (un géant de la jungle est plus grand que son tronc de collision), à son pied
+      const z = this.map.styleZone(d.x, d.y), sz = this.world.treeSize(d.x, d.y, z), foot = d.y + sz * 0.5;
+      const bamboo = z === JUNGLE_ZONE && this.world.isBamboo(d.x, d.y);
+      list.push({ y: foot, draw: () => (bamboo ? drawBambooStump(ctx, d.x, foot, sz * 0.45, d.id) : drawStump(ctx, d.x, foot, sz, z === JUNGLE_ZONE ? 0.5 : 0.36)) });
     }
     const tz = new Map(trees.map((d) => [d, this.map.styleZone(d.x, d.y)])); // style de chaque arbre (la jungle a ses géants)
     for (const d of trees) this.world.treeShadow(ctx, d.x, d.y, tz.get(d));
@@ -2899,7 +2924,7 @@ export class Game {
         if (w.k > 0.05 && pose.air <= r * 0.6) {
           const k = w.k;
           air.push({ y, draw: () => {
-            drawUnit(ctx, { ...look(), inWater: false, x, y: y - Math.sin(this.time * 4 + id) * 3 * k, air: r * 1.6 * k });
+            drawUnit(ctx, { ...look(), inWater: false, flying: k > 0.5, x, y: y - Math.sin(this.time * 4 + id) * 3 * k, air: r * 1.6 * k });
             if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6 - r * 1.6 * k, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
           } });
           continue;
