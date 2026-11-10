@@ -3,10 +3,11 @@ export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 export const dist2 = (ax: number, ay: number, bx: number, by: number) => (ax - bx) ** 2 + (ay - by) ** 2;
 
 /**
- * Au plus `cap` éléments de `wanted`, tirés au hasard parmi tous. La sélection est stable : ceux de `current` qui sont encore
- * voulus restent, et seuls les arrivées, départs et dépassements du plafond provoquent un tirage (pas un nouveau à chaque appel).
+ * Au plus `cap` éléments (distincts) de `wanted`, tirés au hasard parmi tous. La sélection est stable : ceux de `current` qui
+ * sont encore voulus restent ; un tirage n'a lieu que pour combler une place libre (départ, premier appel, plafond relevé), ou
+ * pour retirer l'excédent si le plafond baisse. Plafond atteint, un arrivant ne prend la place de personne.
  */
-export function pickCapped(wanted: readonly string[], current: Iterable<string>, cap: number, rand: () => number = Math.random): Set<string> {
+export function pickCapped(wanted: Iterable<string>, current: Iterable<string>, cap: number, rand: () => number = Math.random): Set<string> {
   const want = new Set(wanted);
   if (want.size <= cap) return want; // rien à départager : aucun tirage (le hasard du jeu reste celui d'avant)
   const keep = [...current].filter((k) => want.has(k));
@@ -19,7 +20,7 @@ export function pickCapped(wanted: readonly string[], current: Iterable<string>,
   };
   if (keep.length >= cap) return new Set(keep.length === cap ? keep : shuffle(keep).slice(0, Math.max(0, cap)));
   const kept = new Set(keep);
-  return new Set([...keep, ...shuffle(wanted.filter((k) => !kept.has(k))).slice(0, cap - keep.length)]); // want.size > cap : il y a toujours à départager
+  return new Set([...keep, ...shuffle([...want].filter((k) => !kept.has(k))).slice(0, cap - keep.length)]); // want.size > cap : il y a toujours à départager
 }
 
 /** PRNG déterministe (mulberry32) : même graine → même carte chez tous les joueurs. */

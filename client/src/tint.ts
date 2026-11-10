@@ -13,11 +13,34 @@ const mat = (m: number[]): Step => ([r, g, b]) => [
   clamp(m[6] * r + m[7] * g + m[8] * b),
 ];
 
-/** Valeur d'un argument de filtre : « 1.5 », « 150% » ou « 220deg » (les degrés sont rendus tels quels). */
-const num = (s: string) => (s.endsWith('%') ? parseFloat(s) / 100 : parseFloat(s));
+const NUM = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/i;
+
+/** Quantité d'un argument de filtre : « 1.5 » ou « 150% » ; vide : 1 ; null si illisible. */
+function amount(s: string): number | null {
+  if (!s) return 1;
+  const m = NUM.exec(s);
+  if (!m || (s.length > m[0].length && s.slice(m[0].length) !== '%')) return null;
+  return s.endsWith('%') ? parseFloat(m[0]) / 100 : parseFloat(m[0]);
+}
+
+/** Angle en degrés : « 220 », « 220deg », « 1.2rad », « 250grad », « 0.5turn » ; vide : 0 ; null si illisible. */
+function angle(s: string): number | null {
+  if (!s) return 0;
+  const m = NUM.exec(s);
+  if (!m) return null;
+  const v = parseFloat(m[0]), unit = s.slice(m[0].length).toLowerCase();
+  switch (unit) {
+    case '': case 'deg': return v;
+    case 'rad': return (v * 180) / Math.PI;
+    case 'grad': return v * 0.9;
+    case 'turn': return v * 360;
+    default: return null;
+  }
+}
 
 function stepOf(name: string, arg: string): Step | null {
-  const a = num(arg || '1');
+  const a = name === 'hue-rotate' ? angle(arg) : amount(arg);
+  if (a === null) return null; // fonction connue mais argument illisible : « non gérée », pas une valeur devinée
   switch (name) {
     case 'brightness': return ([r, g, b]) => [clamp(r * a), clamp(g * a), clamp(b * a)];
     case 'contrast': return ([r, g, b]) => [clamp((r - 0.5) * a + 0.5), clamp((g - 0.5) * a + 0.5), clamp((b - 0.5) * a + 0.5)];
@@ -50,14 +73,19 @@ function stepOf(name: string, arg: string): Step | null {
   }
 }
 
-interface Tint { steps: Step[]; colors: Map<string, string> }
+/** Les fonctions d'une chaîne de filtre CSS, dans l'ordre. */
+export function parseFilter(filter: string): { name: string; arg: string }[] {
+  return [...filter.matchAll(/([a-z-]+)\(([^)]*)\)/g)].map((m) => ({ name: m[1], arg: m[2].trim() }));
+}
+
+interface Tint { steps: Step[]; colors: Map<string, string | null> }
 const tints = new Map<string, Tint>();
 function tintOf(filter: string): Tint {
   let t = tints.get(filter);
   if (!t) {
     const steps: Step[] = [];
-    for (const [, name, arg] of filter.matchAll(/([a-z-]+)\(([^)]*)\)/g)) {
-      const s = stepOf(name, arg.trim());
+    for (const { name, arg } of parseFilter(filter)) {
+      const s = stepOf(name, arg);
       if (s) steps.push(s);
     }
     tints.set(filter, (t = { steps, colors: new Map() }));
@@ -67,7 +95,7 @@ function tintOf(filter: string): Tint {
 
 let scratch: CanvasRenderingContext2D | null = null;
 const HEX = /^#([0-9a-f]{3,8})$/i;
-const RGB = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/i;
+const RGB = /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+(?:e[-+]?\d+)?%?))?\s*\)$/i;
 
 /** Couleur CSS → [r, g, b, a] (r, g, b de 0 à 1) ; null si illisible. Les noms et hsl() passent par un canvas (une fois par couleur). */
 function parse(css: string): [number, number, number, number] | null {
@@ -86,79 +114,125 @@ function parse(css: string): [number, number, number, number] | null {
   if (typeof document === 'undefined') return null;
   scratch ??= document.createElement('canvas').getContext('2d');
   if (!scratch) return null;
-  scratch.fillStyle = '#000';
-  scratch.fillStyle = css; // une couleur invalide laisse noir : on la distingue ci-dessous
+  // une couleur illisible est ignorée par le canvas, qui garde la précédente : deux valeurs de départ différentes la révèlent
+  // (sans confondre avec un vrai noir)
+  scratch.fillStyle = '#010203';
+  scratch.fillStyle = css;
   const norm = scratch.fillStyle as string;
-  if (norm === '#000000' && !/^(black|#0{3,6}|rgba?\(\s*0\s*,\s*0\s*,\s*0)/i.test(css.trim())) return null;
+  scratch.fillStyle = '#fefdfc';
+  scratch.fillStyle = css;
+  if (scratch.fillStyle !== norm) return null;
   return norm === css ? null : parse(norm); // le canvas rend « #rrggbb » ou « rgba(r, g, b, a) » : repasse par les deux cas rapides
 }
 
-/** Couleur d'une robe : la couleur d'origine passée dans la chaîne de filtres (mémorisée). */
+/**
+ * Couleur d'une robe : la couleur d'origine passée dans la chaîne de filtres (mémorisée). Pour « rgba(r,g,b,a) » la mémoire
+ * est indexée par « r,g,b » seul et l'opacité est recopiée telle quelle : une opacité qui varie d'une image à l'autre
+ * (lueurs, pulsations) ne fait pas de nouvelle entrée.
+ */
 export function tintColor(css: string, filter: string): string {
   const t = tintOf(filter);
-  let out = t.colors.get(css);
-  if (out !== undefined) return out;
-  const p = parse(css);
-  if (!p || !t.steps.length) out = css;
-  else {
-    let c: Rgb = [p[0], p[1], p[2]];
-    for (const s of t.steps) c = s(c);
-    out = `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},${p[3]})`;
+  if (css.startsWith('rgba(') && css.endsWith(')')) {
+    const i = css.lastIndexOf(',');
+    const rgb = css.slice(5, i).trim(), a = css.slice(i + 1, -1).trim();
+    if (i > 5 && a && rgb.split(',').length === 3) {
+      let o = t.colors.get(rgb);
+      if (o === undefined) {
+        const p = parse(`rgb(${rgb})`);
+        o = p && t.steps.length ? rgbOf(p, t.steps) : null;
+        remember(t, rgb, o);
+      }
+      return o === null ? css : `rgba(${o},${a})`;
+    }
   }
+  let out = t.colors.get(css);
+  if (out !== undefined) return out ?? css;
+  const p = parse(css);
+  out = p && t.steps.length ? `rgba(${rgbOf(p, t.steps)},${p[3]})` : null;
+  remember(t, css, out);
+  return out ?? css;
+}
+
+/** « r,g,b » (0 à 255) d'une couleur passée dans les étapes du filtre. */
+function rgbOf(p: [number, number, number, number], steps: Step[]) {
+  let c: Rgb = [p[0], p[1], p[2]];
+  for (const s of steps) c = s(c);
+  return `${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)}`;
+}
+function remember(t: Tint, key: string, out: string | null) {
   if (t.colors.size > 4000) t.colors.clear();
-  t.colors.set(css, out);
-  return out;
+  t.colors.set(key, out);
 }
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 const COLOR_PROPS = ['fillStyle', 'strokeStyle', 'shadowColor'] as const;
 const GRADIENTS = ['createLinearGradient', 'createRadialGradient', 'createConicGradient'] as const;
-const descs = new Map<object, Map<string, PropertyDescriptor>>();
-function protoDescs(ctx: Ctx) {
-  const proto = Object.getPrototypeOf(ctx) as object;
-  let d = descs.get(proto);
-  if (!d) {
-    d = new Map();
-    for (const k of COLOR_PROPS) d.set(k, Object.getOwnPropertyDescriptor(proto, k)!);
-    descs.set(proto, d);
+
+/** Robe en cours sur un contexte (null : aucune, tout passe tel quel). */
+interface State { filter: string | null }
+const installed = new WeakMap<object, State | null>();
+
+/**
+ * Pose une fois pour toutes, sur le contexte, des accesseurs qui convertissent les couleurs tant qu'une robe est en cours
+ * (rien à poser ni à retirer à chaque monstre). null si le navigateur n'expose pas les propriétés attendues : pas de robe.
+ * Limite : seules ces propriétés et les dégradés sont convertis (ni motif, ni image) ; et lire fillStyle rend la couleur
+ * déjà convertie, qu'un dessin ne doit donc pas réécrire.
+ */
+function install(ctx: Ctx): State | null {
+  const known = installed.get(ctx);
+  if (known !== undefined) return known;
+  const proto = Object.getPrototypeOf(ctx) as Record<string, unknown>;
+  const state: State = { filter: null };
+  const base = COLOR_PROPS.map((k) => Object.getOwnPropertyDescriptor(proto, k));
+  const makers = GRADIENTS.map((k) => proto[k]);
+  if (base.some((d) => !d?.get || !d.set)) {
+    installed.set(ctx, null);
+    return null;
   }
-  return d;
+  COLOR_PROPS.forEach((k, i) => {
+    const { get, set } = base[i]!;
+    Object.defineProperty(ctx, k, {
+      configurable: true,
+      get: () => get!.call(ctx),
+      set: (v) => set!.call(ctx, state.filter !== null && typeof v === 'string' ? tintColor(v, state.filter) : v),
+    });
+  });
+  GRADIENTS.forEach((k, i) => {
+    const make = makers[i] as ((...a: number[]) => CanvasGradient) | undefined;
+    if (typeof make !== 'function') return;
+    Object.defineProperty(ctx, k, {
+      configurable: true,
+      value: (...a: number[]) => {
+        const g = make.apply(ctx, a), f = state.filter;
+        if (f !== null) {
+          const add = g.addColorStop.bind(g);
+          g.addColorStop = (offset: number, color: string) => add(offset, tintColor(color, f));
+        }
+        return g;
+      },
+    });
+  });
+  installed.set(ctx, state);
+  return state;
 }
 
 /**
  * Exécute `draw` avec la robe `filter` : les couleurs choisies pendant le dessin (texte de style, dégradés compris) sont
- * celles de la robe. Rien ne reste sur le contexte après coup, même si `draw` lève une exception.
+ * celles de la robe. Peut s'imbriquer ; la robe précédente revient après coup, même si `draw` lève une exception.
  */
 export function withTint(ctx: Ctx, filter: string, draw: () => void) {
-  const d = protoDescs(ctx);
-  const map = (v: unknown) => (typeof v === 'string' ? tintColor(v, filter) : v);
-  for (const k of COLOR_PROPS) {
-    const base = d.get(k)!;
-    Object.defineProperty(ctx, k, { configurable: true, get: () => base.get!.call(ctx), set: (v) => base.set!.call(ctx, map(v)) });
-  }
-  const proto = Object.getPrototypeOf(ctx) as Record<string, (...a: number[]) => CanvasGradient>;
-  for (const k of GRADIENTS) {
-    const make = proto[k];
-    if (typeof make !== 'function') continue;
-    Object.defineProperty(ctx, k, {
-      configurable: true,
-      value: (...a: number[]) => {
-        const g = make.apply(ctx, a);
-        const add = g.addColorStop.bind(g);
-        g.addColorStop = (offset: number, color: string) => add(offset, tintColor(color, filter));
-        return g;
-      },
-    });
-  }
+  const state = install(ctx);
+  if (!state) return draw();
+  const prev = state.filter;
+  state.filter = filter;
   try {
     draw();
   } finally {
-    for (const k of COLOR_PROPS) delete (ctx as unknown as Record<string, unknown>)[k];
-    for (const k of GRADIENTS) delete (ctx as unknown as Record<string, unknown>)[k];
+    state.filter = prev;
   }
 }
 
-/** Fonctions d'un filtre CSS que ce module ne sait pas appliquer (vide si tout est géré : voir tests/rules/tint.test.ts). */
+/** Fonctions d'un filtre CSS que ce module ne sait pas appliquer, ou dont l'argument est illisible (vide si tout est géré : voir tests/rules/tint.test.ts). */
 export function unsupportedFilterFunctions(filter: string): string[] {
-  return [...filter.matchAll(/([a-z-]+)\(([^)]*)\)/g)].filter(([, name, arg]) => !stepOf(name, arg.trim())).map(([, name]) => name);
+  return parseFilter(filter).filter(({ name, arg }) => !stepOf(name, arg)).map(({ name }) => name);
 }

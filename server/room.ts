@@ -623,8 +623,8 @@ export class Room {
       for (const p of this.players.values()) for (const r of p.resting) want.set(`${p.userId ?? p.id}:${r.s}`, { s: r.s, legend: r.legend, color: p.color });
       for (const [k, z] of this.sleepers) for (const r of z.rest) want.set(`${k}:${r.s}`, { s: r.s, legend: r.legend, color: z.color });
       // Plafond : au plus PET_CAP Alphas au repos à l'écran, tirés au hasard parmi ceux de tous les membres (stable d'une seconde à l'autre).
-      const shown = pickCapped([...want.keys()], this.pets.keys(), PET_CAP);
-      for (const k of [...want.keys()]) if (!shown.has(k)) want.delete(k);
+      const shown = pickCapped(want.keys(), this.pets.keys(), PET_CAP);
+      if (shown.size < want.size) for (const k of [...want.keys()]) if (!shown.has(k)) want.delete(k);
       for (const k of this.pets.keys()) if (!want.has(k)) this.pets.delete(k);
       for (const [k, w] of want) {
         const old = this.pets.get(k);
