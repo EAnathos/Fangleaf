@@ -2,7 +2,7 @@
 // Ajouter ou retirer un monstre, un Alpha, un légendaire ; appliquer un effet d'état pour une durée au choix ; débloquer ou
 // rejoindre une zone ; abattre un géant. Le serveur n'accepte ces messages qu'hors production.
 
-import { SPECIES, ZONES, ZONE_NAMES } from '../../shared/config.ts';
+import { CLASSES, CLASS_IDS, SPECIES, SPECS, SPEC_IDS, ZONES, ZONE_NAMES, type ClassId, type SpecId } from '../../shared/config.ts';
 import { STATUS_IDS, type CheatMob, type ClientMsg } from '../../shared/protocol.ts';
 import { STATUS_DEFS } from './statusfx.ts';
 
@@ -61,6 +61,12 @@ export function initCheat(send: (m: ClientMsg) => void) {
         <select data-id="boss">${options((i) => !!SPECIES[i].boss)}</select>
         <div class="cheat-row"><button type="button" data-a="kill">Abattre</button><button type="button" data-a="killAll">Tous</button></div>
       </section>
+      <section><h4>Classe + arme (test)</h4>
+        <select data-id="cls">${CLASS_IDS.map((c) => `<option value="${c}">${esc(CLASSES[c].name)}</option>`).join('')}</select>
+        <select data-id="spec"><option value="">Sans spécialisation</option>${SPEC_IDS.map((s) => `<option value="${s}">${esc(SPECS[s].name)} · ${esc(CLASSES[SPECS[s].cls].name)}</option>`).join('')}</select>
+        <div class="cheat-row"><button type="button" data-a="gear">Équiper (arme et armure au max, armé)</button></div>
+        <div class="cheat-row"><button type="button" data-a="dummy">Mannequin de test (immobile, PV infinis)</button></div>
+      </section>
       <section><button type="button" data-a="loot">+300 or, +30 essences, +100 bois et pierre</button></section>`;
     const val = (id: string) => +el.querySelector<HTMLSelectElement>(`select[data-id=${id}]`)!.value;
     const time = el.querySelector<HTMLInputElement>('input[type=number]')!;
@@ -88,6 +94,12 @@ export function initCheat(send: (m: ClientMsg) => void) {
       else if (a === 'unlockAll') send({ t: 'cheatzone', z: ZONES, act: 'unlock' });
       else if (a === 'kill') send({ t: 'cheatboss', s: val('boss') });
       else if (a === 'killAll') send({ t: 'cheatboss', s: -1 });
+      else if (a === 'gear') {
+        const cls = el.querySelector<HTMLSelectElement>('select[data-id=cls]')!.value as ClassId;
+        const spec = el.querySelector<HTMLSelectElement>('select[data-id=spec]')!.value;
+        send({ t: 'cheatgear', cls, ...(spec ? { spec: spec as SpecId } : {}) });
+      }
+      else if (a === 'dummy') send({ t: 'cheatdummy' });
       else if (a === 'loot') send({ t: 'cheat' });
       (document.activeElement as HTMLElement | null)?.tagName === 'BUTTON' && (document.activeElement as HTMLElement).blur(); // la barre d'espace ne doit pas re-cliquer
     };

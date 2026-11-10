@@ -352,6 +352,49 @@ export function heroOf(cls: ClassId | null, spec: SpecId | null) {
     leech: s?.leech ?? 0,
   };
 }
+// Capacité active, propre à chaque SPÉCIALISATION (une par voie, débloquée à la Grande armurerie) : touche dédiée, sur
+// recharge, elle réclame une décision en plein combat là où l'attaque ordinaire est automatique. Pensées pour peser
+// contre un géant (burst, amplifier, encaisser, soigner, replacer), pas seulement nettoyer du menu fretin.
+export interface Ability {
+  name: string;
+  desc: string;
+  cd: number; // recharge (s)
+}
+export const ABILITIES: Record<SpecId, Ability> = {
+  berserker: { name: 'Frénésie', desc: 'Entre en rage : tu frappes bien plus vite et voles de la vie, mais tu encaisses plus.', cd: 14 },
+  guardian: { name: 'Rempart', desc: 'Dresse ton bouclier : les alliés autour de toi encaissent beaucoup moins un moment.', cd: 16 },
+  sniper: { name: 'Tir de rupture', desc: 'Marque une cible : elle subit plus de dégâts de tout le monde un moment.', cd: 12 },
+  ranger: { name: 'Pluie de flèches', desc: 'Fais s\'abattre une pluie de flèches sur une zone : tous les monstres pris dedans sont touchés.', cd: 10 },
+  pyromancer: { name: 'Météore', desc: 'Abats une boule de feu : gros impact, puis un brasier qui brûle qui s\'y tient.', cd: 12 },
+  druid: { name: 'Floraison', desc: 'Une floraison de soins : les alliés proches regagnent des PV, puis récupèrent un moment.', cd: 16 },
+};
+/** La capacité de cette spécialisation, s'il y en a une (pas de capacité tant qu'on n'est pas spécialisé). */
+export const abilityOf = (spec: SpecId | null): Ability | undefined => (spec ? ABILITIES[spec] : undefined);
+
+// Chiffres des capacités (tout réglable ici). Les multiplicateurs de dégâts sont en multiple des dégâts d'arme de la voie.
+export const FRENZY_S = 6; // durée de la frénésie (s)
+export const FRENZY_ATK = 0.55; // recharge d'attaque pendant la frénésie (×0,55 : ~45 % plus vite)
+export const FRENZY_LEECH = 0.2; // part des dégâts rendue en PV
+export const FRENZY_VULN = 1.3; // dégâts subis pendant la frénésie (×1,3)
+export const RAMPART_R = 240; // portée du Rempart (px)
+export const RAMPART_GUARD = 0.45; // réduction de dégâts accordée aux alliés (−45 %)
+export const RAMPART_S = 6; // durée (s)
+export const MARK_R = 340; // portée pour marquer une cible (px)
+export const MARK_S = 8; // durée de la marque (s ; la cible subit plus de dégâts de tout le monde — même amplification que la malédiction)
+export const RAIN_REACH = 520; // portée pour viser la zone (px) ; sinon la pluie tombe devant soi
+export const RAIN_R = 170; // rayon de la zone arrosée par la pluie de flèches (px)
+export const RAIN_DMG = 2.2; // dégâts à chaque monstre de la zone (multiple des dégâts d'arme)
+export const RAIN_ARROWS = 16; // nombre de flèches dessinées qui s'abattent (visuel)
+export const METEOR_R = 110; // rayon de l'impact du Météore (px)
+export const METEOR_DMG = 2.6; // dégâts au point d'impact
+export const METEOR_REACH = 360; // portée de visée (px) ; sinon il tombe sur le monstre le plus proche
+export const METEOR_FIRE_S = 4; // le brasier ronge les monstres touchés quelques secondes (s) — même les géants, que la brûlure ordinaire épargne
+export const METEOR_FIRE_DPS = 0.35; // dégâts par seconde du brasier, en part des dégâts d'impact
+export const BLOOM_R = 260; // portée de la Floraison (px)
+export const BLOOM_HEAL = 0.3; // soin instantané, en part des PV max de chaque allié
+export const BLOOM_REGEN = 0.05; // régénération par seconde ensuite, en part des PV max
+export const BLOOM_S = 5; // durée de la régénération (s)
+
 /** Nom de l'arme à ce niveau : celui de la classe jusqu'au 10, puis celui de la spécialisation. */
 export const weaponName = (cls: ClassId | null, spec: SpecId | null, lvl: number) =>
   lvl <= SPEC_LVL ? classOf(cls).weapons[lvl] : specOf(cls, spec)?.weapons[lvl - SPEC_LVL - 1] ?? `${classOf(cls).weapons[SPEC_LVL]} +${lvl - SPEC_LVL}`;

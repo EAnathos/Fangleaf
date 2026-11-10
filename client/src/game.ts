@@ -45,7 +45,7 @@ const fmtDmg = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits:
 const FLY_HEIGHT = 2.2; // hauteur de vol à dos de vautour (en rayons de l'oiseau)
 
 // En local seulement : ?ciel=nuit, ?ciel=pluie, ?ciel=orage (nuit et pluie), ?ciel=tempete (dans la Mer de sable), ?ciel=givre (la neige qui s'installe)… pour voir le ciel sans attendre.
-const SKY_TEST = import.meta.env.DEV ? ({ nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1, thunder: 1 }, brouillard: { fog: 1 }, tempete: { storm: 1 }, printemps: { season: 0 }, automne: { season: 2 }, givre: { season: 2, snow: 0.35 }, hiver: { season: 3, snow: 1 }, neige: { season: 3, snow: 1, rain: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
+const SKY_TEST = import.meta.env.DEV ? ({ jour: { light: 1, dusk: 0, rain: 0, snow: 0, fog: 0, storm: 0 }, nuit: { light: 0, dusk: 0 }, pluie: { rain: 1 }, orage: { light: 0, dusk: 0, rain: 1, thunder: 1 }, brouillard: { fog: 1 }, tempete: { storm: 1 }, printemps: { season: 0 }, automne: { season: 2 }, givre: { season: 2, snow: 0.35 }, hiver: { season: 3, snow: 1 }, neige: { season: 3, snow: 1, rain: 1 } } as Record<string, object>)[new URLSearchParams(location.search).get('ciel') ?? ''] : undefined;
 
 /** Rayon runique suivi par le client : angle et vitesse de rotation (extrapolés entre deux snapshots), dernier passage, sol brûlé. */
 interface LaserState {
@@ -161,6 +161,7 @@ export class Game {
     this.hud.onBoard = () => net.send({ t: 'board' });
     this.hud.onProfile = (color, hat) => net.send({ t: 'profile', color, hat });
     this.hud.onPick = () => net.send({ t: 'pick' });
+    this.hud.onAbility = () => this.useAbility();
     this.hud.onHold = () => this.toggleHold();
     this.hud.onRide = () => this.toggleMount();
     this.hud.onSword = () => net.send({ t: 'sword' });
@@ -384,7 +385,16 @@ export class Game {
     else if (action === 'mount') this.toggleMount();
     else if (action === 'harvest') this.toggleHarvest();
     else if (action === 'fruit') this.toggleHold();
+    else if (action === 'ability') this.useAbility();
     else if (action === 'revive') this.setHelp(true);
+  }
+
+  /** Espace (ou le bouton tactile) : capacité active de la classe (guerrier : Ruée). Le serveur fait le bond et recale par teleport. */
+  useAbility() {
+    const st = this.self();
+    if (!st || st.dead || st.ability < 0) return; // pas de capacité pour cette classe
+    if (st.ability > 0 || st.holding || st.mount) return; // en recharge, un fruit en main, ou monté
+    this.net.send({ t: 'ability' });
   }
 
   /** G : le Tréant et le Golem de la meute récoltent (arbres, pierres) au lieu de se battre, ou reviennent au combat. */
@@ -920,6 +930,45 @@ export class Game {
       case 'die':
         this.fx.burst(e.x, e.y, SPECIES[e.s].color, e.alpha ? 30 : 12, e.alpha ? 200 : 120);
         break;
+      case 'ability': {
+        // Effet de lancement propre à chaque voie (one-shot, pondéré par le réglage qualité).
+        const near2 = Math.hypot(this.me.x - e.x, this.me.y - e.y);
+        if (e.spec === 'berserker') {
+          // rage : anneau rouge vif, éclats, deux entailles croisées
+          this.fx.ring(e.x, e.y, '#FF5A4A', 12, 62, 0.4);
+          this.fx.ring(e.x, e.y, '#FFC8A0', 8, 38, 0.3);
+          this.fx.burst(e.x, e.y, '#FF5A4A', 20, 200);
+          this.fx.slash(e.x, e.y, -0.6);
+          this.fx.slash(e.x, e.y, 0.9);
+        } else if (e.spec === 'guardian') {
+          // dôme de bouclier : deux anneaux bleus concentriques qui s'ouvrent, éclat doux
+          this.fx.ring(e.x, e.y, '#9FD0FF', 24, 150, 0.55);
+          this.fx.ring(e.x, e.y, '#6FB7FF', 46, 132, 0.6);
+          this.fx.burst(e.x, e.y, '#CDEBFF', 14, 90);
+        } else if (e.spec === 'sniper') {
+          // verrou de visée : un réticule mauve qui se referme sur la cible + croix
+          this.fx.ring(e.x, e.y, '#C59BFF', 72, 18, 0.45);
+          this.fx.ring(e.x, e.y, '#E8D6FF', 34, 14, 0.35);
+          this.fx.slash(e.x, e.y, 0);
+          this.fx.slash(e.x, e.y, Math.PI / 2);
+        } else if (e.spec === 'ranger') {
+          // pluie de flèches : un cercle de zone au sol (les flèches sont les 'shot' qui tombent)
+          this.fx.ring(e.x, e.y, '#8FD86B', 34, 165, 0.5);
+          this.fx.dust(e.x, e.y, 30, 8, 'rgba(120,150,80,0.4)');
+        } else if (e.spec === 'pyromancer') {
+          // météore : une boule de feu tombe du ciel, puis explosion de flammes + braises
+          this.fx.streak(e.x, e.y - 340, e.x, e.y, 15, 'rgba(255,150,60,0.9)', 0.28);
+          this.fx.fireWave(e.x, e.y, 118, ['255,140,50', '255,200,90', '255,245,200']);
+          this.fx.debris(e.x, e.y, ['#FF8A3D', '#FFD27A', '#3A2620'], 12, 240, 7);
+          if (near2 < 520) this.shake = Math.max(this.shake, 0.32);
+        } else if (e.spec === 'druid') {
+          // floraison : anneau vert qui s'ouvre, étincelles de sève
+          this.fx.ring(e.x, e.y, '#7FE0A0', 14, 150, 0.6);
+          this.fx.ring(e.x, e.y, '#C8F5D8', 8, 92, 0.45);
+          this.fx.burst(e.x, e.y, '#7FE0A0', 22, 130);
+        }
+        break;
+      }
       case 'tame': {
         const u = this.posOf(e.id, players);
         if (e.by === this.myId) {
@@ -1237,9 +1286,11 @@ export class Game {
           }
         }
         break;
-      case 'shot':
-        this.fx.shot(e.by === this.myId ? this.me.x : e.x, e.by === this.myId ? this.me.y : e.y, e.tx, e.ty, e.cls);
+      case 'shot': {
+        const fromSelf = e.by === this.myId && !e.drop; // ses propres tirs partent de sa position prédite ; la pluie tombe du ciel (drop)
+        this.fx.shot(fromSelf ? this.me.x : e.x, fromSelf ? this.me.y : e.y, e.tx, e.ty, e.cls);
         break;
+      }
       case 'spec':
         if (e.id === this.myId) {
           this.fx.ring(this.me.x, this.me.y, '#F0B64A', 10, 70);
