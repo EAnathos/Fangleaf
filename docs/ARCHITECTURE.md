@@ -44,6 +44,7 @@ client/    index.html     lobby, HUD et panneaux
            src/game.ts    boucle de jeu : prédiction locale, rendu, événements
            src/net.ts     WebSocket et interpolation
            src/hud.ts     HUD et panneaux (forge, Tanière, marché, Hôtel de ville…)
+           src/changelog.ts   nouveautés du jeu et numéro de version, affichés dans le lobby
            src/world.ts, sprites.ts, caves.ts, volcano.ts, voyage.ts, fx.ts, anim.ts, sky.ts, fog.ts   rendu
            src/audio.ts, music.ts, sfx.ts                                      son
 supabase/  migrations SQL (npm run db:migrate)

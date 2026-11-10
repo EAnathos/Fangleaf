@@ -196,6 +196,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   III : Lacs brumeux et Mer de sable). On n'a qu'**un exemplaire de chaque tome** : il enseigne une leçon de sa
   discipline, et les tomes se lisent dans l'ordre (trois leçons par discipline, soit trois places de meute en plus au
   total). À l'école, **E** pour lire une leçon : elle prend un moment (même hors ligne), une seule à la fois. Un coffre ne donne jamais un tome qu'on a déjà, ni un tome déjà lu.
+  L'onglet **Inventaire** de l'école montre les livres de son sac (celui en lecture, celui prêt à lire, ceux qui
+  attendent le tome d'avant) et ceux déjà lus.
 
 ## Grottes et géants
 
@@ -343,7 +345,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 
 ## Jouer à plusieurs
 
-- Jusqu'à **4 dompteurs** par village. **Menu › Paramètres › Village › Inviter des amis** copie le lien d'invitation (`?v=CODE`).
+- Jusqu'à **4 membres** par village, **connectés ou non** : un membre déconnecté garde sa place. **Menu › Paramètres › Village › Inviter des amis** copie le lien d'invitation (`?v=CODE`).
 - La progression est rattachée au **compte dans un village** : un autre village, c'est repartir de zéro. Un compte
   a au plus 3 villages, listés dans le lobby.
 - L'or et les essences des monstres vaincus se partagent entre dompteurs proches.
@@ -353,4 +355,10 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Chat** : **C** ou le bouton 💬 ; chaque message s'affiche aussi dans une bulle au-dessus de son auteur.
 - **Menu › Profil** : choisir sa couleur (une par membre du village) et un chapeau, acheté une fois en or. Chaque chapeau débloqué renforce l'arme de 10 %.
 - Se connecter sur un autre appareil déconnecte la session en cours (sa progression est sauvegardée d'abord).
-- Le **fondateur** peut expulser (et réintégrer) un membre, et supprimer le village.
+- Le **chef** du village (au départ, son fondateur) peut expulser (et réintégrer) un membre, connecté ou non, et
+  supprimer le village. Il peut aussi le **transmettre** à un autre membre (Paramètres › Village › Transmettre) : ce
+  membre devient le chef, et l'ancien redevient un membre ordinaire. Un chef qui quitte le village le transmet de
+  lui-même au membre le plus récemment actif.
+- **Nouveautés** : le lobby montre, à gauche, ce qu'apporte la dernière mise à jour du jeu et son numéro de version
+  (« nouveau » tant qu'on ne l'avait pas vue) ; les versions précédentes se déplient en dessous. Sur téléphone, la
+  pastille « Nouveautés » en haut à gauche l'ouvre.

@@ -34,6 +34,9 @@ export interface BoardRow extends Stats, Holdings {
   name: string;
   color: string;
   online: boolean;
+  founder?: boolean; // chef du village
+  id?: number; // dompteur en ligne : son id (pour lui transmettre le village)
+  user?: string; // membre déconnecté : son compte (envoyé au seul chef, pour l'expulser ou lui transmettre le village)
 }
 
 /** Ce que le panneau de triche ajoute ou retire : monstre de meute, Alpha, Alpha légendaire, monstre sauvage près de soi. */
@@ -79,6 +82,8 @@ export type ClientMsg =
   | { t: 'chat'; text: string } // message pour tout le village
   | { t: 'board' } // demander le tableau du village
   | { t: 'kick'; id: number } // fondateur : expulser ce dompteur (banni du village)
+  | { t: 'kickAway'; user: string } // fondateur : expulser ce membre déconnecté (banni du village)
+  | { t: 'transfer'; id?: number; user?: string } // fondateur : transmettre le village à ce dompteur en ligne (id) ou à ce membre déconnecté (user)
   | { t: 'unban'; user: string } // fondateur : lever le bannissement d'un compte
   | { t: 'mode'; manual: boolean } // attaque au clic (PC) au lieu de l'attaque automatique
   | { t: 'attack'; x: number; y: number } // attaque au clic : frapper vers ce point // vider son sac (bois, pierre) dans la réserve du village, à l'entrepôt
@@ -291,6 +296,7 @@ export interface Snapshot {
   ores: [number, number][]; // filons proches : [id, pv %] (0 = épuisé) ; sur le réseau : seulement ceux qui ont changé
   chests: [number, number, number, number][]; // coffres des géants vaincus : [id, x, y, ouvert par ce dompteur (0/1)]
   banned: { id: string; name: string }[]; // comptes bannis du village (envoyé au seul fondateur)
+  founder: boolean; // ce dompteur est le chef du village (il peut changer en cours de partie : transmission)
   sleepers: SleeperTuple[]; // dompteurs déconnectés qui dorment au village
   dozers: DozerTuple[]; // leurs monstres, qui flânent ou dorment autour d'eux
   pets: PetTuple[]; // Alphas au repos des membres, qui se promènent et jouent sur l'îlot du village

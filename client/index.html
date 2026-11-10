@@ -42,6 +42,19 @@
     <section class="lobby-hero">
       <h1>Fangleaf</h1>
       <p class="tagline">Chasse, apprivoise, mène ta meute.</p>
+      <button type="button" id="lobby-news-toggle" class="lobby-news-toggle" aria-controls="lobby-news" aria-expanded="false">Nouveautés · <b id="lobby-news-chip"></b></button>
+      <aside id="lobby-news" class="panel lobby-news" aria-labelledby="lobby-news-title">
+        <div class="news-top">
+          <h2 id="lobby-news-title">Dernière mise à jour</h2>
+          <span id="lobby-version" class="version"></span>
+          <button type="button" id="lobby-news-close" class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div id="lobby-news-latest"></div>
+        <details id="lobby-news-older" class="news-older">
+          <summary>Versions précédentes</summary>
+          <div id="lobby-news-list" class="col news-list"></div>
+        </details>
+      </aside>
     </section>
     <form id="lobby-form" class="panel lobby-card">
       <p id="invite-badge" class="invite-badge" hidden><span id="invite-label">Invitation au village</span> <b id="invite-code"></b></p>
@@ -276,6 +289,7 @@
       </div>
     </div>
 
+
     <div id="profile" class="overlay dim" hidden>
       <div class="panel modal profile" role="dialog" aria-modal="true" aria-labelledby="profile-title">
         <div class="row between">
@@ -399,6 +413,7 @@
         <section id="set-village" class="col set-page" role="tabpanel" hidden>
           <button id="invite" class="btn">Inviter des amis · <span id="code-label"></span></button>
           <h3 class="market-head">Membres du village</h3>
+          <p id="members-count" class="small muted"></p>
           <div id="members" class="stones"></div>
           <div id="banned-box" class="col" hidden>
             <h3 class="market-head">Bannis</h3>
@@ -494,12 +509,22 @@
           <h2 id="school-title">École des dompteurs</h2>
           <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
         </div>
-        <div class="tome-where">
-          <b>Où trouver les livres</b>
-          <span class="small muted">Dans les coffres des géants vaincus, parfois. Un exemplaire de chaque tome, à lire dans l'ordre ; la lecture continue même quand tu es déconnecté.</span>
-          <ul id="school-where" class="small"></ul>
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" id="school-tab-lessons" aria-selected="true" aria-controls="school-lessons">Leçons</button>
+          <button type="button" role="tab" id="school-tab-bag" aria-selected="false" aria-controls="school-bag">Inventaire</button>
         </div>
-        <div id="school-list" class="col school-list"></div>
+        <div id="school-lessons" class="col" role="tabpanel">
+          <div class="tome-where">
+            <b>Où trouver les livres</b>
+            <span class="small muted">Dans les coffres des géants vaincus, parfois. Un exemplaire de chaque tome, à lire dans l'ordre ; la lecture continue même quand tu es déconnecté.</span>
+            <ul id="school-where" class="small"></ul>
+          </div>
+          <div id="school-list" class="col school-list"></div>
+        </div>
+        <div id="school-bag" class="col" role="tabpanel" hidden>
+          <p id="school-bag-count" class="collection"></p>
+          <div id="school-books" class="col school-list"></div>
+        </div>
       </div>
     </div>
 

@@ -205,6 +205,8 @@ export class Game {
     initInput(canvas, (code, key) => this.onKey(code, key), (code, key) => (key === '' || matches('revive', code, key)) && this.setHelp(false));
     this.hud.onAttackMode = () => this.sendMode();
     this.hud.onKick = (id) => net.send({ t: 'kick', id });
+    this.hud.onKickAway = (user) => net.send({ t: 'kickAway', user });
+    this.hud.onTransfer = (to) => net.send({ t: 'transfer', ...to });
     this.hud.onUnban = (user) => net.send({ t: 'unban', user });
     this.sendMode();
     addEventListener('resize', () => this.resize());
@@ -1673,6 +1675,7 @@ export class Game {
     this.hud.lore = this.net.latest?.lore ?? [0, 0, 0];
     this.hud.told = this.net.latest?.told ?? [];
     this.hud.banned = this.net.latest?.banned ?? [];
+    if (this.net.latest) this.hud.setFounder(!!this.net.latest.founder);
     this.hud.stock = this.net.latest?.stock ?? [0, 0];
     const palisade = this.hud.buildings.includes('palisade');
     if (palisade !== this.palisadeUp) this.map.setPalisade((this.palisadeUp = palisade)); // solide une fois construite (comme côté serveur)

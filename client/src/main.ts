@@ -3,6 +3,7 @@
 import './styles.css';
 import { MAX_VILLAGES } from '../../shared/config.ts';
 import { authEnabled, currentAccount, type MyVillage, myVillages, signInWithGoogle, signOut } from './auth.ts';
+import { renderLobbyNews } from './changelog.ts';
 import { startLobbyScene } from './lobbyScene.ts';
 import { Net } from './net.ts';
 
@@ -142,6 +143,7 @@ try {
 } catch { /* stockage indisponible */ }
 
 startLobbyScene($<HTMLCanvasElement>('lobby-scene'), () => !$('lobby').hidden);
+renderLobbyNews(); // nouveautés de la dernière mise à jour du jeu, à gauche du lobby
 
 // Le jeu (carte, HUD, son…) est un module à part : le lobby s'affiche sans l'attendre,
 // puis on le télécharge en arrière-plan pour qu'il soit prêt au moment de jouer.

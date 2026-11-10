@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { MAX_PLAYERS, MAX_VILLAGES, TICK_HZ } from '../shared/config.ts';
 import type { ClientMsg, ServerMsg } from '../shared/protocol.ts';
-import { countVillages, createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, leaveVillage, loadMembers, loadProgress, persistenceEnabled, saveProgress, saveVillage, verifyToken, type Profile } from './persist.ts';
+import { countVillages, createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, leaveVillage, loadMembers, loadProgress, memberIds, persistenceEnabled, saveProgress, saveVillage, setFounder, verifyToken, type Profile } from './persist.ts';
 import { makeCode, Room, type Player } from './room.ts';
 import { staticFile } from './static.ts';
 
@@ -176,6 +176,10 @@ wss.on('connection', (ws: WebSocket) => {
     // Progression propre à ce compte DANS ce village : ailleurs, on repart de zéro.
     let profile = user ? await loadProgress(user.userId, r.code) : null;
     if (user && !profile && msg.t === 'join' && (await countVillages(user.userId)) >= MAX_VILLAGES) return send({ t: 'error', msg: tooMany });
+    // un nouveau venu : MAX_PLAYERS membres au plus, connectés ou non
+    if (!profile && msg.t === 'join' && !r.hasRoomFor(user?.userId ?? null, persistenceEnabled() ? await memberIds(r.code) : [])) {
+      return send({ t: 'error', msg: `Ce village a déjà ${MAX_PLAYERS} membres (connectés ou non) : son chef peut en expulser un pour te faire une place.` });
+    }
     if (user && activeUsers.has(user.userId)) {
       // connecté ailleurs pendant le chargement : on le déloge, puis on relit sa progression tout juste sauvegardée
       await evict(user.userId);
@@ -184,6 +188,7 @@ wss.on('connection', (ws: WebSocket) => {
     if (ws.readyState !== ws.OPEN || (user && activeUsers.has(user.userId))) return;
     rooms.set(r.code, r);
     r.onVillage ??= (v) => void saveVillage(r.code, v);
+    r.onFounder ??= (id) => void setFounder(r.code, id);
     room = r;
     if (user) {
       activeUsers.set(user.userId, kick);
@@ -248,6 +253,8 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'profile') room.onProfile(player, +msg.color, +msg.hat);
     else if (msg.t === 'board') room.onBoard(player);
     else if (msg.t === 'kick') room.onKick(player, +msg.id);
+    else if (msg.t === 'kickAway') room.onKickAway(player, String(msg.user));
+    else if (msg.t === 'transfer') room.onTransfer(player, msg.id === undefined ? undefined : +msg.id, msg.user === undefined ? undefined : String(msg.user));
     else if (msg.t === 'unban') room.onUnban(player, String(msg.user));
     else if (msg.t === 'mode') room.onMode(player, !!msg.manual);
     else if (msg.t === 'attack') room.onAttack(player, +msg.x, +msg.y);
