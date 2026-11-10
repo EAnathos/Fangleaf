@@ -215,6 +215,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'upgrade') room.onUpgrade(player, msg.what);
     else if (msg.t === 'alphaUp') room.onAlphaUp(player, +msg.s);
     else if (msg.t === 'alphaMark') room.onAlphaMark(player, +msg.s);
+    else if (msg.t === 'alphaName') room.onAlphaName(player, +msg.s, msg.name);
     else if (msg.t === 'alphaEquip') room.onAlphaEquip(player, +msg.s, !!msg.equip);
     else if (msg.t === 'alphaCreate') room.onAlphaCreate(player, +msg.s);
     else if (msg.t === 'mount') room.onMount(player, +msg.id);

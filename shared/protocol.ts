@@ -50,6 +50,7 @@ export type ClientMsg =
   | { t: 'alphaMark'; s: number } // marquer cette espèce (barre d'essence dans le HUD) ; la même une 2e fois démarque
   | { t: 'alphaEquip'; s: number; equip: boolean } // l'emmener sur le terrain, ou le ranger à la Tanière
   | { t: 'alphaCreate'; s: number }
+  | { t: 'alphaName'; s: number; name: string } // nommer l'Alpha de cette espèce ('' : lui retirer son nom)
   | { t: 'class'; cls: ClassId } // choisir sa classe à la forge
   | { t: 'spec'; spec: SpecId } // choisir la spécialisation de son arme (Grande forge, arme niv. 10)
   | { t: 'legend'; s: number } // rendre légendaire l'Alpha de cette espèce avec l'âme de son géant
@@ -130,6 +131,7 @@ export interface PlayerState {
   awakening: { species: number; left: number; total: number }[]; // Alphas en cours d'éveil (secondes)
   resting: { species: number; level: number; legend: boolean }[]; // Alphas rangés à la Tanière
   marked: number; // espèce d'Alpha marquée (barre d'essence du HUD), -1 : aucune
+  names: [number, string][]; // noms donnés à ses Alphas : [espèce, nom] (tout le monde les voit, au-dessus d'eux)
   seen: number[]; // espèces déjà croisées (bestiaire de la Tanière ; sans les géants)
   dead: boolean;
   respawnIn: number; // secondes, 0 si vivant
@@ -222,7 +224,7 @@ export type GameEvent =
   | { e: 'die'; x: number; y: number; s: number; alpha: boolean }
   | { e: 'tame'; id: number; by: number; s: number }
   | { e: 'gold'; to: number; n: number; x: number; y: number }
-  | { e: 'essence'; to: number; s: number; x: number; y: number }
+  | { e: 'essence'; to: number; s: number; x: number; y: number; n?: number; boss?: number; wins?: number } // n : combien (1 par défaut) ; boss : le géant vaincu qui les a données, wins : sa combientième victoire sur lui
   | { e: 'soul'; to: number; s: number; x: number; y: number } // âme de mini-boss
   | { e: 'mine'; by: number; id: number; done: boolean } // coup de pioche sur un filon (done : épuisé)
   | { e: 'chop'; by: number; id: number; done: boolean } // coup de hache sur un arbre (id : index dans decor ; done : abattu)
@@ -295,6 +297,7 @@ export interface Snapshot {
   bare: number[]; // buissons proches dont les fruits ont été mangés (ils repoussent)
   trees: [number, number][]; // arbres proches entamés ou abattus : [index dans decor, pv %] (absents : intacts)
   caves: number[]; // par grotte : secondes avant le retour du mini-boss (0 = présent)
+  fights: [number, number][]; // combats de géant en cours : [grotte, id du dompteur qui l'a réveillé]
   camps: number[]; // emplacements de camp établis par le village
   buildings: BuildingId[]; // bâtiments construits au village
   hall: number; // niveau de la Maison commune

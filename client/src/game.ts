@@ -23,7 +23,7 @@ import { GLOW, SkyFx } from './sky.ts';
 import { Ambient } from './ambient.ts';
 import { desertMix, drawQuicksand, jungleMix, lakesMix, World } from './world.ts';
 import { LUNES, SNOWFALL, type Sky, sky as skyAt, snowAt, WINTER } from '../../shared/weather.ts';
-import { HALL_ID, VILLAGE_GATES, villageEdge, WorldMap } from '../../shared/worldmap.ts';
+import { type Cave, HALL_ID, VILLAGE_GATES, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts';
 import { drawSubmerged, drawVoyage } from './voyage.ts';
 import { drawAubinAtWork, drawBoat, drawBoatLabel } from './boat.ts';
@@ -178,6 +178,7 @@ export class Game {
     this.hud.onUpgrade = (what) => net.send({ t: 'upgrade', what });
     this.hud.onAlphaUp = (s) => net.send({ t: 'alphaUp', s });
     this.hud.onAlphaMark = (s) => net.send({ t: 'alphaMark', s });
+    this.hud.onAlphaName = (s, name) => net.send({ t: 'alphaName', s, name });
     this.hud.onAlphaEquip = (s, equip) => net.send({ t: 'alphaEquip', s, equip });
     this.hud.onAlphaCreate = (s) => net.send({ t: 'alphaCreate', s });
     this.hud.onHelp = (on) => this.setHelp(on);
@@ -241,6 +242,50 @@ export class Game {
   }
 
   /** Grotte vide : cercle d'invocation là où le géant reviendra, avec le temps restant (il s'emballe à la fin). */
+  /**
+   * Où aller pour rejoindre le combat contre le géant de cette grotte, depuis là où l'on est : sortir d'abord de la grotte
+   * où l'on se trouve, puis son entrée (la bouche du volcan pour une salle du donjon, l'îlot pour un géant à l'air libre).
+   * null : on y est déjà, ou le combat se passe en haute mer.
+   */
+  private fightTarget(c: Cave): { x: number; y: number } | null {
+    if (c.zone === VOYAGE_ZONE || this.map.arenaAt(this.me.x, this.me.y)?.id === c.id) return null;
+    const here = this.map.caveAt(this.me.x, this.me.y);
+    if (c.room !== undefined) return here === this.map.depths ? c.home ?? c.inside : here ? here.exit : this.map.depths.entrance;
+    if (here) return here.exit;
+    return c.open !== undefined ? c.home ?? c.inside : c.entrance;
+  }
+
+  /** Combats de géant engagés par d'autres : une petite flèche autour de soi indique où ils se passent, le temps du combat. */
+  private drawFightArrows() {
+    const fights = this.net.latest?.fights ?? [];
+    if (!fights.length || this.self()?.dead) return;
+    const { ctx, canvas, dpr } = this;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const cx = canvas.width / 2, cy = canvas.height / 2, pulse = 0.75 + 0.25 * Math.sin(this.time * 5);
+    for (const [cave] of fights) {
+      const c = this.map.caves[cave], to = c && this.fightTarget(c);
+      if (!to || Math.hypot(to.x - this.me.x, to.y - this.me.y) < 160) continue;
+      const ang = Math.atan2(to.y - this.me.y, to.x - this.me.x), R = 84 * dpr, k = 11 * dpr;
+      ctx.save();
+      ctx.translate(cx + Math.cos(ang) * R, cy + Math.sin(ang) * R);
+      ctx.rotate(ang);
+      ctx.globalAlpha = pulse;
+      ctx.beginPath();
+      ctx.moveTo(k * 1.3, 0);
+      ctx.lineTo(-k * 0.8, -k);
+      ctx.lineTo(-k * 0.35, 0);
+      ctx.lineTo(-k * 0.8, k);
+      ctx.closePath();
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3 * dpr;
+      ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+      ctx.stroke();
+      ctx.fillStyle = '#FF9B78';
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
   private drawBossReturn(ctx: CanvasRenderingContext2D, x: number, y: number, sec: number) {
     const t = this.time, soon = sec <= 10, k = soon ? 1 - sec / 10 : 0;
     const pulse = 0.5 + 0.5 * Math.sin(t * (soon ? 8 + k * 10 : 2.5));
@@ -936,8 +981,13 @@ export class Game {
         break;
       case 'essence':
         if (e.to === this.myId) {
-          this.fx.essence(e.x, e.y - 30, SPECIES[e.s].color);
-          this.hud.gain('essence', 1);
+          const n = e.n ?? 1;
+          this.fx.essence(e.x, e.y - 30, SPECIES[e.s].color, n > 1 ? `+${n} essences` : undefined, n > 1 ? 1.4 : undefined);
+          this.hud.gain('essence', n);
+          if (e.boss !== undefined) {
+            const th = e.wins === 1 ? '1re' : `${e.wins}e`;
+            this.hud.toast(`${th} victoire sur ${bossName(e.boss)} : +${n} essences de ${SPECIES[e.s].name}`, 'alpha');
+          }
         }
         break;
       case 'soul':
@@ -966,7 +1016,12 @@ export class Game {
         }
         this.shake = 0.35;
         if (this.map.caves[e.cave]?.zone === VOYAGE_ZONE) this.hud.toast(`${bossName(this.map.caves[e.cave].boss)} surgit des flots et s'attaque au bateau !`);
-        else if (e.by !== this.myId) this.hud.toast(`${name(e.by)} a réveillé ${bossName(this.map.caves[e.cave]?.boss ?? 0)} !`);
+        else if (e.by !== this.myId) {
+          // un allié engage le combat : une flèche mène à lui tant que le géant est debout (drawFightArrows)
+          const there = this.map.arenaAt(this.me.x, this.me.y)?.id === e.cave;
+          this.hud.toast(`${name(e.by)} a réveillé ${bossName(this.map.caves[e.cave]?.boss ?? 0)} !${there ? '' : ' Suis la flèche pour lui prêter main-forte.'}`);
+          if (!there) sound.play('roar', 0.35);
+        }
         break;
       }
       case 'phase': {
@@ -2612,6 +2667,8 @@ export class Game {
     });
     const casts = this.trackCasts(hazards, late);
     const colorOf = new Map(players.map((p) => [p.id, p.color]));
+    // noms donnés aux Alphas par leur dompteur (dompteur:espèce → nom), écrits sous leurs pattes
+    const alphaNames = new Map(players.flatMap((p) => (p.names ?? []).map(([sp, n]) => [`${p.id}:${sp}`, n] as const)));
     for (const [id, x, y, r] of this.net.latest?.sands ?? []) {
       const q = this.sandSeen.get(id);
       if (q && inView(x, y, r + 20)) drawQuicksand(ctx, { x, y, r }, Math.min(1, (this.time - q.born) / QUICKSAND_OPEN_S, (q.until - this.time) / 1.2), this.time);
@@ -2945,6 +3002,16 @@ export class Game {
           if (shiver) ctx.translate(shiver, 0);
           this.drawUnitCached(ctx, id, look(), pose);
           if (shiver) ctx.translate(-shiver, 0);
+          const named = alpha && owner ? alphaNames.get(`${owner}:${s0}`) : undefined;
+          if (named) {
+            ctx.font = `700 ${Math.round(12 * textScale())}px "Pixelify Sans", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(16,24,26,0.85)';
+            ctx.strokeText(named, x + pose.dx, y + pose.dy + 16);
+            ctx.fillStyle = colorOf.get(owner) ?? '#EEE7D7';
+            ctx.fillText(named, x + pose.dx, y + pose.dy + 16);
+          }
           if (mood?.mood === 'fear') drawSweat(ctx, x + shiver + r * 0.42 * (this.faces.get(id)?.face ?? 1), y - r * 1.05, Math.max(4, r * 0.13), this.time, id % 7 / 7);
           else if (mood?.mood === 'smug' && Math.hypot(this.me.x - x, this.me.y - y) < 450 && this.time > this.smugAt) {
             this.smugAt = this.time + 3.5;
@@ -3112,6 +3179,8 @@ export class Game {
     }
     sound.rain(here || !settings.display.weather || sky.snow >= SNOWFALL ? 0 : sky.rain); // la neige tombe sans bruit
     sound.storm(here ? 0 : storm);
+
+    this.drawFightArrows();
 
     // Joystick tactile / souris.
     if (stick.active) {
