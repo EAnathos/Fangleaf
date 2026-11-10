@@ -1,6 +1,5 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
-import { CHANGELOG } from './changelog.ts';
 import {
   alphaEquipMax, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, LESSONS_PER_TOME, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
@@ -21,7 +20,7 @@ import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 import { clamp } from '../../shared/math.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | 'news' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | null;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
@@ -430,7 +429,7 @@ export class Hud {
       this.npcAt++;
       this.showNpc();
     };
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'calendar', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile', 'victory', 'news'] as const) {
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'calendar', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile', 'victory'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -624,7 +623,7 @@ export class Hud {
     }));
     this.victoryPortrait = [{ canvas: $<HTMLCanvasElement>('victory-portrait'), s: v.s, seen: true }];
     const open = () => {
-      if (this.panel && this.panel !== 'victory' && this.panel !== 'news') return void setTimeout(open, 800); // un panneau ouvert : il attend
+      if (this.panel && this.panel !== 'victory') return void setTimeout(open, 800); // un panneau ouvert : il attend
       this.setPanel('victory');
       sound.play('fanfare', 0.6);
     };
@@ -666,7 +665,6 @@ export class Hud {
     }
     $('hall').hidden = panel !== 'hall';
     $('victory').hidden = panel !== 'victory';
-    $('news').hidden = panel !== 'news';
     $('settings').hidden = panel !== 'settings';
     $('profile').hidden = panel !== 'profile';
     if (panel === 'profile') {
@@ -930,7 +928,7 @@ export class Hud {
       const act = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.heart ? this.onHeart() : b.plan ? this.onPlan() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
       onTap(prompt, act);
     }
-    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board', 'profile', 'victory', 'news'].includes(this.panel);
+    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board', 'profile', 'victory'].includes(this.panel);
     if (building && b?.panel !== this.panel) this.setPanel(null);
     if (b?.buy) this.buying = b.buy;
     if (b?.at !== undefined && b.at !== this.spotAt) {
@@ -1358,37 +1356,10 @@ export class Hud {
     }
   }
 
-  /**
-   * Nouveautés du jeu (changelog.ts) : à chaque connexion, et depuis le menu. Ce que le joueur n'avait pas encore vu
-   * (d'après ce navigateur) porte la mention « Nouveau ».
-   */
-  showNews() {
-    const KEY = 'fangleaf.news.seen';
-    let seen = new Set<string>();
-    try {
-      seen = new Set(JSON.parse(localStorage.getItem(KEY) ?? '[]') as string[]);
-      localStorage.setItem(KEY, JSON.stringify(CHANGELOG.map((c) => c.id)));
-    } catch { /* stockage indisponible : rien n'est marqué nouveau */ seen = new Set(CHANGELOG.map((c) => c.id)); }
-    const date = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-    $('news-list').replaceChildren(...CHANGELOG.map((c) => {
-      const el = document.createElement('section');
-      el.className = `news-entry${seen.has(c.id) ? '' : ' fresh'}`;
-      el.innerHTML = '<div class="news-head"><b></b><span class="small muted"></span></div><ul class="small"></ul>';
-      el.querySelector('b')!.textContent = c.title;
-      el.querySelector('.news-head .small')!.textContent = seen.has(c.id) ? date(c.date) : `Nouveau · ${date(c.date)}`;
-      el.querySelector('ul')!.replaceChildren(...c.items.map((t) => Object.assign(document.createElement('li'), { textContent: t })));
-      return el;
-    }));
-    this.setPanel('news');
-    $('news-list').scrollTop = 0;
-  }
-
   /** Paramètres : mode d'attaque et touches (PC), membres du village (expulsion par le fondateur). */
   private initSettings(founder: boolean) {
     this.founder = founder;
     $('settings-open').onclick = () => this.setPanel('settings');
-    $('news-open').onclick = () => this.showNews();
-    $('news-ok').onclick = () => this.setPanel(null);
     $('profile-open').onclick = () => this.setPanel('profile');
     onTap($('menu-open'), () => this.setPanel(this.panel === 'quit' ? null : 'quit'));
     onTap($('chat-open'), () => this.setPanel(this.panel === 'chat' ? null : 'chat'));

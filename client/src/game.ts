@@ -199,10 +199,7 @@ export class Game {
         this.introUntil = 0;
         hints();
       });
-    } else {
-      hints();
-      this.hud.showNews(); // à chaque connexion (pas au tout premier réveil : la découverte de l'île d'abord)
-    }
+    } else hints();
     initCheat((m) => this.net.send(m)); // dev : écran de triche (F9 l'ouvre ou le ferme)
     initInput(canvas, (code, key) => this.onKey(code, key), (code, key) => (key === '' || matches('revive', code, key)) && this.setHelp(false));
     this.hud.onAttackMode = () => this.sendMode();

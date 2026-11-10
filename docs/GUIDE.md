@@ -353,5 +353,6 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   supprimer le village. Il peut aussi le **transmettre** à un autre membre (Paramètres › Village › Transmettre) : ce
   membre devient le chef, et l'ancien redevient un membre ordinaire. Un chef qui quitte le village le transmet de
   lui-même au membre le plus récemment actif.
-- **Nouveautés** : à chaque connexion, la liste des dernières mises à jour du jeu s'affiche (ce qu'on n'avait pas
-  encore vu porte la mention « Nouveau ») ; on la retrouve dans **Menu › Nouveautés**.
+- **Nouveautés** : le lobby montre, à gauche, ce qu'apporte la dernière mise à jour du jeu et son numéro de version
+  (« nouveau » tant qu'on ne l'avait pas vue) ; les versions précédentes se déplient en dessous. Sur téléphone, la
+  pastille « Nouveautés » en haut à gauche l'ouvre.

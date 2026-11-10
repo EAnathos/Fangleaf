@@ -1,9 +1,9 @@
-// Nouveautés du jeu, affichées à chaque connexion (et depuis Menu › Nouveautés). La plus récente en tête.
-// Une entrée par mise à jour fusionnée dans main : ce qui change pour le joueur, pas comment c'est codé.
-// id : unique et stable (il sert à repérer ce que le joueur n'a pas encore vu) ; ne jamais le changer après coup.
+// Nouveautés du jeu, une entrée par mise à jour (la plus récente en tête), affichées dans le lobby : la dernière en
+// grand, avec son numéro de version, les précédentes dépliables. Ce qui change pour le joueur, pas comment c'est codé.
+// version : semver ; celle de la plus récente est aussi celle de package.json (les changer ensemble).
 
 export interface ChangelogEntry {
-  id: string;
+  version: string; // 0.6.0
   date: string; // AAAA-MM-JJ
   title: string;
   items: string[];
@@ -11,24 +11,34 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    id: '2026-11-10-chef-ecole',
+    version: '0.6.0',
     date: '2026-11-10',
     title: 'Chef du village, membres et inventaire de l\'école',
     items: [
-      'Les nouveautés s\'affichent à chaque connexion (et dans Menu › Nouveautés).',
+      'Le lobby montre les nouveautés de la dernière mise à jour, avec son numéro de version.',
       'Le chef du village peut le transmettre à un autre membre, connecté ou non (Paramètres › Village).',
       'Un village compte 4 membres au plus, connectés ou non : le chef peut expulser un membre déconnecté pour faire une place.',
       'École des dompteurs : un onglet Inventaire montre les livres de ton sac (en lecture, prêt à lire, à lire après le tome d\'avant) et ceux déjà lus.',
     ],
   },
   {
-    id: '2026-11-10-serveur',
+    version: '0.5.0',
+    date: '2026-11-10',
+    title: 'Essences des géants, noms des Alphas, combats signalés',
+    items: [
+      'Un géant vaincu donne des essences de son espèce à ceux qui l\'ont combattu, un peu plus à chaque nouvelle victoire sur lui.',
+      'Tanière : renomme tes Alphas ; leur nom s\'affiche sous eux, pour tout le village.',
+      'Quand un coéquipier réveille un géant, tu es prévenu, et une flèche autour de toi indique le chemin du combat.',
+    ],
+  },
+  {
+    version: '0.4.1',
     date: '2026-11-10',
     title: 'Serveur plus solide',
     items: ['Une adresse mal formée ne fait plus tomber le serveur (et les villages en cours avec lui).'],
   },
   {
-    id: '2026-11-10-volcan',
+    version: '0.4.0',
     date: '2026-11-10',
     title: 'Volcan, récolte et chapeaux',
     items: [
@@ -39,13 +49,13 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
-    id: '2026-11-10-fluidite',
+    version: '0.3.0',
     date: '2026-11-10',
     title: 'Village plus fluide',
     items: ['Le village rame moins avec beaucoup d\'Alphas : 30 Alphas au repos au plus sont montrés en même temps.'],
   },
   {
-    id: '2026-11-09-coati-legendaires',
+    version: '0.2.0',
     date: '2026-11-09',
     title: 'Coati roux et robes des Alphas',
     items: [
@@ -54,7 +64,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
   {
-    id: '2026-11-09-alpha-marque',
+    version: '0.1.0',
     date: '2026-11-09',
     title: 'Alpha marqué et effets d\'état',
     items: [
@@ -63,3 +73,43 @@ export const CHANGELOG: ChangelogEntry[] = [
     ],
   },
 ];
+
+/** Version du jeu : celle de la dernière mise à jour. */
+export const GAME_VERSION = CHANGELOG[0].version;
+
+/**
+ * Remplit le panneau des nouveautés du lobby : la dernière mise à jour en grand (« nouveau » si ce navigateur ne l'avait
+ * pas encore vue), les précédentes dans « Versions précédentes ». Sur téléphone, une pastille l'ouvre par-dessus le lobby.
+ */
+export function renderLobbyNews() {
+  const $ = (id: string) => document.getElementById(id)!;
+  const date = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const entry = (c: ChangelogEntry, withVersion: boolean) => {
+    const el = document.createElement('section');
+    el.className = 'news-entry';
+    el.innerHTML = '<div class="news-head"><b></b><span class="small muted"></span></div><ul class="small"></ul>';
+    el.querySelector('b')!.textContent = c.title;
+    el.querySelector('.news-head .small')!.textContent = withVersion ? `v${c.version} · ${date(c.date)}` : date(c.date);
+    el.querySelector('ul')!.replaceChildren(...c.items.map((t) => Object.assign(document.createElement('li'), { textContent: t })));
+    return el;
+  };
+  let fresh = false;
+  try {
+    fresh = localStorage.getItem('fangleaf.version') !== GAME_VERSION;
+    localStorage.setItem('fangleaf.version', GAME_VERSION);
+  } catch { /* stockage indisponible : rien n'est marqué nouveau */ }
+  const v = $('lobby-version');
+  v.textContent = `v${GAME_VERSION}`;
+  v.classList.toggle('fresh', fresh);
+  $('lobby-news-chip').textContent = `v${GAME_VERSION}`;
+  $('lobby-news-latest').replaceChildren(entry(CHANGELOG[0], false));
+  $('lobby-news-list').replaceChildren(...CHANGELOG.slice(1).map((c) => entry(c, true)));
+  $('lobby-news-older').hidden = CHANGELOG.length < 2;
+  const panel = $('lobby-news'), toggle = $('lobby-news-toggle');
+  const open = (on: boolean) => {
+    panel.classList.toggle('open', on);
+    toggle.setAttribute('aria-expanded', String(on));
+  };
+  toggle.onclick = () => open(!panel.classList.contains('open'));
+  $('lobby-news-close').onclick = () => open(false);
+}

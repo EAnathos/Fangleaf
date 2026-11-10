@@ -42,6 +42,19 @@
     <section class="lobby-hero">
       <h1>Fangleaf</h1>
       <p class="tagline">Chasse, apprivoise, mène ta meute.</p>
+      <button type="button" id="lobby-news-toggle" class="lobby-news-toggle" aria-controls="lobby-news" aria-expanded="false">Nouveautés · <b id="lobby-news-chip"></b></button>
+      <aside id="lobby-news" class="panel lobby-news" aria-labelledby="lobby-news-title">
+        <div class="news-top">
+          <h2 id="lobby-news-title">Dernière mise à jour</h2>
+          <span id="lobby-version" class="version"></span>
+          <button type="button" id="lobby-news-close" class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
+        </div>
+        <div id="lobby-news-latest"></div>
+        <details id="lobby-news-older" class="news-older">
+          <summary>Versions précédentes</summary>
+          <div id="lobby-news-list" class="col news-list"></div>
+        </details>
+      </aside>
     </section>
     <form id="lobby-form" class="panel lobby-card">
       <p id="invite-badge" class="invite-badge" hidden><span id="invite-label">Invitation au village</span> <b id="invite-code"></b></p>
@@ -272,21 +285,10 @@
           <button id="quit-confirm" class="cta">Retour au lobby</button>
           <button id="profile-open" class="btn">Profil</button>
           <button id="settings-open" class="btn">Paramètres</button>
-          <button id="news-open" class="btn">Nouveautés</button>
         </div>
       </div>
     </div>
 
-    <div id="news" class="overlay dim" hidden>
-      <div class="panel modal news" role="dialog" aria-modal="true" aria-labelledby="news-title">
-        <div class="row between">
-          <h2 id="news-title">Nouveautés</h2>
-          <button class="icon-btn close" aria-label="Fermer"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M3 3 L15 15 M15 3 L3 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></button>
-        </div>
-        <div id="news-list" class="col news-list"></div>
-        <button id="news-ok" class="cta">C'est parti !</button>
-      </div>
-    </div>
 
     <div id="profile" class="overlay dim" hidden>
       <div class="panel modal profile" role="dialog" aria-modal="true" aria-labelledby="profile-title">
