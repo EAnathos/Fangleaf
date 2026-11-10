@@ -11,6 +11,8 @@ export const WORLD_HALF = 17280; // carte de -17280 à 17280 : une île au milie
 // Le village, sur son îlot (relié à l'île par un pont de bois) : une palissade qui n'est pas ronde (voir villageEdge),
 // plus large d'est en ouest ; VILLAGE_R est son rayon moyen.
 export const VILLAGE_R = 470;
+/** Alphas au repos montrés en même temps sur l'îlot du village ; au-delà, un tirage au hasard parmi ceux de tous les membres (le coût d'affichage croît avec leur nombre). */
+export const PET_CAP = 30;
 export const VIEW_R = 1250; // rayon d'intérêt : unités envoyées à chaque joueur
 
 // Bâtiments : positions relatives au centre du village (le feu), un quartier chacun entre les quatre routes.

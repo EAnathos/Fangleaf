@@ -14,7 +14,7 @@ La forme légendaire n'existe que pour les espèces qui ont un géant (`bossOf(s
 
 Tout est dans [`client/src/sprites.ts`](../client/src/sprites.ts), en fin de fichier :
 
-- `VARIANT_FILTERS` : le filtre de couleur de chaque espèce (Alpha et légendaire). `variantFilter` le renvoie (une espèce sans entrée n'a pas de robe : `tests/rules/sprites.test.ts` vérifie que chaque espèce en a une). Le corps est dessiné dans un calque, recopié une seule fois avec le filtre.
+- `VARIANT_FILTERS` : le filtre de couleur de chaque espèce (Alpha et légendaire). `variantFilter` le renvoie (une espèce sans entrée n'a pas de robe : `tests/rules/sprites.test.ts` vérifie que chaque espèce en a une). La robe est appliquée **aux couleurs** pendant que le corps se dessine (`client/src/tint.ts` : la chaîne de fonctions CSS est calculée pour chaque couleur, mémorisée), sans `ctx.filter` ni calque : un filtre canvas par monstre et par image dominait le temps d'une image dès qu'il y avait beaucoup d'Alphas à l'écran. Seuls `hue-rotate`, `saturate`, `brightness`, `contrast`, `grayscale` et `sepia` sont gérés (`tests/rules/tint.test.ts` le vérifie pour chaque robe).
 - `LEGEND_BACK` / `LEGEND_FRONT` : les effets du légendaire, dessinés derrière / devant le corps, **sans** le filtre de couleur (ils gardent leurs vraies couleurs). Ils partagent le repère du corps ; `drawUnit` les appelle quand `u.legend` est vrai (sauf au flash de dégât).
 - Pas de filtre pour les boss, les sprites à clé forcée (`u.key`) et le flash de dégât.
 
@@ -194,5 +194,5 @@ Toutes les espèces : [variantes-alpha/all.png](variantes-alpha/all.png).
 
 ## Ajouter une espèce
 
-1. Ajouter une entrée `VARIANT_FILTERS` (clé du sprite → filtre CSS).
+1. Ajouter une entrée `VARIANT_FILTERS` (clé du sprite → filtre CSS, avec les seules fonctions listées plus haut).
 2. Si elle a un géant : ajouter ses effets dans `LEGEND_FRONT` (et `LEGEND_BACK` pour ce qui passe derrière le corps).

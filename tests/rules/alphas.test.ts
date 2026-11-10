@@ -2,7 +2,8 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { BOSS_MOVES, LEGEND_STAGGER_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, alphaPerk, alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT } from '../../shared/config.ts';
+import { BOSS_MOVES, LEGEND_STAGGER_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, alphaPerk, alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT, PET_CAP } from '../../shared/config.ts';
+import { pickCapped } from '../../shared/math.ts';
 
 describe('Alphas de la Tanière', () => {
   rule('Tanière : éveiller un Alpha avec des essences, le renforcer (de plus en plus cher), sauvegarde du profil.', () => {
@@ -341,4 +342,48 @@ describe('Alphas de la Tanière', () => {
     for (let i = 0; i < 25; i++) r.step();
     check(r.pets.size === 2, 'un Alpha sorti de la Tanière : il quitte l\'îlot');
   });
+  rule('Alphas au repos : au plus PET_CAP à l\'écran, tirés au hasard parmi ceux de tous les membres, et la sélection ne bouge pas.', () => {
+    const r = room();
+    const playable = SPECIES.map((_, i) => i).filter((i) => !SPECIES[i].boss && !SPECIES[i].minion).slice(0, 12);
+    const ps = ['a', 'b', 'c', 'd'].map((n) => r.addPlayer(n, noop));
+    for (const p of ps) for (const s of playable) p.resting.push({ s, lvl: 0, legend: false });
+    const owner = (key: string) => key.split(':')[0];
+    for (let i = 0; i < 25; i++) r.step();
+    check(r.pets.size === PET_CAP, `48 Alphas au repos, ${r.pets.size} montrés (plafond ${PET_CAP})`);
+    const shown = new Set<string>(r.pets.keys());
+    const owners = new Set([...shown].map(owner));
+    check(owners.size >= 3, `tirés parmi tous les membres, pas ceux d'un seul (${owners.size} membres représentés)`);
+    for (let i = 0; i < 20 * 30; i++) r.step();
+    check(r.pets.size === PET_CAP && [...r.pets.keys()].every((k) => shown.has(k)), 'même sélection 30 secondes plus tard (pas de nouveau tirage à chaque seconde)');
+    // un Alpha montré quitte la Tanière : un autre, jusque-là caché, prend sa place ; les autres ne bougent pas
+    const gone = [...shown][0], [uid, sp] = gone.split(':').map(Number);
+    const owning = ps.find((p: { id: number }) => p.id === uid);
+    owning.resting = owning.resting.filter((x: { s: number }) => x.s !== sp);
+    for (let i = 0; i < 25; i++) r.step();
+    const now = new Set<string>(r.pets.keys());
+    check(r.pets.size === PET_CAP && !now.has(gone) && [...shown].filter((k) => k !== gone).every((k) => now.has(k)), 'un départ : un remplaçant est tiré, les 29 autres restent');
+  });
+
+  rule('Alphas au repos : sous le plafond, tous sont montrés.', () => {
+    const r = room();
+    const a = r.addPlayer('a', noop), b = r.addPlayer('b', noop);
+    for (const s of [1, 2, 6, 7, 8]) a.resting.push({ s, lvl: 0, legend: false });
+    for (const s of [1, 2, 6, 7, 8, 9, 10]) b.resting.push({ s, lvl: 0, legend: s === 9 });
+    for (let i = 0; i < 25; i++) r.step();
+    check(r.pets.size === 12, `12 Alphas au repos, ${r.pets.size} montrés`);
+  });
+
+  rule('pickCapped : garde les élus encore voulus, comble au hasard, ne dépasse jamais le plafond.', () => {
+    const all = Array.from({ length: 50 }, (_, i) => `k${i}`);
+    const first = pickCapped(all, [], 30);
+    check(first.size === 30 && [...first].every((k) => all.includes(k)), 'plafond respecté');
+    check(pickCapped(all, first, 30).size === 30 && [...first].every((k) => pickCapped(all, first, 30).has(k)), 'même sélection si rien ne change');
+    const fewer = all.filter((k) => !first.has(k) || k !== [...first][0]);
+    const again = pickCapped(fewer, first, 30);
+    check(again.size === 30 && [...first].slice(1).every((k) => again.has(k)), 'un élu disparu : un seul remplaçant');
+    check(pickCapped(all.slice(0, 10), [], 30).size === 10, 'moins que le plafond : tous');
+    check(pickCapped(all, first, 5).size === 5, 'plafond abaissé : on retire au hasard');
+    check(pickCapped([], first, 30).size === 0, 'plus rien de voulu');
+  });
+
 });

@@ -119,7 +119,9 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Un Alpha par espèce, hors limite de meute. Tombé, il ressuscite après un délai (plus long pour les espèces fortes) ;
   pendant un combat de géant, ou si son dompteur est à terre, il attend la fin.
 - On le **renforce** avec des essences, de plus en plus cher à chaque niveau, et un peu plus dans les zones lointaines.
-- Seuls quelques Alphas sont **équipés** à la fois ; les autres se reposent à la Tanière.
+- Seuls quelques Alphas sont **équipés** à la fois ; les autres se reposent à la Tanière et se promènent sur l'îlot du village.
+  Pour que le jeu reste fluide, **30 Alphas au repos au plus** sont montrés en même temps : au-delà, ils sont tirés au hasard
+  parmi ceux de tous les membres (en ligne ou endormis), et la sélection ne change que quand un Alpha arrive ou part.
 - **Marquer un Alpha** (bouton ☆ de sa carte, éveillé ou non) : une barre d'essences s'affiche alors dans le HUD, vers son
   coût d'éveil, puis de renforcement. Un seul à la fois ; marquer le même à nouveau le démarque.
 - **Bonus de collection** : chaque Alpha éveillé renforce tous les autres.

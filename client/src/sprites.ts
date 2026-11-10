@@ -1,6 +1,7 @@
 // Sprites procéduraux (Canvas 2D) : aucune image à charger.
 
 import { DESERT_ZONE, DRUM_GAP, LOG_SPEED, PINCER_HALF, RING_SPEED, RING_W, SPECIES, SPLASH_FLAT, type Resource } from '../../shared/config.ts';
+import { withTint } from './tint.ts';
 import { HAZARD_STYLES, UNIT_FLAG_BURN, UNIT_FLAG_CURSE, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
 import { hash2 } from '../../shared/math.ts';
 import type { Wings } from './anim.ts';
@@ -75,30 +76,6 @@ const CROWN_Y: Record<string, number> = { drake: -0.15, wyvern: -0.55, dragon: -
 /** Filtre CSS de la robe de l'Alpha (et du légendaire, qui a la même), ou '' pour la forme de base. Une espèce sans entrée n'a pas de robe (voir tests/rules/sprites.test.ts). */
 export const variantFilter = (key: string, alpha: boolean) => (alpha ? (VARIANT_FILTERS[key] ?? '') : '');
 
-let tintLayer: HTMLCanvasElement | null = null;
-/**
- * Dessine le corps dans un calque à part, puis le recopie une seule fois avec le filtre (au lieu d'un filtre par tracé).
- * Le calque finit avec la même transformation que le contexte : les drawers qui laissent un translate actif (saut du
- * sporelin, du vautour) le transmettent comme avant à ce qui est dessiné ensuite (couronne, effets).
- */
-function drawTinted(ctx: Ctx, tint: string, draw: (g: Ctx) => void) {
-  const cv = ctx.canvas as HTMLCanvasElement;
-  const layer = (tintLayer ??= document.createElement('canvas'));
-  if (layer.width !== cv.width || layer.height !== cv.height) [layer.width, layer.height] = [cv.width, cv.height];
-  const g = layer.getContext('2d')!;
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  g.clearRect(0, 0, layer.width, layer.height);
-  g.setTransform(ctx.getTransform());
-  draw(g);
-  const after = g.getTransform();
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.filter = tint;
-  ctx.drawImage(layer, 0, 0);
-  ctx.restore();
-  ctx.setTransform(after);
-}
-
 export function drawUnit(ctx: Ctx, u: UnitLook) {
   const { x, r } = u;
   const key = u.key ?? SPECIES[u.species].sprite ?? SPECIES[u.species].key;
@@ -171,7 +148,9 @@ export function drawUnit(ctx: Ctx, u: UnitLook) {
   const tint = u.flash || u.key || SPECIES[u.species]?.boss ? '' : variantFilter(key, u.alpha || !!u.legend);
   const effects = u.legend && !u.flash; // légendaire : des effets propres à l'espèce, qui ne prennent pas la teinte du corps
   if (effects) LEGEND_BACK[key]?.(ctx, r, u);
-  if (tint) drawTinted(ctx, tint, (g) => (DRAWERS[key] ?? golem)(g, r, fill, u)); // Alpha et légendaire : robe d'une autre couleur que la forme de base
+  // Alpha et légendaire : robe d'une autre couleur que la forme de base, appliquée aux couleurs du corps pendant qu'il se dessine
+  // (voir tint.ts : pas de ctx.filter, qui coûtait bien plus cher que le dessin lui-même)
+  if (tint) withTint(ctx, tint, () => (DRAWERS[key] ?? golem)(ctx, r, fill, u));
   else (DRAWERS[key] ?? golem)(ctx, r, fill, u);
   if (effects) LEGEND_FRONT[key]?.(ctx, r, u);
   if (SPECIES[u.species]?.boss && !u.key) {
@@ -3008,12 +2987,16 @@ function vulture(ctx: Ctx, r: number, _fill: string, u: UnitLook) {
  * en doigts écartés, queue en éventail, collerette et tête rose ; haut au-dessus de son ombre.
  */
 export function drawSoaring(ctx: Ctx, x: number, y: number, r: number, t: number, seed: number, height = 4.2, beat = 0, heading?: number, tint = '') {
+  // tint : robe de l'Alpha (voir variantFilter), appliquée aux couleurs pendant le dessin (voir tint.ts)
+  if (tint) withTint(ctx, tint, () => soaring(ctx, x, y, r, t, seed, height, beat, heading));
+  else soaring(ctx, x, y, r, t, seed, height, beat, heading);
+}
+function soaring(ctx: Ctx, x: number, y: number, r: number, t: number, seed: number, height: number, beat: number, heading: number | undefined) {
   // il plane, et de temps en temps (ou au décollage et à l'atterrissage : beat) il bat franchement des ailes
   const cyc = (t * 0.23 + seed * 0.37) % 1, burst = Math.max(beat, cyc < 0.18 ? Math.sin((cyc / 0.18) * Math.PI) : 0);
   const flap = Math.sin(t * 2.2 + seed) * 0.12 + Math.sin(t * 11 + seed) * 0.5 * burst, h = r * height + Math.sin(t * 1.3 + seed) * r * 0.3;
   const span = r * 2.1 * (1 - 0.12 * burst * Math.abs(Math.sin(t * 11 + seed))), tilt = Math.sin(t * 0.9 + seed) * 0.08; // il penche dans les virages
   ctx.save();
-  if (tint) ctx.filter = tint; // robe de l'Alpha (voir variantFilter)
   ctx.translate(x, y - h);
   ctx.rotate(tilt + (heading === undefined ? 0 : heading + Math.PI / 2)); // la tête vers où il va
   // queue en éventail
