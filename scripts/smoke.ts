@@ -8,7 +8,7 @@ import WebSocket from 'ws';
 import type { ServerMsg, Snapshot } from '../shared/protocol.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 import { SnapshotState } from '../shared/snapshot.ts';
-import { SPECIES, SWORD_PULLS } from '../shared/config.ts';
+import { DEATH_RES_LOSS, SPECIES, SWORD_PULLS } from '../shared/config.ts';
 
 const PORT = 3999;
 const server = spawn('npx', ['tsx', 'server/index.ts'], { env: { ...process.env, PORT: String(PORT), ALLOW_GUESTS: '1', SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '' }, stdio: 'pipe' }); // jamais la vraie base
@@ -114,11 +114,18 @@ async function main() {
 
   // Le bot hôte chasse la proie la plus proche jusqu'à son premier kill (combat et or vérifiés de bout en bout).
   const t0 = Date.now();
-  let sawUnits = 0;
+  let sawUnits = 0, fell = false;
   while (Date.now() - t0 < 45_000) {
     sawUnits = Math.max(sawUnits, host.last?.units.filter((u) => u[6] === 0).length ?? 0);
     const me = host.me();
-    if (!me || me.dead || me.gold > 0) break;
+    if (!me || me.gold > 0) break;
+    if (me.dead) {
+      // tombé (sans or, il ne perd rien) : on attend qu'il réapparaisse et on repart de là où le serveur le pose
+      fell = true;
+      await sleep(200);
+      continue;
+    }
+    if (fell) [fell, x, y, route] = [false, me.x, me.y, []];
     let best: [number, number] | undefined, bd = Infinity;
     for (const u of host.last!.units) {
       // toute proie de la zone 1 (hors géants), en deçà de la porte du village (fermée : Hôtel de ville niv. 0)
@@ -177,10 +184,13 @@ async function main() {
   };
 
   // Forge : ressources de dev, dépôt à l'entrepôt, construction (or du dompteur, bois de la réserve) puis amélioration.
+  while (host.me()!.dead) await sleep(200); // tombé à la fin de la chasse : on attend qu'il réapparaisse
   [x, y] = [host.me()!.x, host.me()!.y];
+  const wood0 = host.me()!.wood;
   host.send({ t: 'cheat' }); // +300 or, +100 bois, +100 pierre
   await sleep(150);
-  check(host.me()!.wood >= 100, `ressources de dev reçues (or ${host.me()!.gold}, bois ${host.me()!.wood})`);
+  // encore blessé par la chasse, il peut tomber juste après (et perdre une part de son sac)
+  check(host.me()!.wood >= Math.floor((wood0 + 100) * (1 - DEATH_RES_LOSS)), `ressources de dev reçues (or ${host.me()!.gold}, bois ${host.me()!.wood})`);
   // le pont de l'îlot du village est cassé : on le répare avec le bois et la pierre du sac
   const br = map.bridge, bl = Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y), bx = (br.a.x - br.b.x) / bl, by = (br.a.y - br.b.y) / bl;
   await reach(br.a.x + bx * 70, br.a.y + by * 70, 60);
