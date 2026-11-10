@@ -397,6 +397,37 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .alpha-card .legend-btn { height: 36px; padding: 0 14px; border-radius: 10px; border: 2px solid var(--amber); background: rgba(240, 182, 74, 0.15); color: var(--amber); font: 700 13px var(--display); white-space: nowrap; }
 .alpha-card .legend-btn:disabled { border-color: var(--line); background: transparent; color: var(--muted); cursor: not-allowed; }
 .alphas .empty { color: var(--muted); padding: 16px; text-align: center; background: var(--night); border-radius: 12px; }
+/* Tanière : filtre (équipés, au repos, à éveiller, tous), tuiles des Alphas pas encore éveillés, ☆ et ✎ en icônes */
+.den-filter .n { margin-left: 6px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+.den-filter .seg-btn[aria-checked="true"] .n { color: inherit; }
+.den-filter .dot { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; background: var(--alpha); color: var(--amber-ink); font: 700 11px/1 var(--body); vertical-align: 1px; }
+.den-section { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 -2px; font: 700 16px var(--display); color: var(--alpha); }
+.den-section span { font: 500 13px var(--body); color: var(--muted); }
+.alpha-card .title-row { display: flex; align-items: center; gap: 6px; }
+.alpha-card .title-row .title { flex: 1; min-width: 0; }
+.alpha-card .ic { width: 30px; height: 30px; flex: none; display: grid; place-items: center; padding: 0; border-radius: 8px; border: 2px solid var(--line); background: transparent; color: var(--text-2); font-size: 15px; line-height: 1; }
+.alpha-card .ic:hover, .alpha-tile .ic:hover { border-color: var(--alpha); color: var(--alpha); }
+.alpha-card .ic.on, .alpha-tile .ic.on { border-color: var(--alpha); color: var(--alpha); background: rgba(180, 140, 255, 0.12); }
+.alpha-card.span-all { grid-column: 1 / -1; }
+.alpha-card .collapse { height: 34px; border-radius: 10px; border: 2px solid var(--line); background: transparent; color: var(--muted); font: 600 13px var(--body); }
+.alpha-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 10px; }
+.alpha-tile { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: 12px; border: 2px solid var(--line); background: var(--night); cursor: pointer; }
+.alpha-tile:hover { border-color: rgba(180, 140, 255, 0.5); }
+.alpha-tile .portrait { width: 52px; height: 52px; flex: none; border-radius: 12px; border: 2px solid rgba(180, 140, 255, 0.3); background: radial-gradient(circle at 50% 60%, rgba(180, 140, 255, 0.12), transparent 70%); opacity: 0.5; filter: grayscale(0.6); }
+.alpha-tile .col { flex: 1; min-width: 0; gap: 5px; }
+.alpha-tile .tile-head { display: flex; align-items: flex-start; gap: 6px; }
+.alpha-tile .tile-name { flex: 1; min-width: 0; padding: 0; border: none; background: none; text-align: left; font: 700 15px/1.15 var(--display); color: var(--text-2); }
+.alpha-tile .tile-sub { font-size: 12px; line-height: 1.3; color: var(--muted); }
+.alpha-tile .ess-bar { flex: none; height: 16px; }
+.alpha-tile .ic { width: 26px; height: 26px; flex: none; display: grid; place-items: center; padding: 0; border-radius: 8px; border: 2px solid var(--line); background: transparent; color: var(--text-2); font-size: 13px; line-height: 1; }
+.alpha-tile .buy { height: 34px; margin-top: 2px; border: none; border-radius: 10px; background: var(--alpha); color: var(--amber-ink); font: 700 14px var(--display); }
+.alpha-tile.ready { border-color: var(--alpha); background: linear-gradient(135deg, rgba(180, 140, 255, 0.16), transparent 70%), var(--night); }
+.alpha-tile.ready .tile-name { color: var(--text); }
+.alpha-tile.ready .portrait, .alpha-tile.waking .portrait { opacity: 1; filter: none; }
+.alpha-tile.waking { border-color: rgba(180, 140, 255, 0.6); }
+.alpha-tile.waking .portrait { animation: waking 1.6s ease-in-out infinite; }
+.alpha-tile.waking .ess-bar i { background: linear-gradient(90deg, var(--alpha), #E2D3FF); }
+@media (prefers-reduced-motion: reduce) { .alpha-tile.waking .portrait { animation: none; } }
 @media (max-width: 640px) {
   .forge-cols { grid-template-columns: 1fr; }
   /* Tanière sur téléphone : portrait et nom en haut, les infos sur toute la largeur, les boutons en rangée en bas */
@@ -406,6 +437,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .alpha-card .title { font-size: 16px; line-height: 1.25; }
   .alpha-card .actions { grid-area: actions; width: auto; flex-direction: row; flex-wrap: wrap; }
   .alpha-card .actions > button { flex: 1 1 0; min-width: 96px; height: 42px; }
+  .den-filter { gap: 6px; }
+  .den-filter .seg-btn { min-width: 0; padding: 0 4px; font-size: 13px; line-height: 1.1; }
+  .den-filter .n { display: block; margin: 1px 0 0; font-size: 12px; }
+  .den-filter .dot { min-width: 16px; height: 16px; margin-left: 3px; padding: 0 4px; font-size: 10px; }
   /* bestiaire : deux colonnes, des cartes plus compactes, les quatre formes tiennent sur une ligne */
   .bestiary-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .beast { padding: 8px; }

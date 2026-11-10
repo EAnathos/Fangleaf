@@ -124,9 +124,12 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Seuls quelques Alphas sont **équipés** à la fois ; les autres se reposent à la Tanière et se promènent sur l'îlot du village.
   Pour que le jeu reste fluide, **30 Alphas au repos au plus** sont montrés en même temps : au-delà, ils sont tirés au hasard
   parmi ceux de tous les membres (en ligne ou endormis), et la sélection ne change que quand une place se libère (un Alpha part) : ceux déjà montrés restent, un arrivant ne prend la place de personne.
-- **Marquer un Alpha** (bouton ☆ de sa carte, éveillé ou non) : une barre d'essences s'affiche alors dans le HUD, vers son
+- **Filtre de la Tanière** : l'onglet Alphas se règle sur **Équipés**, **Au repos**, **À éveiller** ou **Tous**, chacun avec son
+  compteur ; une pastille dit combien d'Alphas attendent une action (éveil, renforcement, double éveil). Les Alphas pas encore
+  éveillés sont de petites tuiles, les prêts en premier ; un clic sur une tuile montre ses stats.
+- **Marquer un Alpha** (bouton ☆ à côté du nom de sa carte, éveillé ou non) : une barre d'essences s'affiche alors dans le HUD, vers son
   coût d'éveil, puis de renforcement. Un seul à la fois ; marquer le même à nouveau le démarque.
-- **Nommer un Alpha** (bouton ✎ Renommer de sa carte, équipé ou au repos) : son nom s'affiche sous ses pattes, à la
+- **Nommer un Alpha** (bouton ✎ à côté du nom de sa carte, équipé ou au repos) : son nom s'affiche sous ses pattes, à la
   couleur de son dompteur, pour tout le village. Un nom vide le lui retire.
 - **Bonus de collection** : chaque Alpha éveillé renforce tous les autres.
 - **Alphas à pouvoir** : le Lièvre soigne son dompteur et la meute proche (dans la meute, il ne va pas au contact :
