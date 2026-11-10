@@ -6,6 +6,7 @@ on avance zone par zone jusqu'au bout de l'île, en affrontant les géants qui d
 
 - **Comment on joue** : [docs/GUIDE.md](docs/GUIDE.md)
 - **Comment c'est fait** (stack, arborescence, flux réseau) : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Comment contribuer** (branches, PR, revue) : [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Stack
 
