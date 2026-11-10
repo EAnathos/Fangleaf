@@ -11,6 +11,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.0',
+    date: '2026-11-10',
+    title: 'Prévenu quand on peut éveiller',
+    items: [
+      'Une notification apparaît dès que tes essences suffisent pour éveiller un Alpha ou pour le renforcer, sans avoir à ouvrir la Tanière pour vérifier.',
+    ],
+  },
+  {
     version: '0.7.0',
     date: '2026-11-10',
     title: 'Capacités de spécialisation',
