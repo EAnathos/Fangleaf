@@ -586,10 +586,11 @@ describe('Géants et grottes', () => {
     check(r.map.arenaAt(q.x, q.y)?.id === c.id, 'le combat fini, un autre dompteur peut entrer');
   });
 
-  rule('Le géant qui a corrigé un dompteur l\'accueille toujours, la première fois, par « Une raclée t\'a pas suffi ? ».', () => {
+  rule('Le géant se souvient du résultat du combat : peur si le dompteur l’a vaincu, arrogance s’il a gagné.', () => {
+    const fear = SPECIES.map((_, s) => moodLine({ mood: 'fear', n: 1 }, s));
+    check(fear.every((l) => !!l && !/raclée|tes bleus|tu en redemandes/i.test(l)), 'après avoir été vaincu, le géant craint le dompteur');
     const smug = SPECIES.map((_, s) => moodLine({ mood: 'smug', n: 1 }, s));
-    check(smug.every((l) => l === 'Une raclée t\'a pas suffi ?'), `réplique après sa première victoire : « ${smug[0]} »`);
-    check(moodLine({ mood: 'smug', n: 2 }, 0) !== smug[0], 'les fois suivantes, il varie');
+    check(smug.every((l) => !!l), 'après avoir battu le dompteur, le géant garde une réplique arrogante');
   });
 
   rule('Un géant qui ne touche personne s\'impatiente : il accélère peu à peu, puis reprend son allure dès qu\'il touche un dompteur.', () => {

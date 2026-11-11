@@ -224,7 +224,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Pendant un combat, la grotte est verrouillée** : une fois le géant réveillé, personne ne peut y entrer ni en
   sortir jusqu'à la fin du combat. Vaincu, il laisse un cercle d'invocation là où il reviendra, avec le temps restant.
 - Il se souvient de toi, le jour même : vaincu, il a peur quand tu reviens (il tremble, une goutte de sueur au front) ;
-  s'il t'a corrigé, il se moque de toi (« Une raclée t'a pas suffi ? »).
+  s'il t'a corrigé, il se montre arrogant à ton retour.
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
   (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact.
 - Il **s'impatiente** s'il ne touche aucun dompteur pendant un moment : « Il s'impatiente et presse le pas ! », il
