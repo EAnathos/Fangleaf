@@ -2,7 +2,7 @@
 
 import {
   bossMelee, sleeperBlocks,
-  alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost, alphaName, bossEssence,
+  alphaEquipMax, ALPHA_LVL_MAX, TRADE_R, TRADE_KEEP_R, BOSS_CHASE_MULT, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost, alphaName, bossEssence,
   ARC_FLIGHT_S, SPLASH_FLAT, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT, ROOM_PACKS, HEART_PACKS, DEPTHS_RESET_S,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, PET_CAP, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
@@ -13,9 +13,10 @@ import {
   abilityOf, FRENZY_S, FRENZY_ATK, FRENZY_LEECH, FRENZY_VULN, RAMPART_R, RAMPART_GUARD, RAMPART_S, MARK_R, MARK_S, RAIN_REACH, RAIN_R, RAIN_DMG, RAIN_ARROWS, METEOR_R, METEOR_DMG, METEOR_REACH, METEOR_FIRE_S, METEOR_FIRE_DPS, BLOOM_R, BLOOM_HEAL, BLOOM_REGEN, BLOOM_S,
 } from '../shared/config.ts';
 import { clamp, dist2, pickCapped } from '../shared/math.ts';
-import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, UnitTuple } from '../shared/protocol.ts';
+import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, SwapOffer, UnitTuple } from '../shared/protocol.ts';
 import { STAT_KEYS, STATUS_IDS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
+import { FOG_N, packFog, revealCells, unpackFog } from '../shared/fog.ts';
 import { HALL_ID, type Ore, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky, SNOWFALL, WINTER } from '../shared/weather.ts';
 import { Grid } from './grid.ts';
@@ -360,7 +361,11 @@ export interface VillageState {
   wood: number; // réserve commune (entrepôt)
   stone: number;
   banned: { id: string; name: string }[]; // comptes expulsés par le fondateur
+  explored: string; // carte explorée par le village (shared/fog.ts, packFog)
 }
+
+/** Échange en cours entre deux dompteurs : la part de chacun, et qui l'a validée. */
+interface Swap { a: number; b: number; offer: Map<number, SwapOffer>; ok: Set<number> }
 
 export const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * heroOf(p.cls, p.spec).hp * (1 + lessonBonus(p.learned, 'vigor'))); // Endurance (tome d'un îlot)
 
@@ -442,15 +447,24 @@ export class Room {
   readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
   readonly stock = { wood: 0, stone: 0 }; // réserve commune de l'entrepôt
   banned: { id: string; name: string }[] = []; // comptes expulsés par le fondateur (leur progression est gardée)
-  onVillage?: (v: VillageState) => void; // sauvegarde, appelée quand le village change (camp, bâtiment, grotte)
+  onVillage?: (v: VillageState) => void | Promise<void>; // sauvegarde, appelée quand le village change (camp, bâtiment, grotte, carte explorée)
   onFounder?: (userId: string) => void; // sauvegarde du nouveau chef (transmission du village)
   founder: string | null = null; // compte qui a fondé le village (seul à pouvoir le supprimer)
   deleted = false; // supprimé : plus aucune sauvegarde
 
   /** seed : graine d'un village enregistré (même carte qu'avant) ; absente pour un nouveau village. */
+  /** Carte explorée par le village (une case par FOG_CELL px) : partagée par tous ses membres, sauvegardée avec lui. */
+  readonly explored = new Uint8Array(FOG_N * FOG_N);
+  private exploredDirty = false;
+  private swaps = new Map<number, Swap>(); // dompteur → l'échange où il est engagé (les deux dompteurs y mènent)
+
   constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}) {
     this.seed = seed ?? Math.floor(Math.random() * 2 ** 31);
     this.map = Room.makeMap(this.seed);
+    if (saved.explored) {
+      const cells = new Uint8Array(FOG_N * FOG_N);
+      if (unpackFog(saved.explored, cells)) this.explored.set(cells); // illisible : on repart d'une carte vierge
+    }
     const indexes = (list: unknown[] | undefined, n: number) =>
       (list ?? []).map(Number).filter((c, i, all) => Number.isInteger(c) && c >= 0 && c < n && all.indexOf(c) === i);
     this.camps = indexes(saved.camps, this.map.sites.length);
@@ -591,6 +605,7 @@ export class Room {
     this.refreshAlphas(p);
     send({ t: 'welcome', id: p.id, code: this.code, seed: this.seed, saved: !!p.userId, villageFound: found, founder: this.isFounder(p), armed: p.sword >= SWORD_PULLS });
     send({ t: 'teleport', x: p.x, y: p.y });
+    send({ t: 'fog', cells: packFog(this.explored) }); // ce que le village a déjà découvert, même en son absence
     this.events.push({ e: 'info', text: `${name} a rejoint le village` });
     return p;
   }
@@ -859,6 +874,8 @@ export class Room {
     const p = this.players.get(id);
     if (!p) return;
     const prof = this.profileOf(p);
+    const swap = this.swaps.get(id);
+    if (swap) this.endSwap(swap, false, `${p.name} est parti : échange annulé.`);
     // ses Alphas tombés dans un combat de géant encore en cours : se reconnecter ne les relève pas
     const fallen = p.army.map((uid) => this.units.get(uid)).filter((u) => u?.alpha && u.fallenIn !== undefined && this.fightOn(u.fallenIn)).map((u) => [u!.s, u!.fallenIn!] as [number, number]);
     if (p.userId && fallen.length) this.fallen.set(p.userId, fallen);
@@ -983,8 +1000,14 @@ export class Room {
     return this.map.buildingPos(b);
   }
 
+  /** La carte explorée a changé depuis la dernière sauvegarde du village : on la sauvegarde (avec le reste du village). */
+  flushExplored() {
+    return this.exploredDirty ? this.saveVillage() : undefined;
+  }
+
   private saveVillage() {
-    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, plan: this.plan, schoolAt: this.schoolAt, beaten: [...this.beaten], heart: this.heart, ...this.stock, banned: [...this.banned] });
+    this.exploredDirty = false;
+    return this.onVillage?.({ explored: packFog(this.explored), camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, plan: this.plan, schoolAt: this.schoolAt, beaten: [...this.beaten], heart: this.heart, ...this.stock, banned: [...this.banned] });
   }
 
   /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
@@ -1728,6 +1751,8 @@ export class Room {
     this.updateDepths();
     this.updateTraps();
     this.updateSeen();
+    this.updateExplored();
+    this.updateSwaps();
 
     // La monture suit exactement son cavalier (elle n'est pas une cible séparée).
     for (const p of this.players.values()) {
@@ -2207,6 +2232,87 @@ export class Room {
       if (!open || !inside) return;
       for (const k of [a, b]) if (!this.garrisoned.has(k) && !this.cleared.has(k)) this.garrison(k);
     });
+  }
+
+  /** Carte du village : les cases dévoilées autour de chaque dompteur debout, pour tous ses membres (2 fois par seconde). */
+  private updateExplored() {
+    if (this.tick % 10 !== 0) return;
+    for (const p of this.players.values()) if (!p.dead && revealCells(this.explored, p.x, p.y)) this.exploredDirty = true;
+  }
+
+  /**
+   * Échanges entre dompteurs proches (or, bois, pierre) : l'un le propose à l'autre, chacun garnit sa part, les deux voient
+   * les deux parts ; il se fait quand les deux ont validé. Toute part qui change annule les validations.
+   */
+  onSwap(p: Player, act: string, data: { with?: unknown; gold?: unknown; wood?: unknown; stone?: unknown } = {}) {
+    const s = this.swaps.get(p.id);
+    if (act === 'open') {
+      const q = this.players.get(Number(data.with));
+      if (s || !q || q === p || p.dead || q.dead || this.swaps.has(q.id) || dist2(p.x, p.y, q.x, q.y) > TRADE_R ** 2) return;
+      const none = (): SwapOffer => ({ gold: 0, wood: 0, stone: 0 });
+      const sw: Swap = { a: p.id, b: q.id, offer: new Map([[p.id, none()], [q.id, none()]]), ok: new Set() };
+      this.swaps.set(p.id, sw);
+      this.swaps.set(q.id, sw);
+      return this.sendSwap(sw);
+    }
+    if (!s) return;
+    if (act === 'cancel') return this.endSwap(s, false, `${p.name} a annulé l'échange.`);
+    if (act === 'offer') {
+      // jamais plus que ce qu'on a dans son sac
+      const n = (v: unknown, max: number) => clamp(Math.floor(Number(v) || 0), 0, Math.max(0, Math.floor(max)));
+      s.offer.set(p.id, { gold: n(data.gold, p.gold), wood: n(data.wood, p.wood), stone: n(data.stone, p.stone) });
+      s.ok.clear(); // une part a changé : chacun revalide ce qu'il voit
+      return this.sendSwap(s);
+    }
+    if (act === 'ok') {
+      s.ok.add(p.id);
+      return s.ok.size === 2 ? this.doSwap(s) : this.sendSwap(s);
+    }
+  }
+
+  private doSwap(s: Swap) {
+    const a = this.players.get(s.a), b = this.players.get(s.b);
+    if (!a || !b) return this.endSwap(s, false, 'Ton partenaire d\'échange est parti.');
+    const pairs = [[a, b], [b, a]] as const;
+    if (pairs.some(([from]) => { const o = s.offer.get(from.id)!; return from.gold < o.gold || from.wood < o.wood || from.stone < o.stone; })) {
+      // l'un a dépensé entre-temps : sa part revient à ce qu'il a, et chacun revalide
+      for (const [from] of pairs) {
+        const o = s.offer.get(from.id)!;
+        s.offer.set(from.id, { gold: Math.min(o.gold, Math.floor(from.gold)), wood: Math.min(o.wood, Math.floor(from.wood)), stone: Math.min(o.stone, Math.floor(from.stone)) });
+      }
+      s.ok.clear();
+      return this.sendSwap(s);
+    }
+    for (const [from, to] of pairs) {
+      const o = s.offer.get(from.id)!;
+      [from.gold, from.wood, from.stone] = [from.gold - o.gold, from.wood - o.wood, from.stone - o.stone];
+      [to.gold, to.wood, to.stone] = [to.gold + o.gold, to.wood + o.wood, to.stone + o.stone];
+      from.dirty = true;
+    }
+    this.endSwap(s, true);
+  }
+
+  private sendSwap(s: Swap) {
+    for (const [me, other] of [[s.a, s.b], [s.b, s.a]]) {
+      this.players.get(me)?.send({ t: 'swap', with: other, mine: s.offer.get(me)!, theirs: s.offer.get(other)!, okMine: s.ok.has(me), okTheirs: s.ok.has(other) });
+    }
+  }
+
+  private endSwap(s: Swap, done: boolean, why?: string) {
+    this.swaps.delete(s.a);
+    this.swaps.delete(s.b);
+    for (const id of [s.a, s.b]) this.players.get(id)?.send({ t: 'swapEnd', done, ...(why ? { why } : {}) });
+  }
+
+  /** Un échange tombe si l'un des deux s'éloigne ou tombe à terre. */
+  private updateSwaps() {
+    if (this.tick % 10 !== 0 || !this.swaps.size) return;
+    for (const s of new Set(this.swaps.values())) {
+      const a = this.players.get(s.a), b = this.players.get(s.b);
+      if (!a || !b) this.endSwap(s, false, 'Ton partenaire d\'échange est parti.');
+      else if (a.dead || b.dead) this.endSwap(s, false, 'Échange annulé : l\'un de vous est à terre.');
+      else if (dist2(a.x, a.y, b.x, b.y) > TRADE_KEEP_R ** 2) this.endSwap(s, false, 'Échange annulé : vous vous êtes éloignés.');
+    }
   }
 
   /** Combat en cours dans l'antre d'un géant du volcan (cave : son index, -1 pour une herse ordinaire) : la herse reste baissée. */

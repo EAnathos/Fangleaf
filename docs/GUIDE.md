@@ -32,6 +32,7 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 | Relever un coéquipier | R maintenu | Bouton maintenu |
 | Grande carte | M, ou clic sur la minicarte | Toucher la minicarte |
 | Chat | C | Bouton 💬 |
+| Proposer un échange à un dompteur proche | U | Bouton ⇄ (près d'un autre dompteur) |
 | Menu, fermer un panneau | Échap | Bouton ☰ |
 
 ## Premiers pas
@@ -129,8 +130,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Il n'y a **pas d'Alpha sauvage**. Chaque monstre vaincu peut laisser une **essence** de son espèce ; avec assez
   d'essences, on **éveille** l'Alpha de cette espèce à la Tanière. L'éveil prend un moment, même hors ligne.
 - Un Alpha par espèce, hors limite de meute. Tombé, il ressuscite après un délai (plus long pour les espèces fortes) ;
-  pendant un combat de géant, ou si son dompteur est à terre, il attend la fin. Tombé pendant un combat de géant, il
-  attend la fin de **ce** combat, même si son dompteur se déconnecte. Sur ordinateur, le HUD dit dans combien
+  pendant un combat de géant, ou si son dompteur est à terre, il attend la fin. Sur ordinateur, le HUD dit dans combien
   de temps il revient : une ligne sous le sac, ou une vignette à son portrait près des effets en cours (au choix dans
   Paramètres › Affichage).
 - On le **renforce** avec des essences, de plus en plus cher à chaque niveau, et un peu plus dans les zones lointaines.
@@ -221,10 +221,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Chaque espèce hostile a son **géant**, qui dort au fond d'une grotte. On **débloque** la grotte pour tout le village
   (de plus en plus cher selon la zone), puis on y entre avec sa meute (E à l'entrée, E à la sortie pour ressortir).
 - **E** près du géant pour lui parler, puis on lance le combat. Ses PV dépendent du nombre de membres du village.
-- **Pendant un combat, la grotte est verrouillée** : une fois le géant réveillé, personne ne peut y entrer ni en
-  sortir jusqu'à la fin du combat. Vaincu, il laisse un cercle d'invocation là où il reviendra, avec le temps restant.
 - Il se souvient de toi, le jour même : vaincu, il a peur quand tu reviens (il tremble, une goutte de sueur au front) ;
-  s'il t'a corrigé, il se montre arrogant à ton retour.
+  s'il t'a corrigé, il se moque de toi.
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
   (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact.
 - Il **s'impatiente** s'il ne touche aucun dompteur pendant un moment : « Il s'impatiente et presse le pas ! », il
@@ -374,6 +372,12 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - La progression est rattachée au **compte dans un village** : un autre village, c'est repartir de zéro. Un compte
   a au plus 3 villages, listés dans le lobby.
 - L'or et les essences des monstres vaincus se partagent entre dompteurs proches.
+- **Carte partagée** : la carte (minicarte et **M**) se découvre pour tout le village. Ce qu'un membre explore,
+  même pendant qu'on est déconnecté, apparaît sur la carte des autres à leur retour.
+- **Échanger** : tout près d'un autre dompteur, **U** (ou le bouton ⇄) lui propose un échange. Une fenêtre s'ouvre
+  chez les deux : chacun choisit ce qu'il donne (or, bois, pierre de son sac, jamais plus qu'il n'a) et voit ce que
+  l'autre propose. L'échange se fait quand **les deux ont validé** ; si une part change, il faut revalider. Il est
+  annulé si l'un ferme la fenêtre, s'éloigne ou tombe.
 - Quand un coéquipier **réveille un géant**, tout le village en est prévenu, et une petite **flèche** autour de soi
   indique le chemin du combat (la sortie de la grotte où l'on est, puis l'entrée de la sienne) tant que le géant est debout.
 - Un membre **déconnecté** dort près du feu du village, sa meute autour de lui.
