@@ -88,7 +88,7 @@ async function cheatsAccepted(port: number, env: Record<string, string>) {
       bot.send({ t: 'create', name: 'Testeur' });
       for (let i = 0; i < 100 && !bot.me(); i++) await sleep(50); // génération de la carte, puis premier snapshot
       const gold = bot.me()?.gold;
-      if (bot.failed || gold === undefined) return console.error(`port ${port} : pas de village (${bot.failed?.message ?? 'aucun snapshot'})`), null;
+      if (bot.failed || gold === undefined) return console.error(`port ${port} : pas de village (${(bot.failed as Error | undefined)?.message ?? 'aucun snapshot'})`), null;
       bot.send({ t: 'cheat' });
       await sleep(300);
       const after = bot.me()?.gold ?? gold;
