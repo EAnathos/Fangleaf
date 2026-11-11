@@ -33,83 +33,102 @@ feat/…, fix/…  ──PR──▶  dev  ──CI──▶  staging     (autom
 | | Local | Staging | Production |
 |---|---|---|---|
 | Branche | n'importe laquelle | `dev` | `main` |
-| Adresse | http://localhost:5173 | https://staging.fangleaf.anathos.me | https://fangleaf.anathos.me |
-| Clone sur la machine | | `~/eanathos/Fangleaf-staging` | `~/eanathos/Fangleaf` |
-| Process pm2, port | `npm run dev` (3001 et 5173) | `fangleaf-staging`, 4311 | `fangleaf`, 4310 |
-| `VITE_FANGLEAF_ENV` (`.env`) | vide | `staging` | vide |
+| Adresse | http://localhost:5173 | https://fangleaf-staging.leo-bessin.dev | https://fangleaf.anathos.me |
+| Hébergement | ta machine | VPS Coolify (conteneur Docker) | VPS d'EAnathos (pm2 derrière nginx) |
+| Lancement | `npm run dev` (3001 et 5173) | image [deploy/Dockerfile](../deploy/Dockerfile), port 4311 | `fangleaf`, port 4310 |
+| `VITE_FANGLEAF_ENV` | vide | `staging` (variable Coolify) | vide |
 | Projet Supabase | le sien | **un projet dédié** | le projet de prod |
 | Triches (F9…) | oui | non (`NODE_ENV=production`) | non |
 | Déploiement | | après la CI sur `dev`, ou à la main | après la CI sur `main`, ou à la main |
 
-Le staging tourne exactement comme la prod (même `NODE_ENV`, même build), seuls ses données et son adresse changent.
-Un badge **STAGING** rouge est affiché en permanence en haut de l'écran, et l'onglet s'appelle « Fangleaf · staging ».
+Le staging tourne exactement comme la prod (même `NODE_ENV`, même code serveur), seuls son hébergement, ses données et
+son adresse changent. Un badge **STAGING** rouge est affiché en permanence en haut de l'écran, et l'onglet s'appelle
+« Fangleaf · staging ».
 
 ### Où l'héberger
 
-Par défaut, le staging tourne **sur le même VPS que la prod**, dans un clone, un process pm2, un port et un vhost nginx
-à part : aucun coût en plus, et les mêmes versions de Node, pm2 et nginx que la prod. Sa limite mémoire est celle de
-la prod (512 Mo, `ecosystem.config.cjs`) : il ne peut pas l'affamer.
+Le staging tourne sur un **VPS séparé, géré par [Coolify](https://coolify.io)**, et non sur le VPS de la prod : les
+deux environnements ne partagent ni machine, ni base, ni process. Une erreur de manipulation sur le staging ne peut
+pas toucher la prod, et une charge anormale non plus.
 
-La proposition de `0h37` d'héberger le staging sur sa machine reste possible sans rien changer au code : il suffit de
-renseigner les secrets de l'environnement GitHub `staging` (voir l'installation, étape 6). Points à vérifier avant :
-disponibilité de la machine, accès SSH par une clé dédiée au déploiement, Node 22 ou plus, pm2 et nginx installés,
-DNS de l'adresse du staging pointé vers elle.
+Coolify construit lui-même l'image à partir de [deploy/Dockerfile](../deploy/Dockerfile), lance le conteneur, et son
+proxy (Traefik) s'occupe du HTTPS et du certificat : le staging n'a donc ni pm2, ni fichier nginx, ni script de
+déploiement. Les fichiers `ecosystem.config.cjs`, [deploy/deploy.sh](../deploy/deploy.sh) et
+`deploy/nginx/fangleaf.anathos.me.conf` ne servent qu'à la production.
+
+Ce que fait l'image : installation des dépendances, build du client (les valeurs `VITE_*` y sont figées), puis au
+démarrage du conteneur les migrations, et enfin le serveur. Une migration qui échoue empêche le conteneur de démarrer,
+donc le déploiement échoue au lieu de laisser un staging à moitié migré.
 
 ## Installation du staging (une fois)
 
 1. **Supabase** : créer un second projet (par exemple `fangleaf-staging`). Dans *Authentication › Sign In / Providers ›
    Google*, activer Google avec le même ID client OAuth que la prod. Dans *Authentication › URL Configuration* :
-   *Site URL* = `https://staging.fangleaf.anathos.me`, *Redirect URLs* = `https://staging.fangleaf.anathos.me/**`.
+   *Site URL* = `https://fangleaf-staging.leo-bessin.dev`, *Redirect URLs* = `https://fangleaf-staging.leo-bessin.dev/**`.
 2. **Google Cloud Console** : dans l'ID client OAuth existant, ajouter l'URI de redirection
    `https://<projet-staging>.supabase.co/auth/v1/callback`.
-3. **DNS** : un enregistrement A (et AAAA) `staging.fangleaf.anathos.me` vers la machine du staging.
-4. **Clone et `.env`** sur la machine :
-   ```bash
-   git clone https://github.com/EAnathos/Fangleaf.git ~/eanathos/Fangleaf-staging
-   cd ~/eanathos/Fangleaf-staging && git checkout --detach origin/dev
-   cp .env.example .env   # valeurs du projet Supabase de staging, et VITE_FANGLEAF_ENV=staging
-   bash deploy/deploy.sh  # dépendances, migrations sur la base de staging, build, démarrage de fangleaf-staging
-   ```
-5. **nginx** : [deploy/nginx/staging.fangleaf.anathos.me.conf](../deploy/nginx/staging.fangleaf.anathos.me.conf),
-   étapes en tête du fichier (certificat Let's Encrypt d'abord).
-6. **GitHub** (*Settings*) :
-   - *Environments* : créer l'environnement `staging`. Si le staging est sur une autre machine que la prod, y définir
-     les secrets `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` et `VPS_PORT` de cette machine (ils priment sur ceux du dépôt).
+3. **DNS** : un enregistrement pour l'adresse du staging vers le VPS Coolify (inutile si le domaine a déjà un
+   enregistrement générique).
+4. **Application Coolify** (*+ New › Application › Public Repository*) :
+   - dépôt `https://github.com/EAnathos/Fangleaf`, branche `dev`, *Build Pack* **Dockerfile** ;
+   - *Base Directory* `/`, *Dockerfile Location* `/deploy/Dockerfile`, *Port Exposes* `4311` ;
+   - *Domains* : l'adresse du staging ; cocher le **noindex** du domaine (en-tête `X-Robots-Tag` : le staging n'a
+     rien à faire dans les moteurs de recherche) ;
+   - *Advanced › Build › Build arguments* : **Managed manually in Dockerfile** (le Dockerfile déclare ses `ARG`) ;
+   - *Health check* activé sur `/`, port 4311 ;
+   - **Auto deploy désactivé** : c'est GitHub Actions qui déclenche le déploiement, seulement après une CI verte.
+5. **Variables d'environnement de l'application** (toutes celles de [.env.example](../.env.example), avec les valeurs
+   du projet Supabase **de staging**) :
+   - disponibles au build **et** à l'exécution : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_FANGLEAF_ENV=staging` ;
+   - exécution seulement : `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`.
+
+   Les `VITE_*` sont figées dans le build : les changer demande un redéploiement, pas un simple redémarrage.
+6. **Jeton d'API Coolify** (*Keys & Tokens › API tokens*) avec les capacités `write` et `deploy`.
+7. **GitHub** (*Settings*) :
+   - *Environments* : créer l'environnement `staging` et y mettre les secrets `COOLIFY_URL` (adresse de l'instance,
+     sans barre finale), `COOLIFY_TOKEN` (le jeton ci-dessus) et `COOLIFY_APP_UUID` (identifiant de l'application,
+     visible dans l'URL de sa page Coolify).
    - *Secrets and variables › Actions › Variables* : `STAGING_ENABLED` = `true` (tant qu'elle manque, le workflow
-     ne fait rien). Facultatif : `STAGING_URL` et `STAGING_DIR` si l'adresse ou le dossier diffèrent des valeurs par défaut.
+     ne fait rien). Facultatif : `STAGING_URL` si l'adresse diffère de la valeur par défaut.
    - *Rules › Rulesets* : protéger `dev` et `main` (PR obligatoire, CI « Typecheck, règles, fumée, build » requise).
      Sur `dev`, ajouter *GitHub Actions* aux contournements autorisés : sans cela, release-version.yml ne peut plus
      pousser le commit de version.
+8. **Premier déploiement** : depuis Coolify (*Deploy*), ou en lançant le workflow *CD staging* à la main avec
+   `ref` = `dev`.
 
 ## Données et secrets : l'isolation
 
+- **Machines séparées** : le staging est sur le VPS Coolify, la prod sur le sien. Aucun fichier, aucun process et
+  aucun port en commun.
 - **Base et comptes séparés** : le staging a son propre projet Supabase, donc sa propre base, sa propre clé
   `service_role` et ses propres comptes. Une fausse manipulation sur le staging ne touche jamais la prod.
 - **Pas de copie des données de prod** vers le staging : elles contiennent des comptes Google, donc des données
   personnelles. Sur le staging, chacun se connecte avec son compte et repart de zéro ; F9 n'existe pas (mode prod),
   on avance en jouant ou on prépare l'état voulu directement dans la base de staging.
 - **Garde-fous automatiques** :
-  - `deploy/deploy.sh` refuse de déployer le staging si son `.env` n'a pas de `SUPABASE_URL`, ou si `SUPABASE_URL`,
-    `VITE_SUPABASE_URL` ou `DATABASE_URL` sont identiques à celles du clone de prod (`../Fangleaf`, ou `PROD_DIR`) ;
-  - le workflow refuse de déployer dans un dossier dont le `.env` ne déclare pas `VITE_FANGLEAF_ENV=staging` :
-    une erreur sur `STAGING_DIR` ne peut pas envoyer `dev` en production ;
-  - `ecosystem.config.cjs` lit l'environnement dans le `.env` du clone : un `pm2 reload` lancé à la main dans le clone
-    de staging relance `fangleaf-staging` sur le port 4311, jamais l'app de prod.
-- **Secrets** : `.env` n'est jamais commité ; les secrets du staging vont dans l'environnement GitHub `staging`.
+  - le workflow vérifie que l'application Coolify visée déploie bien ce dépôt : une erreur sur `COOLIFY_APP_UUID`
+    fait échouer le déploiement au lieu d'écraser une autre application ;
+  - [.dockerignore](../.dockerignore) exclut `.env` de l'image : les secrets du staging viennent uniquement des
+    variables Coolify, et aucun fichier oublié ne peut les remplacer ;
+  - le staging n'a pas accès aux secrets de la prod : ils sont dans l'environnement GitHub `production` et sur le
+    VPS de prod, jamais dans l'environnement `staging`.
+- **Secrets** : `.env` n'est jamais commité ; les secrets du staging vivent dans Coolify, et ceux dont GitHub a
+  besoin pour déclencher le déploiement dans l'environnement GitHub `staging`.
 
 ### Migrations
 
-- Elles passent **d'abord sur le staging** (`deploy.sh` lance `npm run db:migrate`) : une migration cassée échoue là,
-  pas en prod.
+- Elles passent **d'abord sur le staging**, au démarrage du conteneur (`npm run db:migrate`) : une migration cassée
+  empêche le conteneur de démarrer et fait échouer le déploiement, donc elle n'arrive pas en prod.
+- Elles ne s'appliquent qu'une fois (table `_migrations`) : un redémarrage du conteneur ne rejoue rien.
 - Elles ne vont que vers l'avant : une migration fusionnée ne se modifie plus, on en écrit une nouvelle.
 - Un retour arrière du code n'annule pas une migration. Une migration doit donc rester compatible avec la version
   précédente du code : ajouter une colonne avec une valeur par défaut d'abord, retirer l'ancienne dans une version suivante.
-- Le staging est jetable : si sa base devient incohérente, on peut la vider ou recréer le projet, puis relancer le
-  déploiement pour réappliquer toutes les migrations.
+- Le staging est jetable : si sa base devient incohérente, on peut la vider ou recréer le projet Supabase, puis
+  relancer le déploiement pour réappliquer toutes les migrations.
 
 ## Valider sur le staging avant la promotion
 
-À faire sur https://staging.fangleaf.anathos.me, sur le commit de `dev` qu'on s'apprête à promouvoir :
+À faire sur https://fangleaf-staging.leo-bessin.dev, sur le commit de `dev` qu'on s'apprête à promouvoir :
 
 1. Le dernier run *CD staging* est vert et la version du lobby est celle attendue. Le badge STAGING est affiché.
 2. Pour chaque issue incluse : vérifier ses critères d'acceptation, et noter le résultat en commentaire de l'issue.
@@ -118,7 +137,7 @@ DNS de l'adresse du staging pointé vers elle.
    - combat, apprivoisement, achat à la forge ;
    - quitter puis revenir dans le village : or, ressources, équipement et Alphas sont conservés ;
    - sur téléphone si l'interface a changé.
-4. Pas d'erreur dans les logs : `pm2 logs fangleaf-staging --lines 200 --nostream`.
+4. Pas d'erreur dans les logs : page de l'application dans Coolify, onglet *Logs*.
 
 Un problème trouvé en staging se corrige par une nouvelle PR vers `dev`, liée à la même issue. On ne promeut pas
 tant que la liste n'est pas entièrement verte.
@@ -127,8 +146,11 @@ tant que la liste n'est pas entièrement verte.
 
 **Staging** : *Actions › CD staging › Run workflow*, avec dans `ref` le SHA du dernier commit de `dev` qui
 fonctionnait. Le déploiement manuel accepte n'importe quel commit ; le déploiement automatique, lui, ne fait jamais
-reculer le staging. Corriger ensuite par une PR vers `dev` (un `git revert` de la PR fautive si besoin) : la CI
-suivante redéploie `dev` normalement.
+reculer le staging (si deux CI finissent dans le désordre, l'ancienne est ignorée). Corriger ensuite par une PR vers
+`dev` (un `git revert` de la PR fautive si besoin) : la CI suivante redéploie `dev` normalement.
+
+Coolify sait aussi redémarrer l'image précédente (*Deployments › Rollback*) : c'est plus rapide, mais le commit visé
+par l'application ne change pas, donc le prochain déploiement automatique repartira de `dev`.
 
 **Production** :
 
@@ -140,7 +162,7 @@ suivante redéploie `dev` normalement.
    git push -u origin HEAD && gh pr create --base main
    ```
    Une fois fusionnée, la CI puis la CD redéploient `main`. Fusionner ensuite `main` dans `dev`.
-2. **Urgence** (site cassé, pas le temps d'attendre la CI) : sur le VPS,
+2. **Urgence** (site cassé, pas le temps d'attendre la CI) : sur le VPS de prod,
    `cd ~/eanathos/Fangleaf && git checkout --detach <SHA sain> && bash deploy/deploy.sh`, puis faire quand même la
    voie normale : le prochain déploiement automatique repart de `main`.
 

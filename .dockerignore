@@ -1,0 +1,13 @@
+# Ce qui n'entre jamais dans l'image du staging (deploy/Dockerfile).
+# .env est le plus important : le serveur lit le .env du dossier courant au démarrage, un fichier oublié ici
+# écraserait les variables de Coolify. Les secrets du staging viennent uniquement de Coolify.
+.env
+.env.*
+node_modules
+dist
+.git
+.github
+.bench
+docs
+tests
+bench

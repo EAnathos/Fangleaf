@@ -68,10 +68,11 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
   et lance [deploy/deploy.sh](deploy/deploy.sh) (`npm ci`, migrations, build, `pm2 startOrReload`, vérification du port).
   Aussi lançable à la main depuis l'onglet *Actions*.
 - Secrets du dépôt à créer : `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (clé privée dédiée au déploiement), `VPS_PORT` (facultatif).
-- [cd-staging.yml](.github/workflows/cd-staging.yml) : même chose pour le **staging**, quand la CI passe sur `dev`
-  (clone `~/eanathos/Fangleaf-staging`, process `fangleaf-staging`, port 4311, projet Supabase à part).
-  Branches, installation du staging, validation avant la mise en production et retour arrière :
-  [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md).
+- [cd-staging.yml](.github/workflows/cd-staging.yml) : le **staging**, quand la CI passe sur `dev`. Il tourne sur un
+  VPS Coolify à part (image [deploy/Dockerfile](deploy/Dockerfile), projet Supabase dédié) : le workflow demande à
+  Coolify de déployer le commit validé. Secrets de l'environnement GitHub `staging` : `COOLIFY_URL`, `COOLIFY_TOKEN`,
+  `COOLIFY_APP_UUID` ; variable `STAGING_ENABLED` = `true` pour l'activer. Branches, installation du staging,
+  validation avant la mise en production et retour arrière : [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md).
 
 ## Commandes
 

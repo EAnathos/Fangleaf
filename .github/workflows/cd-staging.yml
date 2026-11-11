@@ -1,13 +1,14 @@
-# Déploiement du staging : quand la CI passe sur dev, ou à la main pour un commit précis (retour arrière).
-# Procédure complète (installation, validation, retour arrière) : docs/ENVIRONNEMENTS.md
+# Déploiement du staging sur Coolify : quand la CI passe sur dev, ou à la main pour un commit précis
+# (c'est le retour arrière). Procédure complète : docs/ENVIRONNEMENTS.md
 #
-# Inactif tant que la variable du dépôt STAGING_ENABLED ne vaut pas « true » (Settings › Secrets and variables › Actions › Variables).
+# Inactif tant que la variable du dépôt STAGING_ENABLED ne vaut pas « true »
+# (Settings › Secrets and variables › Actions › Variables).
 #
-# Environnement GitHub « staging » (Settings › Environments) : ses secrets priment sur ceux du dépôt.
-#   VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_PORT   seulement si le staging est sur une autre machine que la prod
-# Variables du dépôt ou de l'environnement « staging » :
-#   STAGING_DIR   dossier du clone de staging sur la machine (~/eanathos/Fangleaf-staging par défaut)
-#   STAGING_URL   adresse publique du staging (https://staging.fangleaf.anathos.me par défaut)
+# Secrets de l'environnement GitHub « staging » (Settings › Environments) :
+#   COOLIFY_URL       adresse de l'instance Coolify, sans barre finale (https://coolify.exemple.dev)
+#   COOLIFY_TOKEN     jeton d'API d'équipe, capacités « write » et « deploy »
+#   COOLIFY_APP_UUID  identifiant de l'application Fangleaf staging dans Coolify
+# Variable facultative : STAGING_URL (adresse publique du staging).
 name: CD staging
 
 on:
@@ -40,11 +41,18 @@ jobs:
         )
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     environment:
       name: staging
-      url: ${{ vars.STAGING_URL || 'https://staging.fangleaf.anathos.me' }}
+      url: ${{ vars.STAGING_URL || 'https://fangleaf-staging.leo-bessin.dev' }}
+    env:
+      COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      APP: ${{ secrets.COOLIFY_APP_UUID }}
     steps:
+      # Le commit à déployer, et la garantie que l'application visée est bien celle de ce dépôt : une erreur
+      # d'identifiant Coolify ne peut pas envoyer dev sur une autre application.
+      # En automatique, le staging ne recule jamais : si deux CI finissent dans le désordre, l'ancienne est ignorée.
       - name: Commit à déployer
         id: target
         env:
@@ -52,52 +60,66 @@ jobs:
           REF: ${{ inputs.ref }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
+          app=$(curl -fsS -H "Authorization: Bearer $COOLIFY_TOKEN" "$COOLIFY_URL/api/v1/applications/$APP")
+          # Coolify stocke « proprietaire/depot » ou l'URL complète selon la façon dont l'application a été créée.
+          repo=$(jq -r '.git_repository' <<<"$app" | sed -E 's#^(https?://|git@)[^/:]+[/:]##; s#\.git$##')
+          [ "${repo,,}" = "${GITHUB_REPOSITORY,,}" ] || { echo "✘ l'application Coolify déploie $repo, pas $GITHUB_REPOSITORY" >&2; exit 1; }
+
           if [ "${{ github.event_name }}" = workflow_dispatch ]; then
-            sha=$(gh api "repos/${{ github.repository }}/commits/$REF" --jq .sha)
-            echo "mode=manual" >> "$GITHUB_OUTPUT"
+            sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$REF" --jq .sha)
           else
             sha=$RUN_SHA
-            echo "mode=auto" >> "$GITHUB_OUTPUT"
+            current=$(jq -r '.git_commit_sha' <<<"$app")
+            if [[ $current =~ ^[0-9a-f]{40}$ ]]; then
+              # ahead : le nouveau commit descend de celui en ligne. identical, behind, diverged : on ne touche à rien.
+              state=$(gh api "repos/$GITHUB_REPOSITORY/compare/$current...$sha" --jq .status 2>/dev/null || echo ahead)
+              if [ "$state" != ahead ]; then
+                echo "Le staging fait déjà tourner $current ($state) : rien à faire"
+                exit 0
+              fi
+            fi
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Déploiement de $sha"
 
-      - name: Clé SSH
+      # Coolify construit l'image (deploy/Dockerfile) depuis ce commit précis, applique les migrations au
+      # démarrage du conteneur, puis remplace l'ancien.
+      - name: Déploiement Coolify
+        id: deploy
+        if: steps.target.outputs.sha
         env:
-          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-
-      # Automatique : le staging n'avance que vers un descendant de ce qu'il fait tourner (deux CI finies dans le
-      # désordre ne le font pas reculer). À la main : n'importe quel commit, c'est le retour arrière.
-      - name: Mise à jour du staging
-        env:
-          VPS_HOST: ${{ secrets.VPS_HOST }}
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
-          STAGING_DIR: ${{ vars.STAGING_DIR || '~/eanathos/Fangleaf-staging' }}
           SHA: ${{ steps.target.outputs.sha }}
-          MODE: ${{ steps.target.outputs.mode }}
         run: |
-          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "set -e
-            cd $STAGING_DIR
-            grep -qE '^\s*VITE_FANGLEAF_ENV\s*=\s*\"?staging' .env ||{ echo '✘ $STAGING_DIR/.env ne déclare pas VITE_FANGLEAF_ENV=staging' >&2; exit 1; }
-            git fetch -q origin
-            if [ $MODE = auto ] && ! git merge-base --is-ancestor HEAD $SHA; then
-              echo 'Le staging fait déjà tourner un commit plus récent : rien à faire'
-              exit 0
-            fi
-            git checkout -q --detach $SHA
-            bash deploy/deploy.sh"
+          curl -fsS -X PATCH "$COOLIFY_URL/api/v1/applications/$APP" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" -H 'Content-Type: application/json' \
+            -d "{\"git_commit_sha\": \"$SHA\"}" >/dev/null
+          uuid=$(curl -fsS -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            "$COOLIFY_URL/api/v1/deploy?uuid=$APP&force=false" | jq -r '.deployments[0].deployment_uuid')
+          [ -n "$uuid" ] && [ "$uuid" != null ] || { echo "✘ Coolify n'a pas accepté le déploiement" >&2; exit 1; }
+          echo "uuid=$uuid" >> "$GITHUB_OUTPUT"
+          echo "Déploiement Coolify $uuid"
+
+      - name: Attendre la fin du déploiement
+        if: steps.deploy.outputs.uuid
+        env:
+          UUID: ${{ steps.deploy.outputs.uuid }}
+        run: |
+          for i in $(seq 1 120); do # 10 minutes : construction de l'image comprise
+            state=$(curl -fsS -H "Authorization: Bearer $COOLIFY_TOKEN" \
+              "$COOLIFY_URL/api/v1/deployments/$UUID" | jq -r '.status')
+            case "$state" in
+              finished) echo "Déploiement terminé"; exit 0 ;;
+              failed|cancelled*) echo "✘ déploiement $state (journal dans Coolify)" >&2; exit 1 ;;
+            esac
+            sleep 5
+          done
+          echo "✘ déploiement toujours en cours après 10 minutes" >&2
+          exit 1
 
       - name: Le staging répond
+        if: steps.deploy.outputs.uuid
         env:
-          STAGING_URL: ${{ vars.STAGING_URL || 'https://staging.fangleaf.anathos.me' }}
+          STAGING_URL: ${{ vars.STAGING_URL || 'https://fangleaf-staging.leo-bessin.dev' }}
         run: |
           for i in $(seq 1 10); do
             # page entière d'abord : un grep -q dans le tube couperait curl en pleine écriture (erreur 23)
