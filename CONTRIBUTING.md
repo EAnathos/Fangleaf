@@ -100,8 +100,9 @@ Une PR fusionnée dans `dev` ne signifie donc pas, à elle seule, que l'issue es
 
 ## 8. Version et changelog
 
-Un changement visible pour le joueur doit ajouter une entrée en tête de `client/src/changelog.ts). La version suit semver : correctif `0.6.1`, nouveauté `0.7.0), avec la même version dans `package.json).
+Pour chaque changement visible par les joueurs, ajouter un fichier JSON indépendant dans `.changes/` (voir [`.changes/README.md`](.changes/README.md)). Ne plus modifier manuellement `package.json`, `package-lock.json` ni le changelog central.
 
+À la fusion des changements dans `main`, le workflow de publication consolide les fragments, choisit le niveau SemVer le plus élevé (`patch`, `minor`, `major)), met à jour la version du package et les nouveautés du lobby, puis relance la CI sur le commit versionné. Les PR indépendantes n'éditent donc plus les mêmes métadonnées.
 ## 9. Si la CI échoue
 
 Lire le log de l'étape qui a cassé (`gh pr checks`), puis reproduire en local avec la commande correspondante. Ne pas relancer les tests en boucle sans corriger la cause.
