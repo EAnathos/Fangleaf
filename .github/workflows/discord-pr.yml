@@ -1,0 +1,77 @@
+# Annonce sur Discord chaque pull request prête à relire : à son ouverture, à sa réouverture,
+# et quand un brouillon passe « Ready for review » (les brouillons restent silencieux).
+#
+# Secret du dépôt (Settings › Secrets and variables › Actions) :
+#   DISCORD_WEBHOOK_URL  URL du webhook du salon Discord
+name: Notification Discord des PR
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions: {} # le webhook suffit, pas besoin du GITHUB_TOKEN
+
+jobs:
+  notify:
+    name: Annonce sur Discord
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Envoi du message
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          ACTION: ${{ github.event.action }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_AUTHOR_URL: ${{ github.event.pull_request.user.html_url }}
+          PR_AUTHOR_AVATAR: ${{ github.event.pull_request.user.avatar_url }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_CREATED_AT: ${{ github.event.pull_request.created_at }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          # PR venue d'un fork : GitHub ne lui transmet pas les secrets
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "Pas de webhook Discord disponible, rien à envoyer"
+            exit 0
+          fi
+
+          case "$ACTION" in
+            reopened)         heading="🔁 Pull Request rouverte" ;;
+            ready_for_review) heading="👀 Pull Request prête à relire" ;;
+            *)                heading="🚀 Nouvelle Pull Request" ;;
+          esac
+
+          jq -n \
+            --arg heading "$heading" \
+            --arg number "$PR_NUMBER" \
+            --arg title "$PR_TITLE" \
+            --arg url "$PR_URL" \
+            --arg body "$PR_BODY" \
+            --arg author "$PR_AUTHOR" \
+            --arg author_url "$PR_AUTHOR_URL" \
+            --arg avatar "$PR_AUTHOR_AVATAR" \
+            --arg branches "\`$PR_HEAD\` → \`$PR_BASE\`" \
+            --arg repo "$REPOSITORY" \
+            --arg date "$PR_CREATED_AT" \
+            '# Discord limite la description à 4096 caractères : on garde le début du texte de la PR
+            ($body | if length > 600 then .[:600] + "…" else . end) as $body
+            | {
+              embeds: [{
+                title: ($heading + " : #" + $number),
+                url: $url,
+                description: ("**" + $title + "**" + (if $body == "" then "" else "\n\n" + $body end) + "\n\n[Voir la Pull Request](" + $url + ")"),
+                color: 5814783,
+                author: { name: $author, url: $author_url, icon_url: $avatar },
+                fields: [
+                  { name: "Dépôt", value: $repo, inline: true },
+                  { name: "Branches", value: $branches, inline: true }
+                ],
+                timestamp: $date
+              }]
+            }' \
+          | curl -fsS --retry 3 -H "Content-Type: application/json" -X POST --data @- "$DISCORD_WEBHOOK_URL"
