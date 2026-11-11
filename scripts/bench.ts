@@ -98,6 +98,7 @@ function run(sc: Scenario): Result {
   // pose des effets persistants et appelle des renforts pendant que le groupe lui inflige des dégâts.
   const cave = sc.boss ? r.map.caves.find((cv) => BOSS_MOVES[SPECIES[cv.boss].key]?.some((move) => move.kind === 'summon')) : undefined;
   const boss = cave ? r.units.get(r.caveBoss[cave.id]) : undefined;
+  if (sc.boss && (!cave || !boss)) throw new Error('Aucun géant avec renforts disponible pour le scénario geant');
   if (cave && boss) {
     players.forEach((q, i) => {
       const a = i * Math.PI / 2;
@@ -108,6 +109,7 @@ function run(sc: Scenario): Result {
       }
     });
     r.onChallenge(players[0].p, cave.id);
+    if (boss.dormant) throw new Error('Le géant du scénario geant ne s’est pas réveillé');
   }
 
   const times: number[] = [];
