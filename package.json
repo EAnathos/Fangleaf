@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit",
     "smoke": "tsx scripts/smoke.ts",
     "test:rules": "tsx --test tests/rules/*.test.ts",
-    "db:migrate": "tsx scripts/migrate.ts"
+    "db:migrate": "tsx scripts/migrate.ts",
+    "changesets:check": "tsx scripts/check-changesets.ts",
+    "release:version": "tsx scripts/release-version.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
