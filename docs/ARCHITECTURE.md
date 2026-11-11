@@ -51,7 +51,7 @@ client/    index.html     lobby, HUD et panneaux
 supabase/  migrations SQL (npm run db:migrate)
 tests/     tests de règles par thème (tests/rules/*.test.ts) et leurs outils (helpers.ts)
 scripts/   test de fumée multi-clients (smoke.ts), migrations
-deploy/    service systemd, nginx, script de déploiement (lancé par .github/workflows/cd.yml)
+deploy/    prod : service systemd, nginx, script de déploiement (cd.yml) · staging : Dockerfile de l'image Coolify (voir ENVIRONNEMENTS.md)
 ```
 
 ## Flux réseau

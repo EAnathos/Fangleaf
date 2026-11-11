@@ -4,6 +4,7 @@ Le travail passe par une issue et une pull request. On ne pousse jamais directem
 
 - `dev` est la branche d'intégration : les changements y sont regroupés et validés sur le staging.
 - `main` correspond à la production. On y promeut `dev` après validation du staging.
+- Le détail des environnements (staging, promotion, retour arrière) est dans [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md).
 - Chaque pull request doit être reliée à une issue GitHub.
 
 Pour installer le projet et lancer le jeu en local, voir le [README](README.md). Pour comprendre le code, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -76,7 +77,7 @@ Si une PR termine entièrement le travail demandé par l'issue, le signaler expl
 ## 5. Revue, staging et fermeture des issues
 
 1. La PR vers `dev` doit passer la CI et être relue avant fusion.
-2. Déployer `dev` sur le staging et vérifier les critères d'acceptation dans cet environnement.
+2. `dev` est déployé automatiquement sur le staging quand la CI passe : y vérifier les critères d'acceptation (liste de validation dans [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md#valider-sur-le-staging-avant-la-promotion)).
 3. Corriger les problèmes détectés en staging via une nouvelle PR liée à la même issue.
 4. Quand les changements prévus sont terminés et validés, promouvoir `dev` vers `main` via une PR dédiée.
 5. La PR de promotion vers `main` peut utiliser `Closes #NUMERO` pour chaque issue réellement terminée. Une issue partiellement traitée reste ouverte et doit être mise à jour.
@@ -99,7 +100,9 @@ Une PR fusionnée dans `dev` ne signifie donc pas, à elle seule, que l'issue es
 - **La base de données** : un changement de schéma, c'est une nouvelle migration numérotée dans `supabase/migrations/`. On ne modifie jamais une migration déjà fusionnée.
 - **La doc à jour** : `docs/GUIDE.md` quand le jeu change pour le joueur, `docs/ARCHITECTURE.md` quand la structure change.
 - **Pas de secrets** : `.env` n'est jamais commité. Une nouvelle variable d'environnement va dans `.env.example` (sans sa valeur) et dans le README.
-- **Le mode dev reste en dev** : triches et raccourcis de test sont désactivés quand `NODE_ENV=production`.
+- **Le mode dev ne va pas en production** : triches et raccourcis de test ne répondent qu'en dev et sur le staging
+  (`NODE_ENV !== 'production'`, ou `ALLOW_CHEATS=1` côté serveur). En production, le serveur les ignore et le client
+  ne les contient même pas.
 
 ## 8. Version et changelog
 

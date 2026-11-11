@@ -20,7 +20,9 @@ Fangleaf : jeu coop dans le navigateur, TypeScript partout (client Canvas, serve
 - **Les chiffres vont dans `shared/config.ts`** (coûts, PV, durées, rayons), jamais en dur ailleurs.
 - **Base de données** : un changement de schéma est une nouvelle migration numérotée dans `supabase/migrations/` ;
   une migration fusionnée ne se modifie jamais. Elle doit rester compatible avec la version précédente du code.
-- **Mode dev** : triches et raccourcis de test seulement quand `NODE_ENV !== 'production'`.
+- **Mode dev** : triches et raccourcis de test seulement quand `NODE_ENV !== 'production'` ou `ALLOW_CHEATS=1`
+  (posé sur le staging, pour y préparer une situation de test) ; jamais en production. Une capacité dangereuse
+  s'ouvre par une variable du serveur, jamais par une valeur venue d'un build du client.
 - **Secrets** : `.env` n'est jamais commité ; une nouvelle variable va dans `.env.example` (sans valeur) et le README.
 - **État de la carte** : tout champ ajouté à `WorldMap` est une donnée copiable par `structuredClone` (pas de fonction
   dans un champ), sinon le cache de cartes des tests casse (`WorldMap.clone`).

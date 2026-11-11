@@ -7,6 +7,7 @@ on avance zone par zone jusqu'au bout de l'île, en affrontant les géants qui d
 - **Comment on joue** : [docs/GUIDE.md](docs/GUIDE.md)
 - **Comment c'est fait** (stack, arborescence, flux réseau) : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Comment contribuer** (branches, PR, revue) : [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Staging et mise en production** (dev, staging, promotion, retour arrière) : [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md)
 
 ## Stack
 
@@ -67,6 +68,15 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
   et lance [deploy/deploy.sh](deploy/deploy.sh) (`npm ci`, migrations, build, `pm2 startOrReload`, vérification du port).
   Aussi lançable à la main depuis l'onglet *Actions*.
 - Secrets du dépôt à créer : `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (clé privée dédiée au déploiement), `VPS_PORT` (facultatif).
+- [cd-staging.yml](.github/workflows/cd-staging.yml) : le **staging**, quand la CI passe sur `dev`. Il tourne sur un
+  VPS Coolify à part (image [deploy/Dockerfile](deploy/Dockerfile), projet Supabase dédié) : le workflow demande à
+  Coolify de déployer le commit validé. Secrets de l'environnement GitHub `staging` : `COOLIFY_URL`, `COOLIFY_TOKEN`,
+  `COOLIFY_APP_UUID` ; variables du dépôt `STAGING_ENABLED` = `true` (sans elle le workflow ne fait rien) et
+  `STAGING_URL` (adresse publique du staging, obligatoire).
+- Variables propres au staging, réglées dans Coolify : `VITE_FANGLEAF_ENV=staging` (badge STAGING, titre de l'onglet
+  et panneau de triche dans le build du client) et `ALLOW_CHEATS=1` (le serveur y accepte les triches F9).
+  La production ne déclare ni l'une ni l'autre. Branches, installation du staging, validation avant la mise en
+  production et retour arrière : [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md).
 
 ## Commandes
 
@@ -90,7 +100,7 @@ supabase/ migrations SQL (npm run db:migrate)
 client/   lobby, boucle de jeu, rendu Canvas procédural, HUD HTML, minicarte
 scripts/  test de fumée multi-clients, migrations
 tests/    tests de règles par thème (tests/rules/*.test.ts) et leurs outils communs (helpers.ts)
-docs/     guide du jeu (GUIDE.md), architecture (ARCHITECTURE.md)
+docs/     guide du jeu (GUIDE.md), architecture (ARCHITECTURE.md), environnements dev, staging et prod (ENVIRONNEMENTS.md)
 ```
 
 Le détail fichier par fichier est dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

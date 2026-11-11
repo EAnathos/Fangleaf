@@ -30,9 +30,11 @@ class Bot {
   id = 0;
   code = '';
   seed = 0;
+  failed?: Error; // connexion impossible : on le constate au lieu de faire tomber le test
   private state = new SnapshotState(); // snapshots différentiels → état complet
-  constructor() {
-    this.ws = new WebSocket(`ws://localhost:${PORT}/ws`);
+  constructor(port = PORT) {
+    this.ws = new WebSocket(`ws://localhost:${port}/ws`);
+    this.ws.on('error', (e) => (this.failed = e));
     this.ws.on('message', (raw) => {
       let m = JSON.parse(String(raw)) as ServerMsg;
       if (m.t === 's') m = this.state.apply(m);
@@ -47,9 +49,15 @@ class Bot {
   }
   open() {
     if (this.ws.readyState === WebSocket.OPEN) return Promise.resolve();
-    return new Promise<void>((r) => this.ws.once('open', () => r()));
+    if (this.failed) return Promise.reject(this.failed);
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('délai de connexion WebSocket dépassé')), 5000);
+      this.ws.once('open', () => { clearTimeout(timeout); resolve(); });
+      this.ws.once('error', (error) => { clearTimeout(timeout); reject(error); });
+    });
   }
   send(m: object) {
+    if (this.ws.readyState !== WebSocket.OPEN) throw new Error(`WebSocket non connecté (état ${this.ws.readyState})`);
     this.ws.send(JSON.stringify(m));
   }
   me() {
@@ -57,8 +65,49 @@ class Bot {
   }
 }
 
+/**
+ * Relance un serveur à part avec ces variables et dit s'il accepte la triche de dev (F9).
+ * null : rien à conclure (serveur jamais démarré, village jamais créé) ; sans ça, un démarrage raté passerait
+ * pour un « refus » et la vérification de la production serait verte sans avoir rien vérifié.
+ */
+async function cheatsAccepted(port: number, env: Record<string, string>) {
+  const srv = spawn('npx', ['tsx', 'server/index.ts'], { env: { ...process.env, PORT: String(port), ALLOW_GUESTS: '1', SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '', ALLOW_CHEATS: '', ...env }, stdio: 'pipe' });
+  srv.stderr.on('data', (d) => process.stderr.write(d)); // sinon un plantage est muet, et le tube plein bloque le serveur
+  let up = false;
+  srv.stdout.on('data', (d) => (up ||= String(d).includes('Fangleaf sur')));
+  try {
+    for (let i = 0; i < 200 && !up; i++) await sleep(50);
+    if (!up) return console.error(`port ${port} : le serveur de test n'a pas démarré`), null;
+    const bot = new Bot(port);
+    try {
+      await bot.open();
+      if (bot.failed || bot.ws.readyState !== WebSocket.OPEN) {
+        console.error(`port ${port} : WebSocket indisponible (${(bot.failed as Error | undefined)?.message ?? 'connexion fermée'})`);
+        return null;
+      }
+      bot.send({ t: 'create', name: 'Testeur' });
+      for (let i = 0; i < 100 && !bot.me(); i++) await sleep(50); // génération de la carte, puis premier snapshot
+      const gold = bot.me()?.gold;
+      if (bot.failed || gold === undefined) return console.error(`port ${port} : pas de village (${(bot.failed as Error | undefined)?.message ?? 'aucun snapshot'})`), null;
+      bot.send({ t: 'cheat' });
+      await sleep(300);
+      const after = bot.me()?.gold ?? gold;
+      return after > gold;
+    } finally {
+      if (bot.ws.readyState === WebSocket.OPEN || bot.ws.readyState === WebSocket.CONNECTING) bot.ws.close();
+    }
+  } finally {
+    srv.kill();
+  }
+}
+
 async function main() {
   for (let i = 0; i < 200 && !ready; i++) await sleep(50);
+  check(ready, 'serveur HTTP démarré');
+  if (!ready) throw new Error('le serveur de test ne démarre pas');
+  const healthResponse = await fetch(`http://localhost:${PORT}/healthz`);
+  const health = await healthResponse.json() as { ok?: boolean; persistenceConfigured?: boolean };
+  check(healthResponse.ok && health.ok === true, 'endpoint de santé HTTP disponible');
   const host = new Bot();
   await host.open();
   host.send({ t: 'create', name: 'Hôte' });
@@ -245,6 +294,11 @@ async function main() {
   leaver.send({ t: 'leave', code: host.code, token: 'faux' });
   await sleep(300);
   check(leaver.msgs.some((m) => m.t === 'error') && !leaver.msgs.some((m) => m.t === 'left'), 'quitter un village sans session valide : refusé');
+
+  // Les triches ne sortent ni du dev ni du staging : deux serveurs courts, lancés comme la prod et comme le staging.
+  // Le verdict doit être franc : un null (serveur muet) fait échouer les deux, il ne passe pas pour un refus.
+  check((await cheatsAccepted(PORT + 1, { NODE_ENV: 'production' })) === false, 'production : la triche de dev est ignorée');
+  check((await cheatsAccepted(PORT + 2, { NODE_ENV: 'production', ALLOW_CHEATS: '1' })) === true, 'staging : la triche de dev est acceptée');
 
   for (const b of [host, ...guests, late, leaver]) b.ws.close();
   server.kill();

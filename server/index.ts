@@ -17,6 +17,9 @@ try {
 initPersistence();
 
 const PORT = Number(process.env.PORT ?? 3001);
+// Triches (F9) : en dev, et partout où ALLOW_CHEATS=1 est posé (le staging, dans Coolify) pour y préparer une
+// situation de test. Comme ALLOW_GUESTS, c'est une variable du serveur seul : aucun build du client ne les ouvre.
+const CHEATS = process.env.NODE_ENV !== 'production' || process.env.ALLOW_CHEATS === '1';
 const DIST = fileURLToPath(new URL('../dist', import.meta.url));
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
@@ -32,6 +35,12 @@ const fail = (res: import('node:http').ServerResponse, code: number, text: strin
 };
 
 const http = createServer((req, res) => {
+  // Sonde de disponibilité indépendante du build statique : Coolify et la CI peuvent vérifier le serveur.
+  if (req.method === 'GET' && req.url?.split('?')[0] === '/healthz') {
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, persistenceConfigured: persistenceEnabled() }));
+    return;
+  }
   // Une requête, quelle qu'elle soit, ne doit jamais faire tomber le serveur (et tous les villages avec lui).
   try {
     if (!existsSync(DIST)) {
@@ -285,13 +294,13 @@ wss.on('connection', (ws: WebSocket) => {
         send({ t: 'error', msg: 'Suppression impossible, réessaie.' });
       });
     }
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheat') room.onCheat(player);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatfx') room.onCheatEffects(player, Array.isArray(msg.effects) ? msg.effects.map(Number) : [], +msg.secs);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatmob') room.onCheatMob(player, +msg.s, msg.kind, !!msg.on);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatzone') room.onCheatZone(player, +msg.z, msg.act);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatboss') room.onCheatBoss(player, +msg.s);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatgear') room.onCheatGear(player, msg.cls, msg.spec);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatdummy') room.onCheatDummy(player);
+    else if (CHEATS && msg.t === 'cheat') room.onCheat(player);
+    else if (CHEATS && msg.t === 'cheatfx') room.onCheatEffects(player, Array.isArray(msg.effects) ? msg.effects.map(Number) : [], +msg.secs);
+    else if (CHEATS && msg.t === 'cheatmob') room.onCheatMob(player, +msg.s, msg.kind, !!msg.on);
+    else if (CHEATS && msg.t === 'cheatzone') room.onCheatZone(player, +msg.z, msg.act);
+    else if (CHEATS && msg.t === 'cheatboss') room.onCheatBoss(player, +msg.s);
+    else if (CHEATS && msg.t === 'cheatgear') room.onCheatGear(player, msg.cls, msg.spec);
+    else if (CHEATS && msg.t === 'cheatdummy') room.onCheatDummy(player);
   });
 
   ws.on('close', () => {
