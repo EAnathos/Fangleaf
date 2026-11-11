@@ -440,7 +440,7 @@ export class Game {
   useAbility() {
     const st = this.self();
     if (!st || st.dead || st.ability < 0) return; // pas de capacité pour cette classe
-    if (st.ability > 0 || st.holding || st.mount) return; // en recharge, un fruit en main, ou monté
+    if (st.ability > 0 || st.holding) return; // en recharge ou un fruit en main (on peut lancer à cheval)
     this.net.send({ t: 'ability' });
   }
 
@@ -2937,6 +2937,7 @@ export class Game {
       const s = SPECIES[s0].mimic ? SPECIES_KEYS.indexOf(SPECIES[s0].mimic!) : s0; // un leurre a le visage de son géant
       if (flags & UNIT_FLAG_MOUNTED) continue; // dessinée sous son cavalier
       if (!inView(x, y, 220)) continue; // le serveur envoie plus large que l'écran : inutile de dessiner le reste
+      const op = owner && owner !== this.myId ? settings.display.allyPackOpacity / 100 : 1; // meute d'un autre joueur : opacité réglable
       const alpha = (flags & UNIT_FLAG_ALPHA) !== 0;
       const legend = (flags & UNIT_FLAG_LEGEND) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
@@ -3046,12 +3047,13 @@ export class Game {
       if (ghost && cast) list.push({ y: cast.y, draw: () => this.drawUnitCached(ctx, id, { ...look(), x: cast.x, y: cast.y }, { ...REST, alpha: ghost }) });
       if (pose.air > r * 0.6) {
         // en plein bond : au-dessus de tout, l'ombre reste au sol (et rétrécit)
-        air.push({ y: y + pose.dy, draw: () => drawUnit(ctx, { ...look(), x: x + pose.dx, y: y + pose.dy, air: pose.air, squash: pose.squash }) });
+        air.push({ y: y + pose.dy, draw: () => { if (op < 1) ctx.globalAlpha = op; drawUnit(ctx, { ...look(), x: x + pose.dx, y: y + pose.dy, air: pose.air, squash: pose.squash }); ctx.globalAlpha = 1; } });
         continue;
       }
       list.push({
         y,
         draw: () => {
+          if (op < 1) ctx.globalAlpha = op; // meute d'un autre joueur : atténuée
           const mood = boss && flags & UNIT_FLAG_DORMANT ? this.bossMoodAt(x, y, s0) : null;
           const shiver = mood?.mood === 'fear' ? Math.sin(this.time * 55) * Math.min(4, 1.2 + mood.n) : 0; // il tremble de peur
           if (shiver) ctx.translate(shiver, 0);
@@ -3094,6 +3096,7 @@ export class Game {
           } else if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
           if (flags & UNIT_FLAG_BURN && Math.random() < this.dt * 10) this.fx.burst(x + (Math.random() - 0.5) * r, y - r * 0.6, Math.random() < 0.5 ? '#FFB347' : '#FF6A2A', 2, 60); // il brûle
           if (flags & (UNIT_FLAG_RALLY | UNIT_FLAG_GUARD | UNIT_FLAG_POISON | UNIT_FLAG_BURN)) drawBuffs(ctx, x, y - r * (alpha ? 1.7 : 1.3) - (hp < 100 ? 18 : 10), flags, this.time, id);
+          if (op < 1) ctx.globalAlpha = 1;
         },
       });
     }
@@ -3106,7 +3109,7 @@ export class Game {
         this.snore(x + 14, y - 36, 15, x);
       } });
     }
-    for (const [id, s, flags, x, y, k] of this.net.latest?.dozers ?? []) {
+    for (const [id, s, flags, x, y, k] of settings.display.sleeperPacks ? (this.net.latest?.dozers ?? []) : []) { // meutes des déconnectés : masquables
       if (!inView(x, y, 80)) continue;
       const alpha = (flags & UNIT_FLAG_ALPHA) !== 0, legend = (flags & UNIT_FLAG_LEGEND) !== 0, asleep = (flags & UNIT_FLAG_DORMANT) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
@@ -3119,7 +3122,7 @@ export class Game {
         if (asleep) this.snore(x + r * 0.5, y - r * 1.2, 12, id);
       } });
     }
-    this.drawPets(ctx, list, inView);
+    if (settings.display.villageAlphas) this.drawPets(ctx, list, inView); // Alphas au repos sur l'îlot : masquables
     for (const p of players) {
       const isMe = p.id === this.myId;
       const x = isMe ? this.me.x : p.x, y = isMe ? this.me.y : p.y;

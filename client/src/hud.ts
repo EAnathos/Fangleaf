@@ -935,13 +935,11 @@ export class Hud {
     const ab = $('ability-btn');
     setHidden(ab, me.dead || me.ability < 0);
     if (!me.dead && me.ability >= 0 && me.spec) {
-      if (ab.dataset.spec !== me.spec) { // icône et nom : on ne les refait qu'au changement de spé (perf)
+      if (ab.dataset.spec !== me.spec) { // icône : on ne la refait qu'au changement de spé (perf)
         ab.dataset.spec = me.spec;
-        const name = abilityOf(me.spec)?.name ?? 'Capacité';
-        const ico = ab.querySelector<HTMLElement>('.ability-ico'), nm = ab.querySelector<HTMLElement>('.ability-name');
+        const ico = ab.querySelector<HTMLElement>('.ability-ico');
         if (ico) ico.innerHTML = ABILITY_ICON[me.spec] ?? '';
-        if (nm) nm.textContent = name;
-        ab.setAttribute('aria-label', name);
+        ab.setAttribute('aria-label', abilityOf(me.spec)?.name ?? 'Capacité'); // le nom reste pour l'accessibilité, pas affiché
       }
       ab.classList.toggle('cooling', me.ability > 0);
       const cd = ab.querySelector<HTMLElement>('.cd-label');
@@ -1471,50 +1469,36 @@ export class Hud {
     seg('alphaRevive');
     $('set-revive').hidden = touchOnly; // au doigt, le temps de résurrection ne s'affiche pas en jeu
     applyUi();
-    // Effets en cours : réglages appliqués tout de suite (la vignette change de coin, de taille, de filtre…).
-    const fxSeg = (name: 'position' | 'size' | 'filter' | 'vignette') => {
-      const group = document.querySelector<HTMLElement>(`[data-fx="${name}"]`)!;
-      const paint = () => group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === settings.display.statusHud[name])));
-      group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => {
-        (settings.display.statusHud[name] as string) = b.dataset.value!;
-        saveSettings();
-        paint();
-        this.placeStatusBar();
-      }));
-      paint();
-    };
-    fxSeg('position');
-    fxSeg('size');
-    fxSeg('filter');
-    fxSeg('vignette');
-    for (const [id, k] of [['enabled', 'enabled'], ['timers', 'timers'], ['animations', 'animations']] as const) {
-      const box = $<HTMLInputElement>(`set-fx-${id}`);
-      box.checked = settings.display.statusHud[k];
-      box.onchange = () => {
-        settings.display.statusHud[k] = box.checked;
-        saveSettings();
-        this.placeStatusBar();
-      };
-    }
-    const opacity = $<HTMLInputElement>('set-fx-opacity');
-    opacity.value = String(settings.display.statusHud.opacity);
-    opacity.oninput = () => {
-      settings.display.statusHud.opacity = +opacity.value;
-      this.status.applyOptions(); // tout de suite, pour voir l'effet pendant qu'on glisse
-    };
-    opacity.onchange = saveSettings;
-    for (const k of ['edge', 'corner'] as const) {
-      const range = $<HTMLInputElement>(`set-fx-${k}`);
-      range.value = String(settings.display.statusHud[k]);
-      range.oninput = () => {
-        settings.display.statusHud[k] = +range.value;
-        this.status.applyOptions();
-      };
-      range.onchange = saveSettings;
-    }
+    // Effets en cours : un seul réglage, le mode d'affichage (désactivé / bonus / malus / tous). Le reste (position, taille,
+    // bord teinté, animations…) reste fixé à sa valeur par défaut et n'est plus réglable.
+    const fxMode = document.querySelector<HTMLElement>('[data-fx-mode]')!;
+    const curMode = () => (!settings.display.statusHud.enabled ? 'off' : settings.display.statusHud.filter);
+    const paintMode = () => fxMode.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === curMode())));
+    fxMode.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => {
+      const v = b.dataset.value!;
+      settings.display.statusHud.enabled = v !== 'off';
+      if (v !== 'off') settings.display.statusHud.filter = v as 'all' | 'buffs' | 'nerfs';
+      saveSettings();
+      paintMode();
+      this.placeStatusBar();
+    }));
+    paintMode();
     this.placeStatusBar();
     for (const k of ['shake', 'ping', 'weather'] as const) {
       const box = $<HTMLInputElement>(`set-${k}`);
+      box.checked = settings.display[k];
+      box.onchange = () => {
+        settings.display[k] = box.checked;
+        saveSettings();
+      };
+    }
+    // Meutes et Alphas des autres joueurs : opacité de leur meute, et affichage des déconnectés et des Alphas au village.
+    const allyOp = $<HTMLInputElement>('set-ally-opacity');
+    allyOp.value = String(settings.display.allyPackOpacity);
+    allyOp.oninput = () => (settings.display.allyPackOpacity = +allyOp.value);
+    allyOp.onchange = saveSettings;
+    for (const k of ['sleeperPacks', 'villageAlphas'] as const) {
+      const box = $<HTMLInputElement>(k === 'sleeperPacks' ? 'set-sleeper-packs' : 'set-village-alphas');
       box.checked = settings.display[k];
       box.onchange = () => {
         settings.display[k] = box.checked;
@@ -2083,9 +2067,11 @@ export class Hud {
         const el = document.createElement('button');
         el.className = `class-card${on ? ' on' : ''}`;
         el.disabled = on || !ready || me.gold < price;
-        el.innerHTML = '<b></b><span></span><span class="tag"></span>';
+        el.innerHTML = '<b></b><span></span><span class="ability"></span><span class="tag"></span>';
         el.querySelector('b')!.textContent = s.name;
         el.querySelector('span')!.textContent = s.desc;
+        const ab = abilityOf(id); // la capacité active débloquée par cette voie
+        if (ab) el.querySelector('.ability')!.textContent = `Capacité · ${ab.name} : ${ab.desc}`;
         el.querySelector('.tag')!.textContent = on ? 'Spécialisation actuelle' : !ready ? 'Pas encore' : price ? `Choisir · ${price} or` : 'Choisir · gratuit';
         el.onclick = () => this.onSpec(id);
         return el;

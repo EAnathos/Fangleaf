@@ -2450,7 +2450,7 @@ export class Room {
    * soigner, replacer). Tir de rupture et Embuscade ne consomment la recharge que s'il y avait une cible.
    */
   onAbility(p: Player) {
-    if (p.dead || p.holding || p.mount) return; // à terre, un fruit en main, ou monté : pas de capacité
+    if (p.dead || p.holding) return; // à terre ou un fruit en main : pas de capacité (mais on peut lancer à cheval)
     if (p.sword < SWORD_PULLS) return; // pas encore armé
     if (this.rooted(p)) return; // saisi par un géant, ou étourdi
     const ab = abilityOf(p.spec);
