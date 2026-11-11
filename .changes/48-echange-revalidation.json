@@ -1,8 +1,0 @@
-{
-  "bump": "patch",
-  "date": "2026-11-11",
-  "title": "Échanges plus sûrs",
-  "items": [
-    "Un échange n'aboutit plus si l'un des deux dompteurs s'est éloigné, est tombé ou est parti au moment de conclure : il est annulé et rien n'est transféré."
-  ]
-}
