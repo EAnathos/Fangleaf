@@ -54,11 +54,12 @@ const ALL_CAVES = Array.from({ length: 64 }, (_, i) => i);
 const ALL_BOSSES = SPECIES.map((sp, i) => (sp.boss ? i : -1)).filter((i) => i >= 0);
 const COMMON = SPECIES.map((sp, i) => (sp.boss ? -1 : i)).filter((i) => i >= 0).slice(0, 6);
 
-type Scenario = { key: string; label: string; players: number; packs: boolean; wild: number; spread: boolean };
+type Scenario = { key: string; label: string; players: number; packs: boolean; wild: number; spread: boolean; boss?: boolean };
 const SCENARIOS: Scenario[] = [
   { key: 'solo', label: '1 joueur seul, sans meute, sur la plage', players: 1, packs: false, wild: 0, spread: false },
   { key: 'coop', label: '4 joueurs dispersés sur l\'île, meutes pleines', players: 4, packs: true, wild: 0, spread: true },
   { key: 'bataille', label: '4 joueurs au même endroit, meutes pleines, 60 monstres sauvages', players: 4, packs: true, wild: 60, spread: false },
+  { key: 'geant', label: '4 joueurs et leurs meutes dans une grotte, combat contre un géant', players: 4, packs: true, wild: 0, spread: false, boss: true },
 ];
 
 type Result = { key: string; ticks: number; meanMs: number; p95Ms: number; p99Ms: number; maxMs: number; bytesPerPlayerS: number; units: number };
@@ -93,6 +94,22 @@ function run(sc: Scenario): Result {
     r.createUnit(COMMON[k % COMMON.length], false, anchor.x + Math.cos(a) * d, anchor.y + Math.sin(a) * d);
   }
 
+  // Le scénario dédié place le groupe dans une grotte et réveille un vrai géant : son IA lance ses attaques,
+  // pose des effets persistants et appelle des renforts pendant que le groupe lui inflige des dégâts.
+  const cave = sc.boss ? r.map.caves[0] : undefined;
+  const boss = cave ? r.units.get(r.caveBoss[cave.id]) : undefined;
+  if (cave && boss) {
+    players.forEach((q, i) => {
+      const a = i * Math.PI / 2;
+      [q.p.x, q.p.y] = [boss.x + Math.cos(a) * 90, boss.y + Math.sin(a) * 90];
+      for (const id of q.p.army) {
+        const u = r.units.get(id);
+        if (u) [u.x, u.y] = [q.p.x + Math.cos(a + 0.5) * 70, q.p.y + Math.sin(a + 0.5) * 70];
+      }
+    });
+    r.onChallenge(players[0].p, cave.id);
+  }
+
   const times: number[] = [];
   let measured = 0;
   for (let t = 0; t < WARMUP + TICKS; t++) {
@@ -100,11 +117,14 @@ function run(sc: Scenario): Result {
     for (const q of players) {
       const a = q.phase + t * DT * 0.5;
       const x = q.cx + Math.cos(a) * 200, y = q.cy + Math.sin(a) * 200;
-      if (!r.map.blocked(x, y)) [q.p.x, q.p.y] = [x, y];
+      if (!sc.boss && !r.map.blocked(x, y)) [q.p.x, q.p.y] = [x, y];
       q.p.hp = 1e9;
       q.p.dead = false;
     }
     if (t === WARMUP) { bytes = 0; measured = 0; }
+    if (boss && t >= WARMUP && t % 20 === 0 && r.units.has(boss.id)) {
+      r.damage(boss, boss.maxHp * 0.0001, players[Math.floor(t / 20) % players.length].p);
+    }
     const t0 = performance.now();
     r.step();
     const dt = performance.now() - t0;
