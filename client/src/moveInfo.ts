@@ -90,7 +90,9 @@ export function traitSkills(sp: Species, tame: boolean): Skill[] {
   if (elementOf(SPECIES.indexOf(sp)) === 'feu') add('Brûlure', 'Ses coups mettent le feu : on brûle quelques secondes (plonger dans l\'eau l\'éteint).');
   if (sp.wings) add('Ailes', tame ? 'Il vole par-dessus l\'eau, les rochers et les arbres pour te suivre.' : 'Il vole par-dessus l\'eau et les obstacles : s\'enfuir à la nage ne le sème pas.');
   if (sp.reach) add('Allonge', 'Il se jette hors de l\'eau sur ce qui passe au bord.');
-  if (sp.forager && tame) add('Cueilleur', 'Il ne se bat jamais : il cueille de lui-même les buissons à baies autour de toi (elles rejoignent ton sac), reste à distance et fuit les monstres.', 'heal');
+  if (sp.forager && tame) add('Cueilleur', 'Il récolte des baies pour toi.', 'heal');
+  if (tame && sp.key === 'treant') add('Bûcheron', 'Il coupe les arbres pour récolter du bois.', 'trait');
+  if (tame && sp.key === 'golem') add('Mineur', 'Il casse les rochers pour récolter de la pierre.', 'trait');
   if (!tame) {
     if (sp.passive) add('Passif', 'Il ne se bat pas : il broute les buissons et fuit qui le frappe. Tends-lui une baie (T).', 'heal');
     if (sp.burrows) add('Fouisseur', 'Il file sous le sable, intouchable, et surgit sous sa cible (cercle annoncé).', 'hidden');

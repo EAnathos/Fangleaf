@@ -11,7 +11,7 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '0.11.0',
+    version: '0.12.0',
     date: '2026-11-11',
     title: 'Réglages et affichage',
     items: [
@@ -19,6 +19,14 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Effets en cours : un seul réglage, le mode d\'affichage (Désactivé / Bonus / Malus / Tous) ; les vignettes sont en petite taille.',
       'Nouveaux réglages : opacité des meutes des autres joueurs, et options pour masquer les meutes des joueurs déconnectés et les Alphas au repos au village.',
       'Sur téléphone, le jeu reste en portrait.',
+    ],
+  },
+  {
+    version: '0.11.0',
+    date: '2026-11-11',
+    title: 'Des jours et des nuits plus courts',
+    items: [
+      'Le cycle jour/nuit dure désormais 14 minutes au lieu de 20, sans changer la part relative du jour, de la nuit et des crépuscules.',
     ],
   },
   {

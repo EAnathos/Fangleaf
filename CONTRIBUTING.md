@@ -1,82 +1,107 @@
 # Contribuer à Fangleaf
 
-`main` est protégée : on n'y pousse jamais directement. Tout passe par une pull request relue et validée par la CI.
-Chaque commit qui arrive sur `main` est déployé en production ([cd.yml](.github/workflows/cd.yml)) : `main` doit toujours marcher.
+Le travail passe par une issue et une pull request. On ne pousse jamais directement sur `dev` ou `main`.
+
+- `dev` est la branche d'intégration : les changements y sont regroupés et validés sur le staging.
+- `main` correspond à la production. On y promeut `dev` après validation du staging.
+- Chaque pull request doit être reliée à une issue GitHub.
 
 Pour installer le projet et lancer le jeu en local, voir le [README](README.md). Pour comprendre le code, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Le workflow
+## 1. Issue obligatoire avant de commencer
 
-1. **Partir d'un `main` à jour**
+Avant tout travail :
 
-   ```bash
-   git switch main && git pull
-   git switch -c feat/nom-court
-   ```
+1. Chercher si une issue ouverte décrit déjà le besoin.
+2. Si elle existe, la mettre à jour avec le périmètre, les précisions et les critères d'acceptation manquants.
+3. Sinon, créer une issue décrivant le problème ou l'amélioration, le résultat attendu et les critères permettant de considérer le travail comme terminé.
+4. Ne pas commencer un changement conséquent sans issue de référence. Pour une correction minime, créer une issue courte reste préférable afin de garder une trace.
 
-2. **Nommer la branche** d'après ce qu'elle fait :
+Une issue doit rester centrée sur un sujet. Si le périmètre évolue fortement, créer une issue complémentaire et faire les liens entre elles.
 
-   | Préfixe | Pour |
-   |---|---|
-   | `feat/` | une nouveauté de jeu (espèce, bâtiment, zone, mécanique) |
-   | `fix/` | un bug |
-   | `perf/` | les performances (rendu, réseau, simulation) |
-   | `balance/` | l'équilibrage seul (`shared/config.ts`) |
-   | `docs/` | la documentation |
-   | `chore/` | outillage, CI, dépendances, déploiement |
+## 2. Branches
 
-3. **Coder par petits commits**, chacun cohérent et qui compile.
+Partir de `dev` à jour et créer une branche dédiée :
 
-4. **Vérifier en local avant de pousser**. Ce sont les mêmes étapes que la CI :
+```bash
+git switch dev
+git pull
+git switch -c feat/nom-court
+```
 
-   ```bash
-   npm run typecheck && npm run test:rules && npm run smoke && npm run build
-   ```
+Préfixes recommandés :
 
-5. **Pousser et ouvrir la PR** vers `main` :
+| Préfixe | Pour |
+|---|---|
+| `feat/` | une nouveauté de jeu (espèce, bâtiment, zone, mécanique) |
+| `fix/` | un bug |
+| `perf/` | les performances (rendu, réseau, simulation) |
+| `balance/` | l'équilibrage seul (`shared/config.ts`) |
+| `docs/` | la documentation |
+| `chore/` | outillage, CI, dépendances, déploiement |
 
-   ```bash
-   git push -u origin feat/nom-court
-   gh pr create --base main
-   ```
+Les branches de travail partent de `dev), jamais directement de `main). Les commits doivent rester petits, cohérents et compilables.
 
-6. **Revue** : il faut au moins **une approbation** d'un autre membre, et le check CI
-   *Typecheck, règles, fumée, build* doit être au vert. Un nouveau commit poussé après une approbation l'annule : il faut une nouvelle relecture.
-   Toutes les conversations de la revue doivent être résolues avant la fusion.
+## 3. Vérifications locales
 
-7. **Fusionner** avec le bouton de la PR (merge commit), puis supprimer la branche. Le déploiement part tout seul.
+Avant de pousser, lancer les vérifications pertinentes. Le socle actuel de la CI est :
 
-Si `main` a avancé pendant la revue, on rattrape avec `git merge origin/main` (ou un rebase tant que la branche n'est qu'à soi), puis on repousse.
+```bash
+npm run typecheck && npm run test:rules && npm run smoke && npm run build
+```
 
-## Les commits
+Ajouter ou adapter les tests lorsqu'un comportement ou une règle change.
 
-- **En français**, au présent, et ils disent **ce qui change pour le joueur** plutôt que comment c'est codé :
-  « Le Tréant de la meute abat les arbres », pas « ajout de treantChops() ».
-- Plusieurs changements dans un commit : on les sépare par « ; ».
+## 4. Pull request obligatoire et lien avec l'issue
+
+Ouvrir une PR de la branche de travail vers `dev` :
+
+```bash
+git push -u origin feat/nom-court
+gh pr create --base dev
+```
+
+Chaque PR doit :
+
+- mentionner l'issue concernée avec `Refs #NUMERO` dans sa description ;
+- expliquer ce qui change, pourquoi et comment tester ;
+- préciser les tests exécutés et leur résultat ;
+- rester limitée à un sujet. Découper les PR trop volumineuses ;
+- inclure une capture ou une courte vidéo pour un changement visuel.
+
+Si une PR termine entièrement le travail demandé par l'issue, le signaler explicitement. Ne pas utiliser `Closes #NUMERO` sur une PR vers `dev` : GitHub pourrait fermer l'issue dès la fusion dans `dev), avant la validation du staging et la mise en production.
+
+## 5. Revue, staging et fermeture des issues
+
+1. La PR vers `dev` doit passer la CI et être relue avant fusion.
+2. Déployer `dev` sur le staging et vérifier les critères d'acceptation dans cet environnement.
+3. Corriger les problèmes détectés en staging via une nouvelle PR liée à la même issue.
+4. Quand les changements prévus sont terminés et validés, promouvoir `dev` vers `main) via une PR dédiée.
+5. La PR de promotion vers `main` peut utiliser `Closes #NUMERO` pour chaque issue réellement terminée. Une issue partiellement traitée reste ouverte et doit être mise à jour.
+6. Après fusion vers `main), vérifier le déploiement de production et fermer manuellement toute issue terminée qui n'aurait pas été fermée automatiquement.
+
+Une PR fusionnée dans `dev` ne signifie donc pas, à elle seule, que l'issue est terminée.
+
+## 6. Les commits
+
+- En français, au présent, et ils disent ce qui change pour le joueur plutôt que comment c'est codé.
+- Plusieurs changements dans un commit : les séparer par `;`.
 - Les corrections demandées en revue vont dans un commit à part, par exemple « Revue de la PR : … ».
 
-## La pull request
-
-- Un titre clair, et dans la description : **ce qui change**, **pourquoi**, et **comment le tester** (où aller, quoi faire en jeu).
-- Un changement visible (sprite, HUD, effet) : une capture ou une courte vidéo.
-- Un changement pour le joueur : une entrée en tête de [client/src/changelog.ts](client/src/changelog.ts) (les
-  nouveautés du jeu, affichées dans le lobby), en quelques lignes, avec un **numéro de version** nouveau
-  (semver : correctif `0.6.1`, nouveautés `0.7.0`) ; la même version dans `package.json`.
-- Une PR par sujet : si elle devient énorme, on la découpe.
-
-## Ce qu'on vérifie en revue
+## 7. Ce qu'on vérifie en revue
 
 - **Le serveur décide** : dégâts, or, apprivoisement, achats et IA se calculent dans `server/room.ts`, jamais d'après ce qu'affirme le client.
-- **Les chiffres vont dans `shared/config.ts`** (coûts, PV, durées, rayons), pas en dur dans le code, et la doc n'en recopie aucun.
-- **Des tests** : une règle nouvelle ou modifiée a son test dans `tests/rules/` (le fichier du thème concerné).
-  Un comportement de bout en bout (réseau, connexion, achats) peut aller dans `scripts/smoke.ts`, qui doit résister au hasard des combats.
-- **La base de données** : un changement de schéma, c'est une nouvelle migration numérotée dans `supabase/migrations/`
-  (`028_….sql`, à la suite de la dernière). On ne modifie jamais une migration déjà fusionnée.
-- **La doc à jour** : [docs/GUIDE.md](docs/GUIDE.md) quand le jeu change pour le joueur, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) quand la structure change.
+- **Les chiffres vont dans `shared/config.ts)** (coûts, PV, durées, rayons), pas en dur dans le code, et la doc n'en recopie aucun.
+- **Des tests** : une règle nouvelle ou modifiée a son test dans `tests/rules/` (le fichier du thème concerné). Un comportement de bout en bout (réseau, connexion, achats) peut aller dans `scripts/smoke.ts`.
+- **La base de données** : un changement de schéma, c'est une nouvelle migration numérotée dans `supabase/migrations/`. On ne modifie jamais une migration déjà fusionnée.
+- **La doc à jour** : `docs/GUIDE.md` quand le jeu change pour le joueur, `docs/ARCHITECTURE.md` quand la structure change.
 - **Pas de secrets** : `.env` n'est jamais commité. Une nouvelle variable d'environnement va dans `.env.example` (sans sa valeur) et dans le README.
 - **Le mode dev reste en dev** : triches et raccourcis de test sont désactivés quand `NODE_ENV=production`.
 
-## Si la CI échoue
+## 8. Version et changelog
 
-Lis le log de l'étape qui a cassé (`gh pr checks`, puis le lien du check) et reproduis en local avec la commande correspondante.
-Le test de fumée joue de vraies parties avec des bots : s'il échoue de temps en temps, rends le script plus robuste plutôt que de relancer jusqu'à ce que ça passe.
+Un changement visible pour le joueur doit ajouter une entrée en tête de `client/src/changelog.ts). La version suit semver : correctif `0.6.1`, nouveauté `0.7.0), avec la même version dans `package.json).
+
+## 9. Si la CI échoue
+
+Lire le log de l'étape qui a cassé (`gh pr checks`), puis reproduire en local avec la commande correspondante. Ne pas relancer les tests en boucle sans corriger la cause.
