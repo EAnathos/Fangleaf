@@ -35,6 +35,12 @@ const fail = (res: import('node:http').ServerResponse, code: number, text: strin
 };
 
 const http = createServer((req, res) => {
+  // Sonde de disponibilité indépendante du build statique : Coolify et la CI peuvent vérifier le serveur.
+  if (req.method === 'GET' && req.url?.split('?')[0] === '/healthz') {
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, persistenceConfigured: persistenceEnabled() }));
+    return;
+  }
   // Une requête, quelle qu'elle soit, ne doit jamais faire tomber le serveur (et tous les villages avec lui).
   try {
     if (!existsSync(DIST)) {
