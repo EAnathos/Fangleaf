@@ -11,6 +11,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.11.0',
+    date: '2026-11-11',
+    title: 'Réglages et affichage',
+    items: [
+      'Les capacités de spécialisation s\'utilisent aussi à dos de monture, et l\'armurerie décrit la capacité de chaque voie.',
+      'Effets en cours : un seul réglage, le mode d\'affichage (Désactivé / Bonus / Malus / Tous) ; les vignettes sont en petite taille.',
+      'Nouveaux réglages : opacité des meutes des autres joueurs, et options pour masquer les meutes des joueurs déconnectés et les Alphas au repos au village.',
+      'Sur téléphone, le jeu reste en portrait.',
+    ],
+  },
+  {
     version: '0.10.0',
     date: '2026-11-10',
     title: 'Prévenu quand on peut éveiller',
