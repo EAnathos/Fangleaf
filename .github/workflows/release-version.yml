@@ -2,7 +2,7 @@ name: Version and changelog
 
 on:
   push:
-    branches: [main]
+    branches: [dev]
 
 permissions:
   contents: write
@@ -14,12 +14,12 @@ concurrency:
 
 jobs:
   version:
-    name: Consolidate changes and version
+    name: Consolidate changes and version on dev
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: dev
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -41,12 +41,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add package.json package-lock.json client/src/changelog.json .changes
           git commit -m "Versionne la publication et consolide le changelog"
-          git push origin main
+          git pull --rebase origin dev
+          git push origin dev
           echo "changed=true" >> "$GITHUB_OUTPUT"
       # Les pushes faits avec GITHUB_TOKEN ne déclenchent pas les autres workflows.
       # On relance donc explicitement la CI sur le commit de version.
-      - name: Run CI on the versioned commit
+      - name: Run CI on the versioned dev commit
         if: steps.commit.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run ci.yml --ref main
+        run: gh workflow run ci.yml --ref dev
