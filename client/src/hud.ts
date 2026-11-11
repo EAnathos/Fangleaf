@@ -3084,7 +3084,7 @@ function beastCardBase(s: number, form: BestiaryForm): { name: string; tag: stri
   }
   if (perk?.kind === 'guard') skills.push({ name: 'Carapace', icon: 'heal', desc: `Les alliés autour de lui encaissent ${pctLabel(perk.value)} de dégâts en moins pendant ${ALPHA_SHOUT_S} s, toutes les ${ALPHA_SHOUT_CD} s.` });
   if (perk?.kind === 'rally') skills.push({ name: 'Cri de ralliement', icon: 'rage', desc: `Les alliés autour de lui font +${pctLabel(perk.value)} de dégâts pendant ${ALPHA_SHOUT_S} s, toutes les ${ALPHA_SHOUT_CD} s.` });
-  if (perk?.kind === 'heal') skills.push({ name: 'Soins', icon: 'heal', desc: `Soigne son dompteur et sa meute proche : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s.` });
+  if (perk?.kind === 'heal') skills.push({ name: 'Soins', icon: 'heal', desc: `Soigne son dompteur, sa meute proche et lui-même : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s.` });
   if (legend && boss >= 0) skills.push(...moveCards(SPECIES[boss].key).filter((_, i) => !LEGEND_SKIPS.has((BOSS_MOVES[SPECIES[boss].key] ?? [])[i].kind)).map((c) => ({ ...c, name: `${c.name} (de ${SPECIES[boss].name})` })));
   return {
     name: legend ? `${sp.name} légendaire` : `${sp.name} alpha`, tag: legend ? `Aura dorée · ×${String(LEGEND_MULT.hp).replace('.', ',')} PV et dégâts` : `${ZONE_NAMES[sp.zone - 1]} · ${traits}`,
