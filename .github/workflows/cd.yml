@@ -22,7 +22,7 @@ jobs:
   deploy:
     name: Déploiement sur fangleaf.anathos.me
     # Après la CI : seulement si elle a réussi, sur un push (pas une PR venue d'un fork).
-    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && contains(fromJson('["push", "workflow_dispatch"]'), github.event.workflow_run.event))
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
