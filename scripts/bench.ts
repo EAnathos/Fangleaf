@@ -96,7 +96,7 @@ function run(sc: Scenario): Result {
 
   // Le scénario dédié place le groupe dans une grotte et réveille un vrai géant : son IA lance ses attaques,
   // pose des effets persistants et appelle des renforts pendant que le groupe lui inflige des dégâts.
-  const cave = sc.boss ? r.map.caves.find((cv) => BOSS_MOVES[SPECIES[cv.boss].key]?.some((move) => move.kind === 'summon')) : undefined;
+  const cave = sc.boss ? r.map.caves.find((cv: { boss: number }) => BOSS_MOVES[SPECIES[cv.boss].key]?.some((move) => move.kind === 'summon')) : undefined;
   const boss = cave ? r.units.get(r.caveBoss[cave.id]) : undefined;
   if (sc.boss && (!cave || !boss)) throw new Error('Aucun géant avec renforts disponible pour le scénario geant');
   if (cave && boss) {
