@@ -493,13 +493,17 @@ describe('Géants et grottes', () => {
       const wolf = r.createUnit(S('wolf'), false, at.x + 220, at.y + 120);
       r.makeTamed(wolf, p);
       wolf.hp = wolf.maxHp = 1e6;
+      // comme en jeu, le voisinage est connu quand il attaque : chaque tornade part vers l'une de ses proies
+      r.grid.clear();
+      for (const e of [p, king, wolf]) r.grid.insert(e);
       cast(r, 'vulture_king', 'tornado', king, p);
       const tw = r.hazards.filter((h: { style: string }) => h.style === 'tornado');
       const d0 = Math.hypot(tw[0].x - p.x, tw[0].y - p.y), w0 = Math.hypot(wolf.x - p.x, wolf.y - p.y);
       run(r, [p, king, wolf], 2.5);
       const d1 = Math.hypot(tw[0].x - p.x, tw[0].y - p.y);
       check(tw.length === 2 && d1 < d0 - 150, `Roi-Vautour : deux tornades, qui poursuivent leur cible (${Math.round(d0)} → ${Math.round(d1)} px)`);
-      check(wolf.hp < wolf.maxHp && TORNADO_PULL_R > 0 && Math.hypot(wolf.x - tw[0].x, wolf.y - tw[0].y) < w0, 'elles blessent et aspirent les monstres de la meute');
+      const near = Math.min(...tw.map((h: { x: number; y: number }) => Math.hypot(wolf.x - h.x, wolf.y - h.y)));
+      check(wolf.hp < wolf.maxHp && TORNADO_PULL_R > 0 && near < w0, `elles blessent et aspirent les monstres de la meute (loup à ${Math.round(near)} px de la plus proche)`);
     }
     {
       // Lueur se téléporte : il retombe dans un cratère de feu qui brûle encore

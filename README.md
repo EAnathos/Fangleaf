@@ -78,7 +78,8 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 | `npm run typecheck` | Vérification TypeScript |
 | `npm run db:migrate` | Applique les migrations Supabase manquantes (`DATABASE_URL` requis) |
 | `npm run smoke` | Test bot (autorise les invités via `ALLOW_GUESTS=1`, réservé aux tests) : création, 4 joueurs max, combat, or, forge, anti-téléportation |
-| `npm run test:rules` | Règles de la simulation, sans réseau (`node:test`) : un fichier par thème dans `tests/rules/` (monde, combat, meute, Alphas, géants, faune, village, réseau). Un seul fichier : `npx tsx --test tests/rules/geants.test.ts` ; un seul test : `--test-name-pattern="Marché"` ; autre graine ou autre heure : `TEST_SEED=…`, `TEST_NOW=…` |
+| `npm run test:rules` | Règles de la simulation, sans réseau (`node:test`) : un fichier par thème dans `tests/rules/`. Un ou plusieurs thèmes : `npm run test:rules -- volcan meute` ; un seul test : `-- geants --test-name-pattern=Marché` ; autre graine ou autre heure : `TEST_SEED=…`, `TEST_NOW=…`. Détails : [tests/README.md](tests/README.md) |
+| `npm run bench` | Banc de performance de la simulation (temps d'un tick, volume des snapshots) ; `-- --against <fichier>` compare à une mesure de référence. Voir [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 
 ## Structure
 

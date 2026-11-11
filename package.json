@@ -12,7 +12,8 @@
     "start": "NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit",
     "smoke": "tsx scripts/smoke.ts",
-    "test:rules": "tsx --test tests/rules/*.test.ts",
+    "test:rules": "tsx scripts/test-rules.ts",
+    "bench": "tsx scripts/bench.ts",
     "db:migrate": "tsx scripts/migrate.ts",
     "changesets:check": "tsx scripts/check-changesets.ts",
     "release:version": "tsx scripts/release-version.ts"
