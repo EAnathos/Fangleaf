@@ -1,7 +1,7 @@
 // Réglages du joueur (gardés dans ce navigateur) : affichage, et sur PC touches et façon d'attaquer.
 // Au doigt, rien ne change pour les touches : on glisse pour se déplacer et l'attaque reste automatique.
 
-export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'harvest' | 'ability' | 'map' | 'revive' | 'chat';
+export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'harvest' | 'ability' | 'map' | 'revive' | 'chat' | 'trade';
 /**
  * Une touche : par code physique (déplacements : ZQSD en AZERTY = WASD en QWERTY) ou par lettre tapée
  * (raccourcis : sinon M ne marche pas en AZERTY). Une touche choisie par le joueur est toujours gardée par code.
@@ -61,6 +61,7 @@ export const ACTIONS: { id: Action; name: string }[] = [
   { id: 'map', name: 'Carte' },
   { id: 'revive', name: 'Relever un coéquipier (maintenir)' },
   { id: 'chat', name: 'Ouvrir le chat' },
+  { id: 'trade', name: 'Proposer un échange (dompteur proche)' },
 ];
 
 const DEFAULTS: Settings = {
@@ -77,6 +78,7 @@ const DEFAULTS: Settings = {
     map: { key: 'm', label: 'M' },
     revive: { key: 'r', label: 'R' },
     chat: { key: 'c', label: 'C' },
+    trade: { key: 'u', label: 'U' },
   },
   attack: 'auto',
   display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', allyPackOpacity: 100, sleeperPacks: true, villageAlphas: true, statusHud: { enabled: true, position: 'top-left', size: 'small', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 }, alphaRevive: 'text' },

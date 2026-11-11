@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, ALL_CAVES } from '../helpers.ts';
-import { BOAT_REACH, BOAT_STAGES, boatReady, BUILDING_IDS, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
+import { BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, BUILDING_IDS, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
 import { HALL_ID } from '../../shared/worldmap.ts';
 import { Room } from '../../server/room.ts';
 
@@ -317,5 +317,67 @@ describe('Le volcan et ses entrailles', () => {
     }
     check(q.hp < hp2, 'les jets tournent : impossible de rester à portée sans être brûlé');
     check(!r.hazards.some((h: { style?: string }) => h.style === 'flame'), 'puis ils s\'éteignent');
+  });
+
+  rule('Antre du volcan : la herse retombe pendant le combat, chacun se retrouve du côté de sa meute et de ses Alphas, puis elle se relève.', () => {
+    const r = room(), m = r.map;
+    const lair = m.caves.find((c: { room?: number }) => c.room !== undefined), li = m.doors.findIndex((q: { lair: number }) => q.lair === lair.id);
+    const d = m.doors[li], k = lair.room, boss = r.units.get(r.caveBoss[lair.id]);
+    const inLair = (e: { x: number; y: number }) => m.roomAt(e.x, e.y) === k;
+    // un point du couloir, juste derrière la herse (côté opposé à l'antre)
+    const out = [1, -1].map((sg) => ({ x: d.x + d.ux * 150 * sg, y: d.y + d.uy * 150 * sg })).find((q) => !inLair(q) && !m.blocked(q.x, q.y))!;
+    const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 40];
+    [q.x, q.y] = [out.x, out.y];
+    m.rooms.forEach((_: unknown, i: number) => r.cleared.add(i));
+    r.tick = 0;
+    r.updateDepths();
+    check(inLair(p) && r.map.arenaAt(p.x, p.y)?.id === lair.id && m.doorShut[li] === 0, 'avant le combat : la herse de l\'antre est levée, le dompteur est dans l\'antre');
+    // la meute de p est restée dans le couloir ; un monstre de q, lui, est entré dans l'antre sans son dompteur
+    const wolf = r.createUnit(SPECIES.findIndex((sp) => sp.key === 'wolf'), false, out.x, out.y);
+    r.makeTamed(wolf, p);
+    const hare = r.spawnAlpha(p, SPECIES.findIndex((sp) => sp.key === 'hare'), 0, false);
+    [hare.x, hare.y] = [out.x, out.y];
+    const stray = r.createUnit(SPECIES.findIndex((sp) => sp.key === 'wolf'), false, p.x + 60, p.y);
+    r.makeTamed(stray, q);
+    r.events = [];
+    r.onChallenge(p, lair.id);
+    check(!boss.dormant && m.doorShut[li] === 1 && m.blocked(d.x, d.y), 'le combat commence : la herse retombe aussitôt et barre le couloir');
+    check(inLair(wolf) && inLair(hare), 'la meute et l\'Alpha restés dans le couloir rejoignent leur dompteur dans l\'antre');
+    check(!inLair(stray) && Math.hypot(stray.x - q.x, stray.y - q.y) < 200, 'le monstre entré sans son dompteur le rejoint dehors');
+    check(r.events.some((e: { e: string; shut?: boolean }) => e.e === 'lair' && e.shut), 'les joueurs proches sont prévenus');
+    r.updateDepths();
+    check(m.doorShut[li] === 1, 'tant que le géant est debout, elle reste baissée');
+    r.events = [];
+    r.calmBoss(boss); // combat perdu : il se rendort, guéri
+    r.updateDepths();
+    check(m.doorShut[li] === 0 && r.events.some((e: { e: string; shut?: boolean }) => e.e === 'lair' && !e.shut), 'le combat fini, la herse se relève');
+  });
+
+  rule('Géant du volcan : combat perdu, il se rendort chez lui avec toute sa vie ; vaincu, il réapparaît dans son antre, lui aussi avec toute sa vie.', () => {
+    const r = room(), m = r.map;
+    const lair = m.caves.find((c: { room?: number }) => c.room !== undefined), home = lair.home ?? lair.inside;
+    let boss = r.units.get(r.caveBoss[lair.id]);
+    const p = r.addPlayer('a', noop);
+    p.hp = 1e9;
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 40];
+    r.onChallenge(p, lair.id);
+    boss.hp = boss.maxHp / 3;
+    [boss.x, boss.y] = [boss.x + 120, boss.y + 40];
+    // plus personne dans l'antre (le dompteur est retourné à l'entrée du donjon) : le combat est perdu
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y - 40];
+    r.tick = 0;
+    r.clearEmptyCaves();
+    check(boss.dormant && boss.hp === boss.maxHp && !boss.fight && Math.hypot(boss.x - home.x, boss.y - home.y) < 1, `combat perdu : il se rendort chez lui, ${Math.round(boss.hp)} / ${Math.round(boss.maxHp)} PV`);
+    // cette fois il est vaincu : il réapparaît après le délai
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 40];
+    r.onChallenge(p, lair.id);
+    r.killUnit(boss, p);
+    check(!r.caveBoss[lair.id], 'vaincu : son antre est vide');
+    r.time += BOSS_RESPAWN_S + 1;
+    r.tick = 0;
+    r.updateSpawns();
+    boss = r.units.get(r.caveBoss[lair.id]);
+    check(!!boss && boss.dormant && boss.hp === boss.maxHp && m.roomAt(boss.x, boss.y) === lair.room, 'le délai passé, il réapparaît endormi dans son antre, avec toute sa vie');
   });
 });

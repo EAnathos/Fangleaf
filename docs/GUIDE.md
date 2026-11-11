@@ -32,6 +32,7 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 | Relever un coéquipier | R maintenu | Bouton maintenu |
 | Grande carte | M, ou clic sur la minicarte | Toucher la minicarte |
 | Chat | C | Bouton 💬 |
+| Proposer un échange à un dompteur proche | U | Bouton ⇄ (près d'un autre dompteur) |
 | Menu, fermer un panneau | Échap | Bouton ☰ |
 
 ## Premiers pas
@@ -286,8 +287,9 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 ## Le volcan et le cœur volcanique
 
 - Un grand volcan se dresse dans la Mer de sable. Sa bouche, à son pied, reste scellée par une croûte d'obsidienne
-  tant que le village n'a pas vaincu les trois géants de la Mer de sable ; ensuite, **E** pour y descendre, de jour
-  comme de nuit et par tous les temps.
+  tant que le village n'a pas vaincu les trois géants de la Mer de sable ; ensuite, **E** (« Rentrer dans le volcan »)
+  pour y descendre, de jour comme de nuit et par tous les temps. En bas, **E** à la sortie (« Sortir du volcan ») pour
+  remonter.
 - Les **entrailles du volcan** sont un donjon (zone 7) : un labyrinthe de grandes salles reliées par de longs couloirs,
   différent d'un village à l'autre. On arrive en bas ; le cœur est au centre ; les trois géants du volcan attendent
   chacun dans sa salle, au bout d'un cul-de-sac — un à gauche, un à droite, un en haut — et il faut fouiller pour les
@@ -296,6 +298,9 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   lève les herses de ses couloirs et débloque les salles voisines. La herse d'une salle de géant porte un sceau d'or :
   il faut en plus **payer l'entrée** (**E** devant la herse, une fois pour tout le village). Si plus personne n'est
   dans le donjon pendant deux minutes, les salles se regarnissent et les herses retombent.
+- **Combat dans un antre** : dès qu'on réveille le géant, la herse de sa salle retombe. Personne n'entre ni ne sort
+  tant qu'il est debout ; la meute et les Alphas restés dans le couloir rejoignent leur dompteur dans la salle (et
+  ceux entrés sans leur dompteur le rejoignent dehors). Vaincu, ou rendormi faute de combattants, la herse se relève.
 - La roche et les herses arrêtent la vue : on ne tire pas d'une salle à l'autre (archers, mages, tortues-volcans…).
 - Dans les salles, des mares de lave infranchissables à pied (à dos de vautour, on les survole) et des **pièges** :
   - les **évents de flammes**, en travers des couloirs : ils rougeoient, puis crachent du feu, chacun à son rythme ;
@@ -367,6 +372,12 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - La progression est rattachée au **compte dans un village** : un autre village, c'est repartir de zéro. Un compte
   a au plus 3 villages, listés dans le lobby.
 - L'or et les essences des monstres vaincus se partagent entre dompteurs proches.
+- **Carte partagée** : la carte (minicarte et **M**) se découvre pour tout le village. Ce qu'un membre explore,
+  même pendant qu'on est déconnecté, apparaît sur la carte des autres à leur retour.
+- **Échanger** : tout près d'un autre dompteur, **U** (ou le bouton ⇄) lui propose un échange. Une fenêtre s'ouvre
+  chez les deux : chacun choisit ce qu'il donne (or, bois, pierre de son sac, jamais plus qu'il n'a) et voit ce que
+  l'autre propose. L'échange se fait quand **les deux ont validé** ; si une part change, il faut revalider. Il est
+  annulé si l'un ferme la fenêtre, s'éloigne ou tombe.
 - Quand un coéquipier **réveille un géant**, tout le village en est prévenu, et une petite **flèche** autour de soi
   indique le chemin du combat (la sortie de la grotte où l'on est, puis l'entrée de la sienne) tant que le géant est debout.
 - Un membre **déconnecté** dort près du feu du village, sa meute autour de lui.

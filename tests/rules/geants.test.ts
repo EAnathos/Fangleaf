@@ -2,7 +2,8 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { alphaCreateCost, SHOT_KINDS, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, LEGEND_MULT, POISON_S, SPECIES, TORNADO_PULL_R, zoneBosses } from '../../shared/config.ts';
+import { moodLine } from '../../client/src/bossMemory.ts';
+import { VOYAGE_ZONE, alphaCreateCost, SHOT_KINDS, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, LEGEND_MULT, POISON_S, SPECIES, TORNADO_PULL_R, zoneBosses } from '../../shared/config.ts';
 
 describe('Géants et grottes', () => {
   rule('Grottes : entrer avec sa meute, mini-boss, âme, réapparition du boss.', () => {
@@ -552,6 +553,44 @@ describe('Géants et grottes', () => {
 
   rule('grottes des dernières zones bien plus chères', () => {
     check(caveUnlockCost(1) === 150 && caveUnlockCost(3) === 450 && caveUnlockCost(4) === 1500 && caveUnlockCost(5) === 3000, 'grottes des dernières zones bien plus chères (1500 et 3000 or)');
+  });
+
+  rule('Un combat de géant déjà commencé ne se rejoint pas : sa grotte refuse d\'entrer jusqu\'à la fin du combat.', () => {
+    const r = room();
+    const c = r.map.caves.find((q: { room?: number; open?: number; zone: number }) => q.room === undefined && q.open === undefined && q.zone !== VOYAGE_ZONE);
+    const boss = r.units.get(r.caveBoss[c.id]);
+    const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
+    [p.x, p.y] = [c.entrance.x, c.entrance.y];
+    r.onCave(p, c.id, true);
+    check(r.map.arenaAt(p.x, p.y)?.id === c.id, 'avant le combat, on entre dans la grotte');
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 30];
+    p.hp = 1e6;
+    r.onChallenge(p, c.id);
+    check(!boss.dormant, 'le combat commence');
+    // Le dompteur déjà dans la grotte ne peut pas en ressortir.
+    [p.x, p.y] = [c.exit.x, c.exit.y];
+    r.events = [];
+    r.onCave(p, c.id, false);
+    check(r.map.arenaAt(p.x, p.y)?.id === c.id, 'pendant le combat, le dompteur reste dans la grotte');
+    check(r.events.some((e: { e: string; to?: number }) => e.e === 'busy' && e.to === p.id), 'la sortie refusée est signalée au dompteur');
+    [q.x, q.y] = [c.entrance.x, c.entrance.y];
+    r.events = [];
+    r.onCave(q, c.id, true);
+    check(r.map.arenaAt(q.x, q.y)?.id !== c.id, 'pendant le combat, un autre dompteur reste dehors');
+    check(r.events.some((e: { e: string; to?: number }) => e.e === 'busy' && e.to === q.id), 'il est prévenu (et lui seul)');
+    r.calmBoss(boss); // combat fini : le géant se rendort
+    r.time += 2; // laisse passer le délai anti-double-interaction depuis l'entrée
+    r.onCave(p, c.id, false);
+    check(r.map.arenaAt(p.x, p.y)?.id !== c.id, 'le combat fini, le dompteur peut sortir');
+    r.onCave(q, c.id, true);
+    check(r.map.arenaAt(q.x, q.y)?.id === c.id, 'le combat fini, un autre dompteur peut entrer');
+  });
+
+  rule('Le géant se souvient du résultat du combat : peur si le dompteur l’a vaincu, arrogance s’il a gagné.', () => {
+    const fear = SPECIES.map((_, s) => moodLine({ mood: 'fear', n: 1 }, s));
+    check(fear.every((l) => !!l && !/raclée|tes bleus|tu en redemandes/i.test(l)), 'après avoir été vaincu, le géant craint le dompteur');
+    const smug = SPECIES.map((_, s) => moodLine({ mood: 'smug', n: 1 }, s));
+    check(smug.every((l) => !!l), 'après avoir battu le dompteur, le géant garde une réplique arrogante');
   });
 
   rule('Un géant qui ne touche personne s\'impatiente : il accélère peu à peu, puis reprend son allure dès qu\'il touche un dompteur.', () => {

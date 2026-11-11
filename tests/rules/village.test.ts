@@ -4,6 +4,8 @@ import { describe } from 'node:test';
 import { rule, check, room, noop, unarmedAdd } from '../helpers.ts';
 import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE, ZONES, gearWood, gearCost, saddleSpeed, HAT_PRICES, oreHp } from '../../shared/config.ts';
 import { Room } from '../../server/room.ts';
+import { FOG_CELL, FOG_N, packFog, unpackFog } from '../../shared/fog.ts';
+import { TRADE_KEEP_R, TRADE_R, WORLD_HALF } from '../../shared/config.ts';
 import { oreRadius, villageEdge } from '../../shared/worldmap.ts';
 import { ELDER_CHAPTERS } from '../../client/src/elder.ts';
 
@@ -745,6 +747,71 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     const st = r.profileOf(p).stats;
     check(st.kills === 1 && st.dmg >= 1007 && st.best === 1000 && st.deaths === 1 && st.wood === 3 && st.stone === 2 && st.time >= 1,
       `stats comptées (vaincus ${st.kills}, dégâts ${st.dmg}, plus gros coup ${st.best}, chutes ${st.deaths}, bois ${st.wood}, temps ${st.time} s)`);
+  });
+
+  rule('Carte du village : ce qu\'un dompteur découvre est gardé par le serveur, sauvegardé avec le village et envoyé à chaque membre qui arrive.', () => {
+    const r = room();
+    const p = r.addPlayer('a', noop);
+    [p.x, p.y] = [r.map.spawn.x, r.map.spawn.y];
+    const cell = (x: number, y: number) => Math.floor((y + WORLD_HALF) / FOG_CELL) * FOG_N + Math.floor((x + WORLD_HALF) / FOG_CELL);
+    r.tick = 0;
+    r.updateExplored();
+    check(r.explored[cell(p.x, p.y)] === 1 && r.explored[cell(p.x + 2000, p.y)] === 0, 'autour du dompteur, la carte est découverte ; loin de lui, non');
+    let saved: { explored: string } | undefined;
+    r.onVillage = (v: { explored: string }) => void (saved = v);
+    r.flushExplored();
+    check(!!saved && saved.explored.length < 2000, `sauvegardée avec le village, en peu de place (${saved?.explored.length} caractères)`);
+    saved = undefined;
+    r.flushExplored();
+    check(!saved, 'rien de nouveau : pas de nouvelle sauvegarde');
+    const back: any = new Room('TEST', r.seed, { explored: packFog(r.explored) });
+    check(packFog(back.explored) === packFog(r.explored), 'le village rechargé retrouve sa carte');
+    const got: { t: string; cells?: string }[] = [];
+    r.addPlayer('b', (m: { t: string }) => got.push(m));
+    const cells = new Uint8Array(FOG_N * FOG_N), msg = got.find((m) => m.t === 'fog');
+    check(!!msg && unpackFog(msg.cells, cells) && cells[cell(p.x, p.y)] === 1, 'un membre qui arrive reçoit ce que les autres ont découvert');
+    check(!unpackFog('nope', cells) && !unpackFog('1:zzzzzzzz', cells) && !unpackFog('1:a,-3', cells), 'une carte illisible est refusée');
+    const bad: any = new Room('TEST', r.seed, { explored: '1:10' });
+    check(bad.explored.every((v: number) => v === 0), 'illisible à la sauvegarde : le village repart d\'une carte vierge');
+  });
+
+  rule('Échange entre dompteurs proches : chacun garnit sa part (or, bois, pierre), les deux la voient, et il ne se fait que quand les deux ont validé.', () => {
+    const r = room();
+    const box = new Map<number, { t: string; [k: string]: any }[]>();
+    const spy = (id: () => number) => (m: { t: string }) => box.set(id(), [...(box.get(id()) ?? []), m]);
+    let ia = 0, ib = 0;
+    const a = r.addPlayer('a', spy(() => ia)), b = r.addPlayer('b', spy(() => ib));
+    [ia, ib] = [a.id, b.id];
+    [a.x, a.y] = [r.map.spawn.x, r.map.spawn.y];
+    [b.x, b.y] = [a.x + TRADE_R + 50, a.y];
+    [a.gold, a.wood, a.stone, b.gold, b.wood, b.stone] = [100, 0, 5, 0, 50, 0];
+    const last = (id: number, t: string) => [...(box.get(id) ?? [])].reverse().find((m) => m.t === t);
+    r.onSwap(a, 'open', { with: b.id });
+    check(!last(a.id, 'swap'), `trop loin (au-delà de ${TRADE_R} px) : pas d'échange`);
+    [b.x, b.y] = [a.x + 80, a.y];
+    r.onSwap(a, 'open', { with: b.id });
+    check(!!last(a.id, 'swap') && last(b.id, 'swap')?.with === a.id, 'tout près : l\'échange s\'ouvre chez les deux');
+    r.onSwap(a, 'offer', { gold: 999, stone: 2 });
+    check(last(a.id, 'swap')?.mine.gold === 100 && last(b.id, 'swap')?.theirs.gold === 100 && last(b.id, 'swap')?.theirs.stone === 2, 'une part ne dépasse jamais ce qu\'on a, et l\'autre la voit');
+    r.onSwap(b, 'offer', { wood: 20 });
+    r.onSwap(a, 'ok');
+    check(last(b.id, 'swap')?.okTheirs === true && a.gold === 100, 'un seul a validé : rien ne bouge, l\'autre le voit');
+    r.onSwap(b, 'offer', { wood: 10 });
+    check(last(a.id, 'swap')?.okMine === false, 'une part change : la validation tombe');
+    a.gold = 40; // il dépense entre-temps
+    r.onSwap(a, 'ok');
+    r.onSwap(b, 'ok');
+    check(a.gold === 40 && last(a.id, 'swap')?.mine.gold === 40 && !last(a.id, 'swapEnd'), 'plus assez d\'or au moment de conclure : sa part est ramenée à ce qu\'il a, chacun revalide');
+    r.onSwap(a, 'ok');
+    r.onSwap(b, 'ok');
+    check(a.gold === 0 && a.wood === 10 && a.stone === 3 && b.gold === 40 && b.wood === 40 && b.stone === 2, `les deux ont validé : l'échange se fait (a : ${a.gold} or, ${a.wood} bois ; b : ${b.gold} or, ${b.wood} bois)`);
+    check(last(a.id, 'swapEnd')?.done === true && last(b.id, 'swapEnd')?.done === true, 'les deux sont prévenus');
+    // un autre échange : il tombe quand on s'éloigne
+    r.onSwap(b, 'open', { with: a.id });
+    [b.x, b.y] = [a.x + TRADE_KEEP_R + 100, a.y];
+    r.tick = 0;
+    r.updateSwaps();
+    check(last(a.id, 'swapEnd')?.done === false && /éloignés/.test(last(a.id, 'swapEnd')?.why ?? ''), 'trop loin l\'un de l\'autre : l\'échange est annulé');
   });
 
   rule('Golem de la meute : il mange aussi les filons d\'or ; l\'or et un peu de pierre reviennent à son dompteur.', () => {

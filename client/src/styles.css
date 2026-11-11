@@ -955,6 +955,18 @@ body.waking #hud { opacity: 0; pointer-events: none; }
 .cheat-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .cheat-time input { width: 70px; }
 
+/* Échange entre dompteurs : ce que je donne à gauche, ce que je reçois à droite. */
+.trade-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0; }
+.trade-side h3 { margin: 0 0 8px; font: 700 16px var(--display); color: var(--amber); }
+.trade-row { display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 8px; min-height: 40px; }
+.trade-row input { width: 100%; min-width: 0; height: 36px; }
+.trade-row b { font: 700 18px var(--display); }
+.trade-actions { gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
+.trade-actions .cta { height: 48px; padding: 0 20px; font-size: 17px; }
+@media (max-width: 480px) { .trade-cols { grid-template-columns: 1fr; } }
+/* au-dessus du bouton de capacité : seulement près d'un autre dompteur */
+.trade-btn { position: absolute; right: 16px; bottom: 232px; width: 56px; height: 56px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border-color: var(--amber); background: rgba(27, 38, 36, 0.92); }
+
 /* Staging : badge permanent, au-dessus de tout, qui ne gêne aucun clic. */
 body.env-staging::after {
   content: 'STAGING'; position: fixed; top: 6px; left: 50%; transform: translateX(-50%); z-index: 10000;
