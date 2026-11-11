@@ -2156,6 +2156,7 @@ export class Room {
   private plateAt = new Map<number, number>(); // dalle piégée → réarmée à ce moment
   private cleared = new Set<number>(); // salles du donjon vidées de leur garnison (l'entrée l'est d'office)
   private garrisoned = new Set<number>(); // salles dont la garnison est apparue
+  private sealed = new Set<number>(); // antres du volcan dont la herse est retombée pour un combat (index de leur géant)
   private depthsSeenAt = -Infinity; // dernier instant où un dompteur était dans le donjon
   private geysers: { i: number; at: number }[] = []; // geysers annoncés (dalle foulée)
 
@@ -2187,11 +2188,62 @@ export class Room {
     for (const k of this.garrisoned) if (!alive.has(k)) this.cleared.add(k);
     map.links.forEach(([a, b], i) => {
       const d = map.doors[i];
-      const open = (this.cleared.has(a) || this.cleared.has(b)) && (d.lair < 0 || this.unlocked.includes(d.lair));
+      const open = (this.cleared.has(a) || this.cleared.has(b)) && (d.lair < 0 || this.unlocked.includes(d.lair)) && !this.lairFight(d.lair);
+      if (open && this.sealed.delete(d.lair)) this.events.push({ e: 'lair', cave: d.lair, shut: false, x: d.x, y: d.y }); // combat fini
       map.doorShut[i] = open ? 0 : 1;
       if (!open || !inside) return;
       for (const k of [a, b]) if (!this.garrisoned.has(k) && !this.cleared.has(k)) this.garrison(k);
     });
+  }
+
+  /** Combat en cours dans l'antre d'un géant du volcan (cave : son index, -1 pour une herse ordinaire) : la herse reste baissée. */
+  private lairFight(cave: number) {
+    const u = cave >= 0 ? this.units.get(this.caveBoss[cave]) : undefined;
+    return !!u && !u.dormant && u.hp > 0;
+  }
+
+  /**
+   * Le combat commence dans l'antre d'un géant du volcan : sa herse retombe aussitôt, personne n'entre ni ne sort avant la
+   * fin. Chacun se retrouve du même côté que sa meute et ses Alphas : qui était sur le seuil entre, les monstres restés
+   * dans le couloir rejoignent leur dompteur dans l'antre, ceux entrés sans lui le rejoignent dehors.
+   */
+  private sealLair(cave: number) {
+    const map = this.map, c = map.caves[cave], k = c?.room;
+    const i = map.doors.findIndex((d) => d.lair === cave);
+    if (k === undefined || i < 0) return;
+    const d = map.doors[i], room = map.rooms[k];
+    map.doorShut[i] = 1;
+    this.sealed.add(cave);
+    const inside = (x: number, y: number) => map.roomAt(x, y) === k;
+    for (const p of this.players.values()) {
+      if (p.dead || map.doorAt(p.x, p.y) !== i) continue;
+      // sous la herse : un pas de plus vers le centre de l'antre
+      const l = Math.hypot(room.x - d.x, room.y - d.y) || 1;
+      const at = map.freeNear(d.x + ((room.x - d.x) / l) * 90, d.y + ((room.y - d.y) / l) * 90);
+      [p.x, p.y] = [at.x, at.y];
+      p.lastPosMs = Date.now();
+      p.send({ t: 'teleport', x: p.x, y: p.y });
+    }
+    for (const u of this.units.values()) {
+      const o = u.owner ? this.players.get(u.owner) : undefined;
+      if (!o || u.reviveAt || o.mount === u.id) continue; // un tombé revient près de son dompteur ; la monture suit son cavalier
+      const want = !o.dead && inside(o.x, o.y);
+      if ((inside(u.x, u.y) || map.doorAt(u.x, u.y) === i) === want) continue;
+      // de l'autre côté de la herse que son dompteur : il le rejoint
+      let at = { x: o.x, y: o.y };
+      for (let n = 0; n < 12; n++) {
+        const a = Math.random() * Math.PI * 2, r = 50 + n * 8;
+        const q = map.freeNear(o.x + Math.cos(a) * r, o.y + Math.sin(a) * r);
+        if (inside(q.x, q.y) === want && map.doorAt(q.x, q.y) < 0) {
+          at = q;
+          break;
+        }
+      }
+      [u.x, u.y] = [at.x, at.y];
+      u.path = null;
+      u.target = 0;
+    }
+    this.events.push({ e: 'lair', cave, shut: true, x: d.x, y: d.y });
   }
 
   /** La garnison d'une salle du donjon (pas l'entrée, ni un antre : son géant y est déjà). */
@@ -2993,6 +3045,7 @@ export class Room {
     u.fight = { at: this.time, from: p.id, by: new Map(), landed: this.time };
     u.target = p.id;
     this.events.push({ e: 'challenge', cave, id: u.id, by: p.id });
+    if (c.room !== undefined) this.sealLair(cave); // antre du volcan : la herse retombe
   }
 
   private summonMinions(u: Unit, n: number, max: number, minion?: string) {
@@ -5422,7 +5475,7 @@ export class Room {
     const ent = (id: number) => this.players.get(id) ?? this.units.get(id);
     switch (e.e) {
       case 'hit': return ent(e.b) ?? ent(e.a) ?? null;
-      case 'die': case 'shot': case 'boom': return e;
+      case 'die': case 'shot': case 'boom': case 'lair': return e;
       case 'zap': return { x: e.pts[0], y: e.pts[1] };
       case 'struck': return e;
       case 'mend': return ent(e.to) ?? null;

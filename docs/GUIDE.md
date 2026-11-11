@@ -286,8 +286,9 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 ## Le volcan et le cœur volcanique
 
 - Un grand volcan se dresse dans la Mer de sable. Sa bouche, à son pied, reste scellée par une croûte d'obsidienne
-  tant que le village n'a pas vaincu les trois géants de la Mer de sable ; ensuite, **E** pour y descendre, de jour
-  comme de nuit et par tous les temps.
+  tant que le village n'a pas vaincu les trois géants de la Mer de sable ; ensuite, **E** (« Rentrer dans le volcan »)
+  pour y descendre, de jour comme de nuit et par tous les temps. En bas, **E** à la sortie (« Sortir du volcan ») pour
+  remonter.
 - Les **entrailles du volcan** sont un donjon (zone 7) : un labyrinthe de grandes salles reliées par de longs couloirs,
   différent d'un village à l'autre. On arrive en bas ; le cœur est au centre ; les trois géants du volcan attendent
   chacun dans sa salle, au bout d'un cul-de-sac — un à gauche, un à droite, un en haut — et il faut fouiller pour les
@@ -296,6 +297,9 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   lève les herses de ses couloirs et débloque les salles voisines. La herse d'une salle de géant porte un sceau d'or :
   il faut en plus **payer l'entrée** (**E** devant la herse, une fois pour tout le village). Si plus personne n'est
   dans le donjon pendant deux minutes, les salles se regarnissent et les herses retombent.
+- **Combat dans un antre** : dès qu'on réveille le géant, la herse de sa salle retombe. Personne n'entre ni ne sort
+  tant qu'il est debout ; la meute et les Alphas restés dans le couloir rejoignent leur dompteur dans la salle (et
+  ceux entrés sans leur dompteur le rejoignent dehors). Vaincu, ou rendormi faute de combattants, la herse se relève.
 - La roche et les herses arrêtent la vue : on ne tire pas d'une salle à l'autre (archers, mages, tortues-volcans…).
 - Dans les salles, des mares de lave infranchissables à pied (à dos de vautour, on les survole) et des **pièges** :
   - les **évents de flammes**, en travers des couloirs : ils rougeoient, puis crachent du feu, chacun à son rythme ;

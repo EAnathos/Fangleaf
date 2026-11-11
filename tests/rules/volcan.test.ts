@@ -318,4 +318,39 @@ describe('Le volcan et ses entrailles', () => {
     check(q.hp < hp2, 'les jets tournent : impossible de rester à portée sans être brûlé');
     check(!r.hazards.some((h: { style?: string }) => h.style === 'flame'), 'puis ils s\'éteignent');
   });
+
+  rule('Antre du volcan : la herse retombe pendant le combat, chacun se retrouve du côté de sa meute et de ses Alphas, puis elle se relève.', () => {
+    const r = room(), m = r.map;
+    const lair = m.caves.find((c: { room?: number }) => c.room !== undefined), li = m.doors.findIndex((q: { lair: number }) => q.lair === lair.id);
+    const d = m.doors[li], k = lair.room, boss = r.units.get(r.caveBoss[lair.id]);
+    const inLair = (e: { x: number; y: number }) => m.roomAt(e.x, e.y) === k;
+    // un point du couloir, juste derrière la herse (côté opposé à l'antre)
+    const out = [1, -1].map((sg) => ({ x: d.x + d.ux * 150 * sg, y: d.y + d.uy * 150 * sg })).find((q) => !inLair(q) && !m.blocked(q.x, q.y))!;
+    const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 40];
+    [q.x, q.y] = [out.x, out.y];
+    m.rooms.forEach((_: unknown, i: number) => r.cleared.add(i));
+    r.tick = 0;
+    r.updateDepths();
+    check(inLair(p) && r.map.arenaAt(p.x, p.y)?.id === lair.id && m.doorShut[li] === 0, 'avant le combat : la herse de l\'antre est levée, le dompteur est dans l\'antre');
+    // la meute de p est restée dans le couloir ; un monstre de q, lui, est entré dans l'antre sans son dompteur
+    const wolf = r.createUnit(SPECIES.findIndex((sp) => sp.key === 'wolf'), false, out.x, out.y);
+    r.makeTamed(wolf, p);
+    const hare = r.spawnAlpha(p, SPECIES.findIndex((sp) => sp.key === 'hare'), 0, false);
+    [hare.x, hare.y] = [out.x, out.y];
+    const stray = r.createUnit(SPECIES.findIndex((sp) => sp.key === 'wolf'), false, p.x + 60, p.y);
+    r.makeTamed(stray, q);
+    r.events = [];
+    r.onChallenge(p, lair.id);
+    check(!boss.dormant && m.doorShut[li] === 1 && m.blocked(d.x, d.y), 'le combat commence : la herse retombe aussitôt et barre le couloir');
+    check(inLair(wolf) && inLair(hare), 'la meute et l\'Alpha restés dans le couloir rejoignent leur dompteur dans l\'antre');
+    check(!inLair(stray) && Math.hypot(stray.x - q.x, stray.y - q.y) < 200, 'le monstre entré sans son dompteur le rejoint dehors');
+    check(r.events.some((e: { e: string; shut?: boolean }) => e.e === 'lair' && e.shut), 'les joueurs proches sont prévenus');
+    r.updateDepths();
+    check(m.doorShut[li] === 1, 'tant que le géant est debout, elle reste baissée');
+    r.events = [];
+    r.calmBoss(boss); // combat perdu : il se rendort, guéri
+    r.updateDepths();
+    check(m.doorShut[li] === 0 && r.events.some((e: { e: string; shut?: boolean }) => e.e === 'lair' && !e.shut), 'le combat fini, la herse se relève');
+  });
 });
