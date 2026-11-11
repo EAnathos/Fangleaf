@@ -1,5 +1,25 @@
 [
   {
+    "version": "0.13.0",
+    "date": "2026-11-11",
+    "title": "Nouveautés : Une carte pour tout le village, et des échanges · Combats de géants plus justes · Volcan : entrées plus claires, antres fermés pendant le combat · Créatures plus malignes",
+    "items": [
+      "Une carte pour tout le village, et des échanges — La carte se découvre pour tout le village : ce qu'explore un membre apparaît chez les autres, même s'ils étaient déconnectés.",
+      "Une carte pour tout le village, et des échanges — Tout près d'un autre dompteur, U (ou le bouton ⇄) lui propose un échange d'or, de bois ou de pierre : chacun voit les deux parts, et l'échange se fait quand les deux ont validé.",
+      "Combats de géants plus justes — Le rayon runique est de nouveau visible pendant toute l'attaque, pas seulement son annonce.",
+      "Combats de géants plus justes — Pendant un combat de géant, personne ne peut entrer ni sortir de sa grotte.",
+      "Combats de géants plus justes — Un Alpha tombé pendant un combat de géant attend la fin de ce combat, même si son dompteur se déconnecte.",
+      "Combats de géants plus justes — Le cercle d'invocation d'un géant vaincu est à sa taille.",
+      "Combats de géants plus justes — Un géant vaincu par le dompteur le craint à son retour ; s'il a gagné, il se montre arrogant.",
+      "Volcan : entrées plus claires, antres fermés pendant le combat — La bouche du volcan propose « Rentrer dans le volcan », et sa sortie « Sortir du volcan ».",
+      "Volcan : entrées plus claires, antres fermés pendant le combat — Dans les entrailles, la herse de l'antre d'un géant retombe dès que le combat commence : personne n'entre ni ne sort tant qu'il est debout.",
+      "Volcan : entrées plus claires, antres fermés pendant le combat — La meute et les Alphas restés dans le couloir rejoignent leur dompteur dans l'antre au moment où la herse tombe.",
+      "Créatures plus malignes — L'Alpha Lièvre se soigne désormais lui-même, en plus de son dompteur et de sa meute.",
+      "Créatures plus malignes — Le Golem de mousse de la meute mange aussi les filons d'or : l'or revient à son dompteur.",
+      "Créatures plus malignes — Un géant qui ne touche personne pendant un moment s'impatiente et accélère peu à peu ; il reprend son allure dès qu'il touche un dompteur."
+    ]
+  },
+  {
     "version": "0.12.0",
     "date": "2026-11-11",
     "title": "Réglages et affichage",

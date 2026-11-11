@@ -1,9 +1,0 @@
-{
-  "bump": "minor",
-  "date": "2026-11-11",
-  "title": "Une carte pour tout le village, et des échanges",
-  "items": [
-    "La carte se découvre pour tout le village : ce qu'explore un membre apparaît chez les autres, même s'ils étaient déconnectés.",
-    "Tout près d'un autre dompteur, U (ou le bouton ⇄) lui propose un échange d'or, de bois ou de pierre : chacun voit les deux parts, et l'échange se fait quand les deux ont validé."
-  ]
-}
