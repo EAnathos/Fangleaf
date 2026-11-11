@@ -2271,8 +2271,10 @@ export class Room {
   }
 
   private doSwap(s: Swap) {
-    const a = this.players.get(s.a), b = this.players.get(s.b);
-    if (!a || !b) return this.endSwap(s, false, 'Ton partenaire d\'échange est parti.');
+    // revérifié à l'instant même du transfert : le contrôle périodique (updateSwaps) peut ne pas encore être passé
+    const broken = this.swapBroken(s);
+    if (broken) return this.endSwap(s, false, broken);
+    const a = this.players.get(s.a)!, b = this.players.get(s.b)!;
     const pairs = [[a, b], [b, a]] as const;
     if (pairs.some(([from]) => { const o = s.offer.get(from.id)!; return from.gold < o.gold || from.wood < o.wood || from.stone < o.stone; })) {
       // l'un a dépensé entre-temps : sa part revient à ce qu'il a, et chacun revalide
@@ -2308,11 +2310,18 @@ export class Room {
   private updateSwaps() {
     if (this.tick % 10 !== 0 || !this.swaps.size) return;
     for (const s of new Set(this.swaps.values())) {
-      const a = this.players.get(s.a), b = this.players.get(s.b);
-      if (!a || !b) this.endSwap(s, false, 'Ton partenaire d\'échange est parti.');
-      else if (a.dead || b.dead) this.endSwap(s, false, 'Échange annulé : l\'un de vous est à terre.');
-      else if (dist2(a.x, a.y, b.x, b.y) > TRADE_KEEP_R ** 2) this.endSwap(s, false, 'Échange annulé : vous vous êtes éloignés.');
+      const broken = this.swapBroken(s);
+      if (broken) this.endSwap(s, false, broken);
     }
+  }
+
+  /** Pourquoi cet échange ne peut plus se faire (l'un est parti, à terre ou trop loin), ou null s'il tient toujours. */
+  private swapBroken(s: Swap) {
+    const a = this.players.get(s.a), b = this.players.get(s.b);
+    if (!a || !b) return 'Ton partenaire d\'échange est parti.';
+    if (a.dead || b.dead) return 'Échange annulé : l\'un de vous est à terre.';
+    if (dist2(a.x, a.y, b.x, b.y) > TRADE_KEEP_R ** 2) return 'Échange annulé : vous vous êtes éloignés.';
+    return null;
   }
 
   /** Combat en cours dans l'antre d'un géant du volcan (cave : son index, -1 pour une herse ordinaire) : la herse reste baissée. */
