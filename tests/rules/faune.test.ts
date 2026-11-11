@@ -402,6 +402,7 @@ describe('Faune : tireurs, gibier, baies, bestiaire', () => {
   });
   rule('Calendrier : douze lunes ; la neige s\'installe peu à peu en fin d\'année, puis fond au Dégel.', () => {
     check(LUNES.length === 12, 'douze lunes');
+    check(DAY_MS === 14 * 60_000, 'le cycle jour/nuit dure 14 minutes, soit 30 % de moins qu\'avant');
     const givres = 9 * LUNE_DAYS;
     check(snowAt(givres - 0.01) === 0 && snowAt(givres + LUNE_DAYS * 0.25) > 0 && snowAt(givres + LUNE_DAYS * 0.25) < 0.5 && snowAt(givres + LUNE_DAYS) === 1, 'aux Premiers Givres, la neige monte peu à peu');
     check(snowAt(LUNE_DAYS * 0.5) > 0 && snowAt(LUNE_DAYS * 0.5) < 1 && snowAt(LUNE_DAYS) === 0, 'au Dégel, elle fond');
