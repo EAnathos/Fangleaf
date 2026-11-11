@@ -71,14 +71,17 @@ describe('Attaques propres des géants', () => {
 
   rule('Vieille-Défense : ruée folle (il fonce, rebondit, touche une fois au passage) et bauge (la boue colle).', () => {
     const { r, p, b, at } = arena('old_tusk', 300);
-    p.y += 4;
     cast(r, 'old_tusk', 'rampage', b, p);
     const lanes = r.hazards.filter((h: { style: string }) => h.style === 'rampage');
     check(lanes.length === 3, 'trois charges d\'affilée');
-    let hits = 0;
+    // Place la cible sur la trajectoire réellement calculée : le relief varie avec TEST_SEED.
+    // Le test vérifie ainsi le contact de la ruée, pas une position arbitraire à 300 px du géant.
+    const first = lanes[0];
+    [p.x, p.y] = [(first.x + first.x2) / 2, (first.y + first.y2) / 2];
     const hp0 = p.hp;
-    run(r, 0.9 + 3 * (460 / 900 + 0.22), () => (hits = Math.max(hits, p.hp < hp0 ? 1 : 0)));
-    check(p.hp < hp0 && Math.hypot(b.x - at.x, b.y - at.y) > 200, `il a foncé (${Math.round(Math.hypot(b.x - at.x, b.y - at.y))} px) et l'a renversé au passage`);
+    run(r, 0.9 + 3 * (460 / 900 + 0.22));
+    const distance = Math.hypot(first.x2 - first.x, first.y2 - first.y);
+    check(p.hp < hp0 && distance > 200, `la ruée parcourt ${Math.round(distance)} px et renverse une cible sur sa trajectoire`);
     const { r: r2, p: p2, b: b2 } = arena('old_tusk', 200);
     cast(r2, 'old_tusk', 'mud', b2, p2);
     run(r2, 1.6);

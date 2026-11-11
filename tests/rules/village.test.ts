@@ -4,7 +4,7 @@ import { describe } from 'node:test';
 import { rule, check, room, noop, unarmedAdd } from '../helpers.ts';
 import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE, ZONES, gearWood, gearCost, saddleSpeed, HAT_PRICES, oreHp } from '../../shared/config.ts';
 import { Room } from '../../server/room.ts';
-import { villageEdge } from '../../shared/worldmap.ts';
+import { oreRadius, villageEdge } from '../../shared/worldmap.ts';
 import { ELDER_CHAPTERS } from '../../client/src/elder.ts';
 
 describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
@@ -745,5 +745,22 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     const st = r.profileOf(p).stats;
     check(st.kills === 1 && st.dmg >= 1007 && st.best === 1000 && st.deaths === 1 && st.wood === 3 && st.stone === 2 && st.time >= 1,
       `stats comptées (vaincus ${st.kills}, dégâts ${st.dmg}, plus gros coup ${st.best}, chutes ${st.deaths}, bois ${st.wood}, temps ${st.time} s)`);
+  });
+
+  rule('Golem de la meute : il mange aussi les filons d\'or ; l\'or et un peu de pierre reviennent à son dompteur.', () => {
+    const r = room();
+    const p = r.addPlayer('a', noop);
+    const ore = r.map.ores.find((o: { res: string }) => o.res === 'gold');
+    [p.x, p.y] = [ore.x + 120, ore.y];
+    const golem = r.createUnit(SPECIES.findIndex((s) => s.key === 'golem'), false, 0, 0);
+    r.makeTamed(golem, p);
+    [golem.x, golem.y] = [ore.x + golem.r + oreRadius(ore), ore.y]; // collé au filon : c'est lui le plus proche
+    const gold = p.gold, stone = p.stone;
+    for (let i = 0; i < 20 * 10 && !r.map.oreDown.has(ore.id); i++) {
+      r.tick++;
+      r.golemEats(golem, p);
+    }
+    check(r.map.oreDown.has(ore.id), 'le filon d\'or est mangé en quelques bouchées');
+    check(p.gold - gold === Math.round(oreGold(ore.zone) * ore.size) && p.stone > stone, `il rapporte ${p.gold - gold} or (comme le dompteur à la pioche) et ${p.stone - stone} pierre`);
   });
 });

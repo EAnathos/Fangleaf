@@ -299,6 +299,17 @@ export class WorldMap {
   private palisadeCells: number[] = []; // cases de la palissade (solides seulement une fois construite)
   private bridgeCells: number[] = []; // cases du pont (praticables seulement une fois réparé)
 
+  /**
+   * Copie profonde, identique à une carte neuve de même graine si celle-ci n'a pas encore servi : environ 20 ms au lieu
+   * de plusieurs secondes de génération. Tous les champs sont des données (pas de fonction) : structuredClone les copie,
+   * état modifiable compris (arbres abattus, filons épuisés, palissade, herses…). Sert au cache de cartes des tests.
+   */
+  clone(): WorldMap {
+    const copy = Object.create(WorldMap.prototype) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(this)) copy[key] = structuredClone(value);
+    return copy as unknown as WorldMap;
+  }
+
   /** draw : la carte sert aussi à dessiner (le client) ; le serveur se passe de ce qui ne sert qu'au dessin (embouchures). */
   constructor(readonly seed: number, draw = true) {
     this.mouth = new Uint8Array(draw ? N * N : 0).fill(255);
