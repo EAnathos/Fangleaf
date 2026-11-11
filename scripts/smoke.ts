@@ -82,7 +82,7 @@ async function cheatsAccepted(port: number, env: Record<string, string>) {
     try {
       await bot.open();
       if (bot.failed || bot.ws.readyState !== WebSocket.OPEN) {
-        console.error(`port ${port} : WebSocket indisponible (${bot.failed?.message ?? 'connexion fermée'})`);
+        console.error(`port ${port} : WebSocket indisponible (${(bot.failed as Error | undefined)?.message ?? 'connexion fermée'})`);
         return null;
       }
       bot.send({ t: 'create', name: 'Testeur' });
