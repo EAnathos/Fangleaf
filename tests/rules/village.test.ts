@@ -814,6 +814,44 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     check(last(a.id, 'swapEnd')?.done === false && /éloignés/.test(last(a.id, 'swapEnd')?.why ?? ''), 'trop loin l\'un de l\'autre : l\'échange est annulé');
   });
 
+  rule('Échange : tout est revérifié au moment de conclure ; trop loin ou à terre avant le contrôle suivant, rien n\'est transféré.', () => {
+    const r = room();
+    const box = new Map<number, { t: string; done?: boolean; why?: string }[]>();
+    const spy = (id: () => number) => (m: { t: string }) => box.set(id(), [...(box.get(id()) ?? []), m]);
+    let ia = 0, ib = 0;
+    const a = r.addPlayer('a', spy(() => ia)), b = r.addPlayer('b', spy(() => ib));
+    [ia, ib] = [a.id, b.id];
+    const end = (id: number) => [...(box.get(id) ?? [])].reverse().find((m) => m.t === 'swapEnd');
+    const deal = () => {
+      [a.x, a.y] = [r.map.spawn.x, r.map.spawn.y];
+      [b.x, b.y] = [a.x + 80, a.y];
+      [a.dead, b.dead] = [false, false];
+      [a.gold, a.wood, b.gold, b.wood] = [100, 0, 0, 50];
+      box.clear();
+      r.onSwap(a, 'open', { with: b.id });
+      r.onSwap(a, 'offer', { gold: 60 });
+      r.onSwap(b, 'offer', { wood: 30 });
+      r.onSwap(a, 'ok');
+    };
+    const untouched = () => a.gold === 100 && a.wood === 0 && b.gold === 0 && b.wood === 50;
+    // trop loin : ils valident tous les deux avant le prochain contrôle périodique (updateSwaps n'est pas appelé)
+    deal();
+    [b.x, b.y] = [a.x + TRADE_KEEP_R + 100, a.y];
+    r.onSwap(b, 'ok');
+    check(untouched(), `trop loin au moment de conclure : rien n'est transféré (a : ${a.gold} or, b : ${b.wood} bois)`);
+    check(end(a.id)?.done === false && end(b.id)?.done === false && /éloignés/.test(end(a.id)?.why ?? ''), 'l\'échange est annulé et les deux sont prévenus');
+    // l'un tombe avant la seconde validation
+    deal();
+    a.dead = true;
+    r.onSwap(b, 'ok');
+    check(untouched(), 'à terre au moment de conclure : rien n\'est transféré');
+    check(end(a.id)?.done === false && end(b.id)?.done === false && /à terre/.test(end(b.id)?.why ?? ''), 'l\'échange est annulé et les deux sont prévenus');
+    // l'un est parti (déconnecté) : l'échange tombe avec lui, sans transfert
+    deal();
+    r.removePlayer(b.id);
+    check(a.gold === 100 && end(a.id)?.done === false, 'le partenaire parti : l\'échange est annulé, rien n\'est transféré');
+  });
+
   rule('Golem de la meute : il mange aussi les filons d\'or ; l\'or et un peu de pierre reviennent à son dompteur.', () => {
     const r = room();
     const p = r.addPlayer('a', noop);
