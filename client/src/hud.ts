@@ -150,9 +150,9 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     // le volcan : sa bouche (scellée tant que les géants de la Mer de sable sont debout), la sortie de ses entrailles,
     // et l'autel du cœur, au centre
     volcanoOpen(v.beaten)
-      ? { cave: { id: HALL_ID, enter: true }, pos: map.volcanoMouth, label: 'E — Descendre dans le volcan' }
+      ? { cave: { id: HALL_ID, enter: true }, pos: map.volcanoMouth, label: 'E — Rentrer dans le volcan' }
       : { pos: map.volcanoMouth, label: 'Scellée : vaincs les géants de la Mer de sable' },
-    { cave: { id: HALL_ID, enter: false }, pos: map.depths.exit, label: 'E — Remonter à la surface' },
+    { cave: { id: HALL_ID, enter: false }, pos: map.depths.exit, label: 'E — Sortir du volcan' },
     // la haute mer : on prend la mer depuis le bateau prêt ; à bord, on peut faire demi-tour, et une fois le Kraken
     // vaincu, la route du Colisée est libre
     ...(() => {

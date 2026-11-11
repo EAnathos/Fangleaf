@@ -1545,6 +1545,13 @@ export class Game {
       case 'info':
         this.hud.toast(e.text);
         break;
+      case 'lair': {
+        // la herse de l'antre retombe au début du combat, et se relève à la fin
+        const name = bossName(this.map.caves[e.cave]?.boss ?? 0);
+        this.hud.toast(e.shut ? `La herse retombe : plus personne n'entre ni ne sort tant que ${name} est debout !` : 'La herse de l\'antre se relève.');
+        if (e.shut) this.shake = Math.max(this.shake, 0.3);
+        break;
+      }
       case 'camp': {
         const c = this.map.sites[e.site];
         this.fx.ring(c.x, c.y, '#F0B64A', 20, CAMP_R, 1.2);
