@@ -2624,6 +2624,7 @@ export class Game {
     }
     const bar = document.getElementById('boss-bar')!;
     document.getElementById('hud')!.classList.toggle('boss-on', !!best);
+    this.hud.bossFight = !!best; // nos Alphas tombés attendent la fin du combat pour ressusciter
     bar.hidden = !best;
     if (!best) {
       this.bossBarFor = 0;
