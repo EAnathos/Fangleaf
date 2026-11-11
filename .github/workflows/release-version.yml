@@ -1,0 +1,80 @@
+name: Version and changelog
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: release-version-dev
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Prepare version and changelog PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validate changesets
+        run: npm run changesets:check
+      - name: Generate release version and changelog
+        run: npm run release:version
+      - name: Commit release metadata on automation branch
+        id: commit
+        env:
+          BRANCH: automation/version-changelog
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git switch -c "$BRANCH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json client/src/changelog.json .changes
+          git commit -m "Versionne la publication et consolide le changelog"
+          # Cette branche est réservée au bot : elle est reconstruite depuis dev
+          # à chaque exécution pour intégrer les derniers changements sans toucher à dev.
+          git push --force origin "HEAD:refs/heads/$BRANCH"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Create or update version pull request
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: automation/version-changelog
+        run: |
+          title="chore(release): publier la version et le changelog"
+          body="$(cat <<'EOF'
+          Cette PR est générée automatiquement à partir des fichiers `.changes`.
+
+          Elle met à jour la version du projet et le changelog consolidé. Elle passe par les contrôles habituels de `dev` : aucune protection de branche n'est contournée.
+
+          Closes #49
+          EOF
+          )"
+          number="$(gh pr list --head "$BRANCH" --base dev --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "$title" --body "$body"
+          else
+            gh pr create --base dev --head "$BRANCH" --title "$title" --body "$body"
+          fi
+      # Les pushes et créations de PR effectués avec GITHUB_TOKEN ne déclenchent
+      # pas automatiquement les workflows CI : on lance donc la CI explicitement.
+      - name: Run CI on the version PR branch
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: automation/version-changelog
+        run: gh workflow run ci.yml --ref "$BRANCH"

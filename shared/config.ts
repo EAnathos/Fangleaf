@@ -257,6 +257,9 @@ export const TAME_CHANCE = 0.25;
 export const TAMED_MULT = 0.5; // un monstre apprivoisé a 50 % des dégâts de sa version sauvage…
 export const TAMED_HP_MULT = 0.575; // … et 57,5 % de ses PV (+15 % par rapport à la moitié)
 export const GOLD_SHARE_R = 700;
+/** Échange entre dompteurs : on le propose à moins de TRADE_R d'un autre ; il tombe si l'on s'éloigne au-delà de TRADE_KEEP_R. */
+export const TRADE_R = 220;
+export const TRADE_KEEP_R = 400;
 
 export const ALPHA_MULT = { hp: 1.9, dmg: 2.2, size: 1.6 }; // Alpha niv. 0 = 1,9× les PV et 2,2× les dégâts du monstre de base
 
@@ -464,7 +467,7 @@ export const ALPHA_LVL_MAX = 10;
  * - le suricate (cri de ralliement) et l'escargot (carapace) ont une compétence : au combat, ils la lancent dès qu'elle
  *   est rechargée, et tous les alliés autour d'eux (dompteurs et meutes, pas seulement le leur) en profitent un moment :
  *   dégâts infligés accrus (suricate) ou dégâts reçus réduits (escargot) ;
- * - le lièvre soigne un peu son dompteur et la meute autour de lui, toutes les ALPHA_HEAL_S secondes.
+ * - le lièvre soigne un peu son dompteur, la meute autour de lui et lui-même, toutes les ALPHA_HEAL_S secondes.
  */
 export const ALPHA_PERKS: Record<string, { kind: 'guard' | 'heal' | 'rally'; base: number; per: number }> = {
   meerkat: { kind: 'rally', base: 0.15, per: 0.015 }, // +15 % de dégâts infligés, +1,5 % par niveau
@@ -736,6 +739,11 @@ export const POISON_S = 4;
 // Les géants poursuivent : quand leur cible s'éloigne, ils accélèrent (impossible de les tuer en reculant).
 export const BOSS_CHASE_R = 0; // dès que sa cible n'est plus au contact
 export const BOSS_CHASE_MULT = 1.45; // 270 à 340 px/s, plus rapide que le dompteur (210)
+// Un géant qui ne touche aucun dompteur pendant BOSS_HASTE_AFTER secondes s'impatiente : il accélère peu à peu
+// (+BOSS_HASTE_RATE par seconde, jusqu'à +BOSS_HASTE_MAX), et reprend son allure dès qu'il touche un dompteur.
+export const BOSS_HASTE_AFTER = 6;
+export const BOSS_HASTE_RATE = 0.05;
+export const BOSS_HASTE_MAX = 0.5;
 export const WEB_SLOW = 0.5; // vitesse sous l'effet d'une toile
 export const WEB_SLOW_S = 2.5;
 

@@ -7,6 +7,7 @@ on avance zone par zone jusqu'au bout de l'île, en affrontant les géants qui d
 - **Comment on joue** : [docs/GUIDE.md](docs/GUIDE.md)
 - **Comment c'est fait** (stack, arborescence, flux réseau) : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Comment contribuer** (branches, PR, revue) : [CONTRIBUTING.md](CONTRIBUTING.md)
+- **Staging et mise en production** (dev, staging, promotion, retour arrière) : [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md)
 
 ## Stack
 
@@ -67,6 +68,15 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
   et lance [deploy/deploy.sh](deploy/deploy.sh) (`npm ci`, migrations, build, `pm2 startOrReload`, vérification du port).
   Aussi lançable à la main depuis l'onglet *Actions*.
 - Secrets du dépôt à créer : `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (clé privée dédiée au déploiement), `VPS_PORT` (facultatif).
+- [cd-staging.yml](.github/workflows/cd-staging.yml) : le **staging**, quand la CI passe sur `dev`. Il tourne sur un
+  VPS Coolify à part (image [deploy/Dockerfile](deploy/Dockerfile), projet Supabase dédié) : le workflow demande à
+  Coolify de déployer le commit validé. Secrets de l'environnement GitHub `staging` : `COOLIFY_URL`, `COOLIFY_TOKEN`,
+  `COOLIFY_APP_UUID` ; variables du dépôt `STAGING_ENABLED` = `true` (sans elle le workflow ne fait rien) et
+  `STAGING_URL` (adresse publique du staging, obligatoire).
+- Variables propres au staging, réglées dans Coolify : `VITE_FANGLEAF_ENV=staging` (badge STAGING, titre de l'onglet
+  et panneau de triche dans le build du client) et `ALLOW_CHEATS=1` (le serveur y accepte les triches F9).
+  La production ne déclare ni l'une ni l'autre. Branches, installation du staging, validation avant la mise en
+  production et retour arrière : [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md).
 
 ## Commandes
 
@@ -78,7 +88,8 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 | `npm run typecheck` | Vérification TypeScript |
 | `npm run db:migrate` | Applique les migrations Supabase manquantes (`DATABASE_URL` requis) |
 | `npm run smoke` | Test bot (autorise les invités via `ALLOW_GUESTS=1`, réservé aux tests) : création, 4 joueurs max, combat, or, forge, anti-téléportation |
-| `npm run test:rules` | Règles de la simulation, sans réseau (`node:test`) : un fichier par thème dans `tests/rules/` (monde, combat, meute, Alphas, géants, faune, village, réseau). Un seul fichier : `npx tsx --test tests/rules/geants.test.ts` ; un seul test : `--test-name-pattern="Marché"` ; autre graine ou autre heure : `TEST_SEED=…`, `TEST_NOW=…` |
+| `npm run test:rules` | Règles de la simulation, sans réseau (`node:test`) : un fichier par thème dans `tests/rules/`. Un ou plusieurs thèmes : `npm run test:rules -- volcan meute` ; un seul test : `-- geants --test-name-pattern=Marché` ; autre graine ou autre heure : `TEST_SEED=…`, `TEST_NOW=…`. Détails : [tests/README.md](tests/README.md) |
+| `npm run bench` | Banc de performance de la simulation (temps d'un tick, volume des snapshots) ; `-- --against <fichier>` compare à une mesure de référence. Voir [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 
 ## Structure
 
@@ -89,7 +100,7 @@ supabase/ migrations SQL (npm run db:migrate)
 client/   lobby, boucle de jeu, rendu Canvas procédural, HUD HTML, minicarte
 scripts/  test de fumée multi-clients, migrations
 tests/    tests de règles par thème (tests/rules/*.test.ts) et leurs outils communs (helpers.ts)
-docs/     guide du jeu (GUIDE.md), architecture (ARCHITECTURE.md)
+docs/     guide du jeu (GUIDE.md), architecture (ARCHITECTURE.md), environnements dev, staging et prod (ENVIRONNEMENTS.md)
 ```
 
 Le détail fichier par fichier est dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -99,5 +110,20 @@ Tout l'équilibrage (PV, dégâts, zones, chance d'apprivoisement, coût de la f
 
 ## Licence
 
-© 2026 EAnathos, tous droits réservés. Le code est visible mais **ni libre ni open source** : aucune copie,
-modification, redistribution ou mise en ligne sans autorisation écrite. Détails dans [LICENSE](LICENSE).
+Fangleaf est **source disponible, avec restriction non commerciale**, sous la
+[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) (© 2026 EAnathos).
+Le texte qui fait foi est celui, en anglais, du fichier [LICENSE](LICENSE) ; ce qui suit n'en est qu'un résumé.
+
+Ce n'est **pas une licence open source** au sens de l'[Open Source Initiative](https://opensource.org/osd) :
+l'OSI exige qu'une licence ne restreigne aucun domaine d'utilisation, et l'usage commercial en est un.
+
+| Autorisé, à des fins non commerciales | Interdit sans autorisation écrite |
+|---|---|
+| Consulter, copier et étudier le code | Vendre le jeu, une copie ou une version modifiée |
+| Le modifier et en tirer des versions dérivées | L'héberger pour en tirer un revenu (abonnement, publicité, achats en jeu, accès payant) |
+| Le redistribuer, modifié ou non | L'utiliser dans le cadre d'une activité commerciale ou pour le compte d'une entreprise |
+| L'héberger pour soi et ses amis, gratuitement | Sous-licencier ou transférer les droits reçus |
+| L'utiliser dans un établissement d'enseignement, un organisme caritatif, de recherche publique ou public | |
+
+Toute redistribution doit être accompagnée du texte de la licence (ou de son URL) et de la ligne
+`Required Notice:` placée en tête de [LICENSE](LICENSE). Pour un usage commercial, ouvrir une issue sur ce dépôt.

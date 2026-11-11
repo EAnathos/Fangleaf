@@ -1,0 +1,152 @@
+[
+  {
+    "version": "0.13.1",
+    "date": "2026-11-11",
+    "title": "Échanges plus sûrs",
+    "items": [
+      "Un échange n'aboutit plus si l'un des deux dompteurs s'est éloigné, est tombé ou est parti au moment de conclure : il est annulé et rien n'est transféré."
+    ]
+  },
+  {
+    "version": "0.13.0",
+    "date": "2026-11-11",
+    "title": "Nouveautés : Une carte pour tout le village, et des échanges · Combats de géants plus justes · Volcan : entrées plus claires, antres fermés pendant le combat · Créatures plus malignes",
+    "items": [
+      "Une carte pour tout le village, et des échanges — La carte se découvre pour tout le village : ce qu'explore un membre apparaît chez les autres, même s'ils étaient déconnectés.",
+      "Une carte pour tout le village, et des échanges — Tout près d'un autre dompteur, U (ou le bouton ⇄) lui propose un échange d'or, de bois ou de pierre : chacun voit les deux parts, et l'échange se fait quand les deux ont validé.",
+      "Combats de géants plus justes — Le rayon runique est de nouveau visible pendant toute l'attaque, pas seulement son annonce.",
+      "Combats de géants plus justes — Pendant un combat de géant, personne ne peut entrer ni sortir de sa grotte.",
+      "Combats de géants plus justes — Un Alpha tombé pendant un combat de géant attend la fin de ce combat, même si son dompteur se déconnecte.",
+      "Combats de géants plus justes — Le cercle d'invocation d'un géant vaincu est à sa taille.",
+      "Combats de géants plus justes — Un géant vaincu par le dompteur le craint à son retour ; s'il a gagné, il se montre arrogant.",
+      "Volcan : entrées plus claires, antres fermés pendant le combat — La bouche du volcan propose « Rentrer dans le volcan », et sa sortie « Sortir du volcan ».",
+      "Volcan : entrées plus claires, antres fermés pendant le combat — Dans les entrailles, la herse de l'antre d'un géant retombe dès que le combat commence : personne n'entre ni ne sort tant qu'il est debout.",
+      "Volcan : entrées plus claires, antres fermés pendant le combat — La meute et les Alphas restés dans le couloir rejoignent leur dompteur dans l'antre au moment où la herse tombe.",
+      "Créatures plus malignes — L'Alpha Lièvre se soigne désormais lui-même, en plus de son dompteur et de sa meute.",
+      "Créatures plus malignes — Le Golem de mousse de la meute mange aussi les filons d'or : l'or revient à son dompteur.",
+      "Créatures plus malignes — Un géant qui ne touche personne pendant un moment s'impatiente et accélère peu à peu ; il reprend son allure dès qu'il touche un dompteur."
+    ]
+  },
+  {
+    "version": "0.12.0",
+    "date": "2026-11-11",
+    "title": "Réglages et affichage",
+    "items": [
+      "Les capacités de spécialisation s'utilisent aussi à dos de monture, et l'armurerie décrit la capacité de chaque voie.",
+      "Effets en cours : un seul réglage, le mode d'affichage (Désactivé / Bonus / Malus / Tous) ; les vignettes sont en petite taille.",
+      "Nouveaux réglages : opacité des meutes des autres joueurs, et options pour masquer les meutes des joueurs déconnectés et les Alphas au repos au village.",
+      "Sur téléphone, le jeu reste en portrait."
+    ]
+  },
+  {
+    "version": "0.11.0",
+    "date": "2026-11-11",
+    "title": "Des jours et des nuits plus courts",
+    "items": [
+      "Le cycle jour/nuit dure désormais 14 minutes au lieu de 20, sans changer la part relative du jour, de la nuit et des crépuscules."
+    ]
+  },
+  {
+    "version": "0.10.0",
+    "date": "2026-11-10",
+    "title": "Prévenu quand on peut éveiller",
+    "items": [
+      "Une notification apparaît dès que tes essences suffisent pour éveiller un Alpha ou pour le renforcer, sans avoir à ouvrir la Tanière pour vérifier."
+    ]
+  },
+  {
+    "version": "0.9.0",
+    "date": "2026-11-10",
+    "title": "Une Tanière plus claire",
+    "items": [
+      "Tanière : un filtre (Équipés, Au repos, À éveiller, Tous) pour ne plus se perdre parmi les Alphas, avec une pastille quand l'un d'eux attend une action.",
+      "Les Alphas pas encore éveillés sont de petites tuiles, les prêts à éveiller en tête ; un clic montre leurs stats.",
+      "☆ Marquer et ✎ Renommer deviennent de petites icônes à côté du nom, et « au repos » n'est plus écrit."
+    ]
+  },
+  {
+    "version": "0.8.0",
+    "date": "2026-11-10",
+    "title": "Le retour de tes Alphas",
+    "items": [
+      "Sur ordinateur, quand un Alpha équipé tombe, le HUD dit dans combien de temps il ressuscite (face à un géant : après le combat).",
+      "Au choix dans Paramètres › Affichage : une ligne sous le sac, ou une vignette à son portrait près des effets en cours."
+    ]
+  },
+  {
+    "version": "0.7.0",
+    "date": "2026-11-10",
+    "title": "Capacités de spécialisation",
+    "items": [
+      "En te spécialisant à la Grande armurerie, ta voie débloque une capacité active (touche Espace, ou le bouton dédié, sur recharge).",
+      "Une par voie : Frénésie (Berserker), Rempart (Gardien), Tir de rupture (Tireur d'élite), Pluie de flèches (Rôdeur), Météore (Pyromancien), Floraison (Druide).",
+      "Elles sont pensées pour peser contre les géants : frapper plus fort, protéger ou soigner les coéquipiers, marquer ou embraser l'ennemi."
+    ]
+  },
+  {
+    "version": "0.6.0",
+    "date": "2026-11-10",
+    "title": "Chef du village, membres et inventaire de l'école",
+    "items": [
+      "Le lobby montre les nouveautés de la dernière mise à jour, avec son numéro de version.",
+      "Le chef du village peut le transmettre à un autre membre, connecté ou non (Paramètres › Village).",
+      "Un village compte 4 membres au plus, connectés ou non : le chef peut expulser un membre déconnecté pour faire une place.",
+      "École des dompteurs : un onglet Inventaire montre les livres de ton sac (en lecture, prêt à lire, à lire après le tome d'avant) et ceux déjà lus."
+    ]
+  },
+  {
+    "version": "0.5.0",
+    "date": "2026-11-10",
+    "title": "Essences des géants, noms des Alphas, combats signalés",
+    "items": [
+      "Un géant vaincu donne des essences de son espèce à ceux qui l'ont combattu, un peu plus à chaque nouvelle victoire sur lui.",
+      "Tanière : renomme tes Alphas ; leur nom s'affiche sous eux, pour tout le village.",
+      "Quand un coéquipier réveille un géant, tu es prévenu, et une flèche autour de toi indique le chemin du combat."
+    ]
+  },
+  {
+    "version": "0.4.1",
+    "date": "2026-11-10",
+    "title": "Serveur plus solide",
+    "items": [
+      "Une adresse mal formée ne fait plus tomber le serveur (et les villages en cours avec lui)."
+    ]
+  },
+  {
+    "version": "0.4.0",
+    "date": "2026-11-10",
+    "title": "Volcan, récolte et chapeaux",
+    "items": [
+      "Volcan : salles agrandies, herses à lever en vidant les salles, géants dans leur salle (entrée payante), carte du donjon ; plus de tir à travers la roche.",
+      "Le Tréant et le Golem de la meute récoltent (touche G) : ils abattent les arbres et mangent les pierres.",
+      "Chaque chapeau débloqué renforce l'arme de 10 %.",
+      "Le Seigneur des cendres s'appelle désormais Titus Veillafandre."
+    ]
+  },
+  {
+    "version": "0.3.0",
+    "date": "2026-11-10",
+    "title": "Village plus fluide",
+    "items": [
+      "Le village rame moins avec beaucoup d'Alphas : 30 Alphas au repos au plus sont montrés en même temps."
+    ]
+  },
+  {
+    "version": "0.2.0",
+    "date": "2026-11-09",
+    "title": "Coati roux et robes des Alphas",
+    "items": [
+      "Coati roux : un gibier de la jungle tapi dans les buissons (feuillage qui frémit, poils roux, reflet d'yeux) ; dans la meute, il cueille.",
+      "Chaque espèce a sa robe d'Alpha et de légendaire, et les légendaires leurs effets propres."
+    ]
+  },
+  {
+    "version": "0.1.0",
+    "date": "2026-11-09",
+    "title": "Alpha marqué et effets d'état",
+    "items": [
+      "Tanière : marque un Alpha (☆) pour suivre ses essences dans le HUD.",
+      "Les effets en cours (poison, brûlure, cri du suricate…) ont leur vignette dans le HUD, avec une fenêtre d'info."
+    ]
+  }
+]

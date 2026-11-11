@@ -1,11 +1,11 @@
 // HUD en HTML : panneaux joueur / groupe, minicarte, forge, tanière, toasts.
 
 import {
-  alphaEquipMax, ALPHA_NAME_MAX, alphaName, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, LESSONS_PER_TOME, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
+  alphaEquipMax, ALPHA_NAME_MAX, alphaName, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, LESSONS_PER_TOME, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH, TRADE_R,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
   armorReduction, weaponCost, weaponDmg, hatBonus, HAT_WEAPON_BONUS, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY, abilityOf,
 } from '../../shared/config.ts';
-import { type BoardRow, type Holdings, type PlayerState, type Stats, type StatusTuple, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
+import { type BoardRow, type Holdings, type PlayerState, type ServerMsg, type Stats, type StatusTuple, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
 import { type CalendarDate, LUNE_DAYS, LUNES, SEASON_EMBLEMS, SEASON_NAMES, seasonDay, snowAt } from '../../shared/weather.ts';
 import { armorColor, drawElder, drawHatchling, drawPlayer, drawSweat, drawUnit } from './sprites.ts';
@@ -20,7 +20,8 @@ import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 import { clamp } from '../../shared/math.ts';
 
-export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | null;
+export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | 'trade' | null;
+type SwapView = Extract<ServerMsg, { t: 'swap' }>;
 /** Achat pour tout le village : un bâtiment, ou l'accès à une grotte. */
 export type Purchase = { b: BuildingId } | { cave: number };
 /** Bâtiment à portée d'interaction, s'il y en a un. */
@@ -150,9 +151,9 @@ export const buildingNear = (map: WorldMap, x: number, y: number, v: VillageView
     // le volcan : sa bouche (scellée tant que les géants de la Mer de sable sont debout), la sortie de ses entrailles,
     // et l'autel du cœur, au centre
     volcanoOpen(v.beaten)
-      ? { cave: { id: HALL_ID, enter: true }, pos: map.volcanoMouth, label: 'E — Descendre dans le volcan' }
+      ? { cave: { id: HALL_ID, enter: true }, pos: map.volcanoMouth, label: 'E — Rentrer dans le volcan' }
       : { pos: map.volcanoMouth, label: 'Scellée : vaincs les géants de la Mer de sable' },
-    { cave: { id: HALL_ID, enter: false }, pos: map.depths.exit, label: 'E — Remonter à la surface' },
+    { cave: { id: HALL_ID, enter: false }, pos: map.depths.exit, label: 'E — Sortir du volcan' },
     // la haute mer : on prend la mer depuis le bateau prêt ; à bord, on peut faire demi-tour, et une fois le Kraken
     // vaincu, la route du Colisée est libre
     ...(() => {
@@ -303,6 +304,12 @@ export class Hud {
   onSchool = () => {}; // donner à Aubin les ressources de l'école
   onSword = () => {};
   onRide = () => {}; // bouton selle (mobile) : monter ou descendre
+  onTrade = () => {}; // bouton d'échange (mobile) : comme la touche U
+  onSwap = (_m: { act: 'offer'; gold: number; wood: number; stone: number } | { act: 'ok' | 'cancel' }) => {};
+  swap: SwapView | null = null; // échange en cours (dernier état reçu du serveur)
+  private swapWith = '';
+  private swapTimer = 0;
+  private holdings = { gold: 0, wood: 0, stone: 0 }; // ce qu'il y a dans son sac (bornes des champs de l'échange)
   onAbility = () => {}; // bouton Ruée (ou Espace) : capacité de classe
   onDeposit = () => {};
   beaten: number[] = []; // géants vaincus par le village
@@ -436,6 +443,24 @@ export class Hud {
     });
     this.initSettings(founder);
     onTap($('hold-btn'), () => this.onHold());
+    onTap($('trade-btn'), () => this.onTrade());
+    // Échange : chaque part tapée part au serveur (un peu après la dernière touche) ; il la borne à ce qu'on a
+    for (const k of ['gold', 'wood', 'stone'] as const) {
+      const input = $<HTMLInputElement>(`trade-${k}`);
+      input.addEventListener('input', () => {
+        clearTimeout(this.swapTimer);
+        this.swapTimer = window.setTimeout(() => this.sendSwapOffer(), 250);
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === 'Escape') input.blur(); // les touches reviennent au jeu
+      });
+    }
+    $('trade-ok').onclick = () => {
+      clearTimeout(this.swapTimer);
+      this.sendSwapOffer(); // la dernière part tapée d'abord, si elle n'est pas encore partie
+      this.onSwap({ act: 'ok' });
+    };
+    $('trade-cancel').onclick = () => this.setPanel(null);
     onTap($('mount-btn'), () => this.onRide());
     onTap($('ability-btn'), () => this.onAbility());
     $('talk-later').onclick = () => this.setPanel(null);
@@ -447,7 +472,7 @@ export class Hud {
       this.npcAt++;
       this.showNpc();
     };
-    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'calendar', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile', 'victory'] as const) {
+    for (const id of ['forge', 'den', 'market', 'bigmap', 'quit', 'calendar', 'travel', 'camp', 'buy', 'talk', 'elder', 'npc', 'hall', 'settings', 'board', 'school', 'profile', 'victory', 'trade'] as const) {
       const el = $(id);
       el.querySelector<HTMLButtonElement>('.close')!.onclick = () => this.setPanel(null);
       el.addEventListener('click', (e) => {
@@ -667,8 +692,60 @@ export class Hud {
     setTimeout(open, 1400); // le temps de le voir tomber
   }
 
+  /** Le serveur a mis l'échange à jour (ouvert, part changée, validation) : on l'affiche ; à l'arrivée, il s'ouvre s'il n'y a rien d'autre. */
+  showSwap(m: SwapView, withName: string) {
+    const fresh = !this.swap;
+    this.swap = m;
+    this.swapWith = withName;
+    if (this.panel === 'trade') this.renderSwap();
+    else if (fresh && !this.panel) this.setPanel('trade');
+    else if (fresh) this.toast(`${withName} te propose un échange : U pour l'ouvrir.`);
+  }
+
+  /** L'échange est fini : conclu (les deux ont validé), ou annulé (par l'un, ou parce qu'on s'est éloignés). */
+  endSwap(done: boolean, why?: string) {
+    const name = this.swapWith;
+    this.swap = null;
+    clearTimeout(this.swapTimer);
+    if (this.panel === 'trade') this.setPanel(null);
+    this.toast(done ? `Échange conclu avec ${name} !` : why ?? 'Échange annulé.', done ? 'good' : '');
+  }
+
+  private sendSwapOffer() {
+    if (!this.swap) return;
+    const n = (k: 'gold' | 'wood' | 'stone') => Math.max(0, Math.min(this.holdings[k], Math.floor(Number($<HTMLInputElement>(`trade-${k}`).value) || 0)));
+    const offer = { gold: n('gold'), wood: n('wood'), stone: n('stone') }, mine = this.swap.mine;
+    if (offer.gold !== mine.gold || offer.wood !== mine.wood || offer.stone !== mine.stone) this.onSwap({ act: 'offer', ...offer });
+  }
+
+  private renderSwap() {
+    const s = this.swap;
+    if (!s) return;
+    $('trade-title').textContent = `Échange avec ${this.swapWith}`;
+    $('trade-them').textContent = `Tu reçois de ${this.swapWith}`;
+    for (const k of ['gold', 'wood', 'stone'] as const) {
+      const input = $<HTMLInputElement>(`trade-${k}`);
+      input.max = String(this.holdings[k]);
+      if (document.activeElement !== input) input.value = String(s.mine[k]); // pas pendant qu'on tape
+      $(`trade-${k}-max`).textContent = `/ ${this.holdings[k]}`;
+      $(`trade-their-${k}`).textContent = String(s.theirs[k]);
+    }
+    const ok = $<HTMLButtonElement>('trade-ok');
+    ok.disabled = s.okMine;
+    ok.textContent = s.okMine ? 'Validé ✔' : 'Valider l\'échange';
+    $('trade-status').textContent = s.okMine && s.okTheirs ? '' : s.okMine ? `En attente de ${this.swapWith}…` : s.okTheirs ? `${this.swapWith} a validé : à toi.` : 'Chacun choisit sa part, puis valide. Si une part change, il faut revalider.';
+  }
+
   setPanel(panel: Panel) {
+    if (this.panel === 'trade' && panel !== 'trade' && this.swap) {
+      // fermer l'échange (Annuler, Échap, la croix), c'est l'annuler pour les deux
+      this.swap = null;
+      clearTimeout(this.swapTimer);
+      this.onSwap({ act: 'cancel' });
+    }
     this.panel = panel;
+    $('trade').hidden = panel !== 'trade';
+    if (panel === 'trade') this.renderSwap();
     $('forge').hidden = panel !== 'forge';
     $('den').hidden = panel !== 'den';
     $('market').hidden = panel !== 'market';
@@ -920,6 +997,9 @@ export class Hud {
     hold.classList.toggle('on', me.holding);
     hold.setAttribute('aria-label', me.holding ? 'Ranger la baie' : 'Tendre une baie');
     // au doigt (sur PC : touche F) : monter ou descendre, dès qu'on a une monture dans sa meute
+    this.holdings = { gold: Math.floor(me.gold), wood: Math.floor(me.wood), stone: Math.floor(me.stone) };
+    // au doigt (sur PC : touche U) : proposer un échange, seulement près d'un autre dompteur debout
+    setHidden($('trade-btn'), !this.swap && (me.dead || !players.some((q) => q.id !== me.id && !q.dead && Math.hypot(q.x - myPos.x, q.y - myPos.y) < TRADE_R)));
     const ride = $('mount-btn');
     ride.classList.toggle('on', !!me.mount);
     ride.setAttribute('aria-label', me.mount ? 'Descendre de sa monture' : 'Monter sur sa monture');
@@ -935,13 +1015,11 @@ export class Hud {
     const ab = $('ability-btn');
     setHidden(ab, me.dead || me.ability < 0);
     if (!me.dead && me.ability >= 0 && me.spec) {
-      if (ab.dataset.spec !== me.spec) { // icône et nom : on ne les refait qu'au changement de spé (perf)
+      if (ab.dataset.spec !== me.spec) { // icône : on ne la refait qu'au changement de spé (perf)
         ab.dataset.spec = me.spec;
-        const name = abilityOf(me.spec)?.name ?? 'Capacité';
-        const ico = ab.querySelector<HTMLElement>('.ability-ico'), nm = ab.querySelector<HTMLElement>('.ability-name');
+        const ico = ab.querySelector<HTMLElement>('.ability-ico');
         if (ico) ico.innerHTML = ABILITY_ICON[me.spec] ?? '';
-        if (nm) nm.textContent = name;
-        ab.setAttribute('aria-label', name);
+        ab.setAttribute('aria-label', abilityOf(me.spec)?.name ?? 'Capacité'); // le nom reste pour l'accessibilité, pas affiché
       }
       ab.classList.toggle('cooling', me.ability > 0);
       const cd = ab.querySelector<HTMLElement>('.cd-label');
@@ -1471,50 +1549,36 @@ export class Hud {
     seg('alphaRevive');
     $('set-revive').hidden = touchOnly; // au doigt, le temps de résurrection ne s'affiche pas en jeu
     applyUi();
-    // Effets en cours : réglages appliqués tout de suite (la vignette change de coin, de taille, de filtre…).
-    const fxSeg = (name: 'position' | 'size' | 'filter' | 'vignette') => {
-      const group = document.querySelector<HTMLElement>(`[data-fx="${name}"]`)!;
-      const paint = () => group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === settings.display.statusHud[name])));
-      group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => {
-        (settings.display.statusHud[name] as string) = b.dataset.value!;
-        saveSettings();
-        paint();
-        this.placeStatusBar();
-      }));
-      paint();
-    };
-    fxSeg('position');
-    fxSeg('size');
-    fxSeg('filter');
-    fxSeg('vignette');
-    for (const [id, k] of [['enabled', 'enabled'], ['timers', 'timers'], ['animations', 'animations']] as const) {
-      const box = $<HTMLInputElement>(`set-fx-${id}`);
-      box.checked = settings.display.statusHud[k];
-      box.onchange = () => {
-        settings.display.statusHud[k] = box.checked;
-        saveSettings();
-        this.placeStatusBar();
-      };
-    }
-    const opacity = $<HTMLInputElement>('set-fx-opacity');
-    opacity.value = String(settings.display.statusHud.opacity);
-    opacity.oninput = () => {
-      settings.display.statusHud.opacity = +opacity.value;
-      this.status.applyOptions(); // tout de suite, pour voir l'effet pendant qu'on glisse
-    };
-    opacity.onchange = saveSettings;
-    for (const k of ['edge', 'corner'] as const) {
-      const range = $<HTMLInputElement>(`set-fx-${k}`);
-      range.value = String(settings.display.statusHud[k]);
-      range.oninput = () => {
-        settings.display.statusHud[k] = +range.value;
-        this.status.applyOptions();
-      };
-      range.onchange = saveSettings;
-    }
+    // Effets en cours : un seul réglage, le mode d'affichage (désactivé / bonus / malus / tous). Le reste (position, taille,
+    // bord teinté, animations…) reste fixé à sa valeur par défaut et n'est plus réglable.
+    const fxMode = document.querySelector<HTMLElement>('[data-fx-mode]')!;
+    const curMode = () => (!settings.display.statusHud.enabled ? 'off' : settings.display.statusHud.filter);
+    const paintMode = () => fxMode.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === curMode())));
+    fxMode.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => {
+      const v = b.dataset.value!;
+      settings.display.statusHud.enabled = v !== 'off';
+      if (v !== 'off') settings.display.statusHud.filter = v as 'all' | 'buffs' | 'nerfs';
+      saveSettings();
+      paintMode();
+      this.placeStatusBar();
+    }));
+    paintMode();
     this.placeStatusBar();
     for (const k of ['shake', 'ping', 'weather'] as const) {
       const box = $<HTMLInputElement>(`set-${k}`);
+      box.checked = settings.display[k];
+      box.onchange = () => {
+        settings.display[k] = box.checked;
+        saveSettings();
+      };
+    }
+    // Meutes et Alphas des autres joueurs : opacité de leur meute, et affichage des déconnectés et des Alphas au village.
+    const allyOp = $<HTMLInputElement>('set-ally-opacity');
+    allyOp.value = String(settings.display.allyPackOpacity);
+    allyOp.oninput = () => (settings.display.allyPackOpacity = +allyOp.value);
+    allyOp.onchange = saveSettings;
+    for (const k of ['sleeperPacks', 'villageAlphas'] as const) {
+      const box = $<HTMLInputElement>(k === 'sleeperPacks' ? 'set-sleeper-packs' : 'set-village-alphas');
       box.checked = settings.display[k];
       box.onchange = () => {
         settings.display[k] = box.checked;
@@ -2083,9 +2147,11 @@ export class Hud {
         const el = document.createElement('button');
         el.className = `class-card${on ? ' on' : ''}`;
         el.disabled = on || !ready || me.gold < price;
-        el.innerHTML = '<b></b><span></span><span class="tag"></span>';
+        el.innerHTML = '<b></b><span></span><span class="ability"></span><span class="tag"></span>';
         el.querySelector('b')!.textContent = s.name;
         el.querySelector('span')!.textContent = s.desc;
+        const ab = abilityOf(id); // la capacité active débloquée par cette voie
+        if (ab) el.querySelector('.ability')!.textContent = `Capacité · ${ab.name} : ${ab.desc}`;
         el.querySelector('.tag')!.textContent = on ? 'Spécialisation actuelle' : !ready ? 'Pas encore' : price ? `Choisir · ${price} or` : 'Choisir · gratuit';
         el.onclick = () => this.onSpec(id);
         return el;
@@ -3098,7 +3164,7 @@ function beastCardBase(s: number, form: BestiaryForm): { name: string; tag: stri
   }
   if (perk?.kind === 'guard') skills.push({ name: 'Carapace', icon: 'heal', desc: `Les alliés autour de lui encaissent ${pctLabel(perk.value)} de dégâts en moins pendant ${ALPHA_SHOUT_S} s, toutes les ${ALPHA_SHOUT_CD} s.` });
   if (perk?.kind === 'rally') skills.push({ name: 'Cri de ralliement', icon: 'rage', desc: `Les alliés autour de lui font +${pctLabel(perk.value)} de dégâts pendant ${ALPHA_SHOUT_S} s, toutes les ${ALPHA_SHOUT_CD} s.` });
-  if (perk?.kind === 'heal') skills.push({ name: 'Soins', icon: 'heal', desc: `Soigne son dompteur et sa meute proche : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s.` });
+  if (perk?.kind === 'heal') skills.push({ name: 'Soins', icon: 'heal', desc: `Soigne son dompteur, sa meute proche et lui-même : ${pctLabel(perk.value)} de leurs PV toutes les ${ALPHA_HEAL_S} s.` });
   if (legend && boss >= 0) skills.push(...moveCards(SPECIES[boss].key).filter((_, i) => !LEGEND_SKIPS.has((BOSS_MOVES[SPECIES[boss].key] ?? [])[i].kind)).map((c) => ({ ...c, name: `${c.name} (de ${SPECIES[boss].name})` })));
   return {
     name: legend ? `${sp.name} légendaire` : `${sp.name} alpha`, tag: legend ? `Aura dorée · ×${String(LEGEND_MULT.hp).replace('.', ',')} PV et dégâts` : `${ZONE_NAMES[sp.zone - 1]} · ${traits}`,

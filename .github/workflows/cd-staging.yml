@@ -1,0 +1,145 @@
+# Déploiement du staging sur Coolify : quand la CI passe sur dev, ou à la main pour un commit précis
+# (c'est le retour arrière). Procédure complète : docs/ENVIRONNEMENTS.md
+#
+# ⚠️ GitHub ne crée les déclenchements `workflow_run` et `workflow_dispatch` que pour les workflows présents sur la
+# branche par défaut (`main`). Tant que ce fichier n'y est pas, aucun run n'existe, ni automatique ni manuel, et c'est
+# silencieux : on déploie alors le staging depuis Coolify. C'est la version de `main` qui s'exécute, même pour un
+# commit de `dev` : une modification de ce fichier n'a d'effet qu'une fois promue.
+#
+# Inactif tant que la variable du dépôt STAGING_ENABLED ne vaut pas « true »
+# (Settings › Secrets and variables › Actions › Variables).
+#
+# Secrets de l'environnement GitHub « staging » (Settings › Environments) :
+#   COOLIFY_URL       adresse de l'instance Coolify, sans barre finale (https://coolify.exemple.dev)
+#   COOLIFY_TOKEN     jeton d'API d'équipe, capacités « write » et « deploy »
+#   COOLIFY_APP_UUID  identifiant de l'application Fangleaf staging dans Coolify
+# Variable obligatoire : STAGING_URL (adresse publique du staging). Sans elle, le workflow s'arrête tout de suite :
+# il vaut mieux une erreur claire qu'un déploiement qui vérifie l'adresse de quelqu'un d'autre.
+name: CD staging
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit, tag ou branche à déployer. Un commit plus ancien de dev pour revenir en arrière.
+        required: true
+        default: dev
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false # un déploiement en cours va toujours au bout
+
+jobs:
+  deploy:
+    name: Déploiement du staging
+    # Après la CI : seulement si elle a réussi, sur un commit de dev (le push d'une fusion ou le commit de version relancé
+    # par release-version.yml), jamais pour une PR.
+    if: >-
+      vars.STAGING_ENABLED == 'true' && (
+        github.event_name == 'workflow_dispatch' || (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event)
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL }}
+    env:
+      COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      APP: ${{ secrets.COOLIFY_APP_UUID }}
+      STAGING_URL: ${{ vars.STAGING_URL }}
+    steps:
+      # Le commit à déployer, et la garantie que l'application visée est bien celle de ce dépôt : une erreur
+      # d'identifiant Coolify ne peut pas envoyer dev sur une autre application.
+      # En automatique, le staging ne recule jamais : si deux CI finissent dans le désordre, l'ancienne est ignorée.
+      - name: Commit à déployer
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ inputs.ref }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          [ -n "$STAGING_URL" ] || { echo "✘ variable STAGING_URL manquante (adresse publique du staging)" >&2; exit 1; }
+          app=$(curl -fsS -H "Authorization: Bearer $COOLIFY_TOKEN" "$COOLIFY_URL/api/v1/applications/$APP")
+          # Coolify stocke « proprietaire/depot » ou l'URL complète selon la façon dont l'application a été créée.
+          repo=$(jq -r '.git_repository' <<<"$app" | sed -E 's#^(https?://|git@)[^/:]+[/:]##; s#\.git$##')
+          [ "${repo,,}" = "${GITHUB_REPOSITORY,,}" ] || { echo "✘ l'application Coolify déploie $repo, pas $GITHUB_REPOSITORY" >&2; exit 1; }
+
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$REF" --jq .sha)
+          else
+            sha=$RUN_SHA
+            current=$(jq -r '.git_commit_sha' <<<"$app")
+            # Même commit : on redéploie. Le commit visé est enregistré avant la construction, donc après un
+            # déploiement raté c'est le seul moyen de réessayer (sinon la relance se croirait déjà à jour).
+            if [[ $current =~ ^[0-9a-f]{40}$ ]] && [ "$current" != "$sha" ]; then
+              # behind : le commit visé est un ancêtre de celui en ligne. diverged : aucun ne descend de l'autre.
+              state=$(gh api "repos/$GITHUB_REPOSITORY/compare/$current...$sha" --jq .status 2>/dev/null || echo ahead)
+              if [ "$state" = behind ] || [ "$state" = diverged ]; then
+                echo "Le staging vise déjà $current ($state) : rien à faire"
+                exit 0
+              fi
+            fi
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Déploiement de $sha"
+
+      # Coolify construit l'image (deploy/Dockerfile) depuis ce commit précis, applique les migrations au
+      # démarrage du conteneur, puis remplace l'ancien.
+      - name: Déploiement Coolify
+        id: deploy
+        if: steps.target.outputs.sha
+        env:
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          curl -fsS -X PATCH "$COOLIFY_URL/api/v1/applications/$APP" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" -H 'Content-Type: application/json' \
+            -d "{\"git_commit_sha\": \"$SHA\"}" >/dev/null
+          uuid=$(curl -fsS -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            "$COOLIFY_URL/api/v1/deploy?uuid=$APP&force=false" | jq -r '.deployments[0].deployment_uuid')
+          [ -n "$uuid" ] && [ "$uuid" != null ] || { echo "✘ Coolify n'a pas accepté le déploiement" >&2; exit 1; }
+          echo "uuid=$uuid" >> "$GITHUB_OUTPUT"
+          echo "Déploiement Coolify $uuid"
+
+      - name: Attendre la fin du déploiement
+        if: steps.deploy.outputs.uuid
+        env:
+          UUID: ${{ steps.deploy.outputs.uuid }}
+        run: |
+          for i in $(seq 1 120); do # 10 minutes : construction de l'image comprise
+            state=$(curl -fsS -H "Authorization: Bearer $COOLIFY_TOKEN" \
+              "$COOLIFY_URL/api/v1/deployments/$UUID" | jq -r '.status')
+            case "$state" in
+              finished) echo "Déploiement terminé"; exit 0 ;;
+              queued|in_progress|'') ;; # vide : réponse illisible ou Coolify indisponible, on réessaie
+              *) echo "✘ déploiement $state (journal dans Coolify)" >&2; exit 1 ;; # failed, cancelled, statut inconnu
+            esac
+            sleep 5
+          done
+          echo "✘ déploiement toujours en cours après 10 minutes" >&2
+          exit 1
+
+      - name: Vérifier la santé du staging
+        if: steps.deploy.outputs.uuid
+        run: |
+          for i in $(seq 1 10); do
+            # La page seule ne prouve ni que le serveur répond, ni que Supabase est configuré.
+            health=$(curl -fsS "$STAGING_URL/healthz" 2>/dev/null || true)
+            page=$(curl -fsS "$STAGING_URL/" 2>/dev/null || true)
+            if jq -e '.ok == true and .persistenceConfigured == true' <<<"$health" >/dev/null \
+              && grep -q '<title>Fangleaf</title>' <<<"$page"; then
+              echo "Staging en ligne, serveur actif et Supabase configuré"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "$STAGING_URL n'est pas prêt (page, serveur ou configuration Supabase)" >&2
+          exit 1

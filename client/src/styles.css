@@ -287,6 +287,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .class-card:hover:not(:disabled) { border-color: var(--amber); }
 .class-card b { font: 700 17px var(--display); }
 .class-card span { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.class-card .ability { margin-top: 2px; font-size: 12px; line-height: 1.35; color: var(--ally); }
 .class-card .tag { margin-top: 4px; font-size: 12px; font-weight: 600; color: var(--amber); }
 .class-card.on { border-color: var(--amber); background: rgba(240, 182, 74, 0.1); cursor: default; }
 .class-card.on .tag { color: var(--ally); }
@@ -606,10 +607,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .ability-btn .ability-ico { display: flex; transition: transform 0.12s; }
 .ability-btn:active .ability-ico { transform: scale(0.9); }
 .ability-btn .cd-label { position: absolute; font: 700 20px var(--body); color: #EADBB8; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
-.ability-btn .ability-name { position: absolute; top: -17px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 700 11px var(--body); color: #EADBB8; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85); pointer-events: none; }
 .ability-btn.cooling { border-color: #6B7A77; }
 .ability-btn.cooling .ability-ico { opacity: 0.22; }
-.ability-btn.cooling .ability-name { opacity: 0.55; }
+/* Mobile : le jeu se joue en portrait ; en paysage sur écran tactile, on invite à tourner le téléphone. */
+#rotate-hint { display: none; }
+@media (orientation: landscape) and (pointer: coarse) {
+  #rotate-hint { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #14231F; color: #EADBB8; text-align: center; padding: 24px; }
+  #rotate-hint p { margin-top: 12px; font: 700 18px var(--body); line-height: 1.45; }
+}
 @media (pointer: fine) { .ability-btn { bottom: 28px; } } /* sur PC, hold-btn et mount-btn sont cachés : la capacité prend la place basse */
 .prompt.pick { border-color: #C8323C; color: #F3A3AA; }
 
@@ -949,3 +954,27 @@ body.waking #hud { opacity: 0; pointer-events: none; }
 .cheat-dot svg { width: 100%; height: 100%; }
 .cheat-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .cheat-time input { width: 70px; }
+
+/* Échange entre dompteurs : ce que je donne à gauche, ce que je reçois à droite. */
+.trade-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0; }
+.trade-side h3 { margin: 0 0 8px; font: 700 16px var(--display); color: var(--amber); }
+.trade-row { display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 8px; min-height: 40px; }
+.trade-row input { width: 100%; min-width: 0; height: 36px; }
+.trade-row b { font: 700 18px var(--display); }
+.trade-actions { gap: 12px; justify-content: flex-end; flex-wrap: wrap; }
+.trade-actions .cta { height: 48px; padding: 0 20px; font-size: 17px; }
+@media (max-width: 480px) { .trade-cols { grid-template-columns: 1fr; } }
+/* au-dessus du bouton de capacité : seulement près d'un autre dompteur */
+.trade-btn { position: absolute; right: 16px; bottom: 232px; width: 56px; height: 56px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border-color: var(--amber); background: rgba(27, 38, 36, 0.92); }
+
+/* Staging : badge permanent, au-dessus de tout, qui ne gêne aucun clic. */
+body.env-staging::after {
+  content: 'STAGING'; position: fixed; top: 6px; left: 50%; transform: translateX(-50%); z-index: 10000;
+  padding: 2px 10px; border-radius: 999px; background: #C0392B; color: #fff; font: 700 12px var(--display);
+  letter-spacing: 2px; pointer-events: none; opacity: 0.9;
+}
+/* Il occupe le haut du centre : on descend d'autant ce qui s'y affiche, sinon il cache la barre du géant
+   et le premier message, c'est-à-dire ce qu'on vient justement vérifier sur le staging. */
+body.env-staging .boss-bar { top: 36px; }
+body.env-staging #toasts { top: 38px; }
+body.env-staging #hud.boss-on #toasts { top: 100px; }

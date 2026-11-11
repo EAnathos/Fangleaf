@@ -13,6 +13,11 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => { /* navigateur sans service worker : tant pis */ }));
 }
+// Staging : un badge permanent pour ne jamais le confondre avec la prod (VITE_FANGLEAF_ENV, figé au build).
+if (import.meta.env.VITE_FANGLEAF_ENV === 'staging') {
+  document.title = 'Fangleaf · staging';
+  document.body.classList.add('env-staging');
+}
 // Pas de menu du clic droit dans le jeu (on le garde dans les champs de texte, pour copier-coller).
 addEventListener('contextmenu', (e) => {
   if (!(e.target instanceof HTMLElement && e.target.closest('input, textarea'))) e.preventDefault();

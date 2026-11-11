@@ -1,7 +1,7 @@
 // Réglages du joueur (gardés dans ce navigateur) : affichage, et sur PC touches et façon d'attaquer.
 // Au doigt, rien ne change pour les touches : on glisse pour se déplacer et l'attaque reste automatique.
 
-export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'harvest' | 'ability' | 'map' | 'revive' | 'chat';
+export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'harvest' | 'ability' | 'map' | 'revive' | 'chat' | 'trade';
 /**
  * Une touche : par code physique (déplacements : ZQSD en AZERTY = WASD en QWERTY) ou par lettre tapée
  * (raccourcis : sinon M ne marche pas en AZERTY). Une touche choisie par le joueur est toujours gardée par code.
@@ -36,6 +36,9 @@ export interface Display {
   weather: boolean; // pluie (la nuit reste : elle fait partie du monde)
   ui: Size; // taille de l'interface (barres, boutons, panneaux)
   text: Size; // taille des textes dans le monde (noms, dégâts, gains)
+  allyPackOpacity: number; // opacité des meutes des autres joueurs (10 à 100 %)
+  sleeperPacks: boolean; // montrer les meutes des joueurs déconnectés (au village)
+  villageAlphas: boolean; // montrer les Alphas au repos qui se promènent sur l'îlot du village
   statusHud: StatusHud; // vignettes des effets d'état
   alphaRevive: 'text' | 'pills'; // Alpha équipé tombé (ordinateur) : temps avant sa résurrection, en texte sous le sac ou en vignette à son portrait
 }
@@ -58,6 +61,7 @@ export const ACTIONS: { id: Action; name: string }[] = [
   { id: 'map', name: 'Carte' },
   { id: 'revive', name: 'Relever un coéquipier (maintenir)' },
   { id: 'chat', name: 'Ouvrir le chat' },
+  { id: 'trade', name: 'Proposer un échange (dompteur proche)' },
 ];
 
 const DEFAULTS: Settings = {
@@ -74,9 +78,10 @@ const DEFAULTS: Settings = {
     map: { key: 'm', label: 'M' },
     revive: { key: 'r', label: 'R' },
     chat: { key: 'c', label: 'C' },
+    trade: { key: 'u', label: 'U' },
   },
   attack: 'auto',
-  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', statusHud: { enabled: true, position: 'top-left', size: 'normal', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 }, alphaRevive: 'text' },
+  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', allyPackOpacity: 100, sleeperPacks: true, villageAlphas: true, statusHud: { enabled: true, position: 'top-left', size: 'small', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 }, alphaRevive: 'text' },
 };
 
 /** Netteté maximale de l'image (pixels par point d'écran) selon la qualité. */
@@ -111,17 +116,21 @@ function load(): Settings {
       weather: typeof d.weather === 'boolean' ? d.weather : D.weather,
       ui: SIZES.find((q) => q === d.ui) ?? D.ui,
       text: SIZES.find((q) => q === d.text) ?? D.text,
+      allyPackOpacity: typeof d.allyPackOpacity === 'number' ? Math.min(100, Math.max(10, Math.round(d.allyPackOpacity))) : D.allyPackOpacity,
+      sleeperPacks: typeof d.sleeperPacks === 'boolean' ? d.sleeperPacks : D.sleeperPacks,
+      villageAlphas: typeof d.villageAlphas === 'boolean' ? d.villageAlphas : D.villageAlphas,
       statusHud: {
+        // Seuls le mode (activé/désactivé) et le filtre (bonus/malus/tous) restent réglables ; le reste est figé aux valeurs par défaut.
         enabled: typeof d.statusHud?.enabled === 'boolean' ? d.statusHud.enabled : D.statusHud.enabled,
-        position: (['top-left', 'top-right', 'bottom-left', 'bottom'] as const).find((q) => q === d.statusHud?.position) ?? D.statusHud.position,
-        size: (['small', 'normal', 'large'] as const).find((q) => q === d.statusHud?.size) ?? D.statusHud.size,
-        timers: typeof d.statusHud?.timers === 'boolean' ? d.statusHud.timers : D.statusHud.timers,
         filter: (['all', 'buffs', 'nerfs'] as const).find((q) => q === d.statusHud?.filter) ?? D.statusHud.filter,
-        animations: typeof d.statusHud?.animations === 'boolean' ? d.statusHud.animations : D.statusHud.animations,
-        vignette: (['off', 'soft', 'normal', 'strong'] as const).find((q) => q === d.statusHud?.vignette) ?? D.statusHud.vignette,
-        opacity: typeof d.statusHud?.opacity === 'number' ? Math.min(100, Math.max(10, Math.round(d.statusHud.opacity))) : D.statusHud.opacity,
-        edge: typeof d.statusHud?.edge === 'number' ? Math.min(90, Math.max(10, Math.round(d.statusHud.edge))) : D.statusHud.edge,
-        corner: typeof d.statusHud?.corner === 'number' ? Math.min(100, Math.max(10, Math.round(d.statusHud.corner))) : D.statusHud.corner,
+        position: D.statusHud.position,
+        size: D.statusHud.size,
+        timers: D.statusHud.timers,
+        animations: D.statusHud.animations,
+        vignette: D.statusHud.vignette,
+        opacity: D.statusHud.opacity,
+        edge: D.statusHud.edge,
+        corner: D.statusHud.corner,
       },
       alphaRevive: (['text', 'pills'] as const).find((q) => q === d.alphaRevive) ?? D.alphaRevive,
     };

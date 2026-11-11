@@ -2,7 +2,7 @@
 
 import {
   bossMelee, sleeperBlocks,
-  alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost, alphaName, bossEssence,
+  alphaEquipMax, ALPHA_LVL_MAX, TRADE_R, TRADE_KEEP_R, BOSS_CHASE_MULT, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost, alphaName, bossEssence,
   ARC_FLIGHT_S, SPLASH_FLAT, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT, ROOM_PACKS, HEART_PACKS, DEPTHS_RESET_S,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, PET_CAP, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
@@ -13,10 +13,11 @@ import {
   abilityOf, FRENZY_S, FRENZY_ATK, FRENZY_LEECH, FRENZY_VULN, RAMPART_R, RAMPART_GUARD, RAMPART_S, MARK_R, MARK_S, RAIN_REACH, RAIN_R, RAIN_DMG, RAIN_ARROWS, METEOR_R, METEOR_DMG, METEOR_REACH, METEOR_FIRE_S, METEOR_FIRE_DPS, BLOOM_R, BLOOM_HEAL, BLOOM_REGEN, BLOOM_S,
 } from '../shared/config.ts';
 import { clamp, dist2, pickCapped } from '../shared/math.ts';
-import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, UnitTuple } from '../shared/protocol.ts';
+import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, SwapOffer, UnitTuple } from '../shared/protocol.ts';
 import { STAT_KEYS, STATUS_IDS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
-import { HALL_ID, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
+import { FOG_N, packFog, revealCells, unpackFog } from '../shared/fog.ts';
+import { HALL_ID, type Ore, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky, SNOWFALL, WINTER } from '../shared/weather.ts';
 import { Grid } from './grid.ts';
 import type { Profile } from './persist.ts';
@@ -49,6 +50,7 @@ interface Unit {
   wanderY: number;
   wanderT: number;
   reviveAt: number; // > 0 : Alpha apprivoisé en attente de résurrection
+  fallenIn?: number; // Alpha tombé pendant un combat de géant (sa grotte) : il ne revient qu'à la fin de ce combat
   level: number; // niveau d'Alpha
   recalling: boolean; // trop loin du dompteur : revient sans combattre
   legend: boolean; // Alpha légendaire
@@ -88,7 +90,7 @@ interface Unit {
   tailsDone?: number; // Salamandre-Mère : queues déjà tombées pendant ce combat
   decoyUntil?: number; // leurre du Feu Ancien : il explose à ce moment-là
   shellUntil?: number; // Tortue-Montagne en toupie : rentrée dans sa carapace (elle encaisse moins) jusque-là
-  fight?: { at: number; from: number; by: Map<number, FightStats> }; // géant en combat : son début, qui l'a réveillé (from), et ce qu'a fait chaque dompteur (écran de victoire)
+  fight?: { at: number; from: number; by: Map<number, FightStats>; landed: number; hasted?: boolean }; // géant en combat : son début, qui l'a réveillé (from), ce qu'a fait chaque dompteur (écran de victoire), quand il a touché un dompteur pour la dernière fois (landed) et s'il s'impatiente déjà (hasted)
   idle: boolean; // sauvage loin de tout dompteur : ni réflexion ni bousculade ce tick
   hitters: Set<number>; // géant : dompteurs qui l'ont frappé (eux ou leur meute) pendant ce combat, seuls ayants droit au coffre
   shoutAt?: number; // Alpha suricate ou escargot : sa compétence est rechargée à ce temps-là
@@ -359,7 +361,11 @@ export interface VillageState {
   wood: number; // réserve commune (entrepôt)
   stone: number;
   banned: { id: string; name: string }[]; // comptes expulsés par le fondateur
+  explored: string; // carte explorée par le village (shared/fog.ts, packFog)
 }
+
+/** Échange en cours entre deux dompteurs : la part de chacun, et qui l'a validée. */
+interface Swap { a: number; b: number; offer: Map<number, SwapOffer>; ok: Set<number> }
 
 export const maxHpOf = (p: Player) => Math.round(armorMaxHp(p.armor) * heroOf(p.cls, p.spec).hp * (1 + lessonBonus(p.learned, 'vigor'))); // Endurance (tome d'un îlot)
 
@@ -398,6 +404,8 @@ const STORM_DPS = 0.02; // part des PV max perdue chaque seconde en plein dedans
 const WAKE_S = 20; // dormeur (lièvre la nuit, ours le jour) réveillé par un coup : il reste debout tant de secondes après le dernier
 
 export class Room {
+  /** Fabrique de la carte d'un village. Les tests la remplacent par un cache (tests/helpers.ts) : générer l'île prend des secondes. */
+  static makeMap = (seed: number) => new WorldMap(seed, false); // sans ce qui ne sert qu'au dessin
   readonly seed: number;
   players = new Map<number, Player>();
   units = new Map<number, Unit>();
@@ -412,6 +420,7 @@ export class Room {
   private treeHp = new Map<number, number>(); // arbres entamés ou abattus (index dans decor) : leurs PV ; absents : intacts
   private treeBack = new Map<number, number>(); // arbres abattus : temps de simulation où ils repoussent
   private caveBoss: number[] = []; // id du mini-boss de chaque grotte (0 : vaincu)
+  private fallen = new Map<string, [number, number][]>(); // compte déconnecté → ses Alphas tombés dans un combat de géant encore en cours (espèce, grotte)
   private caveBack: number[] = []; // temps de simulation de son retour
   private caveAt = new WeakMap<Player, number>(); // dernier passage de chaque dompteur (un double clic ne le fait pas ressortir aussitôt)
   private hazards: Hazard[] = [];
@@ -438,15 +447,24 @@ export class Room {
   readonly beaten: number[]; // géants (espèce) déjà vaincus par le village
   readonly stock = { wood: 0, stone: 0 }; // réserve commune de l'entrepôt
   banned: { id: string; name: string }[] = []; // comptes expulsés par le fondateur (leur progression est gardée)
-  onVillage?: (v: VillageState) => void; // sauvegarde, appelée quand le village change (camp, bâtiment, grotte)
+  onVillage?: (v: VillageState) => void | Promise<void>; // sauvegarde, appelée quand le village change (camp, bâtiment, grotte, carte explorée)
   onFounder?: (userId: string) => void; // sauvegarde du nouveau chef (transmission du village)
   founder: string | null = null; // compte qui a fondé le village (seul à pouvoir le supprimer)
   deleted = false; // supprimé : plus aucune sauvegarde
 
   /** seed : graine d'un village enregistré (même carte qu'avant) ; absente pour un nouveau village. */
+  /** Carte explorée par le village (une case par FOG_CELL px) : partagée par tous ses membres, sauvegardée avec lui. */
+  readonly explored = new Uint8Array(FOG_N * FOG_N);
+  private exploredDirty = false;
+  private swaps = new Map<number, Swap>(); // dompteur → l'échange où il est engagé (les deux dompteurs y mènent)
+
   constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}) {
     this.seed = seed ?? Math.floor(Math.random() * 2 ** 31);
-    this.map = new WorldMap(this.seed, false); // sans ce qui ne sert qu'au dessin
+    this.map = Room.makeMap(this.seed);
+    if (saved.explored) {
+      const cells = new Uint8Array(FOG_N * FOG_N);
+      if (unpackFog(saved.explored, cells)) this.explored.set(cells); // illisible : on repart d'une carte vierge
+    }
     const indexes = (list: unknown[] | undefined, n: number) =>
       (list ?? []).map(Number).filter((c, i, all) => Number.isInteger(c) && c >= 0 && c < n && all.indexOf(c) === i);
     this.camps = indexes(saved.camps, this.map.sites.length);
@@ -574,6 +592,12 @@ export class Room {
         this.placeNear(u, p);
       }
     }
+    // reconnecté pendant un combat de géant où des Alphas sont tombés : ils restent à terre jusqu'à la fin de ce combat
+    for (const [s, cave] of this.fallen.get(p.userId ?? '') ?? []) {
+      const u = p.army.map((id) => this.units.get(id)).find((q) => q?.alpha && q.s === s);
+      if (u && this.fightOn(cave)) Object.assign(u, { hp: 0, reviveAt: this.time, fallenIn: cave, target: 0 });
+    }
+    this.fallen.delete(p.userId ?? '');
     p.hp = maxHpOf(p); // on arrive toujours avec tous ses PV (classe comprise : 75 pour un guerrier débutant)
     this.sleepers.delete(p.userId ?? ''); // il se réveille : il n'est plus endormi au village
     this.players.set(p.id, p);
@@ -581,6 +605,7 @@ export class Room {
     this.refreshAlphas(p);
     send({ t: 'welcome', id: p.id, code: this.code, seed: this.seed, saved: !!p.userId, villageFound: found, founder: this.isFounder(p), armed: p.sword >= SWORD_PULLS });
     send({ t: 'teleport', x: p.x, y: p.y });
+    send({ t: 'fog', cells: packFog(this.explored) }); // ce que le village a déjà découvert, même en son absence
     this.events.push({ e: 'info', text: `${name} a rejoint le village` });
     return p;
   }
@@ -849,6 +874,11 @@ export class Room {
     const p = this.players.get(id);
     if (!p) return;
     const prof = this.profileOf(p);
+    const swap = this.swaps.get(id);
+    if (swap) this.endSwap(swap, false, `${p.name} est parti : échange annulé.`);
+    // ses Alphas tombés dans un combat de géant encore en cours : se reconnecter ne les relève pas
+    const fallen = p.army.map((uid) => this.units.get(uid)).filter((u) => u?.alpha && u.fallenIn !== undefined && this.fightOn(u.fallenIn)).map((u) => [u!.s, u!.fallenIn!] as [number, number]);
+    if (p.userId && fallen.length) this.fallen.set(p.userId, fallen);
     for (const uid of p.army) this.units.delete(uid);
     this.players.delete(id);
     this.diffs.delete(id);
@@ -970,8 +1000,14 @@ export class Room {
     return this.map.buildingPos(b);
   }
 
+  /** La carte explorée a changé depuis la dernière sauvegarde du village : on la sauvegarde (avec le reste du village). */
+  flushExplored() {
+    return this.exploredDirty ? this.saveVillage() : undefined;
+  }
+
   private saveVillage() {
-    this.onVillage?.({ camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, plan: this.plan, schoolAt: this.schoolAt, beaten: [...this.beaten], heart: this.heart, ...this.stock, banned: [...this.banned] });
+    this.exploredDirty = false;
+    return this.onVillage?.({ explored: packFog(this.explored), camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, plan: this.plan, schoolAt: this.schoolAt, beaten: [...this.beaten], heart: this.heart, ...this.stock, banned: [...this.banned] });
   }
 
   /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
@@ -1715,6 +1751,8 @@ export class Room {
     this.updateDepths();
     this.updateTraps();
     this.updateSeen();
+    this.updateExplored();
+    this.updateSwaps();
 
     // La monture suit exactement son cavalier (elle n'est pas une cible séparée).
     for (const p of this.players.values()) {
@@ -1850,7 +1888,9 @@ export class Room {
       const owner = this.players.get(u.owner);
       if (!owner || owner.dead) continue; // il attend que son dompteur soit debout (pas de retour près du boss)
       if (this.bossFight(owner)) continue; // ni pendant un combat de géant : il revient une fois le combat fini
+      if (u.fallenIn !== undefined && this.fightOn(u.fallenIn)) continue; // ni tant que dure le combat où il est tombé
       u.reviveAt = 0;
+      u.fallenIn = undefined;
       u.hp = u.maxHp;
       u.target = 0;
       this.placeNear(u, owner);
@@ -2154,6 +2194,7 @@ export class Room {
   private plateAt = new Map<number, number>(); // dalle piégée → réarmée à ce moment
   private cleared = new Set<number>(); // salles du donjon vidées de leur garnison (l'entrée l'est d'office)
   private garrisoned = new Set<number>(); // salles dont la garnison est apparue
+  private sealed = new Set<number>(); // antres du volcan dont la herse est retombée pour un combat (index de leur géant)
   private depthsSeenAt = -Infinity; // dernier instant où un dompteur était dans le donjon
   private geysers: { i: number; at: number }[] = []; // geysers annoncés (dalle foulée)
 
@@ -2185,11 +2226,152 @@ export class Room {
     for (const k of this.garrisoned) if (!alive.has(k)) this.cleared.add(k);
     map.links.forEach(([a, b], i) => {
       const d = map.doors[i];
-      const open = (this.cleared.has(a) || this.cleared.has(b)) && (d.lair < 0 || this.unlocked.includes(d.lair));
+      const open = (this.cleared.has(a) || this.cleared.has(b)) && (d.lair < 0 || this.unlocked.includes(d.lair)) && !this.lairFight(d.lair);
+      if (open && this.sealed.delete(d.lair)) this.events.push({ e: 'lair', cave: d.lair, shut: false, x: d.x, y: d.y }); // combat fini
       map.doorShut[i] = open ? 0 : 1;
       if (!open || !inside) return;
       for (const k of [a, b]) if (!this.garrisoned.has(k) && !this.cleared.has(k)) this.garrison(k);
     });
+  }
+
+  /** Carte du village : les cases dévoilées autour de chaque dompteur debout, pour tous ses membres (2 fois par seconde). */
+  private updateExplored() {
+    if (this.tick % 10 !== 0) return;
+    for (const p of this.players.values()) if (!p.dead && revealCells(this.explored, p.x, p.y)) this.exploredDirty = true;
+  }
+
+  /**
+   * Échanges entre dompteurs proches (or, bois, pierre) : l'un le propose à l'autre, chacun garnit sa part, les deux voient
+   * les deux parts ; il se fait quand les deux ont validé. Toute part qui change annule les validations.
+   */
+  onSwap(p: Player, act: string, data: { with?: unknown; gold?: unknown; wood?: unknown; stone?: unknown } = {}) {
+    const s = this.swaps.get(p.id);
+    if (act === 'open') {
+      const q = this.players.get(Number(data.with));
+      if (s || !q || q === p || p.dead || q.dead || this.swaps.has(q.id) || dist2(p.x, p.y, q.x, q.y) > TRADE_R ** 2) return;
+      const none = (): SwapOffer => ({ gold: 0, wood: 0, stone: 0 });
+      const sw: Swap = { a: p.id, b: q.id, offer: new Map([[p.id, none()], [q.id, none()]]), ok: new Set() };
+      this.swaps.set(p.id, sw);
+      this.swaps.set(q.id, sw);
+      return this.sendSwap(sw);
+    }
+    if (!s) return;
+    if (act === 'cancel') return this.endSwap(s, false, `${p.name} a annulé l'échange.`);
+    if (act === 'offer') {
+      // jamais plus que ce qu'on a dans son sac
+      const n = (v: unknown, max: number) => clamp(Math.floor(Number(v) || 0), 0, Math.max(0, Math.floor(max)));
+      s.offer.set(p.id, { gold: n(data.gold, p.gold), wood: n(data.wood, p.wood), stone: n(data.stone, p.stone) });
+      s.ok.clear(); // une part a changé : chacun revalide ce qu'il voit
+      return this.sendSwap(s);
+    }
+    if (act === 'ok') {
+      s.ok.add(p.id);
+      return s.ok.size === 2 ? this.doSwap(s) : this.sendSwap(s);
+    }
+  }
+
+  private doSwap(s: Swap) {
+    // revérifié à l'instant même du transfert : le contrôle périodique (updateSwaps) peut ne pas encore être passé
+    const broken = this.swapBroken(s);
+    if (broken) return this.endSwap(s, false, broken);
+    const a = this.players.get(s.a)!, b = this.players.get(s.b)!;
+    const pairs = [[a, b], [b, a]] as const;
+    if (pairs.some(([from]) => { const o = s.offer.get(from.id)!; return from.gold < o.gold || from.wood < o.wood || from.stone < o.stone; })) {
+      // l'un a dépensé entre-temps : sa part revient à ce qu'il a, et chacun revalide
+      for (const [from] of pairs) {
+        const o = s.offer.get(from.id)!;
+        s.offer.set(from.id, { gold: Math.min(o.gold, Math.floor(from.gold)), wood: Math.min(o.wood, Math.floor(from.wood)), stone: Math.min(o.stone, Math.floor(from.stone)) });
+      }
+      s.ok.clear();
+      return this.sendSwap(s);
+    }
+    for (const [from, to] of pairs) {
+      const o = s.offer.get(from.id)!;
+      [from.gold, from.wood, from.stone] = [from.gold - o.gold, from.wood - o.wood, from.stone - o.stone];
+      [to.gold, to.wood, to.stone] = [to.gold + o.gold, to.wood + o.wood, to.stone + o.stone];
+      from.dirty = true;
+    }
+    this.endSwap(s, true);
+  }
+
+  private sendSwap(s: Swap) {
+    for (const [me, other] of [[s.a, s.b], [s.b, s.a]]) {
+      this.players.get(me)?.send({ t: 'swap', with: other, mine: s.offer.get(me)!, theirs: s.offer.get(other)!, okMine: s.ok.has(me), okTheirs: s.ok.has(other) });
+    }
+  }
+
+  private endSwap(s: Swap, done: boolean, why?: string) {
+    this.swaps.delete(s.a);
+    this.swaps.delete(s.b);
+    for (const id of [s.a, s.b]) this.players.get(id)?.send({ t: 'swapEnd', done, ...(why ? { why } : {}) });
+  }
+
+  /** Un échange tombe si l'un des deux s'éloigne ou tombe à terre. */
+  private updateSwaps() {
+    if (this.tick % 10 !== 0 || !this.swaps.size) return;
+    for (const s of new Set(this.swaps.values())) {
+      const broken = this.swapBroken(s);
+      if (broken) this.endSwap(s, false, broken);
+    }
+  }
+
+  /** Pourquoi cet échange ne peut plus se faire (l'un est parti, à terre ou trop loin), ou null s'il tient toujours. */
+  private swapBroken(s: Swap) {
+    const a = this.players.get(s.a), b = this.players.get(s.b);
+    if (!a || !b) return 'Ton partenaire d\'échange est parti.';
+    if (a.dead || b.dead) return 'Échange annulé : l\'un de vous est à terre.';
+    if (dist2(a.x, a.y, b.x, b.y) > TRADE_KEEP_R ** 2) return 'Échange annulé : vous vous êtes éloignés.';
+    return null;
+  }
+
+  /** Combat en cours dans l'antre d'un géant du volcan (cave : son index, -1 pour une herse ordinaire) : la herse reste baissée. */
+  private lairFight(cave: number) {
+    const u = cave >= 0 ? this.units.get(this.caveBoss[cave]) : undefined;
+    return !!u && !u.dormant && u.hp > 0;
+  }
+
+  /**
+   * Le combat commence dans l'antre d'un géant du volcan : sa herse retombe aussitôt, personne n'entre ni ne sort avant la
+   * fin. Chacun se retrouve du même côté que sa meute et ses Alphas : qui était sur le seuil entre, les monstres restés
+   * dans le couloir rejoignent leur dompteur dans l'antre, ceux entrés sans lui le rejoignent dehors.
+   */
+  private sealLair(cave: number) {
+    const map = this.map, c = map.caves[cave], k = c?.room;
+    const i = map.doors.findIndex((d) => d.lair === cave);
+    if (k === undefined || i < 0) return;
+    const d = map.doors[i], room = map.rooms[k];
+    map.doorShut[i] = 1;
+    this.sealed.add(cave);
+    const inside = (x: number, y: number) => map.roomAt(x, y) === k;
+    for (const p of this.players.values()) {
+      if (p.dead || map.doorAt(p.x, p.y) !== i) continue;
+      // sous la herse : un pas de plus vers le centre de l'antre
+      const l = Math.hypot(room.x - d.x, room.y - d.y) || 1;
+      const at = map.freeNear(d.x + ((room.x - d.x) / l) * 90, d.y + ((room.y - d.y) / l) * 90);
+      [p.x, p.y] = [at.x, at.y];
+      p.lastPosMs = Date.now();
+      p.send({ t: 'teleport', x: p.x, y: p.y });
+    }
+    for (const u of this.units.values()) {
+      const o = u.owner ? this.players.get(u.owner) : undefined;
+      if (!o || u.reviveAt || o.mount === u.id) continue; // un tombé revient près de son dompteur ; la monture suit son cavalier
+      const want = !o.dead && inside(o.x, o.y);
+      if ((inside(u.x, u.y) || map.doorAt(u.x, u.y) === i) === want) continue;
+      // de l'autre côté de la herse que son dompteur : il le rejoint
+      let at = { x: o.x, y: o.y };
+      for (let n = 0; n < 12; n++) {
+        const a = Math.random() * Math.PI * 2, r = 50 + n * 8;
+        const q = map.freeNear(o.x + Math.cos(a) * r, o.y + Math.sin(a) * r);
+        if (inside(q.x, q.y) === want && map.doorAt(q.x, q.y) < 0) {
+          at = q;
+          break;
+        }
+      }
+      [u.x, u.y] = [at.x, at.y];
+      u.path = null;
+      u.target = 0;
+    }
+    this.events.push({ e: 'lair', cave, shut: true, x: d.x, y: d.y });
   }
 
   /** La garnison d'une salle du donjon (pas l'entrée, ni un antre : son géant y est déjà). */
@@ -2450,7 +2632,7 @@ export class Room {
    * soigner, replacer). Tir de rupture et Embuscade ne consomment la recharge que s'il y avait une cible.
    */
   onAbility(p: Player) {
-    if (p.dead || p.holding || p.mount) return; // à terre, un fruit en main, ou monté : pas de capacité
+    if (p.dead || p.holding) return; // à terre ou un fruit en main : pas de capacité (mais on peut lancer à cheval)
     if (p.sword < SWORD_PULLS) return; // pas encore armé
     if (this.rooted(p)) return; // saisi par un géant, ou étourdi
     const ab = abilityOf(p.spec);
@@ -2724,6 +2906,11 @@ export class Room {
     if (!done) return;
     this.oreBack[best] = this.time + ORE_RESPAWN_S;
     this.map.oreDown.add(best); // épuisé : il disparaît, on passe à travers jusqu'à son retour
+    this.oreLoot(p, o);
+  }
+
+  /** Ce que rapporte un filon, un rocher ou du bois mort épuisé, par le dompteur lui-même ou par son golem. */
+  private oreLoot(p: Player, o: Ore) {
     p.dirty = true;
     if (o.res === 'gold') {
       const gold = Math.round(oreGold(o.zone) * o.size); // un gros filon rapporte plus
@@ -2881,7 +3068,7 @@ export class Room {
     this.krakenCalled = false;
     const p = aboard[0];
     u.dormant = false;
-    u.fight = { at: this.time, from: p.id, by: new Map() };
+    u.fight = { at: this.time, from: p.id, by: new Map(), landed: this.time };
     u.target = p.id;
     this.events.push({ e: 'challenge', cave: c.id, id: u.id, by: p.id });
   }
@@ -2983,9 +3170,10 @@ export class Room {
     if (!u || !u.dormant || p.dead || this.map.arenaAt(p.x, p.y)?.id !== c.id) return;
     if (dist2(p.x, p.y, u.x, u.y) > (u.r + BOSS_TALK_R) ** 2) return;
     u.dormant = false;
-    u.fight = { at: this.time, from: p.id, by: new Map() };
+    u.fight = { at: this.time, from: p.id, by: new Map(), landed: this.time };
     u.target = p.id;
     this.events.push({ e: 'challenge', cave, id: u.id, by: p.id });
+    if (c.room !== undefined) this.sealLair(cave); // antre du volcan : la herse retombe
   }
 
   private summonMinions(u: Unit, n: number, max: number, minion?: string) {
@@ -3057,6 +3245,13 @@ export class Room {
   }
 
   /** Cerveau d'un mini-boss en combat. Renvoie vrai s'il est occupé (préparation d'une attaque). */
+  /** Impatience d'un géant en combat : 1 tant qu'il a touché un dompteur il y a peu, puis de plus en plus (BOSS_HASTE_*). */
+  private bossHaste(u: Unit) {
+    if (!u.fight) return 1;
+    const idle = this.time - u.fight.landed - BOSS_HASTE_AFTER;
+    return idle > 0 ? 1 + Math.min(BOSS_HASTE_MAX, idle * BOSS_HASTE_RATE) : 1;
+  }
+
   private bossAI(u: Unit, t: Ent) {
     this.dropTrail(u);
     if (u.hibernate) {
@@ -3066,6 +3261,10 @@ export class Room {
       u.hibernate = undefined;
       this.events.push({ e: 'move', id: u.id, kind: 'wake' });
       return false;
+    }
+    if (u.fight && !u.fight.hasted && this.bossHaste(u) > 1) {
+      u.fight.hasted = true; // il s'impatiente : le client l'annonce, il presse le pas (tryAttack)
+      this.events.push({ e: 'move', id: u.id, kind: 'haste' });
     }
     if (u.castUntil > this.time) return true;
     const moves = BOSS_MOVES[SPECIES[u.s].key] ?? [];
@@ -3911,7 +4110,12 @@ export class Room {
   /** Le dompteur est dans une grotte dont le géant est réveillé (combat en cours). */
   private bossFight(p: Player) {
     const c = this.map.arenaAt(p.x, p.y);
-    const u = c && this.units.get(this.caveBoss[c.id]);
+    return !!c && this.fightOn(c.id);
+  }
+
+  /** Combat en cours contre le géant de cette grotte : réveillé et debout. */
+  private fightOn(cave: number) {
+    const u = this.units.get(this.caveBoss[cave] ?? 0);
     return !!u && !u.dormant && u.hp > 0;
   }
 
@@ -3952,6 +4156,10 @@ export class Room {
     // le large, lui, s'ouvre quand le bateau est prêt (rebâti, son cœur volcanique installé)
     const open = id === HALL_ID ? volcanoOpen(this.beaten) : c.zone === VOYAGE_ZONE ? boatReady(this.boat, this.heart) : this.unlocked.includes(id);
     if (enter && !open) return;
+    if (this.fightOn(id)) {
+      this.events.push({ e: 'busy', to: p.id, cave: id }); // combat en cours : impossible d'entrer ou de sortir
+      return;
+    }
     const from = enter ? c.entrance : c.exit;
     // le large : on embarque en parlant à Aubin, à côté du bateau
     const yard = enter && c.zone === VOYAGE_ZONE ? this.elderPos() : from;
@@ -4297,7 +4505,7 @@ export class Room {
     let arrived: boolean;
     if (dive && u.perched && dist2(u.x, u.y, t.x, t.y) <= (range + 30) ** 2) arrived = true;
     else {
-      arrived = this.navTo(u, t.x, t.y, u.speed * chase * (dive ? 1.4 : 1), range - 2);
+      arrived = this.navTo(u, t.x, t.y, u.speed * chase * (dive ? 1.4 : 1) * (isBoss(u.s) ? this.bossHaste(u) : 1), range - 2);
       if (dive && arrived && this.map.passable(u.x, u.y, false)) u.perched = true; // pas sur l'eau ni dans un arbre
     }
     if (isBoss(u.s)) return this.bossMelee(u);
@@ -4866,14 +5074,14 @@ export class Room {
   }
 
   /**
-   * Golem de mousse de la meute (ordinaire ou Alpha), sans ennemi à combattre : il va manger le rocher le plus proche, pas
-   * trop loin de son dompteur, en quelques bouchées ; la pierre revient à son dompteur.
+   * Golem de mousse de la meute (ordinaire ou Alpha), sans ennemi à combattre : il va manger le rocher ou le filon d'or le
+   * plus proche, pas trop loin de son dompteur, en quelques bouchées ; la pierre (et l'or d'un filon) revient à son dompteur.
    * focus : touche de récolte (il cherche autour de son dompteur, plus loin, même s'il y a des monstres).
    */
   private golemEats(u: Unit, o: Player, focus = false) {
     const ok = (i: number) => {
       const ore = this.map.ores[i];
-      return !!ore && ore.res === 'stone' && this.oreHp[i] > 0 && dist2(o.x, o.y, ore.x, ore.y) < (FOLLOW_MAX_R * 0.8) ** 2;
+      return !!ore && (ore.res === 'stone' || ore.res === 'gold') && this.oreHp[i] > 0 && dist2(o.x, o.y, ore.x, ore.y) < (FOLLOW_MAX_R * 0.8) ** 2;
     };
     if (u.eatOre === undefined || u.eatOre < 0 || !ok(u.eatOre)) {
       u.eatOre = -1;
@@ -4899,10 +5107,7 @@ export class Room {
     if (!done) return true;
     this.oreBack[ore.id] = this.time + ORE_RESPAWN_S;
     this.map.oreDown.add(ore.id);
-    const stone = resRoll(resYield(ore.zone) * ore.size * (1 + lessonBonus(o.learned, 'gather')));
-    o.stone += stone;
-    o.dirty = true;
-    this.events.push({ e: 'res', to: o.id, wood: 0, stone, x: ore.x, y: ore.y - 10 });
+    this.oreLoot(o, ore);
     u.eatOre = -1;
     return true;
   }
@@ -4928,6 +5133,7 @@ export class Room {
     }
     if (t.kind === 'p') {
       if (t.dead) return;
+      if (by.kind === 'u' && by.fight) [by.fight.landed, by.fight.hasted] = [this.time, false]; // un géant qui touche un dompteur reprend son allure
       if ((t.frenzy?.until ?? 0) > this.time) amount *= FRENZY_VULN; // en pleine Frénésie : il encaisse plus
       const mount = t.mount ? this.units.get(t.mount) : undefined;
       if (mount) {
@@ -5077,7 +5283,7 @@ export class Room {
     return out;
   }
 
-  /** Alpha lièvre sur le terrain : de temps en temps, il soigne un peu son dompteur et la meute autour de lui. */
+  /** Alpha lièvre sur le terrain : de temps en temps, il soigne un peu son dompteur, la meute autour de lui et lui-même. */
   private alphaHeals() {
     if (this.tick % (ALPHA_HEAL_S * TICK_HZ) !== 0) return;
     for (const p of this.players.values()) {
@@ -5094,7 +5300,7 @@ export class Room {
       const ids: number[] = [];
       for (const id of p.army) {
         const u = this.units.get(id);
-        if (u && u !== h.u && !u.reviveAt && u.hp > 0 && u.hp < u.maxHp && near(u.x, u.y)) {
+        if (u && !u.reviveAt && u.hp > 0 && u.hp < u.maxHp && near(u.x, u.y)) { // lui compris : il se soigne aussi
           u.hp = Math.min(u.maxHp, u.hp + u.maxHp * h.value);
           ids.push(u.id);
         }
@@ -5190,6 +5396,9 @@ export class Room {
         u.reviveAt = this.time + alphaReviveS(u.s);
         u.hp = 0;
         u.target = 0;
+        // tombé pendant un combat de géant : il attend la fin de ce combat, même si son dompteur en sort ou se reconnecte
+        const arena = this.map.arenaAt(u.x, u.y, ISLE_FIGHT_R);
+        u.fallenIn = arena && this.fightOn(arena.id) ? arena.id : undefined;
       } else {
         this.units.delete(u.id);
         const o = this.players.get(u.owner);
@@ -5406,7 +5615,7 @@ export class Room {
     const ent = (id: number) => this.players.get(id) ?? this.units.get(id);
     switch (e.e) {
       case 'hit': return ent(e.b) ?? ent(e.a) ?? null;
-      case 'die': case 'shot': case 'boom': return e;
+      case 'die': case 'shot': case 'boom': case 'lair': return e;
       case 'zap': return { x: e.pts[0], y: e.pts[1] };
       case 'struck': return e;
       case 'mend': return ent(e.to) ?? null;
@@ -5415,7 +5624,7 @@ export class Room {
       case 'munch': return this.map.ores[e.ore] ?? null;
       case 'chop': return this.map.decor[e.id] ?? null;
       case 'eat': case 'pick': return this.map.bushes[e.bush] ?? null;
-      case 'gold': case 'essence': case 'soul': case 'res': case 'chest': case 'full': case 'seen': case 'trade': case 'scroll': return e.to;
+      case 'gold': case 'essence': case 'soul': case 'res': case 'chest': case 'full': case 'seen': case 'trade': case 'scroll': case 'busy': return e.to;
       case 'mount': return e.by;
       default: return null;
     }

@@ -17,6 +17,9 @@ try {
 initPersistence();
 
 const PORT = Number(process.env.PORT ?? 3001);
+// Triches (F9) : en dev, et partout où ALLOW_CHEATS=1 est posé (le staging, dans Coolify) pour y préparer une
+// situation de test. Comme ALLOW_GUESTS, c'est une variable du serveur seul : aucun build du client ne les ouvre.
+const CHEATS = process.env.NODE_ENV !== 'production' || process.env.ALLOW_CHEATS === '1';
 const DIST = fileURLToPath(new URL('../dist', import.meta.url));
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
@@ -32,6 +35,12 @@ const fail = (res: import('node:http').ServerResponse, code: number, text: strin
 };
 
 const http = createServer((req, res) => {
+  // Sonde de disponibilité indépendante du build statique : Coolify et la CI peuvent vérifier le serveur.
+  if (req.method === 'GET' && req.url?.split('?')[0] === '/healthz') {
+    res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+    res.end(JSON.stringify({ ok: true, persistenceConfigured: persistenceEnabled() }));
+    return;
+  }
   // Une requête, quelle qu'elle soit, ne doit jamais faire tomber le serveur (et tous les villages avec lui).
   try {
     if (!existsSync(DIST)) {
@@ -187,7 +196,7 @@ wss.on('connection', (ws: WebSocket) => {
     }
     if (ws.readyState !== ws.OPEN || (user && activeUsers.has(user.userId))) return;
     rooms.set(r.code, r);
-    r.onVillage ??= (v) => void saveVillage(r.code, v);
+    r.onVillage ??= (v) => saveVillage(r.code, v);
     r.onFounder ??= (id) => void setFounder(r.code, id);
     room = r;
     if (user) {
@@ -278,19 +287,20 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'class') room.onClass(player, msg.cls);
     else if (msg.t === 'spec') room.onSpec(player, msg.spec);
     else if (msg.t === 'help') room.onHelp(player, !!msg.on);
+    else if (msg.t === 'swap') room.onSwap(player, String(msg.act), msg as { with?: unknown; gold?: unknown; wood?: unknown; stone?: unknown });
     else if (msg.t === 'reset') {
       reset(room, player).catch((e) => {
         console.error(e);
         send({ t: 'error', msg: 'Suppression impossible, réessaie.' });
       });
     }
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheat') room.onCheat(player);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatfx') room.onCheatEffects(player, Array.isArray(msg.effects) ? msg.effects.map(Number) : [], +msg.secs);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatmob') room.onCheatMob(player, +msg.s, msg.kind, !!msg.on);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatzone') room.onCheatZone(player, +msg.z, msg.act);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatboss') room.onCheatBoss(player, +msg.s);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatgear') room.onCheatGear(player, msg.cls, msg.spec);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatdummy') room.onCheatDummy(player);
+    else if (CHEATS && msg.t === 'cheat') room.onCheat(player);
+    else if (CHEATS && msg.t === 'cheatfx') room.onCheatEffects(player, Array.isArray(msg.effects) ? msg.effects.map(Number) : [], +msg.secs);
+    else if (CHEATS && msg.t === 'cheatmob') room.onCheatMob(player, +msg.s, msg.kind, !!msg.on);
+    else if (CHEATS && msg.t === 'cheatzone') room.onCheatZone(player, +msg.z, msg.act);
+    else if (CHEATS && msg.t === 'cheatboss') room.onCheatBoss(player, +msg.s);
+    else if (CHEATS && msg.t === 'cheatgear') room.onCheatGear(player, msg.cls, msg.spec);
+    else if (CHEATS && msg.t === 'cheatdummy') room.onCheatDummy(player);
   });
 
   ws.on('close', () => {
@@ -302,6 +312,7 @@ wss.on('connection', (ws: WebSocket) => {
       });
       r.removePlayer(p.id);
       if (r.players.size === 0) {
+        void r.flushExplored(); // la carte découverte depuis la dernière sauvegarde
         rooms.delete(r.code);
         console.log(`[${r.code}] fermé (vide)`);
       }
@@ -315,7 +326,10 @@ setInterval(() => {
 
 // Sauvegarde périodique des progressions modifiées.
 setInterval(() => {
-  for (const r of rooms.values()) for (const p of r.players.values()) if (p.dirty) void save(r, p);
+  for (const r of rooms.values()) {
+    for (const p of r.players.values()) if (p.dirty) void save(r, p);
+    void r.flushExplored(); // la carte explorée du village, si elle a changé
+  }
 }, 15_000);
 
 // Arrêt (pm2 restart, systemctl stop, Ctrl+C) : on sauvegarde tout le monde avant de quitter.
@@ -323,7 +337,7 @@ let stopping = false;
 const shutdown = async () => {
   if (stopping) return;
   stopping = true;
-  await Promise.allSettled([...rooms.values()].flatMap((r) => [...r.players.values()].map((p) => save(r, p))));
+  await Promise.allSettled([...rooms.values()].flatMap((r) => [...[...r.players.values()].map((p) => save(r, p)), r.flushExplored()]));
   process.exit(0);
 };
 process.on('SIGTERM', shutdown);

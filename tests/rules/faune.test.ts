@@ -402,13 +402,14 @@ describe('Faune : tireurs, gibier, baies, bestiaire', () => {
   });
   rule('Calendrier : douze lunes ; la neige s\'installe peu à peu en fin d\'année, puis fond au Dégel.', () => {
     check(LUNES.length === 12, 'douze lunes');
+    check(DAY_MS === 14 * 60_000, 'le cycle jour/nuit dure 14 minutes, soit 30 % de moins qu\'avant');
     const givres = 9 * LUNE_DAYS;
     check(snowAt(givres - 0.01) === 0 && snowAt(givres + LUNE_DAYS * 0.25) > 0 && snowAt(givres + LUNE_DAYS * 0.25) < 0.5 && snowAt(givres + LUNE_DAYS) === 1, 'aux Premiers Givres, la neige monte peu à peu');
     check(snowAt(LUNE_DAYS * 0.5) > 0 && snowAt(LUNE_DAYS * 0.5) < 1 && snowAt(LUNE_DAYS) === 0, 'au Dégel, elle fond');
     const seed = 1234, t0 = Date.now();
     let prev = calendar(seed, t0), steps = 0, snowJump = 0;
-    for (let t = t0; t < t0 + LUNES.length * LUNE_DAYS * DAY_MS; t += 60_000) {
-      const c = calendar(seed, t), sk = sky(seed, t), before = sky(seed, t - 60_000);
+    for (let t = t0; t < t0 + LUNES.length * LUNE_DAYS * DAY_MS; t += 30_000) {
+      const c = calendar(seed, t), sk = sky(seed, t), before = sky(seed, t - 30_000);
       if (c.day !== prev.day) steps++;
       snowJump = Math.max(snowJump, Math.abs(sk.snow - before.snow));
       check(sk.season !== WINTER || sk.snow >= 0.5, 'l\'hiver, c\'est quand la neige couvre le sol');

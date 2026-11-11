@@ -26,11 +26,17 @@ jobs:
 
       - run: npm ci
 
+      - name: Valider les fichiers de changements
+        run: npm run changesets:check
+
       - name: TypeScript
         run: npm run typecheck
 
       - name: Règles de simulation
         run: npm run test:rules
+
+      - name: Géants et attaques sur plusieurs terrains
+        run: npm run test:rules -- geants attaques --seeds=42,777
 
       - name: Test de fumée (serveur + clients WebSocket)
         run: npm run smoke

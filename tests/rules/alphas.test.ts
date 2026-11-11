@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { BOSS_MOVES, LEGEND_STAGGER_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, alphaPerk, alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT, PET_CAP } from '../../shared/config.ts';
+import { VOYAGE_ZONE, BOSS_MOVES, LEGEND_STAGGER_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, alphaPerk, alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT, PET_CAP } from '../../shared/config.ts';
 import { pickCapped } from '../../shared/math.ts';
 
 describe('Alphas de la Tanière', () => {
@@ -244,6 +244,26 @@ describe('Alphas de la Tanière', () => {
     check(evs.length === 1 && p.hp === 10 + Math.round(max * 0.03) && ally.hp > 1, `lièvre : +${evs[0]?.n} PV en 3 s pour son dompteur (${max} PV max), et la meute proche est soignée`);
   });
 
+  rule('Alpha lièvre : il se soigne aussi lui-même, même quand son dompteur et sa meute vont bien.', () => {
+    const r = room();
+    const p = r.addPlayer('a', noop);
+    [p.x, p.y] = [r.map.spawn.x, r.map.spawn.y];
+    const hare = r.spawnAlpha(p, SPECIES.findIndex((s) => s.key === 'hare'), 0, false);
+    [hare.x, hare.y] = [p.x + 50, p.y];
+    const hurt = Math.round(hare.maxHp / 2);
+    hare.hp = hurt;
+    const evs: { e: string; ids?: number[] }[] = [];
+    for (let i = 0; i < 20 * 3; i++) {
+      r.tick++;
+      r.events = [];
+      r.alphaHeals();
+      evs.push(...r.events.filter((e: { e: string }) => e.e === 'heal'));
+    }
+    const gain = hare.hp - hurt;
+    check(gain > 0 && Math.abs(gain - hare.maxHp * alphaPerk(hare.s, 0)!.value) < 1e-6, `le lièvre regagne ${gain.toFixed(1)} PV (${hare.maxHp} PV max)`);
+    check(evs.length === 1 && !!evs[0].ids?.includes(hare.id), 'des cœurs montent sur lui (il figure parmi les soignés)');
+  });
+
   rule('Cri du suricate, carapace de l\'escargot : au combat, tous les alliés proches en profitent un moment, puis la compétence se recharge.', () => {
     const r = room();
     const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
@@ -386,4 +406,31 @@ describe('Alphas de la Tanière', () => {
     check(pickCapped([], first, 30).size === 0, 'plus rien de voulu');
   });
 
+
+  rule("Un Alpha tombé pendant un combat de géant ne revient qu’à la fin de ce combat, même si son dompteur se déconnecte.", () => {
+    const r = room();
+    const c = r.map.caves.find((q: { room?: number; open?: number; zone: number }) => q.room === undefined && q.open === undefined && q.zone !== VOYAGE_ZONE);
+    const boss = r.units.get(r.caveBoss[c.id]);
+    const p = r.addPlayer('a', noop, { userId: 'u1', profile: null });
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 40];
+    p.hp = 1e6;
+    const wolfS = SPECIES.findIndex((s) => s.key === 'wolf');
+    const alpha = r.spawnAlpha(p, wolfS, 0, false);
+    [alpha.x, alpha.y] = [p.x + 30, p.y];
+    r.onChallenge(p, c.id);
+    r.killUnit(alpha, boss);
+    check(alpha.reviveAt > 0 && alpha.fallenIn === c.id, 'il tombe pendant le combat');
+    // La sortie est verrouillée ; la déconnexion reste possible et ne doit pas relever l'Alpha.
+    r.time = alpha.reviveAt + 1;
+    const prof = r.profileOf(p);
+    r.removePlayer(p.id);
+    const p2 = r.addPlayer('a', noop, { userId: 'u1', profile: prof });
+    const back = p2.army.map((id: number) => r.units.get(id)).find((u: { alpha: boolean; s: number } | undefined) => u?.alpha && u.s === wolfS);
+    r.time += 100;
+    r.updateRespawns();
+    check(!!back && back.reviveAt > 0 && back.fallenIn === c.id, 'reconnecté : son Alpha tombé reste à terre');
+    r.calmBoss(boss); // le combat se termine (le géant se rendort)
+    r.updateRespawns();
+    check(back.reviveAt === 0 && back.hp === back.maxHp, 'le combat fini, il revient près de son dompteur');
+  });
 });

@@ -2,7 +2,7 @@
 
 import { initCheat } from './cheat.ts';
 import { drawCoatiClue } from './coati.ts';
-import { ISLE_NAMES, SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
+import { TRADE_R, ISLE_NAMES, SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_BURN } from '../../shared/protocol.ts';
@@ -164,6 +164,8 @@ export class Game {
     this.hud.onAbility = () => this.useAbility();
     this.hud.onHold = () => this.toggleHold();
     this.hud.onRide = () => this.toggleMount();
+    this.hud.onTrade = () => this.proposeTrade();
+    this.hud.onSwap = (m) => net.send({ t: 'swap', ...m });
     this.hud.onSword = () => net.send({ t: 'sword' });
     this.hud.onScroll = (cave) => net.send({ t: 'scroll', cave });
     this.hud.onHeart = () => net.send({ t: 'heart' });
@@ -202,7 +204,7 @@ export class Game {
         hints();
       });
     } else hints();
-    initCheat((m) => this.net.send(m)); // dev : écran de triche (F9 l'ouvre ou le ferme)
+    initCheat((m) => this.net.send(m)); // dev et staging : écran de triche (F9 l'ouvre ou le ferme)
     initInput(canvas, (code, key) => this.onKey(code, key), (code, key) => (key === '' || matches('revive', code, key)) && this.setHelp(false));
     this.hud.onAttackMode = () => this.sendMode();
     this.hud.onKick = (id) => net.send({ t: 'kick', id });
@@ -289,8 +291,10 @@ export class Game {
     }
   }
 
-  private drawBossReturn(ctx: CanvasRenderingContext2D, x: number, y: number, sec: number) {
+  /** size : rayon du géant ; le cercle l'entoure largement, du plus petit au Kraken (84 px au moins). */
+  private drawBossReturn(ctx: CanvasRenderingContext2D, x: number, y: number, sec: number, size: number) {
     const t = this.time, soon = sec <= 10, k = soon ? 1 - sec / 10 : 0;
+    const R = Math.max(84, size * 1.9);
     const pulse = 0.5 + 0.5 * Math.sin(t * (soon ? 8 + k * 10 : 2.5));
     ctx.save();
     ctx.translate(x, y);
@@ -299,22 +303,23 @@ export class Game {
     ctx.strokeStyle = soon ? '#F0B64A' : '#8FA9B8';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(0, 0, 84, 0, Math.PI * 2);
+    ctx.arc(0, 0, R, 0, Math.PI * 2);
     ctx.stroke();
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(0, 0, 68, 0, Math.PI * 2);
+    ctx.arc(0, 0, R * 0.81, 0, Math.PI * 2);
     ctx.stroke();
     // runes qui tournent, de plus en plus vite
     ctx.rotate(t * (0.4 + k * 4));
     ctx.fillStyle = ctx.strokeStyle;
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      ctx.fillRect(Math.cos(a) * 76 - 3.5, Math.sin(a) * 76 - 3.5, 7, 7);
+    const runes = Math.round(8 * (R / 84));
+    for (let i = 0; i < runes; i++) {
+      const a = (i / runes) * Math.PI * 2;
+      ctx.fillRect(Math.cos(a) * R * 0.9 - 3.5, Math.sin(a) * R * 0.9 - 3.5, 7, 7);
     }
     ctx.restore();
     // étincelles qui montent juste avant le retour
-    if (soon && Math.random() < 0.2 + k * 0.6) this.fx.burst(x + (Math.random() - 0.5) * 100, y + (Math.random() - 0.5) * 40, '#F0B64A', 1, 40);
+    if (soon && Math.random() < 0.2 + k * 0.6) this.fx.burst(x + (Math.random() - 0.5) * R * 1.2, y + (Math.random() - 0.5) * R * 0.5, '#F0B64A', 1, 40);
     ctx.save();
     ctx.font = '700 28px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
@@ -434,13 +439,25 @@ export class Game {
     else if (action === 'fruit') this.toggleHold();
     else if (action === 'ability') this.useAbility();
     else if (action === 'revive') this.setHelp(true);
+    else if (action === 'trade') this.proposeTrade();
+  }
+
+  /** U (ou le bouton tactile) : proposer un échange au dompteur le plus proche, s'il est tout près ; rouvrir l'échange en cours. */
+  proposeTrade() {
+    if (this.hud.swap) return this.hud.setPanel('trade');
+    const st = this.self();
+    if (!st || st.dead) return;
+    const d = (p: { x: number; y: number }) => Math.hypot(p.x - this.me.x, p.y - this.me.y);
+    const near = (this.net.latest?.players ?? []).filter((p) => p.id !== this.myId && !p.dead && d(p) < TRADE_R).sort((a, b) => d(a) - d(b))[0];
+    if (!near) return this.hud.toast('Approche-toi d\'un autre dompteur pour lui proposer un échange.');
+    this.net.send({ t: 'swap', act: 'open', with: near.id });
   }
 
   /** Espace (ou le bouton tactile) : capacité active de la classe (guerrier : Ruée). Le serveur fait le bond et recale par teleport. */
   useAbility() {
     const st = this.self();
     if (!st || st.dead || st.ability < 0) return; // pas de capacité pour cette classe
-    if (st.ability > 0 || st.holding || st.mount) return; // en recharge, un fruit en main, ou monté
+    if (st.ability > 0 || st.holding) return; // en recharge ou un fruit en main (on peut lancer à cheval)
     this.net.send({ t: 'ability' });
   }
 
@@ -451,7 +468,7 @@ export class Game {
     const mine = (this.net.latest?.units ?? []).filter((u) => u[6] === this.myId).map((u) => SPECIES[u[1]].key);
     if (!st.harvest && !mine.includes('treant') && !mine.includes('golem')) return this.hud.toast('Il te faut un Tréant ou un Golem dans ta meute pour récolter.');
     this.net.send({ t: 'harvest', on: !st.harvest });
-    this.hud.toast(st.harvest ? 'Récolte finie : ton Tréant et ton Golem reviennent au combat.' : 'Récolte : ton Tréant abat les arbres, ton Golem mange les pierres autour de toi.', st.harvest ? '' : 'good');
+    this.hud.toast(st.harvest ? 'Récolte finie : ton Tréant et ton Golem reviennent au combat.' : 'Récolte : ton Tréant abat les arbres, ton Golem mange les pierres et les filons d\'or autour de toi.', st.harvest ? '' : 'good');
   }
 
   /** T : tendre un fruit (le gibier passif s'approche, chaque fruit peut l'apprivoiser) ou le ranger. */
@@ -824,6 +841,9 @@ export class Game {
       location.href = location.pathname;
     } else if (m.t === 'error') this.hud.toast(m.msg);
     else if (m.t === 'board') this.hud.board(m.rows);
+    else if (m.t === 'fog') this.fog.merge(m.cells); // la carte du village, découverte aussi par les autres
+    else if (m.t === 'swap') this.hud.showSwap(m, this.net.latest?.players.find((p) => p.id === m.with)?.name ?? 'un dompteur');
+    else if (m.t === 'swapEnd') this.hud.endSwap(m.done, m.why);
     else if (m.t === 'teleport') {
       // Entrée ou sortie de grotte : l'écran s'ouvre en iris depuis le noir.
       const from = this.map.caveAt(this.me.x, this.me.y), to = this.map.caveAt(m.x, m.y);
@@ -1049,6 +1069,14 @@ export class Game {
         break;
       case 'move': {
         const b = this.posOf(e.id, players);
+        if (e.kind === 'haste') {
+          // il ne touche personne depuis un moment : il s'impatiente et presse le pas (à chaque fois, ça change le combat)
+          if (b) {
+            this.fx.text(b.x, b.y - 70, 'Il s\'impatiente et presse le pas !', '#FFD27A', 17, 1.5);
+            this.fx.ring(b.x, b.y, 'rgba(255,210,122,0.8)', 16, 110, 0.6);
+          }
+          break;
+        }
         // le nom de l'attaque, la première fois qu'il la lance dans ce combat (ensuite, la zone au sol suffit)
         const said = this.movesSaid.get(e.id) ?? this.movesSaid.set(e.id, new Set()).get(e.id)!;
         if (b && (e.kind === 'wake' || e.kind === 'hibernate' || !said.has(e.kind))) this.fx.text(b.x, b.y - 70, e.kind === 'wake' ? 'Il se réveille !' : `${MOVE_NAMES[e.kind as keyof typeof MOVE_NAMES] ?? e.kind} !`, '#FF9B78', 18, 1.3);
@@ -1544,6 +1572,16 @@ export class Game {
         break;
       case 'info':
         this.hud.toast(e.text);
+        break;
+      case 'lair': {
+        // la herse de l'antre retombe au début du combat, et se relève à la fin
+        const name = bossName(this.map.caves[e.cave]?.boss ?? 0);
+        this.hud.toast(e.shut ? `La herse retombe : plus personne n'entre ni ne sort tant que ${name} est debout !` : 'La herse de l\'antre se relève.');
+        if (e.shut) this.shake = Math.max(this.shake, 0.3);
+        break;
+      }
+      case 'busy': // un combat de géant a déjà commencé dans cette grotte : on ne le rejoint pas en cours de route
+        this.hud.toast(`Le combat contre ${bossName(this.map.caves[e.cave]?.boss ?? 0)} est en cours : impossible d'entrer ou de sortir.`);
         break;
       case 'camp': {
         const c = this.map.sites[e.site];
@@ -2081,7 +2119,7 @@ export class Game {
         [st.a, st.snap, st.len] = [a, this.shotsAt, len];
       }
       st.seen = this.time;
-      const at = this.fired.get(key), since = h[6] >= 100 && at !== undefined ? Math.max(0.001, this.time - at) : 0;
+      const at = this.fired.get(String(h[12])), since = h[6] >= 100 && at !== undefined ? Math.max(0.001, this.time - at) : 0; // (rangé par trackCasts sous l'id de la zone)
       const k = since ? 1 : Math.min(0.999, h[6] / 100 + late / Math.max(0.05, h[10] / 100));
       if (since && !st.lit) {
         st.lit = true;
@@ -2683,11 +2721,11 @@ export class Game {
       drawDepths(ctx, this.map, this.time, sealed, !!this.hud.heart, this.net.latest?.traps ?? [], { x0: camX - hw, y0: camY - hh, x1: camX + hw, y1: camY + hh }, this.hud.unlocked);
     } else if (here?.zone === VOYAGE_ZONE) drawVoyage(ctx, here, this.time, camX, camY, hw, hh);
     else if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
-    if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id]);
+    if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id], SPECIES[here.boss]?.r ?? 60);
     // géants des îlots, à l'air libre : le cercle de leur retour, sur leur îlot
     for (const c of this.map.caves) {
       const home = c.home ?? c.inside;
-      if ((here ? here === this.map.depths && c.room !== undefined : c.open !== undefined) && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id]);
+      if ((here ? here === this.map.depths && c.room !== undefined : c.open !== undefined) && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id], SPECIES[c.boss].r);
     }
     const br = this.map.bridge;
     if (!here && inView((br.a.x + br.b.x) / 2, (br.a.y + br.b.y) / 2, Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y) / 2 + 120)) this.world.drawBridge(ctx, this.hud.buildings.includes('bridge'), this.time);
@@ -2937,6 +2975,7 @@ export class Game {
       const s = SPECIES[s0].mimic ? SPECIES_KEYS.indexOf(SPECIES[s0].mimic!) : s0; // un leurre a le visage de son géant
       if (flags & UNIT_FLAG_MOUNTED) continue; // dessinée sous son cavalier
       if (!inView(x, y, 220)) continue; // le serveur envoie plus large que l'écran : inutile de dessiner le reste
+      const op = owner && owner !== this.myId ? settings.display.allyPackOpacity / 100 : 1; // meute d'un autre joueur : opacité réglable
       const alpha = (flags & UNIT_FLAG_ALPHA) !== 0;
       const legend = (flags & UNIT_FLAG_LEGEND) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
@@ -3046,12 +3085,13 @@ export class Game {
       if (ghost && cast) list.push({ y: cast.y, draw: () => this.drawUnitCached(ctx, id, { ...look(), x: cast.x, y: cast.y }, { ...REST, alpha: ghost }) });
       if (pose.air > r * 0.6) {
         // en plein bond : au-dessus de tout, l'ombre reste au sol (et rétrécit)
-        air.push({ y: y + pose.dy, draw: () => drawUnit(ctx, { ...look(), x: x + pose.dx, y: y + pose.dy, air: pose.air, squash: pose.squash }) });
+        air.push({ y: y + pose.dy, draw: () => { if (op < 1) ctx.globalAlpha = op; drawUnit(ctx, { ...look(), x: x + pose.dx, y: y + pose.dy, air: pose.air, squash: pose.squash }); ctx.globalAlpha = 1; } });
         continue;
       }
       list.push({
         y,
         draw: () => {
+          if (op < 1) ctx.globalAlpha = op; // meute d'un autre joueur : atténuée
           const mood = boss && flags & UNIT_FLAG_DORMANT ? this.bossMoodAt(x, y, s0) : null;
           const shiver = mood?.mood === 'fear' ? Math.sin(this.time * 55) * Math.min(4, 1.2 + mood.n) : 0; // il tremble de peur
           if (shiver) ctx.translate(shiver, 0);
@@ -3094,6 +3134,7 @@ export class Game {
           } else if (hp < 100) hpBar(ctx, x, y - r * (alpha ? 1.7 : 1.3) - 6, alpha ? 46 : 28, hp, owner ? '#7FCB5B' : '#E8693F');
           if (flags & UNIT_FLAG_BURN && Math.random() < this.dt * 10) this.fx.burst(x + (Math.random() - 0.5) * r, y - r * 0.6, Math.random() < 0.5 ? '#FFB347' : '#FF6A2A', 2, 60); // il brûle
           if (flags & (UNIT_FLAG_RALLY | UNIT_FLAG_GUARD | UNIT_FLAG_POISON | UNIT_FLAG_BURN)) drawBuffs(ctx, x, y - r * (alpha ? 1.7 : 1.3) - (hp < 100 ? 18 : 10), flags, this.time, id);
+          if (op < 1) ctx.globalAlpha = 1;
         },
       });
     }
@@ -3106,7 +3147,7 @@ export class Game {
         this.snore(x + 14, y - 36, 15, x);
       } });
     }
-    for (const [id, s, flags, x, y, k] of this.net.latest?.dozers ?? []) {
+    for (const [id, s, flags, x, y, k] of settings.display.sleeperPacks ? (this.net.latest?.dozers ?? []) : []) { // meutes des déconnectés : masquables
       if (!inView(x, y, 80)) continue;
       const alpha = (flags & UNIT_FLAG_ALPHA) !== 0, legend = (flags & UNIT_FLAG_LEGEND) !== 0, asleep = (flags & UNIT_FLAG_DORMANT) !== 0;
       const r = alpha ? alphaStats(s, 0, 1, legend).r : SPECIES[s].r;
@@ -3119,7 +3160,7 @@ export class Game {
         if (asleep) this.snore(x + r * 0.5, y - r * 1.2, 12, id);
       } });
     }
-    this.drawPets(ctx, list, inView);
+    if (settings.display.villageAlphas) this.drawPets(ctx, list, inView); // Alphas au repos sur l'îlot : masquables
     for (const p of players) {
       const isMe = p.id === this.myId;
       const x = isMe ? this.me.x : p.x, y = isMe ? this.me.y : p.y;

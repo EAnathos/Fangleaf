@@ -2,7 +2,8 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { alphaCreateCost, SHOT_KINDS, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, LEGEND_MULT, POISON_S, SPECIES, TORNADO_PULL_R, zoneBosses } from '../../shared/config.ts';
+import { moodLine } from '../../client/src/bossMemory.ts';
+import { VOYAGE_ZONE, alphaCreateCost, SHOT_KINDS, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, LEGEND_MULT, POISON_S, SPECIES, TORNADO_PULL_R, zoneBosses } from '../../shared/config.ts';
 
 describe('Géants et grottes', () => {
   rule('Grottes : entrer avec sa meute, mini-boss, âme, réapparition du boss.', () => {
@@ -493,13 +494,17 @@ describe('Géants et grottes', () => {
       const wolf = r.createUnit(S('wolf'), false, at.x + 220, at.y + 120);
       r.makeTamed(wolf, p);
       wolf.hp = wolf.maxHp = 1e6;
+      // comme en jeu, le voisinage est connu quand il attaque : chaque tornade part vers l'une de ses proies
+      r.grid.clear();
+      for (const e of [p, king, wolf]) r.grid.insert(e);
       cast(r, 'vulture_king', 'tornado', king, p);
       const tw = r.hazards.filter((h: { style: string }) => h.style === 'tornado');
       const d0 = Math.hypot(tw[0].x - p.x, tw[0].y - p.y), w0 = Math.hypot(wolf.x - p.x, wolf.y - p.y);
       run(r, [p, king, wolf], 2.5);
       const d1 = Math.hypot(tw[0].x - p.x, tw[0].y - p.y);
       check(tw.length === 2 && d1 < d0 - 150, `Roi-Vautour : deux tornades, qui poursuivent leur cible (${Math.round(d0)} → ${Math.round(d1)} px)`);
-      check(wolf.hp < wolf.maxHp && TORNADO_PULL_R > 0 && Math.hypot(wolf.x - tw[0].x, wolf.y - tw[0].y) < w0, 'elles blessent et aspirent les monstres de la meute');
+      const near = Math.min(...tw.map((h: { x: number; y: number }) => Math.hypot(wolf.x - h.x, wolf.y - h.y)));
+      check(wolf.hp < wolf.maxHp && TORNADO_PULL_R > 0 && near < w0, `elles blessent et aspirent les monstres de la meute (loup à ${Math.round(near)} px de la plus proche)`);
     }
     {
       // Lueur se téléporte : il retombe dans un cratère de feu qui brûle encore
@@ -548,5 +553,71 @@ describe('Géants et grottes', () => {
 
   rule('grottes des dernières zones bien plus chères', () => {
     check(caveUnlockCost(1) === 150 && caveUnlockCost(3) === 450 && caveUnlockCost(4) === 1500 && caveUnlockCost(5) === 3000, 'grottes des dernières zones bien plus chères (1500 et 3000 or)');
+  });
+
+  rule('Un combat de géant déjà commencé ne se rejoint pas : sa grotte refuse d\'entrer jusqu\'à la fin du combat.', () => {
+    const r = room();
+    const c = r.map.caves.find((q: { room?: number; open?: number; zone: number }) => q.room === undefined && q.open === undefined && q.zone !== VOYAGE_ZONE);
+    const boss = r.units.get(r.caveBoss[c.id]);
+    const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
+    [p.x, p.y] = [c.entrance.x, c.entrance.y];
+    r.onCave(p, c.id, true);
+    check(r.map.arenaAt(p.x, p.y)?.id === c.id, 'avant le combat, on entre dans la grotte');
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 30];
+    p.hp = 1e6;
+    r.onChallenge(p, c.id);
+    check(!boss.dormant, 'le combat commence');
+    // Le dompteur déjà dans la grotte ne peut pas en ressortir.
+    [p.x, p.y] = [c.exit.x, c.exit.y];
+    r.events = [];
+    r.onCave(p, c.id, false);
+    check(r.map.arenaAt(p.x, p.y)?.id === c.id, 'pendant le combat, le dompteur reste dans la grotte');
+    check(r.events.some((e: { e: string; to?: number }) => e.e === 'busy' && e.to === p.id), 'la sortie refusée est signalée au dompteur');
+    [q.x, q.y] = [c.entrance.x, c.entrance.y];
+    r.events = [];
+    r.onCave(q, c.id, true);
+    check(r.map.arenaAt(q.x, q.y)?.id !== c.id, 'pendant le combat, un autre dompteur reste dehors');
+    check(r.events.some((e: { e: string; to?: number }) => e.e === 'busy' && e.to === q.id), 'il est prévenu (et lui seul)');
+    r.calmBoss(boss); // combat fini : le géant se rendort
+    r.time += 2; // laisse passer le délai anti-double-interaction depuis l'entrée
+    r.onCave(p, c.id, false);
+    check(r.map.arenaAt(p.x, p.y)?.id !== c.id, 'le combat fini, le dompteur peut sortir');
+    r.onCave(q, c.id, true);
+    check(r.map.arenaAt(q.x, q.y)?.id === c.id, 'le combat fini, un autre dompteur peut entrer');
+  });
+
+  rule('Le géant se souvient du résultat du combat : peur si le dompteur l’a vaincu, arrogance s’il a gagné.', () => {
+    const fear = SPECIES.map((_, s) => moodLine({ mood: 'fear', n: 1 }, s));
+    check(fear.every((l) => !!l && !/raclée|tes bleus|tu en redemandes/i.test(l)), 'après avoir été vaincu, le géant craint le dompteur');
+    const smug = SPECIES.map((_, s) => moodLine({ mood: 'smug', n: 1 }, s));
+    check(smug.every((l) => !!l), 'après avoir battu le dompteur, le géant garde une réplique arrogante');
+  });
+
+  rule('Un géant qui ne touche personne s\'impatiente : il accélère peu à peu, puis reprend son allure dès qu\'il touche un dompteur.', () => {
+    const r = room();
+    const p = r.addPlayer('a', noop);
+    p.hp = 1e6;
+    const boss = r.caveBoss.map((id: number) => r.units.get(id)).find(Boolean);
+    boss.dormant = false;
+    boss.fight = { at: r.time, from: p.id, by: new Map(), landed: r.time };
+    const hasteEvents = () => r.events.filter((e: { e: string; kind?: string }) => e.e === 'move' && e.kind === 'haste').length;
+    check(r.bossHaste(boss) === 1, 'au début du combat, son allure normale');
+    r.time += BOSS_HASTE_AFTER - 0.5;
+    check(r.bossHaste(boss) === 1, `pendant ${BOSS_HASTE_AFTER} s sans toucher personne, rien ne change`);
+    r.time += 4.5;
+    const h4 = r.bossHaste(boss);
+    check(Math.abs(h4 - (1 + 4 * BOSS_HASTE_RATE)) < 1e-9, `4 s plus tard, il va ${Math.round((h4 - 1) * 100)} % plus vite`);
+    r.events = [];
+    r.bossAI(boss, p);
+    r.bossAI(boss, p);
+    check(hasteEvents() === 1, 'il s\'impatiente : annoncé une seule fois');
+    r.time += 600;
+    check(r.bossHaste(boss) === 1 + BOSS_HASTE_MAX, `son accélération plafonne à +${BOSS_HASTE_MAX * 100} %`);
+    r.damage(p, 1, boss);
+    check(r.bossHaste(boss) === 1 && !boss.fight.hasted, 'il touche un dompteur : il reprend aussitôt son allure');
+    r.time += BOSS_HASTE_AFTER + 1;
+    r.events = [];
+    r.bossAI(boss, p);
+    check(r.bossHaste(boss) > 1 && hasteEvents() === 1, 'de nouveau sans toucher personne, il s\'impatiente de nouveau');
   });
 });
