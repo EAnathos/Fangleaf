@@ -9,7 +9,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: release-version-main
+  group: release-version-dev
   cancel-in-progress: false
 
 jobs:
