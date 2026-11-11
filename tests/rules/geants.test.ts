@@ -579,6 +579,7 @@ describe('Géants et grottes', () => {
     check(r.map.arenaAt(q.x, q.y)?.id !== c.id, 'pendant le combat, un autre dompteur reste dehors');
     check(r.events.some((e: { e: string; to?: number }) => e.e === 'busy' && e.to === q.id), 'il est prévenu (et lui seul)');
     r.calmBoss(boss); // combat fini : le géant se rendort
+    r.time += 2; // laisse passer le délai anti-double-interaction depuis l'entrée
     r.onCave(p, c.id, false);
     check(r.map.arenaAt(p.x, p.y)?.id !== c.id, 'le combat fini, le dompteur peut sortir');
     r.onCave(q, c.id, true);
