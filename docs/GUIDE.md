@@ -133,6 +133,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   de temps il revient : une ligne sous le sac, ou une vignette à son portrait près des effets en cours (au choix dans
   Paramètres › Affichage).
 - On le **renforce** avec des essences, de plus en plus cher à chaque niveau, et un peu plus dans les zones lointaines.
+- Quand tes essences suffisent pour éveiller ou renforcer un Alpha, une notification te le dit (une seule fois par palier).
 - Seuls quelques Alphas sont **équipés** à la fois ; les autres se reposent à la Tanière et se promènent sur l'îlot du village.
   Pour que le jeu reste fluide, **30 Alphas au repos au plus** sont montrés en même temps : au-delà, ils sont tirés au hasard
   parmi ceux de tous les membres (en ligne ou endormis), et la sélection ne change que quand une place se libère (un Alpha part) : ceux déjà montrés restent, un arrivant ne prend la place de personne.

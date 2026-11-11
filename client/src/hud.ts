@@ -1032,6 +1032,7 @@ export class Hud {
     setHidden($('mount-row'), !me.mount);
     this.updateMark(me);
     this.updateRevive(me);
+    this.notifyEssences(me);
     if (me.mount) {
       setText($('mount-name'), 'Monture');
       setStyle($('mount-hp'), 'width', `${me.mount.hp}%`);
@@ -2496,6 +2497,32 @@ export class Hud {
     title.after(input);
     input.focus();
     input.select();
+  }
+
+  /** Alphas dont les essences suffisent déjà (clé « espèce:niveau ») ; null tant qu'on n'a rien observé. */
+  private essReady: Set<string> | null = null;
+
+  /**
+   * Prévient (une fois) quand les essences d'une espèce atteignent le coût d'éveil de son Alpha, ou de son prochain
+   * niveau. Le premier passage ne fait que mémoriser l'état : pas de rafale de notifications à la connexion.
+   */
+  private notifyEssences(me: PlayerState) {
+    const ready = new Set<string>(), news: string[] = [];
+    for (const s of SPECIES_BY_ZONE) {
+      const sp = SPECIES[s];
+      if (sp.boss || me.awakening.some((w) => w.species === s)) continue;
+      const a = me.army.find((x) => x.alpha && x.species === s) ?? me.resting.find((r) => r.species === s);
+      if (!a && !(me.seen.includes(s) && this.zoneOpen(sp.zone))) continue;
+      if (a && a.level >= ALPHA_LVL_MAX) continue;
+      if ((me.essences[s] ?? 0) < (a ? alphaUpCost(s, a.level) : alphaCreateCost(s))) continue;
+      const key = `${s}:${a ? a.level : -1}`;
+      ready.add(key);
+      if (this.essReady && !this.essReady.has(key)) news.push(a ? `renforcer ton Alpha ${sp.name} (niv. ${a.level + 1})` : `éveiller ton Alpha ${sp.name}`);
+    }
+    this.essReady = ready;
+    if (news.length && !(this.panel === 'den' && this.denTab === 'alphas')) {
+      this.toast(`Assez d'essences pour ${news.length > 1 ? `${news.length} Alphas : ${news.join(', ')}` : news[0]} ! Direction la Tanière.`, 'alpha');
+    }
   }
 
   /** Barre d'essence de l'Alpha marqué : coût d'éveil s'il dort, compte à rebours pendant l'éveil, coût de renforcement ensuite. */
