@@ -4,9 +4,9 @@
 
 import { clamp, hash2 } from './math.ts';
 
-export const DAY_MS = 20 * 60_000; // un cycle jour + nuit
-const NIGHT = 0.22; // part de la nuit noire : plus courte que le jour (un peu moins de 4 min 30)
-const TWILIGHT = 0.05; // crépuscule et aube, de part et d'autre de la nuit (1 min chacun)
+export const DAY_MS = 14 * 60_000; // un cycle jour + nuit, raccourci de 30 %
+const NIGHT = 0.22; // part de la nuit noire : plus courte que le jour (un peu plus de 3 min)
+const TWILIGHT = 0.05; // crépuscule et aube, de part et d'autre de la nuit (42 s chacun)
 const DAY = 1 - NIGHT - 2 * TWILIGHT;
 
 const RAIN_SLOT = 6 * 60_000; // le temps est tiré au sort par tranches de 6 min…

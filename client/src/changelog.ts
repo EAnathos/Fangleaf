@@ -11,6 +11,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.11.0',
+    date: '2026-11-11',
+    title: 'Des jours et des nuits plus courts',
+    items: [
+      'Le cycle jour/nuit dure désormais 14 minutes au lieu de 20, sans changer la part relative du jour, de la nuit et des crépuscules.',
+    ],
+  },
+  {
     version: '0.10.0',
     date: '2026-11-10',
     title: 'Prévenu quand on peut éveiller',
