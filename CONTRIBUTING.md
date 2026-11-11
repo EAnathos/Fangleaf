@@ -106,3 +106,7 @@ Pour chaque changement visible par les joueurs, ajouter un fichier JSON indépen
 ## 9. Si la CI échoue
 
 Lire le log de l'étape qui a cassé (`gh pr checks`), puis reproduire en local avec la commande correspondante. Ne pas relancer les tests en boucle sans corriger la cause.
+
+## 10. Licence des contributions
+
+Le projet est publié sous la [PolyForm Noncommercial License 1.0.0](LICENSE) (résumé dans le [README](README.md#licence)). En ouvrant une PR, on accepte que sa contribution soit distribuée sous cette même licence. Ne pas y intégrer de code, d'image ou de son repris d'un autre projet dont la licence serait incompatible avec ces conditions.
