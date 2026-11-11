@@ -398,6 +398,8 @@ const STORM_DPS = 0.02; // part des PV max perdue chaque seconde en plein dedans
 const WAKE_S = 20; // dormeur (lièvre la nuit, ours le jour) réveillé par un coup : il reste debout tant de secondes après le dernier
 
 export class Room {
+  /** Fabrique de la carte d'un village. Les tests la remplacent par un cache (tests/helpers.ts) : générer l'île prend des secondes. */
+  static makeMap = (seed: number) => new WorldMap(seed, false); // sans ce qui ne sert qu'au dessin
   readonly seed: number;
   players = new Map<number, Player>();
   units = new Map<number, Unit>();
@@ -446,7 +448,7 @@ export class Room {
   /** seed : graine d'un village enregistré (même carte qu'avant) ; absente pour un nouveau village. */
   constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}) {
     this.seed = seed ?? Math.floor(Math.random() * 2 ** 31);
-    this.map = new WorldMap(this.seed, false); // sans ce qui ne sert qu'au dessin
+    this.map = Room.makeMap(this.seed);
     const indexes = (list: unknown[] | undefined, n: number) =>
       (list ?? []).map(Number).filter((c, i, all) => Number.isInteger(c) && c >= 0 && c < n && all.indexOf(c) === i);
     this.camps = indexes(saved.camps, this.map.sites.length);
