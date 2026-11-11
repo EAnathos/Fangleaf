@@ -11,7 +11,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { parseArgs } from 'node:util';
-import { ARMY_CAP, BUILDING_IDS, DT, HALL_MAX, SPECIES, SWORD_PULLS, TICK_HZ } from '../shared/config.ts';
+import { ARMY_CAP, BOSS_MOVES, BUILDING_IDS, DT, HALL_MAX, SPECIES, SWORD_PULLS, TICK_HZ } from '../shared/config.ts';
 import { Room } from '../server/room.ts';
 import { WorldMap } from '../shared/worldmap.ts';
 
@@ -96,7 +96,7 @@ function run(sc: Scenario): Result {
 
   // Le scénario dédié place le groupe dans une grotte et réveille un vrai géant : son IA lance ses attaques,
   // pose des effets persistants et appelle des renforts pendant que le groupe lui inflige des dégâts.
-  const cave = sc.boss ? r.map.caves[0] : undefined;
+  const cave = sc.boss ? r.map.caves.find((cv) => BOSS_MOVES[SPECIES[cv.boss].key]?.some((move) => move.kind === 'summon')) : undefined;
   const boss = cave ? r.units.get(r.caveBoss[cave.id]) : undefined;
   if (cave && boss) {
     players.forEach((q, i) => {
