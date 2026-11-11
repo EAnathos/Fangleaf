@@ -127,14 +127,19 @@ jobs:
           echo "✘ déploiement toujours en cours après 10 minutes" >&2
           exit 1
 
-      - name: Le staging répond
+      - name: Vérifier la santé du staging
         if: steps.deploy.outputs.uuid
         run: |
           for i in $(seq 1 10); do
-            # page entière d'abord : un grep -q dans le tube couperait curl en pleine écriture (erreur 23)
+            # La page seule ne prouve ni que le serveur répond, ni que Supabase est configuré.
+            health=$(curl -fsS "$STAGING_URL/healthz" 2>/dev/null || true)
             page=$(curl -fsS "$STAGING_URL/" 2>/dev/null || true)
-            if grep -q '<title>Fangleaf</title>' <<<"$page"; then echo "En ligne"; exit 0; fi
+            if jq -e '.ok == true and .persistenceConfigured == true' <<<"$health" >/dev/null \
+              && grep -q '<title>Fangleaf</title>' <<<"$page"; then
+              echo "Staging en ligne, serveur actif et Supabase configuré"
+              exit 0
+            fi
             sleep 3
           done
-          echo "$STAGING_URL ne répond pas" >&2
+          echo "$STAGING_URL n'est pas prêt (page, serveur ou configuration Supabase)" >&2
           exit 1
