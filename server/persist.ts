@@ -82,12 +82,13 @@ export interface VillageSave {
   wood: number; // réserve commune
   stone: number;
   banned: { id: string; name: string }[]; // comptes expulsés par le fondateur
+  explored?: string; // carte explorée par le village (shared/fog.ts, packFog ; migration 029)
 }
 
 /** Graine et biens communs d'un village enregistré, ou null s'il n'existe pas. */
 export async function findVillage(code: string): Promise<({ seed: number; founder: string | null } & VillageSave) | null> {
   if (!db) return null;
-  const { data, error } = await db.from('villages').select('seed, name, told, boat, boat_at, school_plan, school_at, camps, buildings, caves, hall, beaten, heart, wood, stone, banned, created_by').eq('code', code).maybeSingle();
+  const { data, error } = await db.from('villages').select('seed, name, told, boat, boat_at, school_plan, school_at, camps, buildings, caves, hall, beaten, heart, wood, stone, banned, explored, created_by').eq('code', code).maybeSingle();
   if (error) throw new Error(`Lecture du village impossible : ${error.message}`);
   const list = (v: unknown) => (Array.isArray(v) ? v : []);
   return data
@@ -95,6 +96,7 @@ export async function findVillage(code: string): Promise<({ seed: number; founde
       seed: Number(data.seed), camps: list(data.camps).map(Number), buildings: list(data.buildings), unlocked: list(data.caves).map(Number),
       hall: Number(data.hall ?? 0), name: String(data.name ?? ''), told: list(data.told).map(Number), boat: Number(data.boat ?? 0), boatAt: Number(data.boat_at ?? 0), plan: !!data.school_plan, schoolAt: Number(data.school_at ?? 0), beaten: list(data.beaten).map(Number), heart: Number(data.heart ?? 0), wood: Number(data.wood ?? 0), stone: Number(data.stone ?? 0),
       banned: list(data.banned).filter((b) => b && typeof b.id === 'string').map((b) => ({ id: String(b.id), name: String(b.name ?? '') })),
+      explored: typeof data.explored === 'string' ? data.explored : '',
       founder: data.created_by ?? null,
     }
     : null;
@@ -140,7 +142,7 @@ export async function leaveVillage(userId: string, code: string): Promise<{ dele
 /** Biens communs du village (partagés par tous ses membres). */
 export async function saveVillage(code: string, v: VillageSave) {
   if (!db) return;
-  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked, hall: v.hall, name: v.name, told: v.told, boat: v.boat, boat_at: v.boatAt, school_plan: v.plan, school_at: v.schoolAt, beaten: v.beaten, heart: v.heart, wood: v.wood, stone: v.stone, banned: v.banned }).eq('code', code);
+  const { error } = await db.from('villages').update({ camps: v.camps, buildings: v.buildings, caves: v.unlocked, hall: v.hall, name: v.name, told: v.told, boat: v.boat, boat_at: v.boatAt, school_plan: v.plan, school_at: v.schoolAt, beaten: v.beaten, heart: v.heart, wood: v.wood, stone: v.stone, banned: v.banned, ...(v.explored ? { explored: v.explored } : {}) }).eq('code', code);
   if (error) console.error('Sauvegarde du village impossible :', error.message);
 }
 

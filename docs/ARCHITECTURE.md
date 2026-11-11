@@ -31,6 +31,7 @@ shared/    config.ts      règles et équilibrage (espèces, coûts, zones, bât
            worldmap.ts    l'île générée par graine : zones, lacs, grottes, volcan et ses entrailles, îlot du village et son pont, obstacles, chemins
            protocol.ts    messages du WebSocket
            snapshot.ts    envoi différentiel des snapshots (même règle des deux côtés)
+           fog.ts         carte explorée du village : cases dévoilées, format compact pour la base et le réseau
            weather.ts     jour, nuit, averses et tempêtes, tirés de l'heure et de la graine du village
            math.ts        bruit, hasard à graine
 server/    index.ts       HTTP (build statique en prod), WebSocket /ws, salons, boucle de simulation
@@ -65,6 +66,13 @@ deploy/    service systemd, nginx, script de déploiement (lancé par .github/wo
 4. Le client reconstitue l'état complet, affiche les autres avec 100 ms de retard (interpolation) et son propre dompteur sans retard (prédiction).
 
 Le ciel (jour, nuit, météo) n'est pas transmis : client et serveur le calculent chacun à partir de l'heure et de la graine.
+
+La **carte explorée** est commune au village : le serveur dévoile les cases autour de chaque dompteur (`shared/fog.ts`),
+la sauvegarde avec le village (migration 029) et l'envoie à chaque membre qui arrive (`fog`). Ensuite, chaque client
+dévoile lui-même autour des dompteurs qu'il reçoit dans les snapshots (tous les membres connectés y sont).
+
+Les **échanges** entre dompteurs (`swap`) se jouent entièrement sur le serveur : il borne chaque part à ce que le
+dompteur possède, envoie l'état aux deux après chaque changement et ne fait le transfert que quand les deux ont validé.
 
 ## Tests et performance
 

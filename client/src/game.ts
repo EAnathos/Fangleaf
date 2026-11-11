@@ -2,7 +2,7 @@
 
 import { initCheat } from './cheat.ts';
 import { drawCoatiClue } from './coati.ts';
-import { ISLE_NAMES, SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
+import { TRADE_R, ISLE_NAMES, SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_BURN } from '../../shared/protocol.ts';
@@ -164,6 +164,8 @@ export class Game {
     this.hud.onAbility = () => this.useAbility();
     this.hud.onHold = () => this.toggleHold();
     this.hud.onRide = () => this.toggleMount();
+    this.hud.onTrade = () => this.proposeTrade();
+    this.hud.onSwap = (m) => net.send({ t: 'swap', ...m });
     this.hud.onSword = () => net.send({ t: 'sword' });
     this.hud.onScroll = (cave) => net.send({ t: 'scroll', cave });
     this.hud.onHeart = () => net.send({ t: 'heart' });
@@ -437,6 +439,18 @@ export class Game {
     else if (action === 'fruit') this.toggleHold();
     else if (action === 'ability') this.useAbility();
     else if (action === 'revive') this.setHelp(true);
+    else if (action === 'trade') this.proposeTrade();
+  }
+
+  /** U (ou le bouton tactile) : proposer un échange au dompteur le plus proche, s'il est tout près ; rouvrir l'échange en cours. */
+  proposeTrade() {
+    if (this.hud.swap) return this.hud.setPanel('trade');
+    const st = this.self();
+    if (!st || st.dead) return;
+    const d = (p: { x: number; y: number }) => Math.hypot(p.x - this.me.x, p.y - this.me.y);
+    const near = (this.net.latest?.players ?? []).filter((p) => p.id !== this.myId && !p.dead && d(p) < TRADE_R).sort((a, b) => d(a) - d(b))[0];
+    if (!near) return this.hud.toast('Approche-toi d\'un autre dompteur pour lui proposer un échange.');
+    this.net.send({ t: 'swap', act: 'open', with: near.id });
   }
 
   /** Espace (ou le bouton tactile) : capacité active de la classe (guerrier : Ruée). Le serveur fait le bond et recale par teleport. */
@@ -827,6 +841,9 @@ export class Game {
       location.href = location.pathname;
     } else if (m.t === 'error') this.hud.toast(m.msg);
     else if (m.t === 'board') this.hud.board(m.rows);
+    else if (m.t === 'fog') this.fog.merge(m.cells); // la carte du village, découverte aussi par les autres
+    else if (m.t === 'swap') this.hud.showSwap(m, this.net.latest?.players.find((p) => p.id === m.with)?.name ?? 'un dompteur');
+    else if (m.t === 'swapEnd') this.hud.endSwap(m.done, m.why);
     else if (m.t === 'teleport') {
       // Entrée ou sortie de grotte : l'écran s'ouvre en iris depuis le noir.
       const from = this.map.caveAt(this.me.x, this.me.y), to = this.map.caveAt(m.x, m.y);
