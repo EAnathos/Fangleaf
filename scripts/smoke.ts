@@ -49,12 +49,15 @@ class Bot {
   }
   open() {
     if (this.ws.readyState === WebSocket.OPEN) return Promise.resolve();
-    return new Promise<void>((r) => {
-      this.ws.once('open', () => r());
-      this.ws.once('error', () => r()); // sinon on attendrait indéfiniment un serveur qui n'écoute pas
+    if (this.failed) return Promise.reject(this.failed);
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('délai de connexion WebSocket dépassé')), 5000);
+      this.ws.once('open', () => { clearTimeout(timeout); resolve(); });
+      this.ws.once('error', (error) => { clearTimeout(timeout); reject(error); });
     });
   }
   send(m: object) {
+    if (this.ws.readyState !== WebSocket.OPEN) throw new Error(`WebSocket non connecté (état ${this.ws.readyState})`);
     this.ws.send(JSON.stringify(m));
   }
   me() {
@@ -76,16 +79,23 @@ async function cheatsAccepted(port: number, env: Record<string, string>) {
     for (let i = 0; i < 200 && !up; i++) await sleep(50);
     if (!up) return console.error(`port ${port} : le serveur de test n'a pas démarré`), null;
     const bot = new Bot(port);
-    await bot.open();
-    bot.send({ t: 'create', name: 'Testeur' });
-    for (let i = 0; i < 100 && !bot.me(); i++) await sleep(50); // génération de la carte, puis premier snapshot
-    const gold = bot.me()?.gold;
-    if (bot.failed || gold === undefined) return console.error(`port ${port} : pas de village (${bot.failed?.message ?? 'aucun snapshot'})`), null;
-    bot.send({ t: 'cheat' });
-    await sleep(300);
-    const after = bot.me()?.gold ?? gold;
-    bot.ws.close();
-    return after > gold;
+    try {
+      await bot.open();
+      if (bot.failed || bot.ws.readyState !== WebSocket.OPEN) {
+        console.error(`port ${port} : WebSocket indisponible (${bot.failed?.message ?? 'connexion fermée'})`);
+        return null;
+      }
+      bot.send({ t: 'create', name: 'Testeur' });
+      for (let i = 0; i < 100 && !bot.me(); i++) await sleep(50); // génération de la carte, puis premier snapshot
+      const gold = bot.me()?.gold;
+      if (bot.failed || gold === undefined) return console.error(`port ${port} : pas de village (${bot.failed?.message ?? 'aucun snapshot'})`), null;
+      bot.send({ t: 'cheat' });
+      await sleep(300);
+      const after = bot.me()?.gold ?? gold;
+      return after > gold;
+    } finally {
+      if (bot.ws.readyState === WebSocket.OPEN || bot.ws.readyState === WebSocket.CONNECTING) bot.ws.close();
+    }
   } finally {
     srv.kill();
   }
@@ -93,6 +103,11 @@ async function cheatsAccepted(port: number, env: Record<string, string>) {
 
 async function main() {
   for (let i = 0; i < 200 && !ready; i++) await sleep(50);
+  check(ready, 'serveur HTTP démarré');
+  if (!ready) throw new Error('le serveur de test ne démarre pas');
+  const healthResponse = await fetch(`http://localhost:${PORT}/healthz`);
+  const health = await healthResponse.json() as { ok?: boolean; persistenceConfigured?: boolean };
+  check(healthResponse.ok && health.ok === true, 'endpoint de santé HTTP disponible');
   const host = new Bot();
   await host.open();
   host.send({ t: 'create', name: 'Hôte' });
