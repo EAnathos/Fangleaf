@@ -407,7 +407,7 @@ describe('Alphas de la Tanière', () => {
   });
 
 
-  rule('Un Alpha tombé pendant un combat de géant ne revient qu'à la fin de ce combat, même si son dompteur se déconnecte.', () => {
+  rule("Un Alpha tombé pendant un combat de géant ne revient qu’à la fin de ce combat, même si son dompteur se déconnecte.", () => {
     const r = room();
     const c = r.map.caves.find((q: { room?: number; open?: number; zone: number }) => q.room === undefined && q.open === undefined && q.zone !== VOYAGE_ZONE);
     const boss = r.units.get(r.caveBoss[c.id]);
