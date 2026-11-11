@@ -31,8 +31,8 @@ class Bot {
   code = '';
   seed = 0;
   private state = new SnapshotState(); // snapshots différentiels → état complet
-  constructor() {
-    this.ws = new WebSocket(`ws://localhost:${PORT}/ws`);
+  constructor(port = PORT) {
+    this.ws = new WebSocket(`ws://localhost:${port}/ws`);
     this.ws.on('message', (raw) => {
       let m = JSON.parse(String(raw)) as ServerMsg;
       if (m.t === 's') m = this.state.apply(m);
@@ -54,6 +54,28 @@ class Bot {
   }
   me() {
     return this.last?.players.find((p) => p.id === this.id);
+  }
+}
+
+/** Relance un serveur à part avec ces variables, et dit s'il accepte la triche de dev (F9). */
+async function cheatsAccepted(port: number, env: Record<string, string>) {
+  const srv = spawn('npx', ['tsx', 'server/index.ts'], { env: { ...process.env, PORT: String(port), ALLOW_GUESTS: '1', SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '', VITE_FANGLEAF_ENV: '', ...env }, stdio: 'pipe' });
+  let up = false;
+  srv.stdout.on('data', (d) => (up ||= String(d).includes('Fangleaf sur')));
+  try {
+    for (let i = 0; i < 200 && !up; i++) await sleep(50);
+    const bot = new Bot(port);
+    await bot.open();
+    bot.send({ t: 'create', name: 'Testeur' });
+    for (let i = 0; i < 100 && !bot.me(); i++) await sleep(50); // génération de la carte, puis premier snapshot
+    const gold = bot.me()?.gold ?? 0;
+    bot.send({ t: 'cheat' });
+    await sleep(300);
+    const after = bot.me()?.gold ?? 0;
+    bot.ws.close();
+    return after > gold;
+  } finally {
+    srv.kill();
   }
 }
 
@@ -245,6 +267,10 @@ async function main() {
   leaver.send({ t: 'leave', code: host.code, token: 'faux' });
   await sleep(300);
   check(leaver.msgs.some((m) => m.t === 'error') && !leaver.msgs.some((m) => m.t === 'left'), 'quitter un village sans session valide : refusé');
+
+  // Les triches ne sortent ni du dev ni du staging : deux serveurs courts, lancés comme la prod et comme le staging.
+  check(!(await cheatsAccepted(PORT + 1, { NODE_ENV: 'production' })), 'production : la triche de dev est ignorée');
+  check(await cheatsAccepted(PORT + 2, { NODE_ENV: 'production', VITE_FANGLEAF_ENV: 'staging' }), 'staging : la triche de dev est acceptée');
 
   for (const b of [host, ...guests, late, leaver]) b.ws.close();
   server.kill();

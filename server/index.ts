@@ -17,6 +17,9 @@ try {
 initPersistence();
 
 const PORT = Number(process.env.PORT ?? 3001);
+// Triches (F9) : en dev, et sur le staging pour pouvoir y préparer une situation de test. Jamais en production :
+// elle ne déclare pas VITE_FANGLEAF_ENV, et la déclarer y afficherait aussi le badge STAGING.
+const CHEATS = process.env.NODE_ENV !== 'production' || process.env.VITE_FANGLEAF_ENV === 'staging';
 const DIST = fileURLToPath(new URL('../dist', import.meta.url));
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
@@ -284,13 +287,13 @@ wss.on('connection', (ws: WebSocket) => {
         send({ t: 'error', msg: 'Suppression impossible, réessaie.' });
       });
     }
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheat') room.onCheat(player);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatfx') room.onCheatEffects(player, Array.isArray(msg.effects) ? msg.effects.map(Number) : [], +msg.secs);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatmob') room.onCheatMob(player, +msg.s, msg.kind, !!msg.on);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatzone') room.onCheatZone(player, +msg.z, msg.act);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatboss') room.onCheatBoss(player, +msg.s);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatgear') room.onCheatGear(player, msg.cls, msg.spec);
-    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatdummy') room.onCheatDummy(player);
+    else if (CHEATS && msg.t === 'cheat') room.onCheat(player);
+    else if (CHEATS && msg.t === 'cheatfx') room.onCheatEffects(player, Array.isArray(msg.effects) ? msg.effects.map(Number) : [], +msg.secs);
+    else if (CHEATS && msg.t === 'cheatmob') room.onCheatMob(player, +msg.s, msg.kind, !!msg.on);
+    else if (CHEATS && msg.t === 'cheatzone') room.onCheatZone(player, +msg.z, msg.act);
+    else if (CHEATS && msg.t === 'cheatboss') room.onCheatBoss(player, +msg.s);
+    else if (CHEATS && msg.t === 'cheatgear') room.onCheatGear(player, msg.cls, msg.spec);
+    else if (CHEATS && msg.t === 'cheatdummy') room.onCheatDummy(player);
   });
 
   ws.on('close', () => {

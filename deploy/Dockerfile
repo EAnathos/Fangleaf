@@ -23,8 +23,8 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 RUN npm run build
 
-# Le staging tourne comme la prod : triches et raccourcis de dev désactivés.
-# VITE_FANGLEAF_ENV reste aussi à l'exécution : le serveur s'en sert pour l'en-tête noindex.
+# Le staging tourne comme la prod (NODE_ENV=production), à une exception près :
+# VITE_FANGLEAF_ENV reste aussi à l'exécution : le serveur s'en sert pour accepter les triches (F9) sur le staging.
 ENV NODE_ENV=production \
     PORT=4311 \
     VITE_FANGLEAF_ENV=$VITE_FANGLEAF_ENV

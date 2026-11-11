@@ -202,7 +202,7 @@ export class Game {
         hints();
       });
     } else hints();
-    initCheat((m) => this.net.send(m)); // dev : écran de triche (F9 l'ouvre ou le ferme)
+    initCheat((m) => this.net.send(m)); // dev et staging : écran de triche (F9 l'ouvre ou le ferme)
     initInput(canvas, (code, key) => this.onKey(code, key), (code, key) => (key === '' || matches('revive', code, key)) && this.setHelp(false));
     this.hud.onAttackMode = () => this.sendMode();
     this.hud.onKick = (id) => net.send({ t: 'kick', id });

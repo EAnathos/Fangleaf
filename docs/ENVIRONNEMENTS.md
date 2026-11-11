@@ -38,12 +38,17 @@ feat/…, fix/…  ──PR──▶  dev  ──CI──▶  staging     (autom
 | Lancement | `npm run dev` (3001 et 5173) | image [deploy/Dockerfile](../deploy/Dockerfile), port 4311 | `fangleaf`, port 4310 |
 | `VITE_FANGLEAF_ENV` | vide | `staging` (variable Coolify) | vide |
 | Projet Supabase | le sien | **un projet dédié** | le projet de prod |
-| Triches (F9…) | oui | non (`NODE_ENV=production`) | non |
+| Triches (F9…) | oui | oui | non |
 | Déploiement | | après la CI sur `dev`, ou à la main | après la CI sur `main`, ou à la main |
 
-Le staging tourne exactement comme la prod (même `NODE_ENV`, même code serveur), seuls son hébergement, ses données et
-son adresse changent. Un badge **STAGING** rouge est affiché en permanence en haut de l'écran, et l'onglet s'appelle
+Le staging tourne comme la prod (même `NODE_ENV`, même code serveur), seuls son hébergement, ses données et son
+adresse changent. Un badge **STAGING** rouge est affiché en permanence en haut de l'écran, et l'onglet s'appelle
 « Fangleaf · staging ».
+
+Une seule différence de comportement : les **triches (F9)** y répondent, pour pouvoir mettre en place en quelques
+secondes la situation qu'on veut vérifier (or, monstres, zone débloquée, géant abattu). Elles sont ouvertes par
+`VITE_FANGLEAF_ENV=staging`, que la production ne déclare pas ; en production le serveur les ignore et le client ne
+contient même pas le panneau. Le test de fumée vérifie les deux cas.
 
 ### Où l'héberger
 
@@ -62,7 +67,8 @@ donc le déploiement échoue au lieu de laisser un staging à moitié migré.
 
 ## Installation du staging (une fois)
 
-1. **Supabase** : créer un second projet (par exemple `fangleaf-staging`). Dans *Authentication › Sign In / Providers ›
+1. **Supabase** : créer un projet dédié (par exemple `fangleaf-staging`), dans l'organisation Supabase de la personne
+   qui héberge le staging : il ne dépend ainsi ni du projet, ni du compte de la production. Dans *Authentication › Sign In / Providers ›
    Google*, activer Google avec le même ID client OAuth que la prod. Dans *Authentication › URL Configuration* :
    *Site URL* = `https://fangleaf-staging.leo-bessin.dev`, *Redirect URLs* = `https://fangleaf-staging.leo-bessin.dev/**`.
 2. **Google Cloud Console** : dans l'ID client OAuth existant, ajouter l'URI de redirection
@@ -103,8 +109,8 @@ donc le déploiement échoue au lieu de laisser un staging à moitié migré.
 - **Base et comptes séparés** : le staging a son propre projet Supabase, donc sa propre base, sa propre clé
   `service_role` et ses propres comptes. Une fausse manipulation sur le staging ne touche jamais la prod.
 - **Pas de copie des données de prod** vers le staging : elles contiennent des comptes Google, donc des données
-  personnelles. Sur le staging, chacun se connecte avec son compte et repart de zéro ; F9 n'existe pas (mode prod),
-  on avance en jouant ou on prépare l'état voulu directement dans la base de staging.
+  personnelles. Sur le staging, chacun se connecte avec son compte et repart de zéro, puis prépare l'état à tester
+  avec F9 plutôt qu'en rejouant toute la partie.
 - **Garde-fous automatiques** :
   - le workflow vérifie que l'application Coolify visée déploie bien ce dépôt : une erreur sur `COOLIFY_APP_UUID`
     fait échouer le déploiement au lieu d'écraser une autre application ;
