@@ -101,11 +101,11 @@ donc le déploiement échoue au lieu de laisser un staging à moitié migré.
    - *Secrets and variables › Actions › Variables* : `STAGING_ENABLED` = `true` (tant qu'elle manque, le workflow
      ne fait rien) et `STAGING_URL` = l'adresse publique du staging (obligatoire : le workflow refuse de deviner
      une adresse qui pourrait être celle de quelqu'un d'autre).
-   - *Rules › Rulesets* : sur `main`, PR obligatoire et CI « Typecheck, règles, fumée, build » requise.
-     Sur `dev`, s'en tenir à « blocage des pushes forcés » et « suppression interdite » : une PR obligatoire ou une CI
-     requise y bloquerait aussi le commit de version que release-version.yml pousse directement, et *GitHub Actions*
-     n'apparaît pas dans la liste des contournements (ce n'est pas une application installée sur le dépôt). Le reste
-     tient à la règle d'équipe : on ne pousse pas sur `dev`, on y arrive par une PR.
+   - *Rules › Rulesets* : protéger `dev` et `main` (PR obligatoire, CI « Typecheck, règles, fumée, build » requise).
+     Aucun contournement à prévoir : depuis #51, release-version.yml ne pousse plus sur `dev`, il reconstruit la
+     branche `automation/version-changelog` et propose sa version par une PR. En revanche, ne viser que `dev` et
+     `main` : un ruleset qui interdirait les pushes forcés sur toutes les branches arrêterait cette branche du bot,
+     qui est refaite à chaque passage.
 8. **Premier déploiement** : depuis Coolify (*Deploy*). Le workflow *CD staging*, lui, n'existe pour GitHub qu'une
    fois `cd-staging.yml` présent sur la branche par défaut (`main`) : c'est une règle de `workflow_run` et de
    `workflow_dispatch`, et tant qu'elle n'est pas remplie il ne se passe rien, sans message d'erreur. Donc, entre la
