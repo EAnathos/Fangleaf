@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.13.1",
+    "date": "2026-11-11",
+    "title": "Échanges plus sûrs",
+    "items": [
+      "Un échange n'aboutit plus si l'un des deux dompteurs s'est éloigné, est tombé ou est parti au moment de conclure : il est annulé et rien n'est transféré."
+    ]
+  },
+  {
     "version": "0.13.0",
     "date": "2026-11-11",
     "title": "Nouveautés : Une carte pour tout le village, et des échanges · Combats de géants plus justes · Volcan : entrées plus claires, antres fermés pendant le combat · Créatures plus malignes",
