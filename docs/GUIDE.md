@@ -27,6 +27,7 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 | Attaquer | Automatique, ou clic gauche vers le pointeur (au choix) | Automatique |
 | Interagir (bâtiment, grotte, buisson, coffre…) | E | Bouton d'action |
 | Tendre un fruit | T | Bouton à baies |
+| Capacité de spécialisation | Espace | Bouton de capacité |
 | Monter / descendre de sa monture | F | Bouton selle |
 | Relever un coéquipier | R maintenu | Bouton maintenu |
 | Grande carte | M, ou clic sur la minicarte | Toucher la minicarte |
@@ -75,6 +76,15 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Classes**, choisies à l'armurerie (le premier choix est gratuit, les suivants payants) :
   **Guerrier** (corps à corps, plus de PV), **Archer** (tir de loin), **Mage** (orbe qui touche aussi autour de la cible).
   Archers et mages abattent les arbres et cassent les pierres 30 % moins vite.
+- **Capacité de spécialisation** (touche Espace, ou le bouton dédié, sur une recharge affichée) : en se spécialisant à la
+  Grande armurerie, chaque voie débloque une **capacité active**, pensée pour peser dans un combat de géant, pas seulement
+  pour nettoyer du menu fretin. Une par voie :
+  - **Berserker — Frénésie** : il entre en rage, frappe bien plus vite et vole de la vie, mais encaisse plus.
+  - **Gardien — Rempart** : les alliés autour de lui (dompteurs et meutes) encaissent beaucoup moins un moment.
+  - **Tireur d'élite — Tir de rupture** : il marque une cible, qui subit plus de dégâts de tout le monde.
+  - **Rôdeur — Pluie de flèches** : une volée s'abat sur une zone et touche tous les monstres pris dedans.
+  - **Pyromancien — Météore** : une boule de feu s'abat (gros impact), puis un brasier ronge les monstres touchés, géants compris.
+  - **Druide — Floraison** : une floraison de soins rend des PV aux alliés proches, puis les régénère un moment.
 - **Spécialisations** : au-delà d'un certain niveau d'arme, la **Grande armurerie** permet de spécialiser sa classe :
   Berserker ou Gardien (guerrier), Tireur d'élite ou Rôdeur (archer), Pyromancien ou Druide (mage).
 - L'armurerie améliore séparément l'**arme** (dégâts) et l'**armure** (PV max et réduction des dégâts), ainsi que la

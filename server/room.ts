@@ -10,6 +10,7 @@ import {
   treeHp, treeWood, TREE_RESPAWN_S, TREE_STILL_S, TREANT_CHANCE, TREANT_ZONE,
   populationOf, PINCER_HALF, PINCER_R, TORNADO_PULL, TORNADO_PULL_R, TORNADO_R, TORNADO_SPEED, POISON_DPS, BURN_DPS, BURN_S, elementOf, affinity, JUNGLE_ZONE, LAKES_ZONE, LEGEND_SKIPS, HUG_S, ROLL_S, RING_SPEED, RING_W, DRUM_R, ECHO_R, DRUM_GAP, ECHO_STUN_S, LOG_SPEED, RAMPAGE_SPEED, MAW_PULL, MAW_R, CURSE_S, CURSE_BONUS, SHELL_SPEED, DECOY_S, SPARK_JUMPS, SPARK_R, SPARK_FALLOFF, POISON_S,
   armorMaxHp, armorReduction, alphaPerk, SHORE_R, swimMount, flyMount, ALPHA_HEAL_R, ALPHA_HEAL_S, ALPHA_SHOUT_AGGRO, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, TICK_HZ, MOUNT_REACH, MOUNT_SHARE, mountSpeedOf, gatherDmg, hatBonus, weaponDmg, type SpeciesId,
+  abilityOf, FRENZY_S, FRENZY_ATK, FRENZY_LEECH, FRENZY_VULN, RAMPART_R, RAMPART_GUARD, RAMPART_S, MARK_R, MARK_S, RAIN_REACH, RAIN_R, RAIN_DMG, RAIN_ARROWS, METEOR_R, METEOR_DMG, METEOR_REACH, METEOR_FIRE_S, METEOR_FIRE_DPS, BLOOM_R, BLOOM_HEAL, BLOOM_REGEN, BLOOM_S,
 } from '../shared/config.ts';
 import { clamp, dist2, pickCapped } from '../shared/math.ts';
 import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, UnitTuple } from '../shared/protocol.ts';
@@ -51,6 +52,7 @@ interface Unit {
   level: number; // niveau d'Alpha
   recalling: boolean; // trop loin du dompteur : revient sans combattre
   legend: boolean; // Alpha légendaire
+  dummy?: boolean; // dev : mannequin de test (immobile, n'attaque pas, PV infinis) pour éprouver les capacités
   // mini-boss
   castUntil: number; // immobile pendant qu'il prépare une attaque
   phase?: number; // géant à plusieurs phases (le Kraken) : la phase en cours, de 1 à SPECIES.phases
@@ -94,6 +96,7 @@ interface Unit {
   guard?: Buff; // abrité par la carapace d'un escargot
   poison?: Poison; // fléchette de sarbacane
   burn?: Poison; // brûlure (flammes, lave, boules de feu, créatures de feu) : l'eau l'éteint
+  scorch?: { dps: number; until: number; by: Ent }; // brasier du Météore : ronge même les géants (que la brûlure épargne)
 }
 
 /** Ce qu'un dompteur a fait pendant le combat contre un géant (écran de victoire). */
@@ -218,6 +221,7 @@ export interface Player {
   reviveBy: number; // à terre : id du coéquipier qui le relève (0 = personne)
   reviveT: number; // à terre : secondes de réanimation déjà passées
   atkCd: number;
+  abilityAt: number; // temps de simulation du dernier usage de la capacité de classe (-Infinity : jamais, prête)
   sword: number; // coups donnés pour déterrer l'épée (SWORD_PULLS : armé)
   scrolls: number[]; // parchemins portés (géant de chacun), à donner au vieil homme
   swordAt: number; // dernier coup (pas plus d'un toutes les 0,3 s)
@@ -245,10 +249,13 @@ export interface Player {
   readAt: number; // fin de la leçon en cours (Date.now en ms ; 0 : aucune)
   readKind: number; // discipline de la leçon en cours
   rally?: Buff; // encouragé par un cri de suricate
-  guard?: Buff; // abrité par la carapace d'un escargot
+  guard?: Buff; // abrité par la carapace d'un escargot (ou par le Rempart d'un Gardien)
+  frenzy?: Buff; // Berserker : en pleine Frénésie (frappe vite, vole la vie, encaisse plus)
+  bloom?: Buff; // Druide : régénération de la Floraison
   legendAt?: number; // dernière attaque spéciale lancée par l'un de ses Alphas légendaires
   poison?: Poison; // fléchette de sarbacane
   burn?: Poison; // brûlure (flammes, lave, boules de feu, créatures de feu) : l'eau l'éteint
+  scorch?: { dps: number; until: number; by: Ent }; // (jamais sur un dompteur : le brasier ne vise que les monstres)
 }
 
 type Ent = Unit | Player;
@@ -507,7 +514,7 @@ export class Room {
       kind: 'p', id: this.nextId++, name, color, send,
       x: at.x, y: at.y, r: PLAYER_R, fx: 1, fy: 0,
       hp: armorMaxHp(0), weapon: 0, armor: 0, torch: 0, boots: 0, saddle: 0, hat: 0, hats: [], gold: 0, wood: 0, stone: 0, fruits: 0, holding: false, harvest: false, movedAt: 0, stats: statsOf(), manual: false, orderUntil: 0, aimX: 0, aimY: 0, essences: SPECIES.map(() => 0),
-      userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0,
+      userId: account?.userId ?? null, dirty: false, dead: false, respawnAt: 0, helping: false, reviveBy: 0, reviveT: 0, atkCd: 0, abilityAt: -Infinity,
       sword: armed ? SWORD_PULLS : 0, scrolls: [], swordAt: 0, lastPosMs: Date.now(), army: [], mount: 0, awakening: new Map(), villageFound: found, slowUntil: 0, cls: null, spec: null, specs: {}, resting: [], marked: -1, alphaNames: new Map(), bossWins: SPECIES.map(() => 0), seen: new Set(), tomes: Array(BOOKS).fill(0), learned: LESSON_KINDS.map(() => 0), readAt: 0, readKind: 0,
     };
     const prof = account?.profile;
@@ -1245,6 +1252,7 @@ export class Room {
     const ratio = p.hp / maxHpOf(p);
     p.spec = spec;
     p.specs[p.cls] = spec;
+    p.abilityAt = -Infinity; // en changeant de voie, la nouvelle capacité est prête
     p.hp = Math.round(maxHpOf(p) * ratio);
     p.dirty = true;
     this.events.push({ e: 'spec', id: p.id, spec });
@@ -1637,6 +1645,42 @@ export class Room {
     p.wood += 100;
     p.stone += 100;
     this.events.push({ e: 'info', text: `${p.name} triche (mode dev)` });
+  }
+
+  /** Dev : s'équiper d'un coup pour tester (classe, spécialisation, arme et armure au max, torche/bottes/selle, armé, PV pleins). */
+  onCheatGear(p: Player, cls: ClassId, spec?: SpecId) {
+    if (spec && SPEC_IDS.includes(spec)) cls = SPECS[spec].cls; // la spé impose sa classe (sinon on resterait bloqué sur l'ancienne)
+    if (!CLASS_IDS.includes(cls)) return;
+    p.cls = cls;
+    p.spec = spec && SPEC_IDS.includes(spec) ? spec : p.specs[cls] ?? null;
+    if (p.spec) p.specs[cls] = p.spec;
+    p.abilityAt = -Infinity; // capacité prête tout de suite (test)
+    p.weapon = WEAPON_MAX;
+    p.armor = ARMOR_MAX;
+    p.torch = TORCH_MAX;
+    p.boots = BOOTS_MAX;
+    p.saddle = SADDLE_MAX;
+    p.sword = SWORD_PULLS; // armé
+    p.hp = maxHpOf(p); // PV pleins (armure au max)
+    p.dirty = true;
+    this.events.push({ e: 'class', id: p.id, cls });
+    if (p.spec) this.events.push({ e: 'spec', id: p.id, spec: p.spec });
+    this.events.push({ e: 'info', text: `${p.name} s'équipe (mode dev)` });
+  }
+
+  /** Dev : un mannequin de test devant soi — un slime immobile, qui n'attaque pas et ne perd jamais ses PV (pour éprouver les capacités). */
+  onCheatDummy(p: Player) {
+    const s = SPECIES.findIndex((sp) => sp.key === 'slime') as SpeciesId;
+    if (s < 0) return;
+    const fl = Math.hypot(p.fx, p.fy) || 1;
+    let x = p.x, y = p.y;
+    for (const [dx, dy] of [[(p.fx / fl) * 160, (p.fy / fl) * 160], [160, 0], [-160, 0], [0, 160], [0, -160], [0, 0]]) {
+      if (this.map.passable(p.x + dx, p.y + dy, false, false)) { x = p.x + dx; y = p.y + dy; break; } // devant soi d'abord, le reste en secours
+    }
+    const u = this.createUnit(s, false, x, y);
+    u.dummy = true;
+    u.maxHp = u.hp = 100000; // PV « infinis » (de toute façon jamais entamés)
+    this.events.push({ e: 'info', text: `${p.name} pose un mannequin de test (mode dev)` });
   }
 
   // ───────────────────────── Simulation ─────────────────────────
@@ -2391,6 +2435,117 @@ export class Room {
     p.orderUntil = this.time + 0.3;
   }
 
+  /** Dégâts d'arme du dompteur, capacité comprise (classe + spé + chapeaux). */
+  private heroDmg(p: Player, mult = 1) {
+    return weaponDmg(p.weapon) * heroOf(p.cls, p.spec).dmg * hatBonus(p.hats.length) * mult;
+  }
+
+  /** Recharge d'attaque : plus courte en pleine Frénésie du Berserker. */
+  private frenzyAtk(p: Player) {
+    return (p.frenzy?.until ?? 0) > this.time ? FRENZY_ATK : 1;
+  }
+
+  /**
+   * Capacité active de la SPÉCIALISATION, sur recharge. Pensée pour peser contre un géant (burst, amplifier, encaisser,
+   * soigner, replacer). Tir de rupture et Embuscade ne consomment la recharge que s'il y avait une cible.
+   */
+  onAbility(p: Player) {
+    if (p.dead || p.holding || p.mount) return; // à terre, un fruit en main, ou monté : pas de capacité
+    if (p.sword < SWORD_PULLS) return; // pas encore armé
+    if (this.rooted(p)) return; // saisi par un géant, ou étourdi
+    const ab = abilityOf(p.spec);
+    if (!ab || this.time - p.abilityAt < ab.cd) return; // pas spécialisé, ou en recharge
+    let ok = true;
+    switch (p.spec) {
+      case 'berserker': this.abFrenzy(p); break;
+      case 'guardian': this.abRampart(p); break;
+      case 'sniper': ok = this.abMark(p); break;
+      case 'ranger': ok = this.abRain(p); break;
+      case 'pyromancer': this.abMeteor(p); break;
+      case 'druid': this.abBloom(p); break;
+      default: return;
+    }
+    if (ok) p.abilityAt = this.time;
+  }
+
+  /** Berserker — Frénésie : rage sur soi (frappe plus vite, vole la vie, encaisse plus) un moment. */
+  private abFrenzy(p: Player) {
+    p.frenzy = { v: 1, until: this.time + FRENZY_S };
+    this.events.push({ e: 'ability', id: p.id, spec: 'berserker', x: Math.round(p.x), y: Math.round(p.y) });
+  }
+
+  /** Gardien — Rempart : les alliés autour de lui (dompteurs et meutes) encaissent beaucoup moins un moment. */
+  private abRampart(p: Player) {
+    for (const e of this.alliesNear(p.x, p.y, RAMPART_R)) {
+      if (this.buffOf(e, 'guard') < RAMPART_GUARD) e.guard = { v: RAMPART_GUARD, until: this.time + RAMPART_S };
+    }
+    if (this.buffOf(p, 'guard') < RAMPART_GUARD) p.guard = { v: RAMPART_GUARD, until: this.time + RAMPART_S };
+    this.events.push({ e: 'ability', id: p.id, spec: 'guardian', x: Math.round(p.x), y: Math.round(p.y) });
+  }
+
+  /** Tireur d'élite — Tir de rupture : marque le monstre le plus proche ; il subit plus de dégâts de tout le monde. */
+  private abMark(p: Player): boolean {
+    const prey = this.preyOf(p);
+    const t = this.nearest(p.x, p.y, MARK_R, (e) => prey(e) && this.alive(e)) as Unit | undefined;
+    if (!t) return false;
+    t.curseUntil = Math.max(t.curseUntil ?? 0, this.time + MARK_S); // même amplification que la malédiction (rendu compris)
+    this.events.push({ e: 'ability', id: p.id, spec: 'sniper', x: Math.round(t.x), y: Math.round(t.y) });
+    return true;
+  }
+
+  /** Rôdeur — Embuscade : camouflage, puis il surgit dans le dos du monstre le plus proche et le frappe fort. */
+  /** Rôdeur — Pluie de flèches : une volée s'abat sur une zone (le monstre le plus proche, sinon devant soi) et touche tous les monstres pris dedans. */
+  private abRain(p: Player): boolean {
+    const prey = this.preyOf(p);
+    const t = this.nearest(p.x, p.y, RAIN_REACH, (e) => prey(e) && this.alive(e)) as Unit | undefined;
+    const fl = Math.hypot(p.fx, p.fy) || 1;
+    const cx = t ? t.x : p.x + (p.fx / fl) * RAIN_REACH * 0.55, cy = t ? t.y : p.y + (p.fy / fl) * RAIN_REACH * 0.55;
+    const dmg = this.heroDmg(p, RAIN_DMG), leech = heroOf(p.cls, p.spec).leech;
+    this.grid.query(cx, cy, RAIN_R + 40, (e) => {
+      if (prey(e) && this.alive(e) && dist2(e.x, e.y, cx, cy) <= (RAIN_R + e.r) ** 2) this.strike(p, e, dmg, leech);
+    });
+    for (let i = 0; i < RAIN_ARROWS; i++) {
+      const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * RAIN_R;
+      const lx = Math.round(cx + Math.cos(a) * rr), ly = Math.round(cy + Math.sin(a) * rr);
+      this.events.push({ e: 'shot', by: p.id, x: lx, y: ly - 280, tx: lx, ty: ly, cls: 'archer', drop: 1 }); // flèches qui tombent du ciel
+    }
+    this.events.push({ e: 'ability', id: p.id, spec: 'ranger', x: Math.round(cx), y: Math.round(cy) });
+    return true;
+  }
+
+  /** Pyromancien — Météore : impact de feu sur le monstre le plus proche (ou devant soi), puis un brasier qui ronge. */
+  private abMeteor(p: Player) {
+    const prey = this.preyOf(p);
+    const t = this.nearest(p.x, p.y, METEOR_REACH, (e) => prey(e) && this.alive(e)) as Unit | undefined;
+    const fl = Math.hypot(p.fx, p.fy) || 1;
+    const tx = t ? t.x : p.x + (p.fx / fl) * METEOR_REACH * 0.6, ty = t ? t.y : p.y + (p.fy / fl) * METEOR_REACH * 0.6;
+    const dmg = this.heroDmg(p, METEOR_DMG);
+    const hit: Ent[] = [];
+    this.grid.query(tx, ty, METEOR_R + 40, (e) => { if (prey(e) && this.alive(e) && dist2(e.x, e.y, tx, ty) <= (METEOR_R + e.r) ** 2) hit.push(e); });
+    for (const e of hit) {
+      this.strike(p, e, dmg * (1 - 0.5 * Math.min(1, Math.sqrt(dist2(e.x, e.y, tx, ty)) / METEOR_R)), 0);
+      if (this.alive(e)) e.scorch = { dps: dmg * METEOR_FIRE_DPS, until: this.time + METEOR_FIRE_S, by: p }; // brasier (même sur les géants)
+    }
+    this.events.push({ e: 'boom', x: Math.round(tx), y: Math.round(ty), r: METEOR_R, kind: 'lava', by: p.id });
+    this.events.push({ e: 'ability', id: p.id, spec: 'pyromancer', x: Math.round(tx), y: Math.round(ty) });
+  }
+
+  /** Druide — Floraison : soigne d'un coup les alliés proches (dompteurs et meutes/Alphas), puis les régénère un moment. */
+  private abBloom(p: Player) {
+    for (const q of this.players.values()) {
+      if (q.dead || dist2(q.x, q.y, p.x, p.y) > BLOOM_R ** 2) continue;
+      q.hp = Math.min(maxHpOf(q), q.hp + Math.round(maxHpOf(q) * BLOOM_HEAL));
+      q.bloom = { v: 1, until: this.time + BLOOM_S };
+      const ids: number[] = [];
+      for (const id of q.army) {
+        const u = this.units.get(id);
+        if (u && this.alive(u) && dist2(u.x, u.y, p.x, p.y) <= BLOOM_R ** 2) { u.hp = Math.min(u.maxHp, u.hp + u.maxHp * BLOOM_HEAL); ids.push(id); }
+      }
+      this.events.push({ e: 'heal', id: q.id, n: Math.round(maxHpOf(q) * BLOOM_HEAL), by: p.id, ids });
+    }
+    this.events.push({ e: 'ability', id: p.id, spec: 'druid', x: Math.round(p.x), y: Math.round(p.y) });
+  }
+
   private playerAttack(p: Player) {
     if (p.dead) return;
     p.atkCd -= DT;
@@ -2403,7 +2558,7 @@ export class Room {
     const prey = this.preyOf(p);
     const t = this.nearest(p.x, p.y, reach + 50, prey) as Unit | undefined;
     if (!t || dist2(p.x, p.y, t.x, t.y) > (reach + t.r) ** 2) return this.mine(p);
-    p.atkCd = cls.cd;
+    p.atkCd = cls.cd * this.frenzyAtk(p);
     const dmg = weaponDmg(p.weapon) * cls.dmg * hatBonus(p.hats.length);
     if (p.cls === 'archer' || p.cls === 'mage') this.events.push({ e: 'shot', by: p.id, x: p.x, y: p.y, tx: t.x, ty: t.y, cls: p.cls });
     if (cls.splash) {
@@ -2430,7 +2585,7 @@ export class Room {
     const dmg = weaponDmg(p.weapon) * cls.dmg * hatBonus(p.hats.length); // (chaque chapeau débloqué : +10 %)
     const wild = this.preyOf(p), prey = (e: Ent) => wild(e) && this.alive(e); // jamais le gibier passif, même au clic
     if (p.cls === 'mage') {
-      p.atkCd = cls.cd;
+      p.atkCd = cls.cd * this.frenzyAtk(p);
       const k = this.map.sightReach(p.x, p.y, ux, uy, Math.min(d, reach)), bx = p.x + ux * k, by = p.y + uy * k; // l'orbe s'écrase sur la roche
       this.events.push({ e: 'shot', by: p.id, x: p.x, y: p.y, tx: Math.round(bx), ty: Math.round(by), cls: 'mage' });
       this.events.push({ e: 'boom', x: Math.round(bx), y: Math.round(by), r: cls.splash!, kind: 'orb' });
@@ -2441,7 +2596,7 @@ export class Room {
     }
     if (p.cls === 'archer') {
       // flèche en ligne droite : le premier monstre dont elle frôle le corps
-      p.atkCd = cls.cd;
+      p.atkCd = cls.cd * this.frenzyAtk(p);
       let best: Ent | undefined, bt = this.map.sightReach(p.x, p.y, ux, uy, reach); // la flèche se plante dans la roche
       this.grid.query(p.x + ux * reach * 0.5, p.y + uy * reach * 0.5, reach * 0.5 + 60, (e) => {
         if (!prey(e)) return;
@@ -2462,14 +2617,15 @@ export class Room {
       [best, bd] = [e, de];
     });
     if (!best) return this.mine(p);
-    p.atkCd = cls.cd;
+    p.atkCd = cls.cd * this.frenzyAtk(p);
     this.strike(p, best, dmg, cls.leech);
   }
 
-  /** Coup du dompteur : leech, part des dégâts qui lui revient en PV (spécialisation Druide). */
+  /** Coup du dompteur : leech, part des dégâts qui lui revient en PV (spécialisation Druide, et Frénésie du Berserker). */
   private strike(p: Player, e: Ent, dmg: number, leech: number) {
     this.damage(e, dmg, p);
-    if (leech > 0 && !p.dead) p.hp = Math.min(maxHpOf(p), p.hp + dmg * leech);
+    const steal = leech + ((p.frenzy?.until ?? 0) > this.time ? FRENZY_LEECH : 0);
+    if (steal > 0 && !p.dead) p.hp = Math.min(maxHpOf(p), p.hp + dmg * steal);
   }
 
   /** Cueillir les baies du buisson garni le plus proche (devant lui). */
@@ -4045,6 +4201,14 @@ export class Room {
         if (e.burn.until <= this.time || !this.alive(e) || (e.kind === 'p' && this.safe(e.x, e.y)) || this.map.isWater(e.x, e.y)) e.burn = undefined;
         else this.damage(e, e.burn.dps / 2, e.burn.by);
       }
+      if (e.scorch) {
+        // brasier du Météore : ronge même les géants (l'eau l'éteint aussi)
+        if (e.scorch.until <= this.time || !this.alive(e) || this.map.isWater(e.x, e.y)) e.scorch = undefined;
+        else this.damage(e, e.scorch.dps / 2, e.scorch.by);
+      }
+      if (e.kind === 'p' && (e.bloom?.until ?? 0) > this.time && !e.dead) {
+        e.hp = Math.min(maxHpOf(e), e.hp + maxHpOf(e) * BLOOM_REGEN / 2); // Floraison : régénération, deux fois par seconde
+      }
       if (!e.poison) continue;
       if (e.poison.until <= this.time || !this.alive(e) || (e.kind === 'p' && this.safe(e.x, e.y))) {
         e.poison = undefined;
@@ -4166,6 +4330,7 @@ export class Room {
   }
 
   private wildAI(u: Unit) {
+    if (u.dummy) return; // dev : mannequin de test, il ne bouge pas et n'attaque pas
     if (u.dormant) return; // géant qui attend qu'on lui parle
     if (SPECIES[u.s].inert) return this.totemAI(u);
     if (u.decoyUntil && this.time >= u.decoyUntil - 0.8) return this.popDecoy(u);
@@ -4763,6 +4928,7 @@ export class Room {
     }
     if (t.kind === 'p') {
       if (t.dead) return;
+      if ((t.frenzy?.until ?? 0) > this.time) amount *= FRENZY_VULN; // en pleine Frénésie : il encaisse plus
       const mount = t.mount ? this.units.get(t.mount) : undefined;
       if (mount) {
         // La monture encaisse l'essentiel du coup.
@@ -4784,6 +4950,12 @@ export class Room {
       return;
     }
     if (t.owner) amount *= 1 - this.buffOf(t, 'guard'); // carapace de l'escargot : la meute aussi est abritée
+    if (t.dummy) { // dev : mannequin de test — il affiche les dégâts mais ne perd jamais ses PV
+      t.lastAttacker = by.id;
+      t.lastHitAt = this.time;
+      this.events.push({ e: 'hit', a: by.id, b: t.id, dmg: Math.round(amount * 100) / 100, ...m });
+      return;
+    }
     t.hp -= amount;
     if (isBoss(t.s) && !t.owner) {
       const credit = by.kind === 'p' ? by.id : by.owner; // un coup de sa meute compte pour le dompteur
@@ -4876,7 +5048,7 @@ export class Room {
 
   /** Compétences d'Alpha en cours sur cet allié, en drapeaux (UNIT_FLAG_RALLY, UNIT_FLAG_GUARD). */
   private buffFlags(e: Ent) {
-    return ((e.curseUntil ?? 0) > this.time ? UNIT_FLAG_CURSE : 0) | (e.burn && e.burn.until > this.time ? UNIT_FLAG_BURN : 0) | (this.buffOf(e, 'rally') ? UNIT_FLAG_RALLY : 0) | (this.buffOf(e, 'guard') ? UNIT_FLAG_GUARD : 0) | (e.poison && e.poison.until > this.time ? UNIT_FLAG_POISON : 0);
+    return ((e.curseUntil ?? 0) > this.time ? UNIT_FLAG_CURSE : 0) | ((e.burn && e.burn.until > this.time) || (e.scorch && e.scorch.until > this.time) ? UNIT_FLAG_BURN : 0) | (this.buffOf(e, 'rally') ? UNIT_FLAG_RALLY : 0) | (this.buffOf(e, 'guard') ? UNIT_FLAG_GUARD : 0) | (e.poison && e.poison.until > this.time ? UNIT_FLAG_POISON : 0);
   }
 
   /**
@@ -5261,6 +5433,7 @@ export class Room {
         revive: p.dead ? Math.min(100, Math.round((100 * p.reviveT) / REVIVE_HOLD_S)) : 0, reviveBy: p.dead ? p.reviveBy : 0, army: this.armyOf(p),
         pack: this.armySize(p),
         tomes: p.tomes, learned: p.learned, readKind: p.readKind, reading: p.readAt ? Math.max(0, Math.ceil((p.readAt - Date.now()) / 1000)) : 0,
+        ability: abilityOf(p.spec) ? Math.max(0, Math.round(10 * (abilityOf(p.spec)!.cd - (this.time - p.abilityAt))) / 10) : -1,
         mount: this.mountState(p),
         slowed: p.slowUntil > this.time,
         held: this.rooted(p),
@@ -5275,7 +5448,7 @@ export class Room {
         })),
       };
       full.set(p.id, st);
-      light.set(p.id, { ...st, marked: -1, essences: [], army: [], resting: [], seen: [], awakening: [], tomes: [], status: [] });
+      light.set(p.id, { ...st, marked: -1, essences: [], army: [], resting: [], seen: [], awakening: [], tomes: [], status: [], ability: -1 });
     }
     const vr2 = VIEW_R * VIEW_R;
     const spots = this.events.map((e) => this.eventSpot(e)), er2 = (VIEW_R + 300) ** 2;

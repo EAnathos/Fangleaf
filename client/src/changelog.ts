@@ -11,12 +11,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '0.7.0',
+    version: '0.8.0',
     date: '2026-11-10',
     title: 'Le retour de tes Alphas',
     items: [
       'Sur ordinateur, quand un Alpha équipé tombe, le HUD dit dans combien de temps il ressuscite (face à un géant : après le combat).',
       'Au choix dans Paramètres › Affichage : une ligne sous le sac, ou une vignette à son portrait près des effets en cours.',
+    ],
+  },
+  {
+    version: '0.7.0',
+    date: '2026-11-10',
+    title: 'Capacités de spécialisation',
+    items: [
+      'En te spécialisant à la Grande armurerie, ta voie débloque une capacité active (touche Espace, ou le bouton dédié, sur recharge).',
+      'Une par voie : Frénésie (Berserker), Rempart (Gardien), Tir de rupture (Tireur d\'élite), Pluie de flèches (Rôdeur), Météore (Pyromancien), Floraison (Druide).',
+      'Elles sont pensées pour peser contre les géants : frapper plus fort, protéger ou soigner les coéquipiers, marquer ou embraser l\'ennemi.',
     ],
   },
   {
