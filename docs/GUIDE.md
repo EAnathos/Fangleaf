@@ -145,7 +145,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Nommer un Alpha** (bouton ✎ à côté du nom de sa carte, équipé ou au repos) : son nom s'affiche sous ses pattes, à la
   couleur de son dompteur, pour tout le village. Un nom vide le lui retire.
 - **Bonus de collection** : chaque Alpha éveillé renforce tous les autres.
-- **Alphas à pouvoir** : le Lièvre soigne son dompteur et la meute proche (dans la meute, il ne va pas au contact :
+- **Alphas à pouvoir** : le Lièvre soigne son dompteur, la meute proche et lui-même (dans la meute, il ne va pas au contact :
   il reste en retrait, derrière son dompteur). Le Suricate et l'Escargot ont une
   compétence, lancée seule au combat dès qu'elle est rechargée : le Suricate se dresse et crie (les alliés autour de lui
   frappent plus fort), l'Escargot dresse sa carapace (ils encaissent moins). Elle profite à tous les alliés proches,
@@ -164,8 +164,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   affichent ce qu'il y a dans l'entrepôt). Une barre montre ce qu'il reste à un arbre entamé avant qu'il tombe.
 - **Foudre** : sous la pluie, abattre un arbre attire parfois la foudre sur le bûcheron : il perd un peu de PV (elle
   ne l'achève jamais) et reste étourdi un instant.
-- Dans la meute, le **Golem de mousse** croque les rochers alentour et le **Tréant** abat les arbres : la pierre et le
-  bois reviennent à leur dompteur. **G** (touche de récolte) : ils ne s'occupent plus que de ça, autour de leur
+- Dans la meute, le **Golem de mousse** croque les rochers et les filons d'or alentour et le **Tréant** abat les
+  arbres : la pierre, l'or des filons et le bois reviennent à leur dompteur. **G** (touche de récolte) : ils ne s'occupent plus que de ça, autour de leur
   dompteur, sans se battre ; **G** à nouveau pour les ramener au combat.
 - **Baies** : **E** près d'un buisson garni pour cueillir. **T** pour tendre un fruit ; fruit en main, on ne se bat plus.
 - **Gibier passif** (Escargot, Lièvre, Luciole, Suricate) : il n'attaque jamais et vient manger aux buissons.
@@ -224,6 +224,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   s'il t'a corrigé, il se moque de toi.
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
   (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact.
+- Il **s'impatiente** s'il ne touche aucun dompteur pendant un moment : « Il s'impatiente et presse le pas ! », il
+  accélère peu à peu, et reprend son allure dès qu'il touche quelqu'un. Fuir en reculant ne marche qu'un temps.
 - Sur ordinateur, en combat, sa barre de vie et son nom s'affichent en haut de l'écran.
 - Chaque géant a ses attaques à lui, liées à son espèce :
   - **Champignon Géant** : des **champignons** poussent dans l'arène ; on s'en approche, leur chapeau gonfle et ils

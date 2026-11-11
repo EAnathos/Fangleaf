@@ -2,7 +2,7 @@
 
 import {
   bossMelee, sleeperBlocks,
-  alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost, alphaName, bossEssence,
+  alphaEquipMax, ALPHA_LVL_MAX, BOSS_CHASE_MULT, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost, alphaName, bossEssence,
   ARC_FLIGHT_S, SPLASH_FLAT, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT, ROOM_PACKS, HEART_PACKS, DEPTHS_RESET_S,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, PET_CAP, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
@@ -16,7 +16,7 @@ import { clamp, dist2, pickCapped } from '../shared/math.ts';
 import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, UnitTuple } from '../shared/protocol.ts';
 import { STAT_KEYS, STATUS_IDS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
-import { HALL_ID, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
+import { HALL_ID, type Ore, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky, SNOWFALL, WINTER } from '../shared/weather.ts';
 import { Grid } from './grid.ts';
 import type { Profile } from './persist.ts';
@@ -88,7 +88,7 @@ interface Unit {
   tailsDone?: number; // Salamandre-Mère : queues déjà tombées pendant ce combat
   decoyUntil?: number; // leurre du Feu Ancien : il explose à ce moment-là
   shellUntil?: number; // Tortue-Montagne en toupie : rentrée dans sa carapace (elle encaisse moins) jusque-là
-  fight?: { at: number; from: number; by: Map<number, FightStats> }; // géant en combat : son début, qui l'a réveillé (from), et ce qu'a fait chaque dompteur (écran de victoire)
+  fight?: { at: number; from: number; by: Map<number, FightStats>; landed: number; hasted?: boolean }; // géant en combat : son début, qui l'a réveillé (from), ce qu'a fait chaque dompteur (écran de victoire), quand il a touché un dompteur pour la dernière fois (landed) et s'il s'impatiente déjà (hasted)
   idle: boolean; // sauvage loin de tout dompteur : ni réflexion ni bousculade ce tick
   hitters: Set<number>; // géant : dompteurs qui l'ont frappé (eux ou leur meute) pendant ce combat, seuls ayants droit au coffre
   shoutAt?: number; // Alpha suricate ou escargot : sa compétence est rechargée à ce temps-là
@@ -398,6 +398,8 @@ const STORM_DPS = 0.02; // part des PV max perdue chaque seconde en plein dedans
 const WAKE_S = 20; // dormeur (lièvre la nuit, ours le jour) réveillé par un coup : il reste debout tant de secondes après le dernier
 
 export class Room {
+  /** Fabrique de la carte d'un village. Les tests la remplacent par un cache (tests/helpers.ts) : générer l'île prend des secondes. */
+  static makeMap = (seed: number) => new WorldMap(seed, false); // sans ce qui ne sert qu'au dessin
   readonly seed: number;
   players = new Map<number, Player>();
   units = new Map<number, Unit>();
@@ -446,7 +448,7 @@ export class Room {
   /** seed : graine d'un village enregistré (même carte qu'avant) ; absente pour un nouveau village. */
   constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}) {
     this.seed = seed ?? Math.floor(Math.random() * 2 ** 31);
-    this.map = new WorldMap(this.seed, false); // sans ce qui ne sert qu'au dessin
+    this.map = Room.makeMap(this.seed);
     const indexes = (list: unknown[] | undefined, n: number) =>
       (list ?? []).map(Number).filter((c, i, all) => Number.isInteger(c) && c >= 0 && c < n && all.indexOf(c) === i);
     this.camps = indexes(saved.camps, this.map.sites.length);
@@ -2724,6 +2726,11 @@ export class Room {
     if (!done) return;
     this.oreBack[best] = this.time + ORE_RESPAWN_S;
     this.map.oreDown.add(best); // épuisé : il disparaît, on passe à travers jusqu'à son retour
+    this.oreLoot(p, o);
+  }
+
+  /** Ce que rapporte un filon, un rocher ou du bois mort épuisé, par le dompteur lui-même ou par son golem. */
+  private oreLoot(p: Player, o: Ore) {
     p.dirty = true;
     if (o.res === 'gold') {
       const gold = Math.round(oreGold(o.zone) * o.size); // un gros filon rapporte plus
@@ -2881,7 +2888,7 @@ export class Room {
     this.krakenCalled = false;
     const p = aboard[0];
     u.dormant = false;
-    u.fight = { at: this.time, from: p.id, by: new Map() };
+    u.fight = { at: this.time, from: p.id, by: new Map(), landed: this.time };
     u.target = p.id;
     this.events.push({ e: 'challenge', cave: c.id, id: u.id, by: p.id });
   }
@@ -2983,7 +2990,7 @@ export class Room {
     if (!u || !u.dormant || p.dead || this.map.arenaAt(p.x, p.y)?.id !== c.id) return;
     if (dist2(p.x, p.y, u.x, u.y) > (u.r + BOSS_TALK_R) ** 2) return;
     u.dormant = false;
-    u.fight = { at: this.time, from: p.id, by: new Map() };
+    u.fight = { at: this.time, from: p.id, by: new Map(), landed: this.time };
     u.target = p.id;
     this.events.push({ e: 'challenge', cave, id: u.id, by: p.id });
   }
@@ -3057,6 +3064,13 @@ export class Room {
   }
 
   /** Cerveau d'un mini-boss en combat. Renvoie vrai s'il est occupé (préparation d'une attaque). */
+  /** Impatience d'un géant en combat : 1 tant qu'il a touché un dompteur il y a peu, puis de plus en plus (BOSS_HASTE_*). */
+  private bossHaste(u: Unit) {
+    if (!u.fight) return 1;
+    const idle = this.time - u.fight.landed - BOSS_HASTE_AFTER;
+    return idle > 0 ? 1 + Math.min(BOSS_HASTE_MAX, idle * BOSS_HASTE_RATE) : 1;
+  }
+
   private bossAI(u: Unit, t: Ent) {
     this.dropTrail(u);
     if (u.hibernate) {
@@ -3066,6 +3080,10 @@ export class Room {
       u.hibernate = undefined;
       this.events.push({ e: 'move', id: u.id, kind: 'wake' });
       return false;
+    }
+    if (u.fight && !u.fight.hasted && this.bossHaste(u) > 1) {
+      u.fight.hasted = true; // il s'impatiente : le client l'annonce, il presse le pas (tryAttack)
+      this.events.push({ e: 'move', id: u.id, kind: 'haste' });
     }
     if (u.castUntil > this.time) return true;
     const moves = BOSS_MOVES[SPECIES[u.s].key] ?? [];
@@ -4297,7 +4315,7 @@ export class Room {
     let arrived: boolean;
     if (dive && u.perched && dist2(u.x, u.y, t.x, t.y) <= (range + 30) ** 2) arrived = true;
     else {
-      arrived = this.navTo(u, t.x, t.y, u.speed * chase * (dive ? 1.4 : 1), range - 2);
+      arrived = this.navTo(u, t.x, t.y, u.speed * chase * (dive ? 1.4 : 1) * (isBoss(u.s) ? this.bossHaste(u) : 1), range - 2);
       if (dive && arrived && this.map.passable(u.x, u.y, false)) u.perched = true; // pas sur l'eau ni dans un arbre
     }
     if (isBoss(u.s)) return this.bossMelee(u);
@@ -4866,14 +4884,14 @@ export class Room {
   }
 
   /**
-   * Golem de mousse de la meute (ordinaire ou Alpha), sans ennemi à combattre : il va manger le rocher le plus proche, pas
-   * trop loin de son dompteur, en quelques bouchées ; la pierre revient à son dompteur.
+   * Golem de mousse de la meute (ordinaire ou Alpha), sans ennemi à combattre : il va manger le rocher ou le filon d'or le
+   * plus proche, pas trop loin de son dompteur, en quelques bouchées ; la pierre (et l'or d'un filon) revient à son dompteur.
    * focus : touche de récolte (il cherche autour de son dompteur, plus loin, même s'il y a des monstres).
    */
   private golemEats(u: Unit, o: Player, focus = false) {
     const ok = (i: number) => {
       const ore = this.map.ores[i];
-      return !!ore && ore.res === 'stone' && this.oreHp[i] > 0 && dist2(o.x, o.y, ore.x, ore.y) < (FOLLOW_MAX_R * 0.8) ** 2;
+      return !!ore && (ore.res === 'stone' || ore.res === 'gold') && this.oreHp[i] > 0 && dist2(o.x, o.y, ore.x, ore.y) < (FOLLOW_MAX_R * 0.8) ** 2;
     };
     if (u.eatOre === undefined || u.eatOre < 0 || !ok(u.eatOre)) {
       u.eatOre = -1;
@@ -4899,10 +4917,7 @@ export class Room {
     if (!done) return true;
     this.oreBack[ore.id] = this.time + ORE_RESPAWN_S;
     this.map.oreDown.add(ore.id);
-    const stone = resRoll(resYield(ore.zone) * ore.size * (1 + lessonBonus(o.learned, 'gather')));
-    o.stone += stone;
-    o.dirty = true;
-    this.events.push({ e: 'res', to: o.id, wood: 0, stone, x: ore.x, y: ore.y - 10 });
+    this.oreLoot(o, ore);
     u.eatOre = -1;
     return true;
   }
@@ -4928,6 +4943,7 @@ export class Room {
     }
     if (t.kind === 'p') {
       if (t.dead) return;
+      if (by.kind === 'u' && by.fight) [by.fight.landed, by.fight.hasted] = [this.time, false]; // un géant qui touche un dompteur reprend son allure
       if ((t.frenzy?.until ?? 0) > this.time) amount *= FRENZY_VULN; // en pleine Frénésie : il encaisse plus
       const mount = t.mount ? this.units.get(t.mount) : undefined;
       if (mount) {
@@ -5077,7 +5093,7 @@ export class Room {
     return out;
   }
 
-  /** Alpha lièvre sur le terrain : de temps en temps, il soigne un peu son dompteur et la meute autour de lui. */
+  /** Alpha lièvre sur le terrain : de temps en temps, il soigne un peu son dompteur, la meute autour de lui et lui-même. */
   private alphaHeals() {
     if (this.tick % (ALPHA_HEAL_S * TICK_HZ) !== 0) return;
     for (const p of this.players.values()) {
@@ -5094,7 +5110,7 @@ export class Room {
       const ids: number[] = [];
       for (const id of p.army) {
         const u = this.units.get(id);
-        if (u && u !== h.u && !u.reviveAt && u.hp > 0 && u.hp < u.maxHp && near(u.x, u.y)) {
+        if (u && !u.reviveAt && u.hp > 0 && u.hp < u.maxHp && near(u.x, u.y)) { // lui compris : il se soigne aussi
           u.hp = Math.min(u.maxHp, u.hp + u.maxHp * h.value);
           ids.push(u.id);
         }

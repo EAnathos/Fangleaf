@@ -244,6 +244,26 @@ describe('Alphas de la Tanière', () => {
     check(evs.length === 1 && p.hp === 10 + Math.round(max * 0.03) && ally.hp > 1, `lièvre : +${evs[0]?.n} PV en 3 s pour son dompteur (${max} PV max), et la meute proche est soignée`);
   });
 
+  rule('Alpha lièvre : il se soigne aussi lui-même, même quand son dompteur et sa meute vont bien.', () => {
+    const r = room();
+    const p = r.addPlayer('a', noop);
+    [p.x, p.y] = [r.map.spawn.x, r.map.spawn.y];
+    const hare = r.spawnAlpha(p, SPECIES.findIndex((s) => s.key === 'hare'), 0, false);
+    [hare.x, hare.y] = [p.x + 50, p.y];
+    const hurt = Math.round(hare.maxHp / 2);
+    hare.hp = hurt;
+    const evs: { e: string; ids?: number[] }[] = [];
+    for (let i = 0; i < 20 * 3; i++) {
+      r.tick++;
+      r.events = [];
+      r.alphaHeals();
+      evs.push(...r.events.filter((e: { e: string }) => e.e === 'heal'));
+    }
+    const gain = hare.hp - hurt;
+    check(gain > 0 && Math.abs(gain - hare.maxHp * alphaPerk(hare.s, 0)!.value) < 1e-6, `le lièvre regagne ${gain.toFixed(1)} PV (${hare.maxHp} PV max)`);
+    check(evs.length === 1 && !!evs[0].ids?.includes(hare.id), 'des cœurs montent sur lui (il figure parmi les soignés)');
+  });
+
   rule('Cri du suricate, carapace de l\'escargot : au combat, tous les alliés proches en profitent un moment, puis la compétence se recharge.', () => {
     const r = room();
     const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);

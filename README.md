@@ -83,7 +83,8 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 | `npm run typecheck` | Vérification TypeScript |
 | `npm run db:migrate` | Applique les migrations Supabase manquantes (`DATABASE_URL` requis) |
 | `npm run smoke` | Test bot (autorise les invités via `ALLOW_GUESTS=1`, réservé aux tests) : création, 4 joueurs max, combat, or, forge, anti-téléportation |
-| `npm run test:rules` | Règles de la simulation, sans réseau (`node:test`) : un fichier par thème dans `tests/rules/` (monde, combat, meute, Alphas, géants, faune, village, réseau). Un seul fichier : `npx tsx --test tests/rules/geants.test.ts` ; un seul test : `--test-name-pattern="Marché"` ; autre graine ou autre heure : `TEST_SEED=…`, `TEST_NOW=…` |
+| `npm run test:rules` | Règles de la simulation, sans réseau (`node:test`) : un fichier par thème dans `tests/rules/`. Un ou plusieurs thèmes : `npm run test:rules -- volcan meute` ; un seul test : `-- geants --test-name-pattern=Marché` ; autre graine ou autre heure : `TEST_SEED=…`, `TEST_NOW=…`. Détails : [tests/README.md](tests/README.md) |
+| `npm run bench` | Banc de performance de la simulation (temps d'un tick, volume des snapshots) ; `-- --against <fichier>` compare à une mesure de référence. Voir [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 
 ## Structure
 
@@ -104,5 +105,20 @@ Tout l'équilibrage (PV, dégâts, zones, chance d'apprivoisement, coût de la f
 
 ## Licence
 
-© 2026 EAnathos, tous droits réservés. Le code est visible mais **ni libre ni open source** : aucune copie,
-modification, redistribution ou mise en ligne sans autorisation écrite. Détails dans [LICENSE](LICENSE).
+Fangleaf est **source disponible, avec restriction non commerciale**, sous la
+[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) (© 2026 EAnathos).
+Le texte qui fait foi est celui, en anglais, du fichier [LICENSE](LICENSE) ; ce qui suit n'en est qu'un résumé.
+
+Ce n'est **pas une licence open source** au sens de l'[Open Source Initiative](https://opensource.org/osd) :
+l'OSI exige qu'une licence ne restreigne aucun domaine d'utilisation, et l'usage commercial en est un.
+
+| Autorisé, à des fins non commerciales | Interdit sans autorisation écrite |
+|---|---|
+| Consulter, copier et étudier le code | Vendre le jeu, une copie ou une version modifiée |
+| Le modifier et en tirer des versions dérivées | L'héberger pour en tirer un revenu (abonnement, publicité, achats en jeu, accès payant) |
+| Le redistribuer, modifié ou non | L'utiliser dans le cadre d'une activité commerciale ou pour le compte d'une entreprise |
+| L'héberger pour soi et ses amis, gratuitement | Sous-licencier ou transférer les droits reçus |
+| L'utiliser dans un établissement d'enseignement, un organisme caritatif, de recherche publique ou public | |
+
+Toute redistribution doit être accompagnée du texte de la licence (ou de son URL) et de la ligne
+`Required Notice:` placée en tête de [LICENSE](LICENSE). Pour un usage commercial, ouvrir une issue sur ce dépôt.
