@@ -26,6 +26,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Valider les fichiers de changements
+        run: npm run changesets:check
+
       - name: TypeScript
         run: npm run typecheck
 
