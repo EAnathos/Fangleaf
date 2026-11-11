@@ -1,6 +1,11 @@
 # Déploiement du staging sur Coolify : quand la CI passe sur dev, ou à la main pour un commit précis
 # (c'est le retour arrière). Procédure complète : docs/ENVIRONNEMENTS.md
 #
+# ⚠️ GitHub ne crée les déclenchements `workflow_run` et `workflow_dispatch` que pour les workflows présents sur la
+# branche par défaut (`main`). Tant que ce fichier n'y est pas, aucun run n'existe, ni automatique ni manuel, et c'est
+# silencieux : on déploie alors le staging depuis Coolify. C'est la version de `main` qui s'exécute, même pour un
+# commit de `dev` : une modification de ce fichier n'a d'effet qu'une fois promue.
+#
 # Inactif tant que la variable du dépôt STAGING_ENABLED ne vaut pas « true »
 # (Settings › Secrets and variables › Actions › Variables).
 #
@@ -8,7 +13,8 @@
 #   COOLIFY_URL       adresse de l'instance Coolify, sans barre finale (https://coolify.exemple.dev)
 #   COOLIFY_TOKEN     jeton d'API d'équipe, capacités « write » et « deploy »
 #   COOLIFY_APP_UUID  identifiant de l'application Fangleaf staging dans Coolify
-# Variable facultative : STAGING_URL (adresse publique du staging).
+# Variable obligatoire : STAGING_URL (adresse publique du staging). Sans elle, le workflow s'arrête tout de suite :
+# il vaut mieux une erreur claire qu'un déploiement qui vérifie l'adresse de quelqu'un d'autre.
 name: CD staging
 
 on:
@@ -44,11 +50,12 @@ jobs:
     timeout-minutes: 20
     environment:
       name: staging
-      url: ${{ vars.STAGING_URL || 'https://fangleaf-staging.leo-bessin.dev' }}
+      url: ${{ vars.STAGING_URL }}
     env:
       COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
       APP: ${{ secrets.COOLIFY_APP_UUID }}
+      STAGING_URL: ${{ vars.STAGING_URL }}
     steps:
       # Le commit à déployer, et la garantie que l'application visée est bien celle de ce dépôt : une erreur
       # d'identifiant Coolify ne peut pas envoyer dev sur une autre application.
@@ -60,6 +67,7 @@ jobs:
           REF: ${{ inputs.ref }}
           RUN_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
+          [ -n "$STAGING_URL" ] || { echo "✘ variable STAGING_URL manquante (adresse publique du staging)" >&2; exit 1; }
           app=$(curl -fsS -H "Authorization: Bearer $COOLIFY_TOKEN" "$COOLIFY_URL/api/v1/applications/$APP")
           # Coolify stocke « proprietaire/depot » ou l'URL complète selon la façon dont l'application a été créée.
           repo=$(jq -r '.git_repository' <<<"$app" | sed -E 's#^(https?://|git@)[^/:]+[/:]##; s#\.git$##')
@@ -70,11 +78,13 @@ jobs:
           else
             sha=$RUN_SHA
             current=$(jq -r '.git_commit_sha' <<<"$app")
-            if [[ $current =~ ^[0-9a-f]{40}$ ]]; then
-              # ahead : le nouveau commit descend de celui en ligne. identical, behind, diverged : on ne touche à rien.
+            # Même commit : on redéploie. Le commit visé est enregistré avant la construction, donc après un
+            # déploiement raté c'est le seul moyen de réessayer (sinon la relance se croirait déjà à jour).
+            if [[ $current =~ ^[0-9a-f]{40}$ ]] && [ "$current" != "$sha" ]; then
+              # behind : le commit visé est un ancêtre de celui en ligne. diverged : aucun ne descend de l'autre.
               state=$(gh api "repos/$GITHUB_REPOSITORY/compare/$current...$sha" --jq .status 2>/dev/null || echo ahead)
-              if [ "$state" != ahead ]; then
-                echo "Le staging fait déjà tourner $current ($state) : rien à faire"
+              if [ "$state" = behind ] || [ "$state" = diverged ]; then
+                echo "Le staging vise déjà $current ($state) : rien à faire"
                 exit 0
               fi
             fi
@@ -109,7 +119,8 @@ jobs:
               "$COOLIFY_URL/api/v1/deployments/$UUID" | jq -r '.status')
             case "$state" in
               finished) echo "Déploiement terminé"; exit 0 ;;
-              failed|cancelled*) echo "✘ déploiement $state (journal dans Coolify)" >&2; exit 1 ;;
+              queued|in_progress|'') ;; # vide : réponse illisible ou Coolify indisponible, on réessaie
+              *) echo "✘ déploiement $state (journal dans Coolify)" >&2; exit 1 ;; # failed, cancelled, statut inconnu
             esac
             sleep 5
           done
@@ -118,8 +129,6 @@ jobs:
 
       - name: Le staging répond
         if: steps.deploy.outputs.uuid
-        env:
-          STAGING_URL: ${{ vars.STAGING_URL || 'https://fangleaf-staging.leo-bessin.dev' }}
         run: |
           for i in $(seq 1 10); do
             # page entière d'abord : un grep -q dans le tube couperait curl en pleine écriture (erreur 23)

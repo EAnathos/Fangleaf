@@ -17,9 +17,9 @@ try {
 initPersistence();
 
 const PORT = Number(process.env.PORT ?? 3001);
-// Triches (F9) : en dev, et sur le staging pour pouvoir y préparer une situation de test. Jamais en production :
-// elle ne déclare pas VITE_FANGLEAF_ENV, et la déclarer y afficherait aussi le badge STAGING.
-const CHEATS = process.env.NODE_ENV !== 'production' || process.env.VITE_FANGLEAF_ENV === 'staging';
+// Triches (F9) : en dev, et partout où ALLOW_CHEATS=1 est posé (le staging, dans Coolify) pour y préparer une
+// situation de test. Comme ALLOW_GUESTS, c'est une variable du serveur seul : aucun build du client ne les ouvre.
+const CHEATS = process.env.NODE_ENV !== 'production' || process.env.ALLOW_CHEATS === '1';
 const DIST = fileURLToPath(new URL('../dist', import.meta.url));
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',

@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",
+    "pg": "^8.23.1",
     "tsx": "^4.23.15",
     "ws": "^8.22.0"
   },
@@ -28,7 +29,6 @@
     "@types/pg": "^8.23.1",
     "@types/ws": "^8.18.2",
     "concurrently": "^10.0.6",
-    "pg": "^8.23.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.4"
   }

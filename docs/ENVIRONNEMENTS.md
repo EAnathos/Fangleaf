@@ -46,9 +46,11 @@ adresse changent. Un badge **STAGING** rouge est affiché en permanence en haut 
 « Fangleaf · staging ».
 
 Une seule différence de comportement : les **triches (F9)** y répondent, pour pouvoir mettre en place en quelques
-secondes la situation qu'on veut vérifier (or, monstres, zone débloquée, géant abattu). Elles sont ouvertes par
-`VITE_FANGLEAF_ENV=staging`, que la production ne déclare pas ; en production le serveur les ignore et le client ne
-contient même pas le panneau. Le test de fumée vérifie les deux cas.
+secondes la situation qu'on veut vérifier (or, monstres, zone débloquée, géant abattu). Il y faut deux variables que
+la production ne déclare pas : `ALLOW_CHEATS=1` pour que le serveur accepte ces messages (variable du serveur seul,
+comme `ALLOW_GUESTS` : aucun build du client ne peut les lui ouvrir), et `VITE_FANGLEAF_ENV=staging` pour que le
+panneau soit dans le build du client. Le test de fumée lance un serveur comme la prod et un comme le staging, et
+vérifie les deux cas.
 
 ### Où l'héberger
 
@@ -86,23 +88,29 @@ donc le déploiement échoue au lieu de laisser un staging à moitié migré.
 5. **Variables d'environnement de l'application** (toutes celles de [.env.example](../.env.example), avec les valeurs
    du projet Supabase **de staging**) :
    - disponibles au build **et** à l'exécution : `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_FANGLEAF_ENV=staging` ;
-   - exécution seulement : `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`.
+   - exécution seulement : `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `ALLOW_CHEATS=1`.
 
-   Les `VITE_*` sont figées dans le build : les changer demande un redéploiement, pas un simple redémarrage.
+   Les `VITE_*` sont figées dans le build : les changer demande un redéploiement, pas un simple redémarrage. Si l'une
+   des deux valeurs Supabase manque au build, l'image refuse de se construire plutôt que de mettre en ligne un
+   staging sans connexion Google.
 6. **Jeton d'API Coolify** (*Keys & Tokens › API tokens*) avec les capacités `write` et `deploy`.
 7. **GitHub** (*Settings*) :
    - *Environments* : créer l'environnement `staging` et y mettre les secrets `COOLIFY_URL` (adresse de l'instance,
      sans barre finale), `COOLIFY_TOKEN` (le jeton ci-dessus) et `COOLIFY_APP_UUID` (identifiant de l'application,
      visible dans l'URL de sa page Coolify).
    - *Secrets and variables › Actions › Variables* : `STAGING_ENABLED` = `true` (tant qu'elle manque, le workflow
-     ne fait rien). Facultatif : `STAGING_URL` si l'adresse diffère de la valeur par défaut.
+     ne fait rien) et `STAGING_URL` = l'adresse publique du staging (obligatoire : le workflow refuse de deviner
+     une adresse qui pourrait être celle de quelqu'un d'autre).
    - *Rules › Rulesets* : sur `main`, PR obligatoire et CI « Typecheck, règles, fumée, build » requise.
      Sur `dev`, s'en tenir à « blocage des pushes forcés » et « suppression interdite » : une PR obligatoire ou une CI
      requise y bloquerait aussi le commit de version que release-version.yml pousse directement, et *GitHub Actions*
      n'apparaît pas dans la liste des contournements (ce n'est pas une application installée sur le dépôt). Le reste
      tient à la règle d'équipe : on ne pousse pas sur `dev`, on y arrive par une PR.
-8. **Premier déploiement** : depuis Coolify (*Deploy*), ou en lançant le workflow *CD staging* à la main avec
-   `ref` = `dev`.
+8. **Premier déploiement** : depuis Coolify (*Deploy*). Le workflow *CD staging*, lui, n'existe pour GitHub qu'une
+   fois `cd-staging.yml` présent sur la branche par défaut (`main`) : c'est une règle de `workflow_run` et de
+   `workflow_dispatch`, et tant qu'elle n'est pas remplie il ne se passe rien, sans message d'erreur. Donc, entre la
+   fusion dans `dev` et la première promotion vers `main`, le staging se déploie depuis Coolify. Ensuite, c'est
+   toujours la version de `main` qui s'exécute, même pour un commit de `dev`.
 
 ## Données et secrets : l'isolation
 
@@ -152,8 +160,8 @@ tant que la liste n'est pas entièrement verte.
 
 ## Retour arrière
 
-**Staging** : *Actions › CD staging › Run workflow*, avec dans `ref` le SHA du dernier commit de `dev` qui
-fonctionnait. Le déploiement manuel accepte n'importe quel commit ; le déploiement automatique, lui, ne fait jamais
+**Staging** : *Actions › CD staging › Run workflow* (disponible une fois le workflow sur `main`, voir l'installation,
+étape 8), avec dans `ref` le SHA du dernier commit de `dev` qui fonctionnait. Le déploiement manuel accepte n'importe quel commit ; le déploiement automatique, lui, ne fait jamais
 reculer le staging (si deux CI finissent dans le désordre, l'ancienne est ignorée). Corriger ensuite par une PR vers
 `dev` (un `git revert` de la PR fautive si besoin) : la CI suivante redéploie `dev` normalement.
 

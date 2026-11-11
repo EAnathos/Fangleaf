@@ -1,6 +1,7 @@
 // Dev et staging : écran de triche, un vrai panneau : F9 l'ouvre, et il reste ouvert jusqu'à un nouvel appui sur F9 (ou sa croix).
 // Ajouter ou retirer un monstre, un Alpha, un légendaire ; appliquer un effet d'état pour une durée au choix ; débloquer ou
-// rejoindre une zone ; abattre un géant. Le serveur n'accepte ces messages qu'en dev et sur le staging.
+// rejoindre une zone ; abattre un géant. Côté serveur, ces messages ne sont acceptés qu'en dev et là où
+// ALLOW_CHEATS=1 : le panneau présent dans un build ne suffit pas à les faire passer.
 
 import { CLASSES, CLASS_IDS, SPECIES, SPECS, SPEC_IDS, ZONES, ZONE_NAMES, type ClassId, type SpecId } from '../../shared/config.ts';
 import { STATUS_IDS, type CheatMob, type ClientMsg } from '../../shared/protocol.ts';

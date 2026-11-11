@@ -961,3 +961,8 @@ body.env-staging::after {
   padding: 2px 10px; border-radius: 999px; background: #C0392B; color: #fff; font: 700 12px var(--display);
   letter-spacing: 2px; pointer-events: none; opacity: 0.9;
 }
+/* Il occupe le haut du centre : on descend d'autant ce qui s'y affiche, sinon il cache la barre du géant
+   et le premier message, c'est-à-dire ce qu'on vient justement vérifier sur le staging. */
+body.env-staging .boss-bar { top: 36px; }
+body.env-staging #toasts { top: 38px; }
+body.env-staging #hud.boss-on #toasts { top: 100px; }

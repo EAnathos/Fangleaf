@@ -101,8 +101,8 @@ Une PR fusionnée dans `dev` ne signifie donc pas, à elle seule, que l'issue es
 - **La doc à jour** : `docs/GUIDE.md` quand le jeu change pour le joueur, `docs/ARCHITECTURE.md` quand la structure change.
 - **Pas de secrets** : `.env` n'est jamais commité. Une nouvelle variable d'environnement va dans `.env.example` (sans sa valeur) et dans le README.
 - **Le mode dev ne va pas en production** : triches et raccourcis de test ne répondent qu'en dev et sur le staging
-  (`NODE_ENV !== 'production'`, ou `VITE_FANGLEAF_ENV=staging`). En production, le serveur les ignore et le client ne
-  les contient même pas.
+  (`NODE_ENV !== 'production'`, ou `ALLOW_CHEATS=1` côté serveur). En production, le serveur les ignore et le client
+  ne les contient même pas.
 
 ## 8. Version et changelog
 

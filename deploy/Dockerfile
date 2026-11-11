@@ -16,18 +16,22 @@ ARG VITE_FANGLEAF_ENV=staging
 WORKDIR /app
 
 # Les dépendances d'abord : tant que package-lock.json ne bouge pas, Docker réutilise cette couche.
-# Installation complète (pas de --omit=dev) : le build a besoin de vite, les migrations de pg.
+# Installation complète (pas de --omit=dev) : le build du client a besoin de vite, une devDependency.
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY . .
+
+# Sans ces deux valeurs, le build réussit quand même et met en ligne un staging où le bouton « Se connecter avec
+# Google » n'existe pas : un oubli de « Build Variable » dans Coolify doit s'arrêter ici, pas chez les testeurs.
+RUN [ -n "$VITE_SUPABASE_URL" ] && [ -n "$VITE_SUPABASE_ANON_KEY" ] \
+    || { echo '✘ VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY manquant : coche « Build Variable » sur les deux' >&2; exit 1; }
 RUN npm run build
 
-# Le staging tourne comme la prod (NODE_ENV=production), à une exception près :
-# VITE_FANGLEAF_ENV reste aussi à l'exécution : le serveur s'en sert pour accepter les triches (F9) sur le staging.
+# Le staging tourne comme la prod : NODE_ENV=production. Ce qui l'en distingue vient des variables d'exécution de
+# Coolify (ALLOW_CHEATS=1 pour les triches), pas de l'image ; VITE_FANGLEAF_ENV, lui, a déjà servi au build.
 ENV NODE_ENV=production \
-    PORT=4311 \
-    VITE_FANGLEAF_ENV=$VITE_FANGLEAF_ENV
+    PORT=4311
 EXPOSE 4311
 
 # Migrations avant le serveur : une migration cassée arrête le déploiement au lieu d'attendre la prod.
