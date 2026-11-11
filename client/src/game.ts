@@ -289,8 +289,10 @@ export class Game {
     }
   }
 
-  private drawBossReturn(ctx: CanvasRenderingContext2D, x: number, y: number, sec: number) {
+  /** size : rayon du géant ; le cercle l'entoure largement, du plus petit au Kraken (84 px au moins). */
+  private drawBossReturn(ctx: CanvasRenderingContext2D, x: number, y: number, sec: number, size: number) {
     const t = this.time, soon = sec <= 10, k = soon ? 1 - sec / 10 : 0;
+    const R = Math.max(84, size * 1.9);
     const pulse = 0.5 + 0.5 * Math.sin(t * (soon ? 8 + k * 10 : 2.5));
     ctx.save();
     ctx.translate(x, y);
@@ -299,22 +301,23 @@ export class Game {
     ctx.strokeStyle = soon ? '#F0B64A' : '#8FA9B8';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(0, 0, 84, 0, Math.PI * 2);
+    ctx.arc(0, 0, R, 0, Math.PI * 2);
     ctx.stroke();
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(0, 0, 68, 0, Math.PI * 2);
+    ctx.arc(0, 0, R * 0.81, 0, Math.PI * 2);
     ctx.stroke();
     // runes qui tournent, de plus en plus vite
     ctx.rotate(t * (0.4 + k * 4));
     ctx.fillStyle = ctx.strokeStyle;
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      ctx.fillRect(Math.cos(a) * 76 - 3.5, Math.sin(a) * 76 - 3.5, 7, 7);
+    const runes = Math.round(8 * (R / 84));
+    for (let i = 0; i < runes; i++) {
+      const a = (i / runes) * Math.PI * 2;
+      ctx.fillRect(Math.cos(a) * R * 0.9 - 3.5, Math.sin(a) * R * 0.9 - 3.5, 7, 7);
     }
     ctx.restore();
     // étincelles qui montent juste avant le retour
-    if (soon && Math.random() < 0.2 + k * 0.6) this.fx.burst(x + (Math.random() - 0.5) * 100, y + (Math.random() - 0.5) * 40, '#F0B64A', 1, 40);
+    if (soon && Math.random() < 0.2 + k * 0.6) this.fx.burst(x + (Math.random() - 0.5) * R * 1.2, y + (Math.random() - 0.5) * R * 0.5, '#F0B64A', 1, 40);
     ctx.save();
     ctx.font = '700 28px "Pixelify Sans", sans-serif';
     ctx.textAlign = 'center';
@@ -1560,6 +1563,9 @@ export class Game {
         if (e.shut) this.shake = Math.max(this.shake, 0.3);
         break;
       }
+      case 'busy': // un combat de géant a déjà commencé dans cette grotte : on ne le rejoint pas en cours de route
+        this.hud.toast(`Le combat contre ${bossName(this.map.caves[e.cave]?.boss ?? 0)} est en cours : impossible d'entrer ou de sortir.`);
+        break;
       case 'camp': {
         const c = this.map.sites[e.site];
         this.fx.ring(c.x, c.y, '#F0B64A', 20, CAMP_R, 1.2);
@@ -2096,7 +2102,7 @@ export class Game {
         [st.a, st.snap, st.len] = [a, this.shotsAt, len];
       }
       st.seen = this.time;
-      const at = this.fired.get(key), since = h[6] >= 100 && at !== undefined ? Math.max(0.001, this.time - at) : 0;
+      const at = this.fired.get(String(h[12])), since = h[6] >= 100 && at !== undefined ? Math.max(0.001, this.time - at) : 0; // (rangé par trackCasts sous l'id de la zone)
       const k = since ? 1 : Math.min(0.999, h[6] / 100 + late / Math.max(0.05, h[10] / 100));
       if (since && !st.lit) {
         st.lit = true;
@@ -2698,11 +2704,11 @@ export class Game {
       drawDepths(ctx, this.map, this.time, sealed, !!this.hud.heart, this.net.latest?.traps ?? [], { x0: camX - hw, y0: camY - hh, x1: camX + hw, y1: camY + hh }, this.hud.unlocked);
     } else if (here?.zone === VOYAGE_ZONE) drawVoyage(ctx, here, this.time, camX, camY, hw, hh);
     else if (here) ctx.drawImage(this.world.caveInterior(here), here.inside.x - this.world.caveW / 2, here.inside.y - this.world.caveH / 2);
-    if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id]);
+    if (here && this.hud.caves[here.id] > 0) this.drawBossReturn(ctx, here.inside.x, here.inside.y - 60, this.hud.caves[here.id], SPECIES[here.boss]?.r ?? 60);
     // géants des îlots, à l'air libre : le cercle de leur retour, sur leur îlot
     for (const c of this.map.caves) {
       const home = c.home ?? c.inside;
-      if ((here ? here === this.map.depths && c.room !== undefined : c.open !== undefined) && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id]);
+      if ((here ? here === this.map.depths && c.room !== undefined : c.open !== undefined) && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id], SPECIES[c.boss].r);
     }
     const br = this.map.bridge;
     if (!here && inView((br.a.x + br.b.x) / 2, (br.a.y + br.b.y) / 2, Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y) / 2 + 120)) this.world.drawBridge(ctx, this.hud.buildings.includes('bridge'), this.time);

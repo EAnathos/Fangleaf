@@ -129,7 +129,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Il n'y a **pas d'Alpha sauvage**. Chaque monstre vaincu peut laisser une **essence** de son espèce ; avec assez
   d'essences, on **éveille** l'Alpha de cette espèce à la Tanière. L'éveil prend un moment, même hors ligne.
 - Un Alpha par espèce, hors limite de meute. Tombé, il ressuscite après un délai (plus long pour les espèces fortes) ;
-  pendant un combat de géant, ou si son dompteur est à terre, il attend la fin. Sur ordinateur, le HUD dit dans combien
+  pendant un combat de géant, ou si son dompteur est à terre, il attend la fin. Tombé pendant un combat de géant, il
+  attend la fin de **ce** combat, même si son dompteur se déconnecte. Sur ordinateur, le HUD dit dans combien
   de temps il revient : une ligne sous le sac, ou une vignette à son portrait près des effets en cours (au choix dans
   Paramètres › Affichage).
 - On le **renforce** avec des essences, de plus en plus cher à chaque niveau, et un peu plus dans les zones lointaines.
@@ -220,8 +221,10 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Chaque espèce hostile a son **géant**, qui dort au fond d'une grotte. On **débloque** la grotte pour tout le village
   (de plus en plus cher selon la zone), puis on y entre avec sa meute (E à l'entrée, E à la sortie pour ressortir).
 - **E** près du géant pour lui parler, puis on lance le combat. Ses PV dépendent du nombre de membres du village.
+- **Pendant un combat, la grotte est verrouillée** : une fois le géant réveillé, personne ne peut y entrer ni en
+  sortir jusqu'à la fin du combat. Vaincu, il laisse un cercle d'invocation là où il reviendra, avec le temps restant.
 - Il se souvient de toi, le jour même : vaincu, il a peur quand tu reviens (il tremble, une goutte de sueur au front) ;
-  s'il t'a corrigé, il se moque de toi.
+  s'il t'a corrigé, il se montre arrogant à ton retour.
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
   (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact.
 - Il **s'impatiente** s'il ne touche aucun dompteur pendant un moment : « Il s'impatiente et presse le pas ! », il

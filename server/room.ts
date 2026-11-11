@@ -49,6 +49,7 @@ interface Unit {
   wanderY: number;
   wanderT: number;
   reviveAt: number; // > 0 : Alpha apprivoisé en attente de résurrection
+  fallenIn?: number; // Alpha tombé pendant un combat de géant (sa grotte) : il ne revient qu'à la fin de ce combat
   level: number; // niveau d'Alpha
   recalling: boolean; // trop loin du dompteur : revient sans combattre
   legend: boolean; // Alpha légendaire
@@ -414,6 +415,7 @@ export class Room {
   private treeHp = new Map<number, number>(); // arbres entamés ou abattus (index dans decor) : leurs PV ; absents : intacts
   private treeBack = new Map<number, number>(); // arbres abattus : temps de simulation où ils repoussent
   private caveBoss: number[] = []; // id du mini-boss de chaque grotte (0 : vaincu)
+  private fallen = new Map<string, [number, number][]>(); // compte déconnecté → ses Alphas tombés dans un combat de géant encore en cours (espèce, grotte)
   private caveBack: number[] = []; // temps de simulation de son retour
   private caveAt = new WeakMap<Player, number>(); // dernier passage de chaque dompteur (un double clic ne le fait pas ressortir aussitôt)
   private hazards: Hazard[] = [];
@@ -576,6 +578,12 @@ export class Room {
         this.placeNear(u, p);
       }
     }
+    // reconnecté pendant un combat de géant où des Alphas sont tombés : ils restent à terre jusqu'à la fin de ce combat
+    for (const [s, cave] of this.fallen.get(p.userId ?? '') ?? []) {
+      const u = p.army.map((id) => this.units.get(id)).find((q) => q?.alpha && q.s === s);
+      if (u && this.fightOn(cave)) Object.assign(u, { hp: 0, reviveAt: this.time, fallenIn: cave, target: 0 });
+    }
+    this.fallen.delete(p.userId ?? '');
     p.hp = maxHpOf(p); // on arrive toujours avec tous ses PV (classe comprise : 75 pour un guerrier débutant)
     this.sleepers.delete(p.userId ?? ''); // il se réveille : il n'est plus endormi au village
     this.players.set(p.id, p);
@@ -851,6 +859,9 @@ export class Room {
     const p = this.players.get(id);
     if (!p) return;
     const prof = this.profileOf(p);
+    // ses Alphas tombés dans un combat de géant encore en cours : se reconnecter ne les relève pas
+    const fallen = p.army.map((uid) => this.units.get(uid)).filter((u) => u?.alpha && u.fallenIn !== undefined && this.fightOn(u.fallenIn)).map((u) => [u!.s, u!.fallenIn!] as [number, number]);
+    if (p.userId && fallen.length) this.fallen.set(p.userId, fallen);
     for (const uid of p.army) this.units.delete(uid);
     this.players.delete(id);
     this.diffs.delete(id);
@@ -1852,7 +1863,9 @@ export class Room {
       const owner = this.players.get(u.owner);
       if (!owner || owner.dead) continue; // il attend que son dompteur soit debout (pas de retour près du boss)
       if (this.bossFight(owner)) continue; // ni pendant un combat de géant : il revient une fois le combat fini
+      if (u.fallenIn !== undefined && this.fightOn(u.fallenIn)) continue; // ni tant que dure le combat où il est tombé
       u.reviveAt = 0;
+      u.fallenIn = undefined;
       u.hp = u.maxHp;
       u.target = 0;
       this.placeNear(u, owner);
@@ -3982,7 +3995,12 @@ export class Room {
   /** Le dompteur est dans une grotte dont le géant est réveillé (combat en cours). */
   private bossFight(p: Player) {
     const c = this.map.arenaAt(p.x, p.y);
-    const u = c && this.units.get(this.caveBoss[c.id]);
+    return !!c && this.fightOn(c.id);
+  }
+
+  /** Combat en cours contre le géant de cette grotte : réveillé et debout. */
+  private fightOn(cave: number) {
+    const u = this.units.get(this.caveBoss[cave] ?? 0);
     return !!u && !u.dormant && u.hp > 0;
   }
 
@@ -4023,6 +4041,10 @@ export class Room {
     // le large, lui, s'ouvre quand le bateau est prêt (rebâti, son cœur volcanique installé)
     const open = id === HALL_ID ? volcanoOpen(this.beaten) : c.zone === VOYAGE_ZONE ? boatReady(this.boat, this.heart) : this.unlocked.includes(id);
     if (enter && !open) return;
+    if (this.fightOn(id)) {
+      this.events.push({ e: 'busy', to: p.id, cave: id }); // combat en cours : impossible d'entrer ou de sortir
+      return;
+    }
     const from = enter ? c.entrance : c.exit;
     // le large : on embarque en parlant à Aubin, à côté du bateau
     const yard = enter && c.zone === VOYAGE_ZONE ? this.elderPos() : from;
@@ -5259,6 +5281,9 @@ export class Room {
         u.reviveAt = this.time + alphaReviveS(u.s);
         u.hp = 0;
         u.target = 0;
+        // tombé pendant un combat de géant : il attend la fin de ce combat, même si son dompteur en sort ou se reconnecte
+        const arena = this.map.arenaAt(u.x, u.y, ISLE_FIGHT_R);
+        u.fallenIn = arena && this.fightOn(arena.id) ? arena.id : undefined;
       } else {
         this.units.delete(u.id);
         const o = this.players.get(u.owner);
@@ -5484,7 +5509,7 @@ export class Room {
       case 'munch': return this.map.ores[e.ore] ?? null;
       case 'chop': return this.map.decor[e.id] ?? null;
       case 'eat': case 'pick': return this.map.bushes[e.bush] ?? null;
-      case 'gold': case 'essence': case 'soul': case 'res': case 'chest': case 'full': case 'seen': case 'trade': case 'scroll': return e.to;
+      case 'gold': case 'essence': case 'soul': case 'res': case 'chest': case 'full': case 'seen': case 'trade': case 'scroll': case 'busy': return e.to;
       case 'mount': return e.by;
       default: return null;
     }

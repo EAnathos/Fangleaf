@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, ALL_CAVES } from '../helpers.ts';
-import { BOAT_REACH, BOAT_STAGES, boatReady, BUILDING_IDS, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
+import { BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, BUILDING_IDS, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
 import { HALL_ID } from '../../shared/worldmap.ts';
 import { Room } from '../../server/room.ts';
 
@@ -352,5 +352,32 @@ describe('Le volcan et ses entrailles', () => {
     r.calmBoss(boss); // combat perdu : il se rendort, guéri
     r.updateDepths();
     check(m.doorShut[li] === 0 && r.events.some((e: { e: string; shut?: boolean }) => e.e === 'lair' && !e.shut), 'le combat fini, la herse se relève');
+  });
+
+  rule('Géant du volcan : combat perdu, il se rendort chez lui avec toute sa vie ; vaincu, il réapparaît dans son antre, lui aussi avec toute sa vie.', () => {
+    const r = room(), m = r.map;
+    const lair = m.caves.find((c: { room?: number }) => c.room !== undefined), home = lair.home ?? lair.inside;
+    let boss = r.units.get(r.caveBoss[lair.id]);
+    const p = r.addPlayer('a', noop);
+    p.hp = 1e9;
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 40];
+    r.onChallenge(p, lair.id);
+    boss.hp = boss.maxHp / 3;
+    [boss.x, boss.y] = [boss.x + 120, boss.y + 40];
+    // plus personne dans l'antre (le dompteur est retourné à l'entrée du donjon) : le combat est perdu
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y - 40];
+    r.tick = 0;
+    r.clearEmptyCaves();
+    check(boss.dormant && boss.hp === boss.maxHp && !boss.fight && Math.hypot(boss.x - home.x, boss.y - home.y) < 1, `combat perdu : il se rendort chez lui, ${Math.round(boss.hp)} / ${Math.round(boss.maxHp)} PV`);
+    // cette fois il est vaincu : il réapparaît après le délai
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 40];
+    r.onChallenge(p, lair.id);
+    r.killUnit(boss, p);
+    check(!r.caveBoss[lair.id], 'vaincu : son antre est vide');
+    r.time += BOSS_RESPAWN_S + 1;
+    r.tick = 0;
+    r.updateSpawns();
+    boss = r.units.get(r.caveBoss[lair.id]);
+    check(!!boss && boss.dormant && boss.hp === boss.maxHp && m.roomAt(boss.x, boss.y) === lair.room, 'le délai passé, il réapparaît endormi dans son antre, avec toute sa vie');
   });
 });
