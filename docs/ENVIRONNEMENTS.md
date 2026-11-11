@@ -83,7 +83,7 @@ donc le déploiement échoue au lieu de laisser un staging à moitié migré.
    - *Domains* : l'adresse du staging ; cocher le **noindex** du domaine (en-tête `X-Robots-Tag` : le staging n'a
      rien à faire dans les moteurs de recherche) ;
    - *Advanced › Build › Build arguments* : **Managed manually in Dockerfile** (le Dockerfile déclare ses `ARG`) ;
-   - *Health check* activé sur `/`, port 4311 ;
+   - *Health check* activé sur `/healthz`, port 4311 ;
    - **Auto deploy désactivé** : c'est GitHub Actions qui déclenche le déploiement, seulement après une CI verte.
 5. **Variables d'environnement de l'application** (toutes celles de [.env.example](../.env.example), avec les valeurs
    du projet Supabase **de staging**) :
@@ -153,7 +153,7 @@ donc le déploiement échoue au lieu de laisser un staging à moitié migré.
    - combat, apprivoisement, achat à la forge ;
    - quitter puis revenir dans le village : or, ressources, équipement et Alphas sont conservés ;
    - sur téléphone si l'interface a changé.
-4. Pas d'erreur dans les logs : page de l'application dans Coolify, onglet *Logs*.
+4. Le workflow vérifie `/healthz` (serveur actif et configuration Supabase présente) ainsi que le titre de la page. Cela ne remplace pas un essai réel de connexion Google et de sauvegarde.\n5. Pas d'erreur dans les logs : page de l'application dans Coolify, onglet *Logs*.
 
 Un problème trouvé en staging se corrige par une nouvelle PR vers `dev`, liée à la même issue. On ne promeut pas
 tant que la liste n'est pas entièrement verte.
