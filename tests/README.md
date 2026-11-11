@@ -17,10 +17,11 @@ npm run test:rules -- --list                            # les thèmes
 npm run test:rules -- volcan                            # un thème
 npm run test:rules -- volcan meute                      # plusieurs
 npm run test:rules -- geants --test-name-pattern=Kraken # les tests d'un thème dont le nom contient « Kraken »
-TEST_SEED=7 npm run test:rules -- attaques              # une autre graine (autre île, autre hasard)
+npm run test:rules -- monde geants attaques --seeds=1,42,777 # thèmes ciblés, sur trois graines
 ```
 
-Les options de `node:test` passent telles quelles, écrites avec `=`.
+Les options de `node:test` passent telles quelles, écrites avec `=`. `--seeds=1,42,777` relance les seuls thèmes demandés
+avec chacune des graines : utile pour vérifier les tests sensibles au relief sans multiplier toute la suite.
 
 ## Les thèmes (`tests/rules/`)
 
