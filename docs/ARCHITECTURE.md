@@ -50,7 +50,7 @@ client/    index.html     lobby, HUD et panneaux
 supabase/  migrations SQL (npm run db:migrate)
 tests/     tests de règles par thème (tests/rules/*.test.ts) et leurs outils (helpers.ts)
 scripts/   test de fumée multi-clients (smoke.ts), migrations
-deploy/    service systemd, nginx, script de déploiement (lancé par .github/workflows/cd.yml)
+deploy/    service systemd, nginx (prod et staging), script de déploiement (lancé par cd.yml et cd-staging.yml, voir ENVIRONNEMENTS.md)
 ```
 
 ## Flux réseau

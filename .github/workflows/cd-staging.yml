@@ -1,0 +1,109 @@
+# Déploiement du staging : quand la CI passe sur dev, ou à la main pour un commit précis (retour arrière).
+# Procédure complète (installation, validation, retour arrière) : docs/ENVIRONNEMENTS.md
+#
+# Inactif tant que la variable du dépôt STAGING_ENABLED ne vaut pas « true » (Settings › Secrets and variables › Actions › Variables).
+#
+# Environnement GitHub « staging » (Settings › Environments) : ses secrets priment sur ceux du dépôt.
+#   VPS_HOST, VPS_USER, VPS_SSH_KEY, VPS_PORT   seulement si le staging est sur une autre machine que la prod
+# Variables du dépôt ou de l'environnement « staging » :
+#   STAGING_DIR   dossier du clone de staging sur la machine (~/eanathos/Fangleaf-staging par défaut)
+#   STAGING_URL   adresse publique du staging (https://staging.fangleaf.anathos.me par défaut)
+name: CD staging
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit, tag ou branche à déployer. Un commit plus ancien de dev pour revenir en arrière.
+        required: true
+        default: dev
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false # un déploiement en cours va toujours au bout
+
+jobs:
+  deploy:
+    name: Déploiement du staging
+    # Après la CI : seulement si elle a réussi, sur un commit de dev (le push d'une fusion ou le commit de version relancé
+    # par release-version.yml), jamais pour une PR.
+    if: >-
+      vars.STAGING_ENABLED == 'true' && (
+        github.event_name == 'workflow_dispatch' || (
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event)
+        )
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL || 'https://staging.fangleaf.anathos.me' }}
+    steps:
+      - name: Commit à déployer
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ inputs.ref }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            sha=$(gh api "repos/${{ github.repository }}/commits/$REF" --jq .sha)
+            echo "mode=manual" >> "$GITHUB_OUTPUT"
+          else
+            sha=$RUN_SHA
+            echo "mode=auto" >> "$GITHUB_OUTPUT"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Déploiement de $sha"
+
+      - name: Clé SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # Automatique : le staging n'avance que vers un descendant de ce qu'il fait tourner (deux CI finies dans le
+      # désordre ne le font pas reculer). À la main : n'importe quel commit, c'est le retour arrière.
+      - name: Mise à jour du staging
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+          STAGING_DIR: ${{ vars.STAGING_DIR || '~/eanathos/Fangleaf-staging' }}
+          SHA: ${{ steps.target.outputs.sha }}
+          MODE: ${{ steps.target.outputs.mode }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" "set -e
+            cd $STAGING_DIR
+            grep -qE '^\s*VITE_FANGLEAF_ENV\s*=\s*\"?staging' .env ||{ echo '✘ $STAGING_DIR/.env ne déclare pas VITE_FANGLEAF_ENV=staging' >&2; exit 1; }
+            git fetch -q origin
+            if [ $MODE = auto ] && ! git merge-base --is-ancestor HEAD $SHA; then
+              echo 'Le staging fait déjà tourner un commit plus récent : rien à faire'
+              exit 0
+            fi
+            git checkout -q --detach $SHA
+            bash deploy/deploy.sh"
+
+      - name: Le staging répond
+        env:
+          STAGING_URL: ${{ vars.STAGING_URL || 'https://staging.fangleaf.anathos.me' }}
+        run: |
+          for i in $(seq 1 10); do
+            # page entière d'abord : un grep -q dans le tube couperait curl en pleine écriture (erreur 23)
+            page=$(curl -fsS "$STAGING_URL/" 2>/dev/null || true)
+            if grep -q '<title>Fangleaf</title>' <<<"$page"; then echo "En ligne"; exit 0; fi
+            sleep 3
+          done
+          echo "$STAGING_URL ne répond pas" >&2
+          exit 1
