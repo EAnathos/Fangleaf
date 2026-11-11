@@ -243,6 +243,8 @@ export class Hud {
   private miniBg: HTMLCanvasElement;
   private last = { party: '', den: '', cls: '', spec: '', travel: '', bestiary: '', market: '', hall: '', members: '', elder: '', school: '', profile: '' };
   private denTab: 'alphas' | 'bestiary' = 'alphas';
+  private denView: 'field' | 'rest' | 'sleep' | 'all' = 'field'; // filtre des Alphas : équipés, au repos, à éveiller, tous
+  private denOpen = new Set<number>(); // tuiles d'Alphas pas encore éveillés ouvertes en carte complète
   private beastOpen: number | null = null; // fiche ouverte au bestiaire (espèce), ou la grille
   private form: BestiaryForm = 'wild'; // forme montrée par le bestiaire
   private beasts: Portrait[] = [];
@@ -522,6 +524,23 @@ export class Hud {
       if (mk?.dataset.s) this.onAlphaMark(Number(mk.dataset.s));
       const rn = (e.target as HTMLElement).closest<HTMLButtonElement>('button.rename');
       if (rn?.dataset.s) this.editAlphaName(rn.closest('.alpha-card')!, Number(rn.dataset.s), rn.dataset.name ?? '');
+      // tuile d'un Alpha pas encore éveillé : un clic l'ouvre en carte complète (« Réduire » la referme)
+      const tile = (e.target as HTMLElement).closest<HTMLElement>('.alpha-tile');
+      if (tile && !(e.target as HTMLElement).closest('button.mark, button.buy')) {
+        this.denOpen.add(Number(tile.dataset.tile));
+        this.last.den = '';
+      }
+      const fold = (e.target as HTMLElement).closest<HTMLButtonElement>('button.collapse');
+      if (fold?.dataset.s) {
+        this.denOpen.delete(Number(fold.dataset.s));
+        this.last.den = '';
+      }
+    });
+    $('den-filter').addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-view]');
+      if (!b) return;
+      this.denView = b.dataset.view as typeof this.denView;
+      this.last.den = '';
     });
   }
 
@@ -2189,7 +2208,7 @@ export class Hud {
   }
 
   private updateDen(me: PlayerState) {
-    const key = JSON.stringify([this.hall, this.beaten, me.mount?.id, me.awakening, me.essences, me.resting, me.marked, me.names, me.seen, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
+    const key = JSON.stringify([this.denView, [...this.denOpen], this.hall, this.beaten, me.mount?.id, me.awakening, me.essences, me.resting, me.marked, me.names, me.seen, me.army.filter((a) => a.alpha).map((a) => [a.id, a.level, a.legend, a.reviveIn > 0])]);
     const typing = document.activeElement instanceof HTMLInputElement && $('alphas').contains(document.activeElement); // on nomme un Alpha : pas de reconstruction
     if (key !== this.last.den && !typing) {
       this.last.den = key;
@@ -2213,124 +2232,243 @@ export class Hud {
     // espèces croisées dont la zone est ouverte (un Alpha déjà possédé reste visible, même d'une zone fermée)
     const owned = (s: number) => me.army.some((x) => x.alpha && x.species === s) || me.resting.some((x) => x.species === s) || me.awakening.some((w) => w.species === s);
     const known = SPECIES_BY_ZONE.filter((s) => !SPECIES[s].boss && (owned(s) || (me.seen.includes(s) && this.zoneOpen(SPECIES[s].zone))));
+    $('den-filter').hidden = !known.length;
     if (!known.length) {
       $('alphas').replaceChildren(Object.assign(document.createElement('p'), { className: 'small muted', textContent: 'Aucune espèce rencontrée pour l\'instant : pars à la chasse, chaque espèce croisée pourra éveiller son Alpha ici.' }));
       return;
     }
-    $('alphas').replaceChildren(
-      ...known.map((s) => {
-        const sp = SPECIES[s];
-        // Alpha possédé : équipé (sur le terrain) ou rangé à la Tanière.
-        const field = me.army.find((x) => x.alpha && x.species === s);
-        const rest = me.resting.find((x) => x.species === s);
-        const a = field ?? (rest ? { id: 0, level: rest.level, legend: rest.legend, reviveIn: 0 } : undefined);
-        const lvl = a?.level ?? 0;
-        // stats affichées avec le bonus de collection (en comptant cet Alpha s'il n'est pas encore là)
-        const stat = (l: number) => alphaStats(s, l, a ? count : count + 1, a?.legend);
-        const maxed = !!a && lvl >= ALPHA_LVL_MAX;
-        const cost = a ? alphaUpCost(s, lvl) : alphaCreateCost(s);
-        const unit = 'essences';
-        const have = me.essences[s];
-        const el = document.createElement('div');
-        el.className = `alpha-card${a ? '' : ' asleep'}`;
-        el.innerHTML = `<canvas class="portrait"></canvas><div class="col"><span class="title"></span><div class="stat-rows"></div>
-          <div class="ess"><div class="ess-bar"><i></i><span></span></div></div></div><div class="actions"><button class="buy"></button></div>`;
-        const canvas = el.querySelector('canvas')!;
-        canvas.setAttribute('role', 'img');
-        canvas.setAttribute('aria-label', `${sp.name} alpha`);
-        this.portraits.push({ canvas, s, seen: true, alpha: true, legend: !!a?.legend });
-        const named = a ? new Map(me.names ?? []).get(s) : undefined;
-        el.querySelector('.title')!.textContent = a
-          ? `${named ? `« ${named} » · ` : ''}${a.legend ? `${sp.name} légendaire` : `${sp.name} alpha`} · niv. ${lvl}${a.reviveIn ? ' (ressuscite…)' : ''}${rest ? ' · au repos' : ''}`
-          : `${sp.name} alpha`;
-        const now = stat(lvl), nxt = stat(lvl + 1);
-        // Une ligne par statistique, avec la valeur au niveau suivant quand on peut renforcer.
-        const grow = (a1: number, b1: number) => (a && !maxed ? `${a1} → <span class="up">${b1}</span>` : String(a1));
-        const rows: [keyof typeof ICONS, string, string][] = [
-          ['hp', 'PV', grow(now.hp, nxt.hp)],
-          ['dmg', 'Dégâts', grow(now.dmg, nxt.dmg)],
-          ['revive', 'Résurrection', `${alphaReviveS(s)} s`],
-        ];
-        if (MOUNTS[sp.key]) rows.push(['mount', 'Monture', `vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}${SWIM_MOUNTS.has(sp.key) ? ' · sur l\'eau' : FLY_MOUNTS.has(sp.key) ? ' · en vol' : ''}`]);
-        const perk = alphaPerk(s, lvl), perkNext = alphaPerk(s, lvl + 1);
-        if (perk && perkNext) {
-          const grow1 = (v: number, w: number, f: (n: number) => string) => (a && !maxed ? `${f(v)} → <span class="up">${f(w)}</span>` : f(v));
-          rows.push(perk.kind === 'guard'
-            ? ['guard', 'Carapace', grow1(perk.value, perkNext.value, (n) => `−${pctLabel(n)} dégâts reçus`)]
-            : perk.kind === 'rally'
-              ? ['rally', 'Cri', grow1(perk.value, perkNext.value, (n) => `+${pctLabel(n)} dégâts`)]
-              : ['heal', 'Soigne', grow1(perk.value, perkNext.value, (n) => `${pctLabel(n)} PV / ${ALPHA_HEAL_S} s`)]);
-        }
-        el.querySelector('.stat-rows')!.innerHTML = rows
-          .map(([icon, label, value]) => `<div class="stat-row ${icon}">${ICONS[icon]}<span>${label}</span><b>${value}</b></div>`)
-          .join('');
-        (el.querySelector('.ess-bar i') as HTMLElement).style.width = `${maxed ? 100 : Math.min(100, (100 * have) / cost)}%`;
-        el.querySelector('.ess span')!.textContent = maxed ? `${have} ${unit}` : `${have} / ${cost} ${unit}`; // dans la jauge
-        if (a?.legend) el.classList.add('legend');
-        const waking = me.awakening.find((w) => w.species === s);
-        if (waking) {
-          // Éveil en cours : compte à rebours à la place de la jauge d'essences.
-          el.className = 'alpha-card waking';
-          el.querySelector('.title')!.textContent = `${sp.name} alpha · éveil en cours`;
-          (el.querySelector('.ess-bar i') as HTMLElement).style.width = `${(100 * (waking.total - waking.left)) / waking.total}%`;
-          const mm = Math.floor(waking.left / 60), ss = String(waking.left % 60).padStart(2, '0');
-          el.querySelector('.ess span')!.textContent = `S'éveille dans ${mm}:${ss}`;
-        }
-        const btn = el.querySelector<HTMLButtonElement>('.buy')!;
-        if (a) btn.dataset.up = String(s);
-        else btn.dataset.create = String(s);
-        if (rest) el.classList.add('resting');
-        btn.disabled = maxed || have < cost || !!waking;
-        btn.textContent = maxed ? 'Niveau maximum' : a ? 'Renforcer' : waking ? 'Éveil…' : `Éveiller · ${duration(alphaAwakenS(s))}`;
-        // Double éveil (Alpha légendaire) : les âmes du géant de l'espèce, dans une jauge sous celle des essences.
-        const boss = bossOf(s);
-        if (a && !a.legend && boss >= 0) {
-          const souls = me.essences[boss] ?? 0;
-          const why = `Double éveil : PV et dégâts ×${String(LEGEND_MULT.hp).replace('.', ',')}, aura dorée. Bats ${SPECIES[boss].name} dans sa grotte pour obtenir son âme.`;
-          const gauge = document.createElement('div');
-          gauge.className = 'ess double';
-          gauge.title = why;
-          gauge.innerHTML = '<div class="ess-bar"><i></i><span></span></div>';
-          (gauge.querySelector('i') as HTMLElement).style.width = `${Math.min(100, (100 * souls) / LEGEND_SOULS)}%`;
-          gauge.querySelector('span')!.textContent = `Double éveil · ${Math.min(souls, LEGEND_SOULS)} / ${LEGEND_SOULS} âmes`; // de quel géant : dans l'infobulle
-          el.querySelector('.col')!.append(gauge);
-          const leg = document.createElement('button');
-          leg.className = 'legend-btn';
-          leg.dataset.legend = String(s);
-          leg.disabled = souls < LEGEND_SOULS;
-          leg.textContent = 'Double éveil';
-          leg.title = why;
-          el.querySelector('.actions')!.append(leg);
-        }
-        // Marquer : suit les essences de cette espèce dans le HUD (une seule à la fois).
-        const mk = document.createElement('button');
-        mk.className = `mark${me.marked === s ? ' on' : ''}`;
-        mk.dataset.s = String(s);
-        mk.setAttribute('aria-pressed', String(me.marked === s));
-        mk.title = 'Suivre les essences de cet Alpha dans le HUD';
-        mk.textContent = me.marked === s ? '★ Marqué' : '☆ Marquer';
-        el.querySelector('.actions')!.append(mk);
-        // Équiper (5 au maximum sur le terrain, 6 avec le tome du volcan) ou ranger à la Tanière.
-        if (a) {
-          const eq = document.createElement('button');
-          eq.className = `equip${rest && equipped >= equipMax ? ' full' : ''}`; // plus de place : grisé
-          eq.dataset.s = String(s);
-          eq.dataset.equip = rest ? '1' : '0';
-          eq.disabled = !!rest && equipped >= equipMax;
-          eq.textContent = rest ? (equipped >= equipMax ? `${equipMax}/${equipMax} équipés` : 'Équiper') : 'Déséquiper';
-          el.querySelector('.actions')!.append(eq);
-          // Nommer son Alpha : le nom s'affiche sous ses pattes, pour tout le village.
-          const rn = document.createElement('button');
-          rn.className = 'rename';
-          rn.dataset.s = String(s);
-          rn.dataset.name = named ?? '';
-          rn.title = 'Donner un nom à cet Alpha (vide : lui retirer son nom)';
-          rn.textContent = '✎ Renommer';
-          el.querySelector('.actions')!.append(rn);
-        }
-        return el;
-      }),
-    );
+    // Où en est chaque espèce : équipée, au repos, ou pas encore éveillée (à éveiller, ou en cours d'éveil).
+    const where = (s: number) => (me.army.some((x) => x.alpha && x.species === s) ? 'field' : me.resting.some((x) => x.species === s) ? 'rest' : 'sleep');
+    const inGroup = (g: string) => known.filter((s) => where(s) === g);
+    /** Une action est possible : éveiller, renforcer, ou double éveil. */
+    const canAct = (s: number) => {
+      const own = me.army.find((x) => x.alpha && x.species === s) ?? me.resting.find((x) => x.species === s);
+      if (!own) return !me.awakening.some((w) => w.species === s) && (me.essences[s] ?? 0) >= alphaCreateCost(s);
+      const boss = bossOf(s);
+      return (own.level < ALPHA_LVL_MAX && (me.essences[s] ?? 0) >= alphaUpCost(s, own.level)) || (!own.legend && boss >= 0 && (me.essences[boss] ?? 0) >= LEGEND_SOULS);
+    };
+    // Alphas à éveiller : les prêts d'abord, puis l'éveil en cours, puis du plus avancé au plus lointain.
+    const sleepers = inGroup('sleep').sort((x, y) => {
+      const rank = (s: number) => (canAct(s) ? 0 : me.awakening.some((w) => w.species === s) ? 1 : 2);
+      const prog = (s: number) => (me.essences[s] ?? 0) / alphaCreateCost(s);
+      return rank(x) - rank(y) || prog(y) - prog(x) || SPECIES[x].zone - SPECIES[y].zone;
+    });
+    $('den-filter').replaceChildren(...([
+      ['field', 'Équipés', `${equipped}/${equipMax}`],
+      ['rest', 'Au repos', String(me.resting.length)],
+      ['sleep', 'À éveiller', String(sleepers.length)],
+      ['all', 'Tous', String(known.length)],
+    ] as const).map(([view, label, n]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'seg-btn';
+      b.dataset.view = view;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(view === this.denView));
+      b.innerHTML = '<span></span><span class="n"></span>';
+      b.children[0].textContent = label;
+      b.children[1].textContent = n;
+      const ready = view === 'all' ? 0 : inGroup(view).filter(canAct).length; // pastille : combien attendent une action
+      if (ready) {
+        const dot = document.createElement('i');
+        dot.className = 'dot';
+        dot.textContent = String(ready);
+        dot.title = view === 'sleep' ? `${ready} Alpha${ready > 1 ? 's' : ''} prêt${ready > 1 ? 's' : ''} à éveiller` : `${ready} Alpha${ready > 1 ? 's' : ''} à renforcer ou à doublement éveiller`;
+        b.append(dot);
+      }
+      return b;
+    }));
+
+    /** Tuile compacte d'un Alpha pas encore éveillé : portrait, jauge, et « Éveiller » quand c'est possible. */
+    const tile = (s: number) => {
+      const sp = SPECIES[s], waking = me.awakening.find((w) => w.species === s), cost = alphaCreateCost(s), have = me.essences[s] ?? 0;
+      const ready = !waking && have >= cost;
+      const el = document.createElement('div');
+      el.className = `alpha-tile${ready ? ' ready' : ''}${waking ? ' waking' : ''}`;
+      el.dataset.tile = String(s);
+      el.innerHTML = '<canvas class="portrait" role="img"></canvas><div class="col"><div class="tile-head"><button type="button" class="tile-name" title="Voir ses stats"></button></div><span class="tile-sub"></span><div class="ess-bar"><i></i><span></span></div></div>';
+      const canvas = el.querySelector('canvas')!;
+      canvas.setAttribute('aria-label', `${sp.name} alpha`);
+      this.portraits.push({ canvas, s, seen: true, alpha: true });
+      el.querySelector('.tile-name')!.textContent = sp.name;
+      const mk = document.createElement('button');
+      mk.type = 'button';
+      mk.className = `ic mark${me.marked === s ? ' on' : ''}`;
+      mk.dataset.s = String(s);
+      mk.setAttribute('aria-pressed', String(me.marked === s));
+      mk.setAttribute('aria-label', 'Marquer');
+      mk.title = 'Suivre les essences de cet Alpha dans le HUD';
+      mk.textContent = me.marked === s ? '★' : '☆';
+      el.querySelector('.tile-head')!.append(mk);
+      const perk = alphaPerk(s, 1);
+      el.querySelector('.tile-sub')!.textContent = [ZONE_NAMES[sp.zone - 1], MOUNTS[sp.key] ? 'Monture' : '', perk ? (perk.kind === 'guard' ? 'Carapace' : perk.kind === 'rally' ? 'Cri' : 'Soigne') : ''].filter(Boolean).join(' · ');
+      (el.querySelector('.ess-bar i') as HTMLElement).style.width = `${waking ? (100 * (waking.total - waking.left)) / waking.total : Math.min(100, (100 * have) / cost)}%`;
+      el.querySelector('.ess-bar span')!.textContent = waking ? `S'éveille dans ${Math.floor(waking.left / 60)}:${String(waking.left % 60).padStart(2, '0')}` : `${have} / ${cost}`;
+      if (ready) {
+        const buy = document.createElement('button');
+        buy.type = 'button';
+        buy.className = 'buy';
+        buy.dataset.create = String(s);
+        buy.textContent = `Éveiller · ${duration(alphaAwakenS(s))}`;
+        el.querySelector('.col')!.append(buy);
+      }
+      return el;
+    };
+
+    // ☆ et ✎ sont de petites icônes à côté du nom (moins de boutons par carte) ; fromTile : carte ouverte depuis une tuile
+    const card = (s: number, fromTile = false) => {
+      const sp = SPECIES[s];
+      // Alpha possédé : équipé (sur le terrain) ou rangé à la Tanière.
+      const field = me.army.find((x) => x.alpha && x.species === s);
+      const rest = me.resting.find((x) => x.species === s);
+      const a = field ?? (rest ? { id: 0, level: rest.level, legend: rest.legend, reviveIn: 0 } : undefined);
+      const lvl = a?.level ?? 0;
+      // stats affichées avec le bonus de collection (en comptant cet Alpha s'il n'est pas encore là)
+      const stat = (l: number) => alphaStats(s, l, a ? count : count + 1, a?.legend);
+      const maxed = !!a && lvl >= ALPHA_LVL_MAX;
+      const cost = a ? alphaUpCost(s, lvl) : alphaCreateCost(s);
+      const unit = 'essences';
+      const have = me.essences[s];
+      const el = document.createElement('div');
+      el.className = `alpha-card${a ? '' : ' asleep'}`;
+      el.innerHTML = `<canvas class="portrait"></canvas><div class="col"><div class="title-row"><span class="title"></span></div><div class="stat-rows"></div>
+        <div class="ess"><div class="ess-bar"><i></i><span></span></div></div></div><div class="actions"><button class="buy"></button></div>`;
+      if (fromTile) el.classList.add('span-all');
+      const canvas = el.querySelector('canvas')!;
+      canvas.setAttribute('role', 'img');
+      canvas.setAttribute('aria-label', `${sp.name} alpha`);
+      this.portraits.push({ canvas, s, seen: true, alpha: true, legend: !!a?.legend });
+      const named = a ? new Map(me.names ?? []).get(s) : undefined;
+      el.querySelector('.title')!.textContent = a
+        ? `${named ? `« ${named} » · ` : ''}${a.legend ? `${sp.name} légendaire` : `${sp.name} alpha`} · niv. ${lvl}${a.reviveIn ? ' (ressuscite…)' : ''}`
+        : `${sp.name} alpha`;
+      const now = stat(lvl), nxt = stat(lvl + 1);
+      // Une ligne par statistique, avec la valeur au niveau suivant quand on peut renforcer.
+      const grow = (a1: number, b1: number) => (a && !maxed ? `${a1} → <span class="up">${b1}</span>` : String(a1));
+      const rows: [keyof typeof ICONS, string, string][] = [
+        ['hp', 'PV', grow(now.hp, nxt.hp)],
+        ['dmg', 'Dégâts', grow(now.dmg, nxt.dmg)],
+        ['revive', 'Résurrection', `${alphaReviveS(s)} s`],
+      ];
+      if (MOUNTS[sp.key]) rows.push(['mount', 'Monture', `vitesse ×${String(MOUNTS[sp.key]).replace('.', ',')}${SWIM_MOUNTS.has(sp.key) ? ' · sur l\'eau' : FLY_MOUNTS.has(sp.key) ? ' · en vol' : ''}`]);
+      const perk = alphaPerk(s, lvl), perkNext = alphaPerk(s, lvl + 1);
+      if (perk && perkNext) {
+        const grow1 = (v: number, w: number, f: (n: number) => string) => (a && !maxed ? `${f(v)} → <span class="up">${f(w)}</span>` : f(v));
+        rows.push(perk.kind === 'guard'
+          ? ['guard', 'Carapace', grow1(perk.value, perkNext.value, (n) => `−${pctLabel(n)} dégâts reçus`)]
+          : perk.kind === 'rally'
+            ? ['rally', 'Cri', grow1(perk.value, perkNext.value, (n) => `+${pctLabel(n)} dégâts`)]
+            : ['heal', 'Soigne', grow1(perk.value, perkNext.value, (n) => `${pctLabel(n)} PV / ${ALPHA_HEAL_S} s`)]);
+      }
+      el.querySelector('.stat-rows')!.innerHTML = rows
+        .map(([icon, label, value]) => `<div class="stat-row ${icon}">${ICONS[icon]}<span>${label}</span><b>${value}</b></div>`)
+        .join('');
+      (el.querySelector('.ess-bar i') as HTMLElement).style.width = `${maxed ? 100 : Math.min(100, (100 * have) / cost)}%`;
+      el.querySelector('.ess span')!.textContent = maxed ? `${have} ${unit}` : `${have} / ${cost} ${unit}`; // dans la jauge
+      if (a?.legend) el.classList.add('legend');
+      const waking = me.awakening.find((w) => w.species === s);
+      if (waking) {
+        // Éveil en cours : compte à rebours à la place de la jauge d'essences.
+        el.className = 'alpha-card waking';
+        el.querySelector('.title')!.textContent = `${sp.name} alpha · éveil en cours`;
+        (el.querySelector('.ess-bar i') as HTMLElement).style.width = `${(100 * (waking.total - waking.left)) / waking.total}%`;
+        const mm = Math.floor(waking.left / 60), ss = String(waking.left % 60).padStart(2, '0');
+        el.querySelector('.ess span')!.textContent = `S'éveille dans ${mm}:${ss}`;
+      }
+      const btn = el.querySelector<HTMLButtonElement>('.buy')!;
+      if (a) btn.dataset.up = String(s);
+      else btn.dataset.create = String(s);
+      if (rest) el.classList.add('resting');
+      btn.disabled = maxed || have < cost || !!waking;
+      btn.textContent = maxed ? 'Niveau maximum' : a ? 'Renforcer' : waking ? 'Éveil…' : `Éveiller · ${duration(alphaAwakenS(s))}`;
+      // Double éveil (Alpha légendaire) : les âmes du géant de l'espèce, dans une jauge sous celle des essences.
+      const boss = bossOf(s);
+      if (a && !a.legend && boss >= 0) {
+        const souls = me.essences[boss] ?? 0;
+        const why = `Double éveil : PV et dégâts ×${String(LEGEND_MULT.hp).replace('.', ',')}, aura dorée. Bats ${SPECIES[boss].name} dans sa grotte pour obtenir son âme.`;
+        const gauge = document.createElement('div');
+        gauge.className = 'ess double';
+        gauge.title = why;
+        gauge.innerHTML = '<div class="ess-bar"><i></i><span></span></div>';
+        (gauge.querySelector('i') as HTMLElement).style.width = `${Math.min(100, (100 * souls) / LEGEND_SOULS)}%`;
+        gauge.querySelector('span')!.textContent = `Double éveil · ${Math.min(souls, LEGEND_SOULS)} / ${LEGEND_SOULS} âmes`; // de quel géant : dans l'infobulle
+        el.querySelector('.col')!.append(gauge);
+        const leg = document.createElement('button');
+        leg.className = 'legend-btn';
+        leg.dataset.legend = String(s);
+        leg.disabled = souls < LEGEND_SOULS;
+        leg.textContent = 'Double éveil';
+        leg.title = why;
+        el.querySelector('.actions')!.append(leg);
+      }
+      // Marquer : suit les essences de cette espèce dans le HUD (une seule à la fois). ☆ en icône à côté du nom.
+      const mk = document.createElement('button');
+      mk.type = 'button';
+      mk.className = `ic mark${me.marked === s ? ' on' : ''}`;
+      mk.dataset.s = String(s);
+      mk.setAttribute('aria-pressed', String(me.marked === s));
+      mk.setAttribute('aria-label', 'Marquer');
+      mk.title = 'Suivre les essences de cet Alpha dans le HUD';
+      mk.textContent = me.marked === s ? '★' : '☆';
+      el.querySelector('.title-row')!.append(mk);
+      // Équiper (5 au maximum sur le terrain, 6 avec le tome du volcan) ou ranger à la Tanière.
+      if (a) {
+        const eq = document.createElement('button');
+        eq.className = `equip${rest && equipped >= equipMax ? ' full' : ''}`; // plus de place : grisé
+        eq.dataset.s = String(s);
+        eq.dataset.equip = rest ? '1' : '0';
+        eq.disabled = !!rest && equipped >= equipMax;
+        eq.textContent = rest ? (equipped >= equipMax ? `${equipMax}/${equipMax} équipés` : 'Équiper') : 'Déséquiper';
+        el.querySelector('.actions')!.append(eq);
+        // Nommer son Alpha : le nom s'affiche sous ses pattes, pour tout le village.
+        const rn = document.createElement('button');
+        rn.type = 'button';
+        rn.className = 'ic rename';
+        rn.dataset.s = String(s);
+        rn.dataset.name = named ?? '';
+        rn.title = 'Donner un nom à cet Alpha (vide : lui retirer son nom)';
+        rn.setAttribute('aria-label', 'Renommer');
+        rn.textContent = '✎';
+        el.querySelector('.title-row')!.append(rn);
+      }
+      if (fromTile) {
+        const fold = document.createElement('button');
+        fold.type = 'button';
+        fold.className = 'collapse';
+        fold.dataset.s = String(s);
+        fold.textContent = 'Réduire';
+        el.querySelector('.actions')!.append(fold);
+      }
+      return el;
+    };
+
+    // Les vues du filtre : équipés et au repos en cartes, les pas encore éveillés en tuiles (une carte quand on l'ouvre).
+    const cards = (list: number[]) => list.map((s) => card(s));
+    const tiles = (list: number[]) => {
+      const grid = document.createElement('div');
+      grid.className = 'alpha-tiles';
+      grid.append(...list.map((s) => (this.denOpen.has(s) ? card(s, true) : tile(s))));
+      return grid;
+    };
+    const heading = (label: string, n: string) => {
+      const h = document.createElement('h3');
+      h.className = 'den-section';
+      h.append(label, Object.assign(document.createElement('span'), { textContent: n }));
+      return h;
+    };
+    const none = (text: string) => Object.assign(document.createElement('p'), { className: 'empty', textContent: text });
+    const field = inGroup('field'), rested = inGroup('rest');
+    const view = this.denView;
+    $('alphas').replaceChildren(...(
+      view === 'field' ? (field.length ? cards(field) : [none('Aucun Alpha équipé : équipes-en depuis « Au repos ».')])
+        : view === 'rest' ? (rested.length ? cards(rested) : [none('Aucun Alpha au repos.')])
+          : view === 'sleep' ? [sleepers.length ? tiles(sleepers) : none('Tous les Alphas rencontrés sont éveillés.')]
+            : [
+              heading('Équipés', `${equipped}/${equipMax}`), ...cards(field),
+              ...(rested.length ? [heading('Au repos', String(rested.length)), ...cards(rested)] : []),
+              ...(sleepers.length ? [heading('À éveiller', String(sleepers.length)), tiles(sleepers)] : []),
+            ]
+    ));
   }
 
   /** Champ de saisie du nom d'un Alpha, à la place du titre de sa carte : Entrée valide, Échap annule. */
