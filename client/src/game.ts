@@ -1565,6 +1565,7 @@ export class Game {
       }
       case 'busy': // un combat de géant a déjà commencé dans cette grotte : on ne le rejoint pas en cours de route
         this.hud.toast(`Le combat contre ${bossName(this.map.caves[e.cave]?.boss ?? 0)} est en cours : impossible d'entrer ou de sortir.`);
+        break;
       case 'camp': {
         const c = this.map.sites[e.site];
         this.fx.ring(c.x, c.y, '#F0B64A', 20, CAMP_R, 1.2);
