@@ -20,7 +20,7 @@ const asked = args.filter((a) => !a.startsWith('-'));
 const seedOption = args.find((a) => a.startsWith('--seeds='));
 const flags = args.filter((a) => a.startsWith('-') && a !== seedOption);
 const seeds = seedOption ? seedOption.slice('--seeds='.length).split(',') : [process.env.TEST_SEED];
-if (seeds.some((seed) => seed !== undefined && (!/^\\d+$/.test(seed) || !Number.isSafeInteger(Number(seed))))) {
+if (seeds.some((seed) => seed !== undefined && (!/^\d+$/.test(seed) || Number(seed) < 1 || !Number.isSafeInteger(Number(seed))))) {
   console.error('--seeds attend une liste de graines entières positives, séparées par des virgules');
   process.exit(2);
 }
@@ -32,7 +32,7 @@ if (unknown.length) {
 const files = (asked.length ? asked.map((t) => t.replace(/\.test\.ts$/, '')) : themes).map((t) => `${DIR}/${t}.test.ts`);
 let status = 0;
 for (const seed of seeds) {
-  if (seed !== undefined) console.log(`\\nTests avec TEST_SEED=${seed}`);
+  if (seed !== undefined) console.log(`\nTests avec TEST_SEED=${seed}`);
   const env = seed === undefined ? process.env : { ...process.env, TEST_SEED: seed };
   const run = spawnSync(process.execPath, ['--import', 'tsx', '--test', ...flags, ...files], { stdio: 'inherit', env });
   if (run.status !== 0) status = run.status ?? 1;
