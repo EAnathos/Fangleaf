@@ -3,7 +3,7 @@
 import {
   alphaEquipMax, ALPHA_NAME_MAX, alphaName, ISLE_NAMES, BOSS_HP_BONUS, LEGEND_SKIPS, AFFINITY_STRONG, AFFINITY_WEAK, beats, ELEMENT_NAMES, ELEMENTS, elementOf, CAVE_CD, BOAT_STAGES, dockStoneOn, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, SWIM_MOUNTS, FLY_MOUNTS, ALPHA_HEAL_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_S, ALPHA_LVL_MAX, alphaPerk, BOSS_MOVES, MOVE_NAMES, BOSS_TALK_R, LURE_R, MAX_PLAYERS, CLASS_CHANGE_COST, CLASS_IDS, CLASSES, classOf, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, weaponName, MOUNTS, alphaCreateCost, alphaStats, bossOf, collectionMult, LEGEND_MULT, LEGEND_SOULS, ARMOR_MAX, ARMOR_NAMES, BOOTS_MAX, BOOTS_NAMES, bootsSpeed, type Gear, gearCost, gearMax, SADDLE_MAX, SADDLE_NAMES, saddleSpeed, costText, TORCH_MAX, TORCH_NAMES, torchRadius, armyCap, DISCIPLINES, LESSON_KINDS, bookIndex, tomeForLesson, LESSONS_PER_TOME, SCHOOL_CAMP, PLAN_REACH, ZONES, tomeOfZone, BUILDING_REACH,
   BUILDINGS, BUSH_PICK_R, type BuildingId, buildingCost, type Cost, gateHall, gateOpen, DESERT_ZONE, PLAYER_COLORS, HATS, HAT_PRICES, HALL, HALL_MAX, zoneBosses, caveUnlockCost, monsterBuyPrice, monsterSellPrice, TAMED_HP_MULT, TAMED_MULT, CAMP_COST, campName, REVIVE_R, SPECIES, SPECIES_BY_ZONE, ZONE_NAMES, WEAPON_MAX, WORLD_HALF, alphaAwakenS, alphaLevelMult, alphaReviveS, alphaUpCost, armorCost, armorMaxHp,
-  armorReduction, weaponCost, weaponDmg, hatBonus, HAT_WEAPON_BONUS, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY,
+  armorReduction, weaponCost, weaponDmg, hatBonus, HAT_WEAPON_BONUS, volcanoOpen, VOLCANO_ZONE, HALL_RX, VOYAGE_ZONE, DECK_RX, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, VOLCANO_R, VOLCANO_RY, abilityOf,
 } from '../../shared/config.ts';
 import { type BoardRow, type Holdings, type PlayerState, type Stats, type StatusTuple, type UnitTuple, UNIT_FLAG_HIDDEN } from '../../shared/protocol.ts';
 import { BRIDGE_W, HALL_ID, type WorldMap } from '../../shared/worldmap.ts';
@@ -67,6 +67,16 @@ export interface VillageView {
   elderLeaving?: boolean; // Aubin vient de partir pour le bateau : il est encore au village (on finit de lui parler)
   elderAway?: boolean; // Aubin vit au bateau (sa mémoire retrouvée)
 }
+/** Icône du bouton de capacité, propre à chaque spécialisation. */
+const ABILITY_ICON: Record<SpecId, string> = {
+  berserker: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2 L14 9 L21 7 L16 12 L21 17 L14 15 L12 22 L10 15 L3 17 L8 12 L3 7 L10 9 Z" fill="#FF7A6A"/></svg>',
+  guardian: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2 L20 5 V11 C20 16 16 20 12 22 C8 20 4 16 4 11 V5 Z" fill="#9FD0FF"/></svg>',
+  sniper: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><circle cx="12" cy="12" r="7.5" fill="none" stroke="#C9A8FF" stroke-width="2.2"/><path d="M12 1.5 V6 M12 18 V22.5 M1.5 12 H6 M18 12 H22.5" stroke="#C9A8FF" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  ranger: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><g stroke="#8FD86B" stroke-width="2.1" stroke-linecap="round" fill="none"><path d="M6 2.5 V12 M6 12 L4 9.3 M6 12 L8 9.3"/><path d="M12 5 V14.5 M12 14.5 L10 11.8 M12 14.5 L14 11.8"/><path d="M18 2.5 V12 M18 12 L16 9.3 M18 12 L20 9.3"/></g></svg>',
+  pyromancer: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M13 2 C14 7 18 8.5 17 14 C16.3 18 13.8 21 12 21 C10 21 7 18.8 7 14.3 C7 11 9 11 10 8.3 C10.6 10 11.2 10.6 12 11 C12.6 8 12 5 13 2 Z" fill="#FF9B3D"/></svg>',
+  druid: '<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><g fill="#8FE6AC"><ellipse cx="12" cy="5.5" rx="2.6" ry="4.5"/><ellipse cx="12" cy="18.5" rx="2.6" ry="4.5"/><ellipse cx="5.5" cy="12" rx="4.5" ry="2.6"/><ellipse cx="18.5" cy="12" rx="4.5" ry="2.6"/></g><circle cx="12" cy="12" r="2.6" fill="#FFD166"/></svg>',
+};
+
 const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 const ROMAN = ['I', 'II', 'III'];
 const num = (n: number) => Math.round(n).toLocaleString('fr-FR');
@@ -293,6 +303,7 @@ export class Hud {
   onSchool = () => {}; // donner à Aubin les ressources de l'école
   onSword = () => {};
   onRide = () => {}; // bouton selle (mobile) : monter ou descendre
+  onAbility = () => {}; // bouton Ruée (ou Espace) : capacité de classe
   onDeposit = () => {};
   beaten: number[] = []; // géants vaincus par le village
   onHall = (_name?: string) => {};
@@ -328,6 +339,9 @@ export class Hud {
   }
   lore: [number, number, number] = [0, 0, 0]; // souvenirs retrouvés, étapes du bateau, secondes avant la fin de l'étape en cours
   night = false; // il fait nuit (le gibier qui dort ne viendra pas manger)
+  bossFight = false; // un géant réveillé est là (sa barre en haut de l'écran) : nos Alphas tombés attendent la fin du combat
+  private reviveKey = ''; // Alphas tombés affichés (et sous quelle forme) : on ne refait les lignes ou vignettes que s'ils changent
+  private revivePortraits: Portrait[] = [];
   scrollCaves: number[] = []; // grottes dont le parchemin m'attend // portrait du géant à qui l'on parle
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
   private spotAt = 0; // Pierre ou emplacement devant lequel on se tient (panneaux voyage et camp)
@@ -423,6 +437,7 @@ export class Hud {
     this.initSettings(founder);
     onTap($('hold-btn'), () => this.onHold());
     onTap($('mount-btn'), () => this.onRide());
+    onTap($('ability-btn'), () => this.onAbility());
     $('talk-later').onclick = () => this.setPanel(null);
     // un nouveau-né : on se parle à tour de rôle, une réplique après l'autre
     $('victory-ok').onclick = () => this.setPanel(null);
@@ -874,6 +889,7 @@ export class Hud {
     const home = pos === 'top-left' ? document.querySelector('.hud-tl') : pos === 'top-right' ? document.querySelector('.hud-tr') : $('hud');
     if (bar.parentElement !== home) home!.append(bar);
     this.status.applyOptions();
+    $('revive-bar').dataset.size = settings.display.statusHud.size; // les vignettes des Alphas tombés : à la taille des effets
   }
 
   update(me: PlayerState, players: PlayerState[], units: UnitTuple[], myPos: { x: number; y: number }, ping: number) {
@@ -915,6 +931,22 @@ export class Hud {
     // qui dorment dans leur tanière (la nuit, ils ne sortiront pas)
     const prey = units.some((u) => !u[6] && SPECIES[u[1]].passive && !(this.night && SPECIES[u[1]].shy && u[2] & UNIT_FLAG_HIDDEN) && Math.hypot(u[3] - myPos.x, u[4] - myPos.y) < LURE_R);
     setHidden($('hold-btn'), me.holding ? false : !me.fruits || !prey);
+    // Capacité de spécialisation : visible une fois spécialisé, avec son icône, son nom et sa recharge.
+    const ab = $('ability-btn');
+    setHidden(ab, me.dead || me.ability < 0);
+    if (!me.dead && me.ability >= 0 && me.spec) {
+      if (ab.dataset.spec !== me.spec) { // icône et nom : on ne les refait qu'au changement de spé (perf)
+        ab.dataset.spec = me.spec;
+        const name = abilityOf(me.spec)?.name ?? 'Capacité';
+        const ico = ab.querySelector<HTMLElement>('.ability-ico'), nm = ab.querySelector<HTMLElement>('.ability-name');
+        if (ico) ico.innerHTML = ABILITY_ICON[me.spec] ?? '';
+        if (nm) nm.textContent = name;
+        ab.setAttribute('aria-label', name);
+      }
+      ab.classList.toggle('cooling', me.ability > 0);
+      const cd = ab.querySelector<HTMLElement>('.cd-label');
+      if (cd) cd.textContent = me.ability > 0 ? String(Math.ceil(me.ability)) : '';
+    }
 
     // Groupe.
     const others = players.filter((p) => p.id !== me.id);
@@ -999,6 +1031,7 @@ export class Hud {
     // Monture.
     setHidden($('mount-row'), !me.mount);
     this.updateMark(me);
+    this.updateRevive(me);
     if (me.mount) {
       setText($('mount-name'), 'Monture');
       setStyle($('mount-hp'), 'width', `${me.mount.hp}%`);
@@ -1417,8 +1450,8 @@ export class Hud {
         if (tab === 'village') this.onBoard(); // les membres déconnectés : le serveur répond avec le tableau du village
       };
     }
-    // Affichage : qualité, chiffres des dégâts, secousses, latence (appliqués tout de suite).
-    const seg = (name: 'quality' | 'damage' | 'ui' | 'text') => {
+    // Affichage : qualité, chiffres des dégâts, secousses, latence, résurrection des Alphas (appliqués tout de suite).
+    const seg = (name: 'quality' | 'damage' | 'ui' | 'text' | 'alphaRevive') => {
       const group = document.querySelector<HTMLElement>(`[data-setting="${name}"]`)!;
       const paint = () => group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === settings.display[name])));
       group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => {
@@ -1434,6 +1467,8 @@ export class Hud {
     seg('damage');
     seg('ui');
     seg('text');
+    seg('alphaRevive');
+    $('set-revive').hidden = touchOnly; // au doigt, le temps de résurrection ne s'affiche pas en jeu
     applyUi();
     // Effets en cours : réglages appliqués tout de suite (la vignette change de coin, de taille, de filtre…).
     const fxSeg = (name: 'position' | 'size' | 'filter' | 'vignette') => {
@@ -2498,6 +2533,67 @@ export class Hud {
     if ($('mark-row').title !== title) $('mark-row').title = title;
     setText($('mark-text'), text);
     setStyle($('mark-fill'), 'width', `${Math.round(pct * 10) / 10}%`); // arrondi : comparable à ce que le navigateur garde
+  }
+
+  /**
+   * Alphas équipés tombés, sur ordinateur : dans combien de temps ils ressuscitent (au choix, Paramètres › Affichage).
+   * Texte : une ligne par Alpha sous le sac. Vignettes : son portrait grisé près des effets en cours, avec un cadran qui
+   * s'éclaircit à mesure qu'il revient et les secondes restantes. Pendant un combat de géant, le serveur le garde à 1 s
+   * jusqu'à la fin : il ressuscitera après le combat.
+   */
+  private updateRevive(me: PlayerState) {
+    const pills = settings.display.alphaRevive === 'pills';
+    const down = touchOnly || me.dead ? [] : me.army.filter((a) => a.alpha && a.reviveIn > 0);
+    const row = $('revive-row'), bar = $('revive-bar');
+    setHidden(row, pills || !down.length);
+    setHidden(bar, !pills || !down.length);
+    if (!down.length) {
+      this.reviveKey = '';
+      return;
+    }
+    const names = new Map(me.names ?? []);
+    const name = (s: number) => names.get(s) ?? SPECIES[s].name; // son nom s'il en a un, sinon l'espèce
+    const box = pills ? bar : row;
+    const key = JSON.stringify([pills, bar.dataset.size, settings.display.ui, down.map((a) => [a.id, a.species, a.legend, names.get(a.species)])]);
+    if (key !== this.reviveKey) {
+      this.reviveKey = key;
+      this.revivePortraits = [];
+      box.replaceChildren(...down.map((a) => {
+        const el = document.createElement('div');
+        if (pills) {
+          el.className = 'revive-tile';
+          el.setAttribute('role', 'img');
+          el.innerHTML = '<canvas></canvas><span class="fx-sweep"></span><span class="fx-time"></span>';
+          this.revivePortraits.push({ canvas: el.querySelector('canvas')!, s: a.species, seen: true, alpha: true, legend: a.legend });
+        } else {
+          el.className = 'revive-line';
+          el.innerHTML = `${ICONS.revive}<span><span></span><b></b></span>`;
+        }
+        return el;
+      }));
+      paintPortraits(this.revivePortraits, true); // immobiles : dessinés une fois
+    }
+    down.forEach((a, i) => {
+      const el = box.children[i] as HTMLElement;
+      const held = a.reviveIn <= 1 && this.bossFight;
+      const when = held ? 'après le combat' : `dans ${a.reviveIn} s`;
+      if (pills) {
+        const p = Math.min(1, a.reviveIn / alphaReviveS(a.species)).toFixed(3); // part sombre du cadran : ce qu'il reste à attendre
+        if (el.dataset.p !== p) {
+          el.dataset.p = p;
+          el.style.setProperty('--p', p);
+        }
+        setText(el.querySelector<HTMLElement>('.fx-time')!, held ? '…' : String(a.reviveIn));
+        const label = `${name(a.species)} ressuscite ${when}`;
+        if (el.title !== label) {
+          el.title = label;
+          el.setAttribute('aria-label', label);
+        }
+      } else {
+        setText(el.querySelector<HTMLElement>('span > span')!, `${name(a.species)} ressuscite `);
+        setText(el.querySelector('b')!, when);
+      }
+    });
   }
 
   /** Fond de la minicarte (zones + lacs), calculé une seule fois à partir de la carte. */

@@ -258,6 +258,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'unban') room.onUnban(player, String(msg.user));
     else if (msg.t === 'mode') room.onMode(player, !!msg.manual);
     else if (msg.t === 'attack') room.onAttack(player, +msg.x, +msg.y);
+    else if (msg.t === 'ability') room.onAbility(player);
     else if (msg.t === 'sword') room.onSword(player);
     else if (msg.t === 'scroll') room.onScroll(player, +msg.cave);
     else if (msg.t === 'scrollGive') room.onScrollGive(player);
@@ -288,6 +289,8 @@ wss.on('connection', (ws: WebSocket) => {
     else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatmob') room.onCheatMob(player, +msg.s, msg.kind, !!msg.on);
     else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatzone') room.onCheatZone(player, +msg.z, msg.act);
     else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatboss') room.onCheatBoss(player, +msg.s);
+    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatgear') room.onCheatGear(player, msg.cls, msg.spec);
+    else if (process.env.NODE_ENV !== 'production' && msg.t === 'cheatdummy') room.onCheatDummy(player);
   });
 
   ws.on('close', () => {

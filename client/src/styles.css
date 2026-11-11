@@ -181,6 +181,19 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #mark-row .portrait.asleep { opacity: 0.45; filter: grayscale(0.6); }
 .mark-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 #mark-row .row { gap: 8px; }
+/* Alphas équipés tombés (ordinateur) : dans combien de temps ils ressuscitent. Au choix : une ligne par Alpha sous le sac,
+   ou une vignette à son portrait (grisé) près des effets en cours, dont le cadran s'éclaircit à mesure qu'il revient. */
+.revive-row { display: flex; flex-direction: column; gap: 3px; padding-top: 6px; border-top: 1px solid var(--line); }
+.revive-line { display: flex; align-items: flex-start; gap: 6px; font-size: 13px; line-height: 1.35; color: var(--muted); font-variant-numeric: tabular-nums; }
+.revive-line svg { width: 12px; height: 12px; flex: none; margin-top: 3px; color: var(--alpha); }
+.revive-line b { font-weight: 600; color: var(--text-2); }
+.revive-tile {
+  --c: #B48CFF; position: relative; width: var(--fx); height: var(--fx); border-radius: 32%; pointer-events: auto; cursor: help;
+  background: radial-gradient(circle at 50% 60%, rgba(180, 140, 255, 0.18), rgba(16, 24, 26, 0.92) 70%);
+  border: 2px solid rgba(180, 140, 255, 0.55); box-shadow: 0 3px 6px rgba(0, 0, 0, 0.45);
+}
+.revive-tile canvas { width: 100%; height: 100%; display: block; border-radius: inherit; filter: grayscale(0.7); opacity: 0.8; }
+.set-revive { display: contents; } /* ses lignes suivent la mise en page de la rubrique ; cachée au doigt */
 #mark-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #mark-text { white-space: nowrap; }
 .modal.quit { width: min(440px, calc(100vw - 32px)); }
@@ -588,6 +601,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* sous le bouton baie, même forme : il n'apparaît qu'avec une monture */
 .mount-btn { position: absolute; right: 16px; bottom: 28px; width: 56px; height: 56px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border-color: #B8743A; background: rgba(27, 38, 36, 0.92); }
 .mount-btn.on { border-color: var(--amber); background: rgba(240, 182, 74, 0.18); }
+/* Capacité de classe (guerrier : Ruée) : bouton tactile et indicateur de recharge (visible aussi sur PC). */
+.ability-btn { position: absolute; right: 16px; bottom: 164px; width: 56px; height: 56px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; border-color: var(--amber); background: rgba(27, 38, 36, 0.92); }
+.ability-btn .ability-ico { display: flex; transition: transform 0.12s; }
+.ability-btn:active .ability-ico { transform: scale(0.9); }
+.ability-btn .cd-label { position: absolute; font: 700 20px var(--body); color: #EADBB8; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); }
+.ability-btn .ability-name { position: absolute; top: -17px; left: 50%; transform: translateX(-50%); white-space: nowrap; font: 700 11px var(--body); color: #EADBB8; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85); pointer-events: none; }
+.ability-btn.cooling { border-color: #6B7A77; }
+.ability-btn.cooling .ability-ico { opacity: 0.22; }
+.ability-btn.cooling .ability-name { opacity: 0.55; }
+@media (pointer: fine) { .ability-btn { bottom: 28px; } } /* sur PC, hold-btn et mount-btn sont cachés : la capacité prend la place basse */
 .prompt.pick { border-color: #C8323C; color: #F3A3AA; }
 
 /* Paramètres. */

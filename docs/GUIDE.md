@@ -27,6 +27,7 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 | Attaquer | Automatique, ou clic gauche vers le pointeur (au choix) | Automatique |
 | Interagir (bâtiment, grotte, buisson, coffre…) | E | Bouton d'action |
 | Tendre un fruit | T | Bouton à baies |
+| Capacité de spécialisation | Espace | Bouton de capacité |
 | Monter / descendre de sa monture | F | Bouton selle |
 | Relever un coéquipier | R maintenu | Bouton maintenu |
 | Grande carte | M, ou clic sur la minicarte | Toucher la minicarte |
@@ -75,6 +76,15 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Classes**, choisies à l'armurerie (le premier choix est gratuit, les suivants payants) :
   **Guerrier** (corps à corps, plus de PV), **Archer** (tir de loin), **Mage** (orbe qui touche aussi autour de la cible).
   Archers et mages abattent les arbres et cassent les pierres 30 % moins vite.
+- **Capacité de spécialisation** (touche Espace, ou le bouton dédié, sur une recharge affichée) : en se spécialisant à la
+  Grande armurerie, chaque voie débloque une **capacité active**, pensée pour peser dans un combat de géant, pas seulement
+  pour nettoyer du menu fretin. Une par voie :
+  - **Berserker — Frénésie** : il entre en rage, frappe bien plus vite et vole de la vie, mais encaisse plus.
+  - **Gardien — Rempart** : les alliés autour de lui (dompteurs et meutes) encaissent beaucoup moins un moment.
+  - **Tireur d'élite — Tir de rupture** : il marque une cible, qui subit plus de dégâts de tout le monde.
+  - **Rôdeur — Pluie de flèches** : une volée s'abat sur une zone et touche tous les monstres pris dedans.
+  - **Pyromancien — Météore** : une boule de feu s'abat (gros impact), puis un brasier ronge les monstres touchés, géants compris.
+  - **Druide — Floraison** : une floraison de soins rend des PV aux alliés proches, puis les régénère un moment.
 - **Spécialisations** : au-delà d'un certain niveau d'arme, la **Grande armurerie** permet de spécialiser sa classe :
   Berserker ou Gardien (guerrier), Tireur d'élite ou Rôdeur (archer), Pyromancien ou Druide (mage).
 - L'armurerie améliore séparément l'**arme** (dégâts) et l'**armure** (PV max et réduction des dégâts), ainsi que la
@@ -119,7 +129,9 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Il n'y a **pas d'Alpha sauvage**. Chaque monstre vaincu peut laisser une **essence** de son espèce ; avec assez
   d'essences, on **éveille** l'Alpha de cette espèce à la Tanière. L'éveil prend un moment, même hors ligne.
 - Un Alpha par espèce, hors limite de meute. Tombé, il ressuscite après un délai (plus long pour les espèces fortes) ;
-  pendant un combat de géant, ou si son dompteur est à terre, il attend la fin.
+  pendant un combat de géant, ou si son dompteur est à terre, il attend la fin. Sur ordinateur, le HUD dit dans combien
+  de temps il revient : une ligne sous le sac, ou une vignette à son portrait près des effets en cours (au choix dans
+  Paramètres › Affichage).
 - On le **renforce** avec des essences, de plus en plus cher à chaque niveau, et un peu plus dans les zones lointaines.
 - Seuls quelques Alphas sont **équipés** à la fois ; les autres se reposent à la Tanière et se promènent sur l'îlot du village.
   Pour que le jeu reste fluide, **30 Alphas au repos au plus** sont montrés en même temps : au-delà, ils sont tirés au hasard

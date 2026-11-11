@@ -1,7 +1,7 @@
 // Réglages du joueur (gardés dans ce navigateur) : affichage, et sur PC touches et façon d'attaquer.
 // Au doigt, rien ne change pour les touches : on glisse pour se déplacer et l'attaque reste automatique.
 
-export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'harvest' | 'map' | 'revive' | 'chat';
+export type Action = 'up' | 'down' | 'left' | 'right' | 'interact' | 'fruit' | 'mount' | 'harvest' | 'ability' | 'map' | 'revive' | 'chat';
 /**
  * Une touche : par code physique (déplacements : ZQSD en AZERTY = WASD en QWERTY) ou par lettre tapée
  * (raccourcis : sinon M ne marche pas en AZERTY). Une touche choisie par le joueur est toujours gardée par code.
@@ -37,6 +37,7 @@ export interface Display {
   ui: Size; // taille de l'interface (barres, boutons, panneaux)
   text: Size; // taille des textes dans le monde (noms, dégâts, gains)
   statusHud: StatusHud; // vignettes des effets d'état
+  alphaRevive: 'text' | 'pills'; // Alpha équipé tombé (ordinateur) : temps avant sa résurrection, en texte sous le sac ou en vignette à son portrait
 }
 export interface Settings {
   keys: Record<Action, Binding>;
@@ -53,6 +54,7 @@ export const ACTIONS: { id: Action; name: string }[] = [
   { id: 'fruit', name: 'Tendre un fruit' },
   { id: 'mount', name: 'Monter / descendre' },
   { id: 'harvest', name: 'Tréant et Golem : récolter (arbres, pierres)' },
+  { id: 'ability', name: 'Capacité de spécialisation' },
   { id: 'map', name: 'Carte' },
   { id: 'revive', name: 'Relever un coéquipier (maintenir)' },
   { id: 'chat', name: 'Ouvrir le chat' },
@@ -68,12 +70,13 @@ const DEFAULTS: Settings = {
     fruit: { key: 't', label: 'T' },
     mount: { key: 'f', label: 'F' },
     harvest: { key: 'g', label: 'G' },
+    ability: { code: 'Space', label: 'Espace' },
     map: { key: 'm', label: 'M' },
     revive: { key: 'r', label: 'R' },
     chat: { key: 'c', label: 'C' },
   },
   attack: 'auto',
-  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', statusHud: { enabled: true, position: 'top-left', size: 'normal', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 } },
+  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', statusHud: { enabled: true, position: 'top-left', size: 'normal', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 }, alphaRevive: 'text' },
 };
 
 /** Netteté maximale de l'image (pixels par point d'écran) selon la qualité. */
@@ -120,6 +123,7 @@ function load(): Settings {
         edge: typeof d.statusHud?.edge === 'number' ? Math.min(90, Math.max(10, Math.round(d.statusHud.edge))) : D.statusHud.edge,
         corner: typeof d.statusHud?.corner === 'number' ? Math.min(100, Math.max(10, Math.round(d.statusHud.corner))) : D.statusHud.corner,
       },
+      alphaRevive: (['text', 'pills'] as const).find((q) => q === d.alphaRevive) ?? D.alphaRevive,
     };
     return { keys, attack: saved?.attack === 'click' ? 'click' : 'auto', display };
   } catch {
