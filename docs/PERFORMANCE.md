@@ -25,7 +25,7 @@ Les 100 premiers ticks (mise en place) ne sont pas comptés ; la mesure porte en
 | `coop` | 4 joueurs dispersés sur l'île, meutes pleines (`ARMY_CAP`) | l'IA des meutes et l'envoi à 4 vues différentes |
 | `bataille` | 4 joueurs au même endroit, meutes pleines, 60 monstres sauvages autour | le combat de masse, le pire cas courant |
 
-Les joueurs tournent lentement autour de leur point de départ (leur vue change, comme en jeu) et ne meurent pas.
+Dans les scénarios ordinaires, les joueurs tournent lentement autour de leur point de départ (leur vue change, comme en jeu) et ne meurent pas. Dans `geant`, ils restent dans l'arène pour maintenir le combat ; le géant est réveillé et le groupe lui inflige périodiquement des dégâts.
 
 ## Seuils
 
@@ -74,7 +74,7 @@ voulu déplace durablement les chiffres, en le disant dans la PR.
 4. En cas de ✘ : relancer une fois (une autre application peut avoir pris le processeur). Si le ✘ persiste, corriger,
    ou expliquer dans la PR pourquoi le coût est accepté (et mettre à jour la référence si c'est durable).
 
-Pour aller plus vite pendant le travail : `npm run bench -- --only bataille --ticks 400`.
+Pour aller plus vite pendant le travail : `npm run bench -- --only bataille --ticks 400`. Le scénario `geant` est nouveau et n'a pas encore de mesure dans la référence historique : le lancer sur la même machine avant/après pour établir sa comparaison.
 
 `.bench/` est ignoré par git : les mesures locales n'y sont jamais commitées.
 
