@@ -62,12 +62,12 @@ const FEAR = [
   ['Tu m\'as déjà battu {n} fois aujourd\'hui ! Je vais finir par déménager…', '{n} fois aujourd\'hui… Je t\'en supplie, va voir un autre géant !'],
 ];
 const SMUG = [
-  ['Une raclée ne t\'a pas suffi ?', 'Tiens, te revoilà ! Tu en redemandes ?', 'Déjà de retour ? Tes bleus n\'ont même pas eu le temps de sécher.'],
+  ['Une raclée t\'a pas suffi ?'], // sa première victoire du jour sur toi : toujours celle-là
   ['Encore toi ? Tu es têtu, je te l\'accorde.', 'Deux raclées aujourd\'hui, et tu reviens ? J\'admire.'],
   ['{n} raclées aujourd\'hui… Tu commences à me faire de la peine.', 'Encore ? C\'est la {n}e fois aujourd\'hui ! Tu ne te lasses donc jamais ?'],
 ];
 const FEAR_CRY = ['B-bon… Je ne me laisserai pas faire !', 'Doucement, cette fois !', 'Au secours !'];
-const SMUG_CRY = ['Tu vas encore mordre la poussière !', 'Allez, une dernière raclée pour la route !', 'Ha ! Viens là !'];
+const SMUG_CRY = ['Tu vas encore mordre la poussière !', 'Allez, une dernière raclée pour la route !', 'Ha ! Viens là !', 'Tiens, te revoilà ! Tu en redemandes ?', 'Déjà de retour ? Tes bleus n\'ont même pas eu le temps de sécher.'];
 
 const pick = (list: string[], seed: number, n: number) => list[seed % list.length].replace('{n}', String(n));
 

@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { BOSS_MOVES, LEGEND_STAGGER_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, alphaPerk, alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT, PET_CAP } from '../../shared/config.ts';
+import { VOYAGE_ZONE, BOSS_MOVES, LEGEND_STAGGER_S, ALPHA_SHOUT_CD, ALPHA_SHOUT_R, ALPHA_SHOUT_S, alphaPerk, alphaCreateCost, ARMY_CAP, PLAYER_RESPAWN_S, armorMaxHp, SPECIES, alphaAwakenS, alphaStats, alphaUpCost, ALPHA_MULT, PET_CAP } from '../../shared/config.ts';
 import { pickCapped } from '../../shared/math.ts';
 
 describe('Alphas de la Tanière', () => {
@@ -406,4 +406,31 @@ describe('Alphas de la Tanière', () => {
     check(pickCapped([], first, 30).size === 0, 'plus rien de voulu');
   });
 
+
+  rule('Un Alpha tombé pendant un combat de géant ne revient qu'à la fin de ce combat, même si son dompteur se déconnecte.', () => {
+    const r = room();
+    const c = r.map.caves.find((q: { room?: number; open?: number; zone: number }) => q.room === undefined && q.open === undefined && q.zone !== VOYAGE_ZONE);
+    const boss = r.units.get(r.caveBoss[c.id]);
+    const p = r.addPlayer('a', noop, { userId: 'u1', profile: null });
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 40];
+    p.hp = 1e6;
+    const wolfS = SPECIES.findIndex((s) => s.key === 'wolf');
+    const alpha = r.spawnAlpha(p, wolfS, 0, false);
+    [alpha.x, alpha.y] = [p.x + 30, p.y];
+    r.onChallenge(p, c.id);
+    r.killUnit(alpha, boss);
+    check(alpha.reviveAt > 0 && alpha.fallenIn === c.id, 'il tombe pendant le combat');
+    // La sortie est verrouillée ; la déconnexion reste possible et ne doit pas relever l'Alpha.
+    r.time = alpha.reviveAt + 1;
+    const prof = r.profileOf(p);
+    r.removePlayer(p.id);
+    const p2 = r.addPlayer('a', noop, { userId: 'u1', profile: prof });
+    const back = p2.army.map((id: number) => r.units.get(id)).find((u: { alpha: boolean; s: number } | undefined) => u?.alpha && u.s === wolfS);
+    r.time += 100;
+    r.updateRespawns();
+    check(!!back && back.reviveAt > 0 && back.fallenIn === c.id, 'reconnecté : son Alpha tombé reste à terre');
+    r.calmBoss(boss); // le combat se termine (le géant se rendort)
+    r.updateRespawns();
+    check(back.reviveAt === 0 && back.hp === back.maxHp, 'le combat fini, il revient près de son dompteur');
+  });
 });

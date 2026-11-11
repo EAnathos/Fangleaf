@@ -292,6 +292,7 @@ export type GameEvent =
   | { e: 'chat'; by: number; name: string; color: string; text: string } // message d'un dompteur
   | { e: 'info'; text: string }
   | { e: 'lair'; cave: number; shut: boolean; x: number; y: number } // la herse d'un antre du volcan retombe (combat) ou se relève (fini)
+  | { e: 'busy'; to: number; cave: number } // ce dompteur voulait entrer dans une grotte où un combat de géant a déjà commencé
 
 export interface Snapshot {
   t: 's';
