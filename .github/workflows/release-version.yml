@@ -1,0 +1,53 @@
+name: Version and changelog
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: release-version-dev
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Consolidate changes and version on dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validate changesets
+        run: npm run changesets:check
+      - name: Generate release version and changelog
+        run: npm run release:version
+      - name: Commit release metadata
+        id: commit
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json client/src/changelog.json .changes
+          git commit -m "Versionne la publication et consolide le changelog"
+          git pull --rebase origin dev
+          git push origin dev
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      # Les pushes faits avec GITHUB_TOKEN ne déclenchent pas les autres workflows.
+      # On relance donc explicitement la CI sur le commit de version.
+      - name: Run CI on the versioned dev commit
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref dev
