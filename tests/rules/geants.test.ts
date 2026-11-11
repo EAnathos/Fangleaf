@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { alphaCreateCost, SHOT_KINDS, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, LEGEND_MULT, POISON_S, SPECIES, TORNADO_PULL_R, zoneBosses } from '../../shared/config.ts';
+import { alphaCreateCost, SHOT_KINDS, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, LEGEND_MULT, POISON_S, SPECIES, TORNADO_PULL_R, zoneBosses } from '../../shared/config.ts';
 
 describe('Géants et grottes', () => {
   rule('Grottes : entrer avec sa meute, mini-boss, âme, réapparition du boss.', () => {
@@ -548,5 +548,33 @@ describe('Géants et grottes', () => {
 
   rule('grottes des dernières zones bien plus chères', () => {
     check(caveUnlockCost(1) === 150 && caveUnlockCost(3) === 450 && caveUnlockCost(4) === 1500 && caveUnlockCost(5) === 3000, 'grottes des dernières zones bien plus chères (1500 et 3000 or)');
+  });
+
+  rule('Un géant qui ne touche personne s\'impatiente : il accélère peu à peu, puis reprend son allure dès qu\'il touche un dompteur.', () => {
+    const r = room();
+    const p = r.addPlayer('a', noop);
+    p.hp = 1e6;
+    const boss = r.caveBoss.map((id: number) => r.units.get(id)).find(Boolean);
+    boss.dormant = false;
+    boss.fight = { at: r.time, from: p.id, by: new Map(), landed: r.time };
+    const hasteEvents = () => r.events.filter((e: { e: string; kind?: string }) => e.e === 'move' && e.kind === 'haste').length;
+    check(r.bossHaste(boss) === 1, 'au début du combat, son allure normale');
+    r.time += BOSS_HASTE_AFTER - 0.5;
+    check(r.bossHaste(boss) === 1, `pendant ${BOSS_HASTE_AFTER} s sans toucher personne, rien ne change`);
+    r.time += 4.5;
+    const h4 = r.bossHaste(boss);
+    check(Math.abs(h4 - (1 + 4 * BOSS_HASTE_RATE)) < 1e-9, `4 s plus tard, il va ${Math.round((h4 - 1) * 100)} % plus vite`);
+    r.events = [];
+    r.bossAI(boss, p);
+    r.bossAI(boss, p);
+    check(hasteEvents() === 1, 'il s\'impatiente : annoncé une seule fois');
+    r.time += 600;
+    check(r.bossHaste(boss) === 1 + BOSS_HASTE_MAX, `son accélération plafonne à +${BOSS_HASTE_MAX * 100} %`);
+    r.damage(p, 1, boss);
+    check(r.bossHaste(boss) === 1 && !boss.fight.hasted, 'il touche un dompteur : il reprend aussitôt son allure');
+    r.time += BOSS_HASTE_AFTER + 1;
+    r.events = [];
+    r.bossAI(boss, p);
+    check(r.bossHaste(boss) > 1 && hasteEvents() === 1, 'de nouveau sans toucher personne, il s\'impatiente de nouveau');
   });
 });
