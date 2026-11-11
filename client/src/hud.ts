@@ -337,6 +337,9 @@ export class Hud {
   }
   lore: [number, number, number] = [0, 0, 0]; // souvenirs retrouvés, étapes du bateau, secondes avant la fin de l'étape en cours
   night = false; // il fait nuit (le gibier qui dort ne viendra pas manger)
+  bossFight = false; // un géant réveillé est là (sa barre en haut de l'écran) : nos Alphas tombés attendent la fin du combat
+  private reviveKey = ''; // Alphas tombés affichés (et sous quelle forme) : on ne refait les lignes ou vignettes que s'ils changent
+  private revivePortraits: Portrait[] = [];
   scrollCaves: number[] = []; // grottes dont le parchemin m'attend // portrait du géant à qui l'on parle
   private buying: Purchase | null = null; // achat proposé par le panneau d'achat
   private spotAt = 0; // Pierre ou emplacement devant lequel on se tient (panneaux voyage et camp)
@@ -867,6 +870,7 @@ export class Hud {
     const home = pos === 'top-left' ? document.querySelector('.hud-tl') : pos === 'top-right' ? document.querySelector('.hud-tr') : $('hud');
     if (bar.parentElement !== home) home!.append(bar);
     this.status.applyOptions();
+    $('revive-bar').dataset.size = settings.display.statusHud.size; // les vignettes des Alphas tombés : à la taille des effets
   }
 
   update(me: PlayerState, players: PlayerState[], units: UnitTuple[], myPos: { x: number; y: number }, ping: number) {
@@ -1008,6 +1012,7 @@ export class Hud {
     // Monture.
     setHidden($('mount-row'), !me.mount);
     this.updateMark(me);
+    this.updateRevive(me);
     if (me.mount) {
       setText($('mount-name'), 'Monture');
       setStyle($('mount-hp'), 'width', `${me.mount.hp}%`);
@@ -1426,8 +1431,8 @@ export class Hud {
         if (tab === 'village') this.onBoard(); // les membres déconnectés : le serveur répond avec le tableau du village
       };
     }
-    // Affichage : qualité, chiffres des dégâts, secousses, latence (appliqués tout de suite).
-    const seg = (name: 'quality' | 'damage' | 'ui' | 'text') => {
+    // Affichage : qualité, chiffres des dégâts, secousses, latence, résurrection des Alphas (appliqués tout de suite).
+    const seg = (name: 'quality' | 'damage' | 'ui' | 'text' | 'alphaRevive') => {
       const group = document.querySelector<HTMLElement>(`[data-setting="${name}"]`)!;
       const paint = () => group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.value === settings.display[name])));
       group.querySelectorAll<HTMLButtonElement>('button').forEach((b) => (b.onclick = () => {
@@ -1443,6 +1448,8 @@ export class Hud {
     seg('damage');
     seg('ui');
     seg('text');
+    seg('alphaRevive');
+    $('set-revive').hidden = touchOnly; // au doigt, le temps de résurrection ne s'affiche pas en jeu
     applyUi();
     // Effets en cours : réglages appliqués tout de suite (la vignette change de coin, de taille, de filtre…).
     const fxSeg = (name: 'position' | 'size' | 'filter' | 'vignette') => {
@@ -2388,6 +2395,67 @@ export class Hud {
     if ($('mark-row').title !== title) $('mark-row').title = title;
     setText($('mark-text'), text);
     setStyle($('mark-fill'), 'width', `${Math.round(pct * 10) / 10}%`); // arrondi : comparable à ce que le navigateur garde
+  }
+
+  /**
+   * Alphas équipés tombés, sur ordinateur : dans combien de temps ils ressuscitent (au choix, Paramètres › Affichage).
+   * Texte : une ligne par Alpha sous le sac. Vignettes : son portrait grisé près des effets en cours, avec un cadran qui
+   * s'éclaircit à mesure qu'il revient et les secondes restantes. Pendant un combat de géant, le serveur le garde à 1 s
+   * jusqu'à la fin : il ressuscitera après le combat.
+   */
+  private updateRevive(me: PlayerState) {
+    const pills = settings.display.alphaRevive === 'pills';
+    const down = touchOnly || me.dead ? [] : me.army.filter((a) => a.alpha && a.reviveIn > 0);
+    const row = $('revive-row'), bar = $('revive-bar');
+    setHidden(row, pills || !down.length);
+    setHidden(bar, !pills || !down.length);
+    if (!down.length) {
+      this.reviveKey = '';
+      return;
+    }
+    const names = new Map(me.names ?? []);
+    const name = (s: number) => names.get(s) ?? SPECIES[s].name; // son nom s'il en a un, sinon l'espèce
+    const box = pills ? bar : row;
+    const key = JSON.stringify([pills, bar.dataset.size, settings.display.ui, down.map((a) => [a.id, a.species, a.legend, names.get(a.species)])]);
+    if (key !== this.reviveKey) {
+      this.reviveKey = key;
+      this.revivePortraits = [];
+      box.replaceChildren(...down.map((a) => {
+        const el = document.createElement('div');
+        if (pills) {
+          el.className = 'revive-tile';
+          el.setAttribute('role', 'img');
+          el.innerHTML = '<canvas></canvas><span class="fx-sweep"></span><span class="fx-time"></span>';
+          this.revivePortraits.push({ canvas: el.querySelector('canvas')!, s: a.species, seen: true, alpha: true, legend: a.legend });
+        } else {
+          el.className = 'revive-line';
+          el.innerHTML = `${ICONS.revive}<span><span></span><b></b></span>`;
+        }
+        return el;
+      }));
+      paintPortraits(this.revivePortraits, true); // immobiles : dessinés une fois
+    }
+    down.forEach((a, i) => {
+      const el = box.children[i] as HTMLElement;
+      const held = a.reviveIn <= 1 && this.bossFight;
+      const when = held ? 'après le combat' : `dans ${a.reviveIn} s`;
+      if (pills) {
+        const p = Math.min(1, a.reviveIn / alphaReviveS(a.species)).toFixed(3); // part sombre du cadran : ce qu'il reste à attendre
+        if (el.dataset.p !== p) {
+          el.dataset.p = p;
+          el.style.setProperty('--p', p);
+        }
+        setText(el.querySelector<HTMLElement>('.fx-time')!, held ? '…' : String(a.reviveIn));
+        const label = `${name(a.species)} ressuscite ${when}`;
+        if (el.title !== label) {
+          el.title = label;
+          el.setAttribute('aria-label', label);
+        }
+      } else {
+        setText(el.querySelector<HTMLElement>('span > span')!, `${name(a.species)} ressuscite `);
+        setText(el.querySelector('b')!, when);
+      }
+    });
   }
 
   /** Fond de la minicarte (zones + lacs), calculé une seule fois à partir de la carte. */
