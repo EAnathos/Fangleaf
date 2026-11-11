@@ -32,6 +32,7 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 | Relever un coéquipier | R maintenu | Bouton maintenu |
 | Grande carte | M, ou clic sur la minicarte | Toucher la minicarte |
 | Chat | C | Bouton 💬 |
+| Proposer un échange à un dompteur proche | U | Bouton ⇄ (près d'un autre dompteur) |
 | Menu, fermer un panneau | Échap | Bouton ☰ |
 
 ## Premiers pas
@@ -365,6 +366,12 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - La progression est rattachée au **compte dans un village** : un autre village, c'est repartir de zéro. Un compte
   a au plus 3 villages, listés dans le lobby.
 - L'or et les essences des monstres vaincus se partagent entre dompteurs proches.
+- **Carte partagée** : la carte (minicarte et **M**) se découvre pour tout le village. Ce qu'un membre explore,
+  même pendant qu'on est déconnecté, apparaît sur la carte des autres à leur retour.
+- **Échanger** : tout près d'un autre dompteur, **U** (ou le bouton ⇄) lui propose un échange. Une fenêtre s'ouvre
+  chez les deux : chacun choisit ce qu'il donne (or, bois, pierre de son sac, jamais plus qu'il n'a) et voit ce que
+  l'autre propose. L'échange se fait quand **les deux ont validé** ; si une part change, il faut revalider. Il est
+  annulé si l'un ferme la fenêtre, s'éloigne ou tombe.
 - Quand un coéquipier **réveille un géant**, tout le village en est prévenu, et une petite **flèche** autour de soi
   indique le chemin du combat (la sortie de la grotte où l'on est, puis l'entrée de la sienne) tant que le géant est debout.
 - Un membre **déconnecté** dort près du feu du village, sa meute autour de lui.

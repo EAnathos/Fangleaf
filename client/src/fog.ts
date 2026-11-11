@@ -1,13 +1,12 @@
 // Brouillard de guerre : la carte se dévoile autour des dompteurs du village au fil de l'exploration.
-// Logique : grille de cases de 48 px (exploré ou non). Affichage : un canvas au 1/24 où chaque
-// découverte « gomme » un disque à bord fondu, pour des contours ronds et doux.
+// Logique : grille de cases de 48 px (exploré ou non), mêmes règles que le serveur (shared/fog.ts), qui garde la carte
+// du village et l'envoie à l'arrivée (merge). Affichage : un canvas au 1/24 où chaque découverte « gomme » un disque à
+// bord fondu, pour des contours ronds et doux.
 
 import { WORLD_HALF } from '../../shared/config.ts';
+import { FOG_CELL, FOG_N as N, REVEAL_R, revealCells, unpackFog } from '../../shared/fog.ts';
 
-export const FOG_CELL = 48; // doit diviser la taille du monde (34560 / 48 = 720) : sinon les rangées se décalent
-export const REVEAL_R = 650;
-const N = (WORLD_HALF * 2) / FOG_CELL;
-if (!Number.isInteger(N)) throw new Error(`FOG_CELL (${FOG_CELL}) doit diviser la taille du monde`);
+export { FOG_CELL, REVEAL_R };
 const PX = 24; // 1 pixel du canvas d'affichage = 24 px du monde (1440² pixels : 8 Mo, au lieu de 19 Mo à 16 px)
 const M = (WORLD_HALF * 2) / PX;
 
@@ -102,15 +101,22 @@ export class Fog {
       this.erase(x, y, r);
       this.last.set(who, [x, y]);
     }
-    const ci = (x + WORLD_HALF) / FOG_CELL, cj = (y + WORLD_HALF) / FOG_CELL, cr = r / FOG_CELL;
-    for (let j = Math.max(0, Math.floor(cj - cr)); j <= Math.min(N - 1, Math.ceil(cj + cr)); j++) {
-      for (let i = Math.max(0, Math.floor(ci - cr)); i <= Math.min(N - 1, Math.ceil(ci + cr)); i++) {
-        if (this.explored[j * N + i]) continue;
-        if ((i + 0.5 - ci) ** 2 + (j + 0.5 - cj) ** 2 > cr * cr) continue;
-        this.explored[j * N + i] = 1;
-        this.dirty = true;
-      }
+    if (revealCells(this.explored, x, y, r)) this.dirty = true;
+  }
+
+  /** La carte du village, gardée par le serveur : ce que les autres membres ont découvert, même en notre absence. */
+  merge(text: string) {
+    const cells = new Uint8Array(N * N);
+    if (!unpackFog(text, cells)) return;
+    let n = 0;
+    for (let i = 0; i < cells.length; i++) {
+      if (!cells[i] || this.explored[i]) continue;
+      this.explored[i] = 1;
+      n++;
     }
+    if (!n) return;
+    this.dirty = true;
+    this.repaint();
   }
 
   isExplored(x: number, y: number) {

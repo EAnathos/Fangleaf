@@ -73,6 +73,9 @@ export type ClientMsg =
   | { t: 'school' } // donner à Aubin les ressources de l'école : il la bâtit au village
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
   | { t: 'rename'; name: string } // renommer le village, devant l'Hôtel de ville (une fois construit)
+  | { t: 'swap'; act: 'open'; with: number } // proposer un échange à ce dompteur, tout proche
+  | { t: 'swap'; act: 'offer'; gold: number; wood: number; stone: number } // sa part de l'échange en cours
+  | { t: 'swap'; act: 'ok' | 'cancel' } // valider l'échange (fait quand les deux ont validé), ou l'annuler
   | { t: 'hall'; name?: string } // améliorer la Maison commune (pour tout le village) ; name : nom du village, à sa construction
   | { t: 'sword' } // tirer sur l'épée plantée dans le sable (SWORD_PULLS fois)
   | { t: 'pick' } // cueillir les baies du buisson garni le plus proche
@@ -330,6 +333,9 @@ export interface Snapshot {
   ev: GameEvent[];
 }
 
+/** Part d'un dompteur dans un échange. */
+export type SwapOffer = { gold: number; wood: number; stone: number };
+
 export type ServerMsg =
   | { t: 'welcome'; id: number; code: string; seed: number; saved: boolean; villageFound: boolean; founder: boolean; armed: boolean } // armed : épée déjà déterrée
   | { t: 'left'; code: string } // village quitté (réponse à « leave »)
@@ -338,4 +344,7 @@ export type ServerMsg =
   | { t: 'teleport'; x: number; y: number }
   | { t: 'pong'; ts: number; now?: number } // now : heure du serveur (ms), pour le ciel commun
   | { t: 'board'; rows: BoardRow[] } // tableau du village (membres en ligne et déconnectés)
+  | { t: 'fog'; cells: string } // carte explorée du village (shared/fog.ts, packFog), envoyée à l'arrivée
+  | { t: 'swap'; with: number; mine: SwapOffer; theirs: SwapOffer; okMine: boolean; okTheirs: boolean } // échange en cours, après chaque changement
+  | { t: 'swapEnd'; done: boolean; why?: string } // échange conclu (done) ou annulé (why : pourquoi)
   | Snapshot;

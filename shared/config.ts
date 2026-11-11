@@ -257,6 +257,9 @@ export const TAME_CHANCE = 0.25;
 export const TAMED_MULT = 0.5; // un monstre apprivoisé a 50 % des dégâts de sa version sauvage…
 export const TAMED_HP_MULT = 0.575; // … et 57,5 % de ses PV (+15 % par rapport à la moitié)
 export const GOLD_SHARE_R = 700;
+/** Échange entre dompteurs : on le propose à moins de TRADE_R d'un autre ; il tombe si l'on s'éloigne au-delà de TRADE_KEEP_R. */
+export const TRADE_R = 220;
+export const TRADE_KEEP_R = 400;
 
 export const ALPHA_MULT = { hp: 1.9, dmg: 2.2, size: 1.6 }; // Alpha niv. 0 = 1,9× les PV et 2,2× les dégâts du monstre de base
 

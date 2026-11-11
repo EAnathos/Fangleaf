@@ -187,7 +187,7 @@ wss.on('connection', (ws: WebSocket) => {
     }
     if (ws.readyState !== ws.OPEN || (user && activeUsers.has(user.userId))) return;
     rooms.set(r.code, r);
-    r.onVillage ??= (v) => void saveVillage(r.code, v);
+    r.onVillage ??= (v) => saveVillage(r.code, v);
     r.onFounder ??= (id) => void setFounder(r.code, id);
     room = r;
     if (user) {
@@ -278,6 +278,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'class') room.onClass(player, msg.cls);
     else if (msg.t === 'spec') room.onSpec(player, msg.spec);
     else if (msg.t === 'help') room.onHelp(player, !!msg.on);
+    else if (msg.t === 'swap') room.onSwap(player, String(msg.act), msg as { with?: unknown; gold?: unknown; wood?: unknown; stone?: unknown });
     else if (msg.t === 'reset') {
       reset(room, player).catch((e) => {
         console.error(e);
@@ -302,6 +303,7 @@ wss.on('connection', (ws: WebSocket) => {
       });
       r.removePlayer(p.id);
       if (r.players.size === 0) {
+        void r.flushExplored(); // la carte découverte depuis la dernière sauvegarde
         rooms.delete(r.code);
         console.log(`[${r.code}] fermé (vide)`);
       }
@@ -315,7 +317,10 @@ setInterval(() => {
 
 // Sauvegarde périodique des progressions modifiées.
 setInterval(() => {
-  for (const r of rooms.values()) for (const p of r.players.values()) if (p.dirty) void save(r, p);
+  for (const r of rooms.values()) {
+    for (const p of r.players.values()) if (p.dirty) void save(r, p);
+    void r.flushExplored(); // la carte explorée du village, si elle a changé
+  }
 }, 15_000);
 
 // Arrêt (pm2 restart, systemctl stop, Ctrl+C) : on sauvegarde tout le monde avant de quitter.
@@ -323,7 +328,7 @@ let stopping = false;
 const shutdown = async () => {
   if (stopping) return;
   stopping = true;
-  await Promise.allSettled([...rooms.values()].flatMap((r) => [...r.players.values()].map((p) => save(r, p))));
+  await Promise.allSettled([...rooms.values()].flatMap((r) => [...[...r.players.values()].map((p) => save(r, p)), r.flushExplored()]));
   process.exit(0);
 };
 process.on('SIGTERM', shutdown);
