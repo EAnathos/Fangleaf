@@ -1,0 +1,39 @@
+{
+  "node": "v22.16.0",
+  "platform": "win32-x64",
+  "seed": 1,
+  "ticks": 1200,
+  "mapMs": 2791,
+  "results": [
+    {
+      "key": "solo",
+      "ticks": 1200,
+      "meanMs": 2.273,
+      "p95Ms": 4.343,
+      "p99Ms": 5.847,
+      "maxMs": 11.934,
+      "bytesPerPlayerS": 26712,
+      "units": 830
+    },
+    {
+      "key": "coop",
+      "ticks": 1200,
+      "meanMs": 4.978,
+      "p95Ms": 8.151,
+      "p99Ms": 11.725,
+      "maxMs": 19.298,
+      "bytesPerPlayerS": 32453,
+      "units": 871
+    },
+    {
+      "key": "bataille",
+      "ticks": 1200,
+      "meanMs": 4.094,
+      "p95Ms": 6.618,
+      "p99Ms": 8.273,
+      "maxMs": 17.35,
+      "bytesPerPlayerS": 42228,
+      "units": 855
+    }
+  ]
+}

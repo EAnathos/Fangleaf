@@ -465,7 +465,7 @@ export class Game {
     const mine = (this.net.latest?.units ?? []).filter((u) => u[6] === this.myId).map((u) => SPECIES[u[1]].key);
     if (!st.harvest && !mine.includes('treant') && !mine.includes('golem')) return this.hud.toast('Il te faut un Tréant ou un Golem dans ta meute pour récolter.');
     this.net.send({ t: 'harvest', on: !st.harvest });
-    this.hud.toast(st.harvest ? 'Récolte finie : ton Tréant et ton Golem reviennent au combat.' : 'Récolte : ton Tréant abat les arbres, ton Golem mange les pierres autour de toi.', st.harvest ? '' : 'good');
+    this.hud.toast(st.harvest ? 'Récolte finie : ton Tréant et ton Golem reviennent au combat.' : 'Récolte : ton Tréant abat les arbres, ton Golem mange les pierres et les filons d\'or autour de toi.', st.harvest ? '' : 'good');
   }
 
   /** T : tendre un fruit (le gibier passif s'approche, chaque fruit peut l'apprivoiser) ou le ranger. */
@@ -1066,6 +1066,14 @@ export class Game {
         break;
       case 'move': {
         const b = this.posOf(e.id, players);
+        if (e.kind === 'haste') {
+          // il ne touche personne depuis un moment : il s'impatiente et presse le pas (à chaque fois, ça change le combat)
+          if (b) {
+            this.fx.text(b.x, b.y - 70, 'Il s\'impatiente et presse le pas !', '#FFD27A', 17, 1.5);
+            this.fx.ring(b.x, b.y, 'rgba(255,210,122,0.8)', 16, 110, 0.6);
+          }
+          break;
+        }
         // le nom de l'attaque, la première fois qu'il la lance dans ce combat (ensuite, la zone au sol suffit)
         const said = this.movesSaid.get(e.id) ?? this.movesSaid.set(e.id, new Set()).get(e.id)!;
         if (b && (e.kind === 'wake' || e.kind === 'hibernate' || !said.has(e.kind))) this.fx.text(b.x, b.y - 70, e.kind === 'wake' ? 'Il se réveille !' : `${MOVE_NAMES[e.kind as keyof typeof MOVE_NAMES] ?? e.kind} !`, '#FF9B78', 18, 1.3);
@@ -1562,6 +1570,13 @@ export class Game {
       case 'info':
         this.hud.toast(e.text);
         break;
+      case 'lair': {
+        // la herse de l'antre retombe au début du combat, et se relève à la fin
+        const name = bossName(this.map.caves[e.cave]?.boss ?? 0);
+        this.hud.toast(e.shut ? `La herse retombe : plus personne n'entre ni ne sort tant que ${name} est debout !` : 'La herse de l\'antre se relève.');
+        if (e.shut) this.shake = Math.max(this.shake, 0.3);
+        break;
+      }
       case 'camp': {
         const c = this.map.sites[e.site];
         this.fx.ring(c.x, c.y, '#F0B64A', 20, CAMP_R, 1.2);

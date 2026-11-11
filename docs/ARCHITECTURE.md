@@ -1,4 +1,4 @@
-# Fangleaf — Architecture
+# Fangleaf : architecture
 
 Jeu coop top-down façon *Wild Tamer*, jusqu'à 4 joueurs par village, dans le navigateur.
 Les règles et l'équilibrage (espèces, coûts, zones…) sont dans `shared/config.ts` : ce document n'en recopie aucun chiffre.
@@ -74,9 +74,34 @@ dévoile lui-même autour des dompteurs qu'il reçoit dans les snapshots (tous l
 Les **échanges** entre dompteurs (`swap`) se jouent entièrement sur le serveur : il borne chaque part à ce que le
 dompteur possède, envoie l'état aux deux après chaque changement et ne fait le transfert que quand les deux ont validé.
 
-## Tests
+## Tests et performance
 
 - `npm run test:rules` : la simulation sans réseau, un fichier par thème, hasard et horloge figés (même résultat en local et en CI).
+  `npm run test:rules -- <thème>` n'en lance qu'une partie ([scripts/test-rules.ts](../scripts/test-rules.ts)).
 - `npm run smoke` : le vrai serveur et 4 bots WebSocket, de la création du village jusqu'à sa suppression.
+- `npm run bench` : temps d'un tick et volume des snapshots sur des scénarios figés ([scripts/bench.ts](../scripts/bench.ts)).
+
+Organisation des tests, outils communs et cache de cartes : [tests/README.md](../tests/README.md).
+Scénarios, seuils et procédure de mesure : [PERFORMANCE.md](PERFORMANCE.md).
 
 La CI (`.github/workflows/ci.yml`) lance le typecheck, les deux tests et le build ; le déploiement suit quand elle passe.
+
+## Fichiers à découper
+
+Quelques fichiers concentrent l'essentiel du code et coûtent cher à relire, à fusionner et à charger dans le contexte
+d'un assistant. Ils se découpent **progressivement**, un fichier par PR, quand aucune autre PR en cours ne les touche.
+
+| Fichier | Taille | Découpage visé |
+|---|---|---|
+| `client/src/sprites.ts` | ~9 700 lignes | un module par famille de créatures (`client/src/sprites/…`), les outils de dessin communs à part |
+| `server/room.ts` | ~5 500 lignes | la classe `Room` garde l'état, les joueurs et les actions ; à part : les attaques des géants (section « Attaques spéciales des mini-boss », ~2 500 lignes), l'envoi réseau (section « Réseau »), puis l'IA des meutes et la faune |
+| `client/src/game.ts`, `client/src/hud.ts`, `client/src/world.ts` | ~3 000 lignes chacun | `hud.ts` : un module par panneau (forge, Tanière, marché, Hôtel de ville…) ; `world.ts` : terrain, décor, bâtiments |
+| `shared/worldmap.ts` | ~2 100 lignes | la génération (une fois, à la création) séparée des requêtes de jeu (`blocked`, `freeNear`, chemins) |
+
+Règles d'un découpage :
+
+1. **Déplacement pur** : aucun changement de comportement dans la même PR. Les tests de règles et le test de fumée
+   passent sans modification, et le banc de performance ne bouge pas (`npm run bench -- --against …`).
+2. Un module a une responsabilité qu'on peut dire en une phrase, écrite en tête du fichier.
+3. Pas de dépendance circulaire : un module extrait de `room.ts` reçoit la `Room` en paramètre, il ne l'importe pas.
+4. Mettre à jour l'arborescence ci-dessus dans la même PR.

@@ -293,7 +293,8 @@ export type GameEvent =
   | { e: 'trade'; to: number; s: number; gold: number; sold: boolean } // Marché : monstre vendu ou acheté
   | { e: 'travel'; id: number; x: number; y: number; tx: number; ty: number } // voyage par Pierre de passage
   | { e: 'chat'; by: number; name: string; color: string; text: string } // message d'un dompteur
-  | { e: 'info'; text: string };
+  | { e: 'info'; text: string }
+  | { e: 'lair'; cave: number; shut: boolean; x: number; y: number } // la herse d'un antre du volcan retombe (combat) ou se relève (fini)
 
 export interface Snapshot {
   t: 's';
