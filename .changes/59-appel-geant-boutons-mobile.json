@@ -1,0 +1,9 @@
+{
+  "bump": "minor",
+  "date": "2026-11-12",
+  "title": "Appeler le village devant un géant",
+  "items": [
+    "Devant un géant endormi, le bouton « Appeler » montre le chemin aux autres dompteurs : une flèche dorée les mène jusqu'à toi, jusqu'à ce que le combat commence.",
+    "Sur téléphone, les boutons du dialogue avec un géant ne dépassent plus de l'écran."
+  ]
+}
