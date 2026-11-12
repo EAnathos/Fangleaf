@@ -61,7 +61,7 @@ s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois 
    retournent ; ils se montent, dans l'eau) et Petits Masqués à la sarbacane (leurs fléchettes **empoisonnent** : on
    perd des PV quelques secondes, une goutte verte au-dessus de la tête). Leurs géants dorment au fond de **temples** à degrés.
 7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable, sables mouvants qui s'ouvrent sous les pasges. Un grand volcan s'y dresse.
-8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles lancent des roches en fusion en cloche, qui mettent le feu) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
+8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise (elles sèment la lave en courant et bondissent sur leur cible dans une gerbe de braises, qui laisse un cratère brûlant), Chauves-souris de cendre, Tortues-volcans (elles lancent des roches en fusion en cloche, qui mettent le feu) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)). Ce sont les créatures les plus robustes de l'île.
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
 la zone suivante, il faut à la fois l'**Hôtel de ville** au bon niveau et avoir vaincu **tous les géants** de la
@@ -293,15 +293,18 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   remonter.
 - Les **entrailles du volcan** sont un donjon (zone 7) : un labyrinthe de grandes salles reliées par de longs couloirs,
   différent d'un village à l'autre. On arrive en bas ; le cœur est au centre ; les trois géants du volcan attendent
-  chacun dans sa salle, au bout d'un cul-de-sac — un à gauche, un à droite, un en haut — et il faut fouiller pour les
-  trouver. Dedans, la minicarte et la carte (**M**) montrent le donjon et les salles déjà vues.
+  chacun dans sa salle, au bout d'un cul-de-sac (un à gauche, un à droite, un en haut), et il faut fouiller pour les
+  trouver. Dedans, la minicarte et la carte (**M**) montrent le donjon et les salles déjà découvertes par le village :
+  elles restent découvertes quand on remonte, qu'on recharge la page ou que les salles se regarnissent.
 - Chaque couloir est fermé par une **herse**. Chaque salle a sa garnison de créatures de lave : **vider une salle**
   lève les herses de ses couloirs et débloque les salles voisines. La herse d'une salle de géant porte un sceau d'or :
   il faut en plus **payer l'entrée** (**E** devant la herse, une fois pour tout le village). Si plus personne n'est
-  dans le donjon pendant deux minutes, les salles se regarnissent et les herses retombent.
+  dans le donjon pendant un moment, les salles se regarnissent et les herses retombent.
 - **Combat dans un antre** : dès qu'on réveille le géant, la herse de sa salle retombe. Personne n'entre ni ne sort
   tant qu'il est debout ; la meute et les Alphas restés dans le couloir rejoignent leur dompteur dans la salle (et
-  ceux entrés sans leur dompteur le rejoignent dehors). Vaincu, ou rendormi faute de combattants, la herse se relève.
+  ceux entrés sans leur dompteur le rejoignent dehors). Rien ne reste coincé sous la herse, et les monstres sauvages
+  qui poursuivaient un dompteur juste devant elle entrent avec lui. Le combat dure tant qu'un dompteur est debout de
+  ce côté de la herse, du mur jusqu'à la herse elle-même. Vaincu, ou rendormi faute de combattants, la herse se relève.
 - La roche et les herses arrêtent la vue : on ne tire pas d'une salle à l'autre (archers, mages, tortues-volcans…).
 - Dans les salles, des mares de lave infranchissables à pied (à dos de vautour, on les survole) et des **pièges** :
   - les **évents de flammes**, en travers des couloirs : ils rougeoient, puis crachent du feu, chacun à son rythme ;

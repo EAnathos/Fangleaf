@@ -872,10 +872,11 @@ export const SPECIES: Species[] = [
   // Bois profonds : le Tréant dort dans un arbre ; il en sort parfois quand on l'abat (jamais d'apparition ailleurs).
   { key: 'treant', name: 'Tréant', color: '#6B4E30', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1], awaken: 20 }, // rare : éveil moins cher
   // Entrailles du volcan (zone 7, sous la Mer de sable) : trois espèces qu'on ne voit nulle part ailleurs, et leurs géants
-  // (un antre chacun dans la salle).
-  { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 3600, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 8, population: 16, pack: [2, 4] },
-  { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 2800, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 8, population: 14, pack: [3, 5] },
-  { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 9000, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 8, population: 10, pack: [1, 1], ranged: { kind: 'magma', range: 360, windup: 0.7, speed: 0, splash: 60 } },
+  // (un antre chacun dans la salle). La salamandre sème la lave en courant et bondit dans une gerbe de braises (sauvage
+  // comme apprivoisée) : sans ça, c'était la plus faible des trois.
+  { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 5400, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 8, population: 16, pack: [2, 4], moves: [{ kind: 'trail', cd: 8, dur: 3 }, { kind: 'blink', cd: 12, fire: true }] },
+  { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 4200, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 8, population: 14, pack: [3, 5] },
+  { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 13500, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 8, population: 10, pack: [1, 1], ranged: { kind: 'magma', range: 360, windup: 0.7, speed: 0, splash: 60 } },
   { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'salamander', base: 'salamander' },
   { key: 'ash_lord', name: 'Titus Veillafandre', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'ash_bat', base: 'ash_bat' },
   { key: 'mountain_tortoise', name: 'Tortue-Montagne', color: '#40342E', r: 70, hp: 170000, dmg: 520, speed: 185, atkCd: 1.5, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'lava_tortoise', base: 'lava_tortoise' },
@@ -993,6 +994,8 @@ export const CORRIDOR_R = 72; // demi-largeur d'un couloir
 export const DOOR_T = 16; // demi-épaisseur d'une herse
 export const ROOM_PACKS: [number, number] = [2, 3]; // meutes gardant chaque salle (au moins, au plus)
 export const HEART_PACKS = 4; // celles qui gardent la salle du cœur
+export const LAIR_PULL_R = 600; // la herse d'un antre retombe : un monstre sauvage à cette distance, aux trousses de quelqu'un dans l'antre, y entre avec lui
+export const DEPTHS_REVEAL_R = 420; // une salle du donjon est découverte (sur sa carte) quand un dompteur passe à cette distance de son bord
 export const DEPTHS_RESET_S = 120; // personne dans le donjon depuis ce temps-là : salles regarnies, herses rabaissées
 // Pièges du donjon : évents de flammes en travers des couloirs (un rythme à lire), dalles piégées dans les salles (un geyser de lave).
 export const VENT_R = 84;
