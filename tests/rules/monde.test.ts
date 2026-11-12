@@ -6,6 +6,9 @@ import { DESERT_ZONE, JUNGLE_ZONE, ZONES, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRA
 import { BEACH, SEA_SHALLOW, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { sky } from '../../shared/weather.ts';
 import { maxHpOf, Room } from '../../server/room.ts';
+import { MapGenerator } from '../../server/mapgen.ts';
+import { isDeepStrictEqual } from 'node:util';
+import { performance } from 'node:perf_hooks';
 
 describe('Le monde : carte, obstacles, brume, météo', () => {
   rule('Les 8 espèces apparaissent sur la carte, deux par zone.', () => {
@@ -411,5 +414,61 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     check(bird.hp < bird.maxHp, 'un tir, si');
     r3.onMount(p3, 0);
     check(!p3.mount && !r3.map.blocked(p3.x, p3.y), 'en descendant au-dessus de l\'eau, on se pose sur la terre ferme');
+  });
+
+  rule('Île générée hors du fil principal : identique à celle du fil principal, sans bloquer la boucle des villages.', async () => {
+    const gen = new MapGenerator();
+    try {
+      const seed = room().seed;
+      // un « autre village » qui bat toutes les 10 ms : on mesure sa plus longue attente pendant la génération
+      let worst = 0, last = performance.now();
+      const beat = setInterval(() => {
+        const t = performance.now();
+        worst = Math.max(worst, t - last);
+        last = t;
+      }, 10);
+      const t0 = performance.now();
+      const map = await gen.generate(seed);
+      const took = performance.now() - t0;
+      clearInterval(beat);
+      check(worst < 1000, `pendant ${Math.round(took)} ms de génération, la boucle n'a jamais attendu plus de ${Math.round(worst)} ms`);
+      const model = Room.makeMap(seed); // (le cache des tests : une copie d'une île neuve de cette graine)
+      check(map instanceof WorldMap && isDeepStrictEqual({ ...map }, { ...model }), 'même île que sur le fil principal, champ par champ');
+      const spot = [map.spawn, map.village, map.volcano, { x: map.village.x + 333, y: map.village.y - 777 }];
+      check(spot.every((q) => map.blocked(q.x, q.y) === model.blocked(q.x, q.y)) && map.zoneAt(map.volcano.x, map.volcano.y) === model.zoneAt(model.volcano.x, model.volcano.y), 'ses requêtes de jeu répondent pareil');
+      const r = new Room('TEST', seed, {}, map);
+      check(r.map === map, 'le village prend l\'île qu\'on lui donne');
+      let refused = false;
+      try {
+        new Room('TEST', seed + 1, {}, map);
+      } catch {
+        refused = true;
+      }
+      check(refused, 'une île d\'une autre graine est refusée');
+    } finally {
+      gen.close();
+    }
+  });
+
+  rule('Génération d\'île : une erreur, un plantage ou un blocage du worker ne fait échouer que cette île ; chaque village reçoit sa propre carte.', async () => {
+    // (2 s : démarrer un worker prend un moment quand les autres tests chargent le processeur)
+    const gen = new MapGenerator(new URL('../mapgen-fake.ts', import.meta.url), 2000);
+    const error = (seed: number) => gen.generate(seed).then(() => '', (e: Error) => e.message);
+    try {
+      check(/graine maudite/.test(await error(15)), 'une génération en erreur échoue avec son message');
+      check(/arrêté/.test(await error(13)), 'un worker qui plante fait échouer sa génération');
+      check((await gen.generate(1)).seed === 1, 'après le plantage, un worker neuf prend la suite');
+      check(/pas de réponse après 2000 ms/.test(await error(14)), 'un worker bloqué est abandonné après le délai');
+      // deux villages de même graine en même temps : chacun sa carte (elle change en jeu : arbres abattus, palissade…)
+      const [a, b] = (await Promise.all([gen.generate(2), gen.generate(2)])) as unknown as { cells: Uint8Array }[];
+      check(a !== b && a.cells !== b.cells && a.cells[0] === b.cells[0], 'deux demandes, deux cartes distinctes (le worker a repris après le blocage)');
+      // arrêt (serveur qui s'éteint) : la génération en cours et celles en attente sont annulées
+      const pending = [error(14), error(3)];
+      gen.close();
+      const msgs = await Promise.all(pending);
+      check(msgs.every((m) => /annulée/.test(m)), `arrêt : générations annulées (${msgs.join(' / ')})`);
+    } finally {
+      gen.close();
+    }
   });
 });

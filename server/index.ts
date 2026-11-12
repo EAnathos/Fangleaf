@@ -9,6 +9,7 @@ import { MAX_PLAYERS, MAX_VILLAGES, TICK_HZ } from '../shared/config.ts';
 import type { ClientMsg, ServerMsg } from '../shared/protocol.ts';
 import { countVillages, createVillage, deleteProgress, deleteVillage, findVillage, initPersistence, leaveVillage, loadMembers, loadProgress, memberIds, persistenceEnabled, saveProgress, saveVillage, setFounder, verifyToken, type Profile } from './persist.ts';
 import { makeCode, Room, type Player } from './room.ts';
+import { MapGenerator } from './mapgen.ts';
 import { staticFile } from './static.ts';
 
 try {
@@ -62,6 +63,27 @@ const http = createServer((req, res) => {
 http.on('clientError', (_e, socket) => socket.writable ? socket.end('HTTP/1.1 400 Bad Request\r\n\r\n') : socket.destroy()); // requête HTTP illisible
 
 const rooms = new Map<string, Room>();
+// Les îles se génèrent dans un worker : pendant les secondes que ça prend, les villages ouverts continuent de tourner.
+const mapgen = new MapGenerator();
+// Villages enregistrés en cours de réouverture (île en génération) : ceux qui les rejoignent ensemble attendent la même.
+const opening = new Map<string, Promise<Room>>();
+
+/** Rouvre un village enregistré : son île, générée hors du fil principal, puis ses membres déconnectés, endormis au feu. */
+function openRoom(code: string, saved: NonNullable<Awaited<ReturnType<typeof findVillage>>>) {
+  let room = opening.get(code);
+  if (!room) {
+    room = mapgen.generate(saved.seed).then((map) => {
+      const r = Object.assign(new Room(code, saved.seed, saved, map), { founder: saved.founder });
+      // Les membres déconnectés dorment au village (on ne les montre pas s'ils sont bannis).
+      loadMembers(code)
+        .then((list) => list.forEach((m) => !r.isBanned(m.userId) && r.addSleeper(m.userId, m.profile)))
+        .catch((e) => console.error(e));
+      return r;
+    }).finally(() => opening.delete(code));
+    opening.set(code, room);
+  }
+  return room;
+}
 // Messages compressés (snapshots JSON ~3 fois plus petits), au niveau le plus rapide : peu de CPU pour beaucoup de bande passante.
 const wss = new WebSocketServer({ server: http, path: '/ws', maxPayload: 4096, perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 1 } } });
 
@@ -158,7 +180,13 @@ wss.on('connection', (ws: WebSocket) => {
       if (user && (await countVillages(user.userId)) >= MAX_VILLAGES) return send({ t: 'error', msg: tooMany });
       let code = makeCode();
       while (rooms.has(code) || (await findVillage(code)) !== null) code = makeCode();
-      r = new Room(code);
+      const seed = Math.floor(Math.random() * 2 ** 31);
+      try {
+        r = new Room(code, seed, {}, await mapgen.generate(seed));
+      } catch (e) {
+        console.error(e);
+        return send({ t: 'error', msg: 'Le village n\'a pas pu être créé : réessaie.' });
+      }
       r.founder = user?.userId ?? null;
       await createVillage(code, r.seed, user?.userId ?? null);
     } else {
@@ -168,15 +196,13 @@ wss.on('connection', (ws: WebSocket) => {
       else {
         const saved = await findVillage(code);
         if (saved === null) return send({ t: 'error', msg: `Aucun village avec le code ${code || '…'}.` });
-        const reopened = !rooms.get(code);
-        r = rooms.get(code) ?? Object.assign(new Room(code, saved.seed, saved), { founder: saved.founder }); // un autre joueur a pu le rouvrir pendant l'attente
-        // Les membres déconnectés dorment au village (on ne les montre pas s'ils sont bannis).
-        if (reopened) {
-          const room = r;
-          loadMembers(code)
-            .then((list) => list.forEach((m) => !room.isBanned(m.userId) && room.addSleeper(m.userId, m.profile)))
-            .catch((e) => console.error(e));
+        try {
+          r = rooms.get(code) ?? (await openRoom(code, saved));
+        } catch (e) {
+          console.error(e);
+          return send({ t: 'error', msg: 'Le village n\'a pas pu être chargé : réessaie.' });
         }
+        r = rooms.get(code) ?? r; // un autre joueur a pu le rouvrir pendant l'attente
       }
       if (r.isBanned(user?.userId)) return send({ t: 'error', msg: 'Tu as été expulsé de ce village.' });
       if (r.full) return send({ t: 'error', msg: `Ce village est complet (${MAX_PLAYERS} dompteurs max).` });
@@ -337,6 +363,7 @@ let stopping = false;
 const shutdown = async () => {
   if (stopping) return;
   stopping = true;
+  mapgen.close(); // les îles en génération ne serviront plus : ceux qui les attendaient reçoivent une erreur
   await Promise.allSettled([...rooms.values()].flatMap((r) => [...[...r.players.values()].map((p) => save(r, p)), r.flushExplored()]));
   process.exit(0);
 };

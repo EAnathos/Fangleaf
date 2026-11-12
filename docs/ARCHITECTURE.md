@@ -36,6 +36,7 @@ shared/    config.ts      règles et équilibrage (espèces, coûts, zones, bât
            math.ts        bruit, hasard à graine
 server/    index.ts       HTTP (build statique en prod), WebSocket /ws, salons, boucle de simulation
            room.ts        simulation d'un village : IA, combat, meutes, géants, économie
+           mapgen.ts      génération des îles dans un worker (mapgen-worker.ts) : les autres villages ne sont pas figés
            grid.ts        hash spatial (voisinage sans O(n²))
            persist.ts     sauvegarde Supabase : villages et progression par (compte, village)
            static.ts      fichiers du build servis en HTTP (URL malformée refusée, rien hors de dist/)

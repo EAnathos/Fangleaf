@@ -11,7 +11,8 @@ figés (comme les tests de règles), et mesure :
 
 | Mesure | Pourquoi | Dépend de la machine |
 |---|---|---|
-| **Génération de l'île** (ms) | Elle bloque la boucle de tous les villages quand un village est chargé | oui |
+| **Génération de l'île** (ms) | Son coût brut, mesuré sur le fil principal | oui |
+| **Blocage pendant une génération** (ms) | La plus longue attente de la boucle des villages pendant qu'une île se génère dans le worker ; la mémoire ajoutée au pic est affichée | oui |
 | **Tick** : moyenne, p95, p99, max (ms) | Le budget d'un tick est `1000 / TICK_HZ` ms pour tout le process | oui |
 | **Snapshots** (octets par joueur et par seconde) | La bande passante de chaque joueur, sérialisée en JSON comme sur le WebSocket | **non** : identique d'une machine à l'autre |
 
@@ -35,6 +36,8 @@ Définis en tête de [scripts/bench.ts](../scripts/bench.ts) (`THRESHOLDS`) :
   (bruit de mesure).
 - **Snapshots** : au plus **+10 %**. La mesure est déterministe : tout écart vient du code.
 - **Génération de l'île** : au plus +25 %, avec un plancher de 100 ms.
+- **Blocage pendant une génération** : au plus 250 ms dans tous les cas (`mapBlockMs`). Au-delà, les autres villages
+  sentiraient le chargement d'une île.
 - **Budget absolu** : un p99 au-delà de la moitié du budget d'un tick est signalé dans tous les cas.
 
 `npm run bench -- --against <fichier>` affiche ✔ ou ✘ pour chaque mesure et sort en erreur (code 1) au-delà d'un seuil.
@@ -80,8 +83,13 @@ Pour aller plus vite pendant le travail : `npm run bench -- --only bataille --ti
 
 ## Points chauds connus
 
-- **Génération de l'île** : plusieurs secondes, sur le fil principal. Quand un village est créé ou rechargé, tous les
-  autres villages du process sont figés pendant ce temps. Pistes : la générer dans un worker, ou garder en cache
-  l'île des villages récemment fermés (`WorldMap.clone` copie une île en une vingtaine de millisecondes).
+- **Génération de l'île** : plusieurs secondes de calcul. Elle se fait dans un worker ([server/mapgen.ts](../server/mapgen.ts)) :
+  le fil principal ne fait que recevoir l'île (ses tableaux sont transférés, pas copiés), et les autres villages
+  continuent de tourner. Un seul worker génère une île à la fois : processeur et mémoire restent bornés quand
+  plusieurs villages se chargent ensemble (ils attendent leur tour, deux joueurs qui rouvrent le même village attendent
+  la même île). Un cache des îles de villages fermés n'a pas été retenu : il ne sert qu'aux réouvertures (pas aux
+  créations), garde en mémoire une île entière par village fermé, et le worker suffit à supprimer le blocage.
+  Coût du worker : la première île est plus lente (démarrage du worker et chargement de TypeScript) et la mémoire
+  du process monte d'environ 100 Mo au pic pendant une génération (mesuré par `npm run bench`).
 - **Les tests de règles** construisaient une île par village de test : c'était l'essentiel de leur durée. Ils
   utilisent désormais un cache par graine (`tests/helpers.ts`), voir [tests/README.md](../tests/README.md).
