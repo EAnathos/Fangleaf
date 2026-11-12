@@ -458,9 +458,11 @@ export class Room {
   private exploredDirty = false;
   private swaps = new Map<number, Swap>(); // dompteur → l'échange où il est engagé (les deux dompteurs y mènent)
 
-  constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}) {
+  /** map : l'île déjà générée (server/mapgen.ts, hors du fil principal) ; sinon elle est générée ici, d'un bloc. */
+  constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}, map?: WorldMap) {
     this.seed = seed ?? Math.floor(Math.random() * 2 ** 31);
-    this.map = Room.makeMap(this.seed);
+    if (map && map.seed !== this.seed) throw new Error(`île de la graine ${map.seed} pour un village de graine ${this.seed}`);
+    this.map = map ?? Room.makeMap(this.seed);
     if (saved.explored) {
       const cells = new Uint8Array(FOG_N * FOG_N);
       if (unpackFog(saved.explored, cells)) this.explored.set(cells); // illisible : on repart d'une carte vierge
