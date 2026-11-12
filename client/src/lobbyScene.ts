@@ -31,6 +31,9 @@ const ACTORS: Actor[] = [
   { x: 262, y: 44, species: 7, wild: true, face: -1, seed: 9 }, // Feu follet
 ];
 
+// Place du dompteur, à gauche du feu (coordonnées « jeu »).
+const PLAYER_X = -62, PLAYER_Y = 4;
+
 interface Tree { x: number; h: number; w: number }
 interface Mote { x: number; y: number; r: number; sp: number; ph: number }
 
@@ -74,11 +77,23 @@ export function startLobbyScene(canvas: HTMLCanvasElement, isActive: () => boole
   addEventListener('resize', resize);
   resize();
 
+  // Le dompteur suit le curseur des yeux : pointeur en pixels d'écran, regard lissé pour qu'il ne saute pas d'un coup.
+  let pointer: { x: number; y: number } | null = null;
+  const gaze = { x: 1, y: 0.15 };
+  const onPointer = (e: PointerEvent) => {
+    pointer = e.pointerType === 'mouse' ? { x: e.clientX, y: e.clientY } : null; // au doigt, pas de survol : regard par défaut
+  };
+  const onLeave = () => { pointer = null; };
+  addEventListener('pointermove', onPointer);
+  document.documentElement.addEventListener('pointerleave', onLeave);
+
   const t0 = performance.now();
   let last = t0;
   const frame = (now: number) => {
     if (!isActive()) {
       removeEventListener('resize', resize);
+      removeEventListener('pointermove', onPointer);
+      document.documentElement.removeEventListener('pointerleave', onLeave);
       return;
     }
     const t = (now - t0) / 1000, dt = Math.min(0.05, (now - last) / 1000);
@@ -135,6 +150,18 @@ export function startLobbyScene(canvas: HTMLCanvasElement, isActive: () => boole
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, w, h);
 
+    // Regard visé : vers le curseur (en coordonnées « jeu »), plus discret quand il est tout près du visage.
+    let tx = 1, ty = 0.15;
+    if (pointer) {
+      const dx = (pointer.x - cx) / S - PLAYER_X, dy = (pointer.y - groundY) / S - (PLAYER_Y - 18);
+      const d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / 40) / d;
+      tx = dx * k;
+      ty = dy * k;
+    }
+    const ease = 1 - Math.exp(-dt * 12);
+    gaze.x += (tx - gaze.x) * ease;
+    gaze.y += (ty - gaze.y) * ease;
+
     // Personnages, en coordonnées « jeu » centrées sur le feu.
     ctx.setTransform(dpr * S, 0, 0, dpr * S, dpr * cx, dpr * groundY);
     type D = { y: number; draw: () => void };
@@ -149,7 +176,10 @@ export function startLobbyScene(canvas: HTMLCanvasElement, isActive: () => boole
         });
       },
     }));
-    list.push({ y: 4, draw: () => drawPlayer(ctx, -62, 4, '#5CC8B8', 1, 0.15, 3, '', t, false, false, false) });
+    list.push({
+      y: PLAYER_Y,
+      draw: () => drawPlayer(ctx, PLAYER_X, PLAYER_Y, '#5CC8B8', 1, 0.15, 3, '', t, false, false, false, false, null, null, 0, true, 0, gaze),
+    });
     list.push({
       y: 0,
       draw: () => {

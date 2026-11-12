@@ -1,5 +1,13 @@
 [
   {
+    "version": "0.15.3",
+    "date": "2026-11-12",
+    "title": "Le dompteur du lobby te regarde",
+    "items": [
+      "Dans le lobby, le dompteur près du feu suit ta souris des yeux."
+    ]
+  },
+  {
     "version": "0.15.2",
     "date": "2026-11-12",
     "title": "Le jeu se charge après une mise à jour",

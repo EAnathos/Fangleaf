@@ -1007,8 +1007,12 @@ export const CORRIDOR_R = 72; // demi-largeur d'un couloir
 // Portes du donjon : une herse de basalte au milieu de chaque couloir. Elle se lève quand l'une des deux salles qu'il relie
 // a été vidée de ses monstres (la salle d'entrée l'est d'office) ; celle d'un antre, quand en plus le village a payé l'entrée.
 export const DOOR_T = 16; // demi-épaisseur d'une herse
-export const ROOM_PACKS: [number, number] = [2, 3]; // meutes gardant chaque salle (au moins, au plus)
-export const HEART_PACKS = 4; // celles qui gardent la salle du cœur
+export const ROOM_PACKS: [number, number] = [3, 4]; // meutes gardant chaque salle (au moins, au plus)
+export const ROOM_MIN = 8; // créatures d'une garnison, au moins : des meutes de plus s'y ajoutent (deux tortues seules, c'était une salle vide)
+export const HEART_PACKS = 5; // celles qui gardent la salle du cœur
+// Une salle vidée se regarnit pendant la visite (on peut chasser dans le donjon), loin des yeux : ses herses restent levées.
+export const ROOM_REFILL_S = 75; // vide depuis ce temps-là…
+export const ROOM_REFILL_R = 900; // … et aucun dompteur à cette distance de son bord (une salle d'écart, au moins)
 export const LAIR_PULL_R = 600; // la herse d'un antre retombe : un monstre sauvage à cette distance, aux trousses de quelqu'un dans l'antre, y entre avec lui
 export const DEPTHS_REVEAL_R = 420; // une salle du donjon est découverte (sur sa carte) quand un dompteur passe à cette distance de son bord
 export const DEPTHS_RESET_S = 120; // personne dans le donjon depuis ce temps-là : salles regarnies, herses rabaissées

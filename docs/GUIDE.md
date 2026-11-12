@@ -306,8 +306,10 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   elles restent découvertes quand on remonte, qu'on recharge la page ou que les salles se regarnissent.
 - Chaque couloir est fermé par une **herse**. Chaque salle a sa garnison de créatures de lave : **vider une salle**
   lève les herses de ses couloirs et débloque les salles voisines. La herse d'une salle de géant porte un sceau d'or :
-  il faut en plus **payer l'entrée** (**E** devant la herse, une fois pour tout le village). Si plus personne n'est
-  dans le donjon pendant un moment, les salles se regarnissent et les herses retombent.
+  il faut en plus **payer l'entrée** (**E** devant la herse, une fois pour tout le village). Une salle vidée se
+  regarnit au bout d'un moment, quand aucun dompteur n'est à proximité : on peut chasser dans le donjon. Ses herses,
+  elles, restent levées. Si plus personne n'est dans le donjon pendant un moment, toutes les salles se regarnissent
+  et les herses retombent.
 - **Combat dans un antre** : dès qu'on réveille le géant, la herse de sa salle retombe. Personne n'entre ni ne sort
   tant qu'il est debout ; la meute et les Alphas restés dans le couloir rejoignent leur dompteur dans la salle (et
   ceux entrés sans leur dompteur le rejoignent dehors). Rien ne reste coincé sous la herse, et les monstres sauvages
