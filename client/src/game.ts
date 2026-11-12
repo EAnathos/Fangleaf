@@ -605,7 +605,7 @@ export class Game {
     if (closed >= 0) {
       const c = map.spineAt(map.gateSpine(closed) - 90);
       if (Math.abs(c.x - camX) < hw + 300 && Math.abs(c.y - camY) < hh + 300) {
-        this.world.drawGateLabel(ctx, c.x, c.y, closed === 0 ? 'Brume · suite de la Lisière' : `Brume · ${ZONE_NAMES[closed]}`, this.gateWhy(closed));
+        this.world.buildings.drawGateLabel(ctx, c.x, c.y, closed === 0 ? 'Brume · suite de la Lisière' : `Brume · ${ZONE_NAMES[closed]}`, this.gateWhy(closed));
       }
     }
   }
@@ -1408,7 +1408,7 @@ export class Game {
         if (!d) break;
         const t = this.map.trunkOf(d);
         this.chopAt.set(e.id, this.time);
-        const z = this.map.styleZone(d.x, d.y), bamboo = z === JUNGLE_ZONE && this.world.isBamboo(d.x, d.y);
+        const z = this.map.styleZone(d.x, d.y), bamboo = z === JUNGLE_ZONE && this.world.decor.isBamboo(d.x, d.y);
         this.fx.burst(t.x, t.y - 10, bamboo ? '#9DBF5A' : '#B88A5A', e.done ? 24 : 5, e.done ? 160 : 70); // copeaux (ou éclats de bambou)
         if (e.done) this.fx.burst(t.x, t.y - 50, z === DESERT_ZONE ? '#7FA65A' : '#4F8A45', 26, 140); // le feuillage s'éparpille
         if (e.by === this.myId || players.some((p) => p.id === e.by)) this.tools.set(e.by, { kind: 'axe', at: this.time, tx: t.x, ty: t.y });
@@ -2728,22 +2728,22 @@ export class Game {
       if ((here ? here === this.map.depths && c.room !== undefined : c.open !== undefined) && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id], SPECIES[c.boss].r);
     }
     const br = this.map.bridge;
-    if (!here && inView((br.a.x + br.b.x) / 2, (br.a.y + br.b.y) / 2, Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y) / 2 + 120)) this.world.drawBridge(ctx, this.hud.buildings.includes('bridge'), this.time);
-    const cs = this.world.campSize;
-    ctx.drawImage(this.world.camp, spawn.x - cs / 2, spawn.y - cs / 2);
-    const vs = this.world.villageSize;
-    ctx.drawImage(this.world.village, village.x - vs / 2, village.y - vs / 2);
+    if (!here && inView((br.a.x + br.b.x) / 2, (br.a.y + br.b.y) / 2, Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y) / 2 + 120)) this.world.buildings.drawBridge(ctx, this.hud.buildings.includes('bridge'), this.time);
+    const cs = this.world.buildings.campSize;
+    ctx.drawImage(this.world.buildings.camp, spawn.x - cs / 2, spawn.y - cs / 2);
+    const vs = this.world.buildings.villageSize;
+    ctx.drawImage(this.world.buildings.village, village.x - vs / 2, village.y - vs / 2);
     ctx.save();
     ctx.translate(village.x, village.y);
-    this.world.drawCampfire(ctx, this.time);
+    this.world.buildings.drawCampfire(ctx, this.time);
     // bâtiments : construits, ou leur chantier avec son prix
-    for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall, this.hud.buildings.includes(`plot_${b}`), b === 'forge' && this.hud.buildings.includes('forge2'));
-    this.world.drawHall(ctx, this.hud.hall, this.time);
-    this.world.drawStore(ctx, this.hud.stock);
-    this.world.drawBoard(ctx);
+    for (const b of ['forge', 'den', 'market'] as const) this.world.buildings.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall, this.hud.buildings.includes(`plot_${b}`), b === 'forge' && this.hud.buildings.includes('forge2'));
+    this.world.buildings.drawHall(ctx, this.hud.hall, this.time);
+    this.world.buildings.drawStore(ctx, this.hud.stock);
+    this.world.buildings.drawBoard(ctx);
     ctx.restore();
     const camps = this.net.latest?.camps ?? [];
-    this.map.sites.forEach((c, i) => inView(c.x, c.y, 260) && this.world.drawSite(ctx, i, camps.includes(i), this.time));
+    this.map.sites.forEach((c, i) => inView(c.x, c.y, 260) && this.world.buildings.drawSite(ctx, i, camps.includes(i), this.time));
 
     // Projectiles des tireurs (dessinés après les créatures) : les tirs droits sont extrapolés entre deux snapshots.
     const shots = this.net.latest?.shots ?? [];
@@ -2790,7 +2790,7 @@ export class Game {
     const schoolState = this.hud.buildings.includes('school') ? 'built' : wait ? 'building' : plan ? 'plan' : 'none';
     const me = this.self(), schoolCalls = !!me && this.hud.schoolCalls(me); // une leçon finie, un livre à lire : l'École appelle
     if (inView(sc.x, sc.y, 140)) list.push({ y: sc.y, draw: () => {
-      this.world.drawSchool(ctx, schoolState, wait, this.time);
+      this.world.buildings.drawSchool(ctx, schoolState, wait, this.time);
       if (schoolCalls) drawQuestMark(ctx, sc.x, sc.y - 120, this.time);
     } });
     // le vieux coffre du Camp avancé, avec le plan de l'école, tant que personne ne l'a ouvert
@@ -2806,7 +2806,7 @@ export class Game {
       // celle du village se construit ; celles des camps s'éveillent avec leur camp
       const active = k === 0 ? this.hud.buildings.includes('stone') : camps.includes(k - 1);
       const label = k === 0 && !active ? BUILDINGS.stone.name : undefined; // le prix : dans le panneau de construction
-      if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
+      if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.buildings.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
     // le bateau du bout de l'île : l'épave, puis le bateau qu'Aubin rebâtit, étape par étape (avec son chantier)
     const sw = this.map.shipwreck, [, boatStage, boatLeft] = this.hud.lore;
@@ -2822,7 +2822,7 @@ export class Game {
     if (this.hud.heart >= HEART_IN_BOAT && inView(sw.x, sw.y, 200)) list.push({ y: sw.y + 30, draw: () => drawBoatHeart(ctx, sw.x, sw.y, this.time) });
     // Pierre de passage du bateau : à construire dès la Mer de sable ouverte (éteinte et nommée jusque-là)
     const bs = this.map.boatStone, dock = dockStoneOn(this.hud.buildings, this.hud.lore[1]);
-    if ((dock || this.gateOpen(DESERT_ZONE - 1)) && inView(bs.x, bs.y, 100)) list.push({ y: bs.y, draw: () => this.world.drawStone(ctx, bs.x, bs.y, dock, this.time, dock ? undefined : BUILDINGS.stone.name) });
+    if ((dock || this.gateOpen(DESERT_ZONE - 1)) && inView(bs.x, bs.y, 100)) list.push({ y: bs.y, draw: () => this.world.buildings.drawStone(ctx, bs.x, bs.y, dock, this.time, dock ? undefined : BUILDINGS.stone.name) });
     // parchemins laissés par les géants, au fond de leur grotte (chacun voit ceux qui l'attendent)
     for (const id of this.hud.scrollCaves) {
       const at = this.map.scrollPos(this.map.caves[id]);
@@ -2830,10 +2830,10 @@ export class Game {
     }
     // Palissade du village : pieux hauts, triés avec les créatures (on passe derrière) ; pas encore construite : son tracé.
     const palisade = this.hud.buildings.includes('palisade');
-    if (!here && !palisade && inView(village.x, village.y, VILLAGE_R * 1.3 + 60)) this.world.drawPalisadePlan(ctx);
+    if (!here && !palisade && inView(village.x, village.y, VILLAGE_R * 1.3 + 60)) this.world.buildings.drawPalisadePlan(ctx);
     if (!here && palisade && inView(village.x, village.y, VILLAGE_R * 1.3 + 60)) {
-      this.world.stakes.forEach((st, k) => inView(st.x, st.y, 40) && list.push({ y: st.y, draw: () => this.world.drawStake(ctx, k) }));
-      this.world.gatePosts.forEach((g, k) => inView(g.x, g.y, 60) && list.push({ y: g.y, draw: () => this.world.drawGatePost(ctx, k, this.time) }));
+      this.world.buildings.stakes.forEach((st, k) => inView(st.x, st.y, 40) && list.push({ y: st.y, draw: () => this.world.buildings.drawStake(ctx, k) }));
+      this.world.buildings.gatePosts.forEach((g, k) => inView(g.x, g.y, 60) && list.push({ y: g.y, draw: () => this.world.buildings.drawGatePost(ctx, k, this.time) }));
     }
     // Arbres de la carte : triés avec les créatures, feuillage transparent quand on passe dessous.
     // Abattus : une souche (on passe à travers, comme sur le serveur) jusqu'à ce qu'ils repoussent.
@@ -2845,14 +2845,14 @@ export class Game {
     for (const d of all) {
       if (!this.map.treeDown.has(d.id)) continue;
       // à la taille de l'arbre dessiné (un géant de la jungle est plus grand que son tronc de collision), à son pied
-      const z = this.map.styleZone(d.x, d.y), sz = this.world.treeSize(d.x, d.y, z), foot = d.y + sz * 0.5;
-      const bamboo = z === JUNGLE_ZONE && this.world.isBamboo(d.x, d.y);
+      const z = this.map.styleZone(d.x, d.y), sz = this.world.decor.treeSize(d.x, d.y, z), foot = d.y + sz * 0.5;
+      const bamboo = z === JUNGLE_ZONE && this.world.decor.isBamboo(d.x, d.y);
       list.push({ y: foot, draw: () => (bamboo ? drawBambooStump(ctx, d.x, foot, sz * 0.45, d.id) : drawStump(ctx, d.x, foot, sz, z === JUNGLE_ZONE ? 0.5 : 0.36)) });
     }
     const tz = new Map(trees.map((d) => [d, this.map.styleZone(d.x, d.y)])); // style de chaque arbre (la jungle a ses géants)
-    for (const d of trees) this.world.treeShadow(ctx, d.x, d.y, tz.get(d));
+    for (const d of trees) this.world.decor.treeShadow(ctx, d.x, d.y, tz.get(d));
     for (const d of trees) {
-      const s = this.world.treeSize(d.x, d.y, tz.get(d));
+      const s = this.world.decor.treeSize(d.x, d.y, tz.get(d));
       const hitK = Math.max(0, 1 - (this.time - (this.chopAt.get(d.id) ?? -9)) / 0.3), shake = Math.sin(this.time * 70) * 3 * hitK; // il tremble sous la hache
       const under = Math.hypot(this.me.x - d.x, this.me.y - (d.y - s * 0.6)) < s + 14 && this.me.y < d.y + s * 0.5;
       const fade = this.fades.get(d) ?? 1, target = under ? 0.3 : 1;
@@ -2863,7 +2863,7 @@ export class Game {
         y: d.y + s * 0.5,
         draw: () => {
           if (shake) ctx.translate(shake, 0);
-          this.world.tree(ctx, d.x, d.y, tz.get(d) ?? 1, next, false);
+          this.world.decor.tree(ctx, d.x, d.y, tz.get(d) ?? 1, next, false);
           if (shake) ctx.translate(-shake, 0);
           // entamé : ce qu'il lui reste avant de tomber (comme les rochers et les filons)
           const hp = treeState.get(d.id);
