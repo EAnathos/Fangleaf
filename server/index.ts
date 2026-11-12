@@ -31,7 +31,8 @@ const MIME: Record<string, string> = {
 /** Réponse texte courte (erreurs) : jamais deux fois, même si l'en-tête est déjà parti. */
 const fail = (res: import('node:http').ServerResponse, code: number, text: string) => {
   if (res.headersSent) return void res.destroy();
-  res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8' });
+  // no-store : une erreur passagère (déploiement en cours) ne doit rester dans aucun cache.
+  res.writeHead(code, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
   res.end(text);
 };
 
@@ -49,11 +50,12 @@ const http = createServer((req, res) => {
       res.end('Serveur Fangleaf actif. En dev, ouvre le client Vite (http://localhost:5173).');
       return;
     }
-    const file = staticFile(DIST, req.url ?? '/');
-    if (!file) return fail(res, 400, 'Requête invalide.');
+    const found = staticFile(DIST, req.url ?? '/');
+    if ('status' in found) return fail(res, found.status, found.status === 400 ? 'Requête invalide.' : 'Fichier introuvable.');
+    const { file, cache } = found;
     const stream = createReadStream(file);
     stream.on('error', () => fail(res, 500, 'Erreur du serveur.')); // fichier disparu entre-temps, droits…
-    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
+    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream', 'cache-control': cache });
     stream.pipe(res);
   } catch (e) {
     console.error('Requête HTTP en erreur :', req.url, e);

@@ -39,7 +39,7 @@ server/    index.ts       HTTP (build statique en prod), WebSocket /ws, salons, 
            mapgen.ts      génération des îles dans un worker (mapgen-worker.ts) : les autres villages ne sont pas figés
            grid.ts        hash spatial (voisinage sans O(n²))
            persist.ts     sauvegarde Supabase : villages et progression par (compte, village)
-           static.ts      fichiers du build servis en HTTP (URL malformée refusée, rien hors de dist/)
+           static.ts      fichiers du build servis en HTTP (URL malformée refusée, rien hors de dist/, 404 sous /assets/, en-têtes de cache)
 client/    index.html     lobby, HUD et panneaux
            og.html        page de dev qui produit l'aperçu des liens (public/og.jpg)
            src/main.ts    lobby : créer ou rejoindre un village

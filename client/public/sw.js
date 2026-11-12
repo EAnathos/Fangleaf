@@ -2,7 +2,8 @@
 // - Pages : le réseau d'abord (toujours la dernière version), la copie en cache seulement hors ligne.
 // - Fichiers /assets/ (noms avec empreinte, donc jamais modifiés) : le cache d'abord.
 // - Rien d'autre n'est intercepté : ni la connexion au jeu (/ws), ni les comptes, ni les polices.
-const CACHE = 'fangleaf-v1';
+// v2 : jette les copies de v1, dont des pages HTML gardées sous le nom d'un script pendant un déploiement.
+const CACHE = 'fangleaf-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => {
@@ -20,7 +21,9 @@ self.addEventListener('fetch', (event) => {
       const hit = await caches.match(req);
       if (hit) return hit;
       const res = await fetch(req);
-      if (res.ok) (await caches.open(CACHE)).put(req, res.clone());
+      // Une page HTML n'est jamais un fichier du build : un serveur d'avant le correctif la renvoyait pour un fichier
+      // absent, et la garder ici bloquerait le jeu pour de bon (le cache d'abord).
+      if (res.ok && !res.headers.get('content-type')?.includes('text/html')) (await caches.open(CACHE)).put(req, res.clone());
       return res;
     })());
     return;
