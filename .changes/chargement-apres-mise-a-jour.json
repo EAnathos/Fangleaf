@@ -1,0 +1,9 @@
+{
+  "bump": "patch",
+  "date": "2026-11-12",
+  "title": "Le jeu se charge après une mise à jour",
+  "items": [
+    "Juste après une mise à jour, le jeu pouvait rester bloqué sur l'accueil, sans version ni bouton de connexion : il se charge de nouveau normalement.",
+    "Une page restée ouverte pendant une mise à jour se recharge d'elle-même au lieu de rester bloquée."
+  ]
+}

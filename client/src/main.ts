@@ -13,6 +13,17 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   addEventListener('load', () => void navigator.serviceWorker.register('/sw.js').catch(() => { /* navigateur sans service worker : tant pis */ }));
 }
+// Un déploiement pendant que la page est ouverte : les fichiers chargés à la demande (jeu, connexion) n'existent plus
+// sous l'ancien nom. On recharge une fois pour récupérer la nouvelle version ; le drapeau évite une boucle si le
+// fichier manque aussi après le rechargement.
+addEventListener('vite:preloadError', () => {
+  try {
+    if (sessionStorage.getItem('fangleaf-reloaded')) return;
+    sessionStorage.setItem('fangleaf-reloaded', '1');
+  } catch { return; }
+  location.reload();
+});
+addEventListener('load', () => setTimeout(() => { try { sessionStorage.removeItem('fangleaf-reloaded'); } catch { /* stockage bloqué */ } }, 10_000));
 // Staging : un badge permanent pour ne jamais le confondre avec la prod (VITE_FANGLEAF_ENV, figé au build).
 if (import.meta.env.VITE_FANGLEAF_ENV === 'staging') {
   document.title = 'Fangleaf · staging';
