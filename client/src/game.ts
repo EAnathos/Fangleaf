@@ -152,6 +152,7 @@ export class Game {
     this.hud.onSell = (id) => net.send({ t: 'sell', id });
     this.hud.onBuy = (s) => net.send({ t: 'buy', s });
     this.hud.onChallenge = (cave) => net.send({ t: 'challenge', cave });
+    this.hud.onRally = (cave) => net.send({ t: 'rally', cave });
     this.hud.onChest = (id) => net.send({ t: 'chest', id });
     this.hud.onSail = () => this.map.voyage && net.send({ t: 'cave', id: this.map.voyage.id, enter: true }); // Aubin : on prend la mer
     this.hud.onHall = (name) => net.send({ t: 'hall', name });
@@ -260,14 +261,18 @@ export class Game {
     return c.open !== undefined ? c.home ?? c.inside : c.entrance;
   }
 
-  /** Combats de géant engagés par d'autres : une petite flèche autour de soi indique où ils se passent, le temps du combat. */
+  /**
+   * Combats de géant engagés par d'autres : une petite flèche autour de soi indique où ils se passent, le temps du combat.
+   * Un appel à venir combattre un géant encore endormi (bouton « Appeler ») : une flèche dorée, jusqu'au réveil du géant.
+   */
   private drawFightArrows() {
-    const fights = this.net.latest?.fights ?? [];
-    if (!fights.length || this.self()?.dead) return;
+    const fights = this.net.latest?.fights ?? [], rallies = this.net.latest?.rallies ?? [];
+    if ((!fights.length && !rallies.length) || this.self()?.dead) return;
     const { ctx, canvas, dpr } = this;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const cx = canvas.width / 2, cy = canvas.height / 2, pulse = 0.75 + 0.25 * Math.sin(this.time * 5);
-    for (const [cave] of fights) {
+    const arrows = [...fights.map(([cave]) => [cave, '#FF9B78'] as const), ...rallies.filter(([cave]) => !fights.some(([f]) => f === cave)).map(([cave]) => [cave, '#F0B64A'] as const)];
+    for (const [cave, color] of arrows) {
       const c = this.map.caves[cave], to = c && this.fightTarget(c);
       if (!to || Math.hypot(to.x - this.me.x, to.y - this.me.y) < 160) continue;
       const ang = Math.atan2(to.y - this.me.y, to.x - this.me.x), R = 84 * dpr, k = 11 * dpr;
@@ -285,7 +290,7 @@ export class Game {
       ctx.lineWidth = 3 * dpr;
       ctx.strokeStyle = 'rgba(16,24,26,0.85)';
       ctx.stroke();
-      ctx.fillStyle = '#FF9B78';
+      ctx.fillStyle = color;
       ctx.fill();
       ctx.restore();
     }
@@ -1106,6 +1111,15 @@ export class Game {
         }
         break;
       }
+      case 'rally': {
+        const boss = bossName(this.map.caves[e.cave]?.boss ?? 0);
+        if (e.by === this.myId) this.hud.toast(`Appel lancé : une flèche mène les autres dompteurs jusqu'à ${boss}.`, 'good');
+        else {
+          this.hud.toast(`${name(e.by)} t'appelle à combattre ${boss} avec lui ! Suis la flèche dorée.`);
+          sound.play('roar', 0.25);
+        }
+        break;
+      }
       case 'phase': {
         const b = this.posOf(e.id, players);
         if (b) {
@@ -1789,6 +1803,7 @@ export class Game {
     if (!dead) this.updateArea(dt);
     if (view && st) {
       this.render(view.units, view.players);
+      this.hud.rallies = this.net.latest?.rallies ?? [];
       this.hud.update(st, view.players, view.units, this.me, this.net.ping);
     }
   }

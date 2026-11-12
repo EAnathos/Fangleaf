@@ -326,6 +326,8 @@ export class Hud {
   banned: { id: string; name: string }[] = []; // bannis du village (vu par le fondateur)
   onChest = (_id: number) => {};
   onChallenge = (_cave: number) => {};
+  onRally = (_cave: number) => {};
+  rallies: readonly (readonly [number, number])[] = []; // appels en cours (snapshot) : [grotte, dompteur qui appelle]
   private talker: Portrait[] = [];
   private talkKey = ''; // géant et humeur du dialogue affiché
   private elderAt = 0; // réplique du vieil homme en cours
@@ -424,6 +426,7 @@ export class Hud {
       this.onReset();
     };
     $('talk-fight').onclick = () => this.onChallenge(this.spotAt);
+    $('talk-rally').onclick = () => this.onRally(this.spotAt);
     $('hall-up').onclick = () => {
       if (this.hall > 0) return this.onHall();
       const input = $<HTMLInputElement>('hall-name');
@@ -1076,7 +1079,7 @@ export class Hud {
     }
     this.updateSchoolHint(me);
     if (this.panel === 'buy') this.updateBuy(me);
-    if (this.panel === 'talk') this.updateTalk();
+    if (this.panel === 'talk') this.updateTalk(players.length - 1);
     if (this.panel === 'hall') this.updateHall(me);
     this.myScrolls = me.scrolls ?? 0;
     if (this.panel === 'elder') this.updateElder(me);
@@ -1434,9 +1437,15 @@ export class Hud {
   }
 
   /** Dialogue avec un géant endormi : sa réplique, puis on lance le combat (ou pas). */
-  private updateTalk() {
+  /** others : les autres dompteurs connectés (seuls eux peuvent répondre à un appel). */
+  private updateTalk(others: number) {
     const c = this.map.caves[this.spotAt];
     if (!c) return;
+    // Appeler : une flèche mène les autres jusqu'ici, jusqu'au réveil du géant
+    const rally = $<HTMLButtonElement>('talk-rally'), called = this.rallies.some(([cave]) => cave === c.id);
+    rally.disabled = called || others <= 0;
+    setText(rally.querySelector('span')!, called ? 'Appel lancé' : 'Appeler');
+    rally.title = called ? "Une flèche mène les autres dompteurs jusqu'ici, jusqu'au début du combat." : others <= 0 ? "Personne d'autre au village pour l'instant." : 'Montrer le chemin du géant aux autres dompteurs, avant de lancer le combat.';
     const sp = SPECIES[c.boss], mood = bossMemory.mood(c.id), key = `${c.id}|${mood?.mood}|${mood?.n}`;
     if (this.talkKey !== key) {
       // il se souvient de nous : apeuré s'il a été vaincu aujourd'hui, moqueur s'il nous a corrigés

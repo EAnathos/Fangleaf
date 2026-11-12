@@ -3,7 +3,7 @@
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
 import { moodLine } from '../../client/src/bossMemory.ts';
-import { VOYAGE_ZONE, alphaCreateCost, SHOT_KINDS, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, LEGEND_MULT, POISON_S, SPECIES, TORNADO_PULL_R, zoneBosses } from '../../shared/config.ts';
+import { VOYAGE_ZONE, RALLY_CD_S, RALLY_S, alphaCreateCost, SHOT_KINDS, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_HP_BONUS, BOSS_MOVES, BOSS_RESPAWN_S, CHEST_GOLD, caveUnlockCost, LEGEND_MULT, POISON_S, SPECIES, TORNADO_PULL_R, zoneBosses } from '../../shared/config.ts';
 
 describe('Géants et grottes', () => {
   rule('Grottes : entrer avec sa meute, mini-boss, âme, réapparition du boss.', () => {
@@ -126,6 +126,52 @@ describe('Géants et grottes', () => {
       if (m.owner) tamed++;
     }
     check(tamed === 0, 'les renforts d\'un géant ne s\'apprivoisent jamais (0 sur 60)');
+  });
+
+  rule("Appeler les autres devant un géant endormi : une flèche pour tout le village, effacée au réveil du géant, au départ de celui qui appelle ou après un moment ; jamais de loin, ni en rafale.", () => {
+    const r = room();
+    const c = r.map.caves[0];
+    const boss = r.units.get(r.caveBoss[c.id]);
+    type Msg = { t: string; rallies?: [number, number][]; ev?: { e: string; cave?: number; by?: number }[] };
+    let last: Msg | undefined;
+    const calls: { e: string; cave?: number; by?: number }[] = [];
+    const p = r.addPlayer('a', noop), q = r.addPlayer('b', (m: Msg) => {
+      if (m.t !== 's') return;
+      last = m;
+      calls.push(...(m.ev ?? []).filter((e) => e.e === 'rally'));
+    });
+    [q.x, q.y] = [r.map.village.x, r.map.village.y]; // loin, au village
+    [p.x, p.y] = [r.map.village.x + 40, r.map.village.y];
+    r.onRally(p, c.id);
+    r.step();
+    check(!last?.rallies && calls.length === 0, 'loin du géant : pas d\'appel');
+    [p.x, p.y] = [boss.x + boss.r + 20, boss.y];
+    r.onRally(p, c.id);
+    r.step();
+    check(JSON.stringify(last?.rallies) === JSON.stringify([[c.id, p.id]]), `devant le géant endormi : l'appel arrive chez l'autre, au village (${JSON.stringify(last?.rallies)})`);
+    check(calls.length === 1 && calls[0].by === p.id, 'et il en est prévenu une fois');
+    r.onRally(p, c.id);
+    r.step();
+    check(calls.length === 1, `relancé aussitôt : ignoré (pas de rafale avant ${RALLY_CD_S} s)`);
+    r.onChallenge(p, c.id);
+    r.step();
+    check(!boss.dormant && !last?.rallies, 'le combat commence : la flèche disparaît chez tous');
+    // nouvel essai : le géant rendormi, l'appel expire au bout de RALLY_S
+    r.calmBoss(boss);
+    r.time += RALLY_CD_S + 1;
+    [p.x, p.y] = [boss.x + boss.r + 20, boss.y];
+    r.onRally(p, c.id);
+    r.step();
+    check(!!last?.rallies, 'rappel possible après le délai');
+    r.time += RALLY_S + 1;
+    r.step();
+    check(!last?.rallies, `au bout de ${RALLY_S} s sans combat, l'appel s'efface`);
+    r.time += RALLY_CD_S + 1;
+    [p.x, p.y] = [boss.x + boss.r + 20, boss.y];
+    r.onRally(p, c.id);
+    r.removePlayer(p.id);
+    r.step();
+    check(!last?.rallies, 'celui qui appelle quitte le village : l\'appel s\'efface');
   });
 
   rule('Renforts d\'un géant : ils disparaissent dès que plus aucun dompteur debout n\'est dans la grotte.', () => {

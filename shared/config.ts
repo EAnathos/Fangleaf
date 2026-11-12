@@ -518,6 +518,8 @@ export const QUICKSAND_GROWTH = 1.8; // … puis × 1,8 chaque seconde (3, 5,4, 
 export const quicksandSink = (n: number) => QUICKSAND_SINK * QUICKSAND_GROWTH ** Math.max(0, n);
 export const BOSS_HP_BONUS = 1.2; // PV des géants : +20 % par-dessus le tableau des espèces
 export const BOSS_TALK_R = 140; // distance (depuis le bord du géant) pour lui parler et lancer le combat
+export const RALLY_S = 120; // appel à rejoindre un géant (flèche chez les autres dompteurs) : il s'efface au réveil du géant, ou au bout de ce temps
+export const RALLY_CD_S = 10; // un même appel ne se relance pas plus souvent (pas de notifications en rafale)
 export const BOSS_SOUL_DROP = 0.35;
 // Coffre du géant vaincu : chaque dompteur l'ouvre une fois, pour un montant d'or tiré au hasard (× l'or du géant).
 export const CHEST_GOLD: [number, number] = [0.75, 2]; // chance, pour chaque dompteur présent, d'obtenir l'âme
