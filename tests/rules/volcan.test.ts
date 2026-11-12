@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, ALL_CAVES } from '../helpers.ts';
-import { BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, BUILDING_IDS, DEPTHS_RESET_S, LAIR_PULL_R, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
+import { BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, ROOM_MIN, ROOM_REFILL_R, ROOM_REFILL_S, BUILDING_IDS, DEPTHS_RESET_S, LAIR_PULL_R, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
 import { HALL_ID } from '../../shared/worldmap.ts';
 import { Room } from '../../server/room.ts';
 
@@ -108,6 +108,61 @@ describe('Le volcan et ses entrailles', () => {
     const next = new Set(m.links.flatMap(([a, b]: number[]) => (a === entry ? [b] : b === entry ? [a] : [])));
     check(wild.length > 0 && wild.every((u: { x: number; y: number; room: number }) => m.caveAt(u.x, u.y) === m.depths && !m.blocked(u.x, u.y) && next.has(u.room) && m.roomAt(u.x, u.y) === u.room),
       `${wild.length} créatures de lave, dans les salles qui touchent l'entrée (et seulement elles)`);
+  });
+
+  rule('Chaque salle gardée du donjon a sa garnison bien fournie : ROOM_MIN créatures de lave au moins.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    r.units.clear();
+    const counts: number[] = [];
+    m.rooms.forEach((q: { kind: string }, k: number) => {
+      if (q.kind === 'entry' || q.kind === 'lair') return;
+      r.garrison(k);
+      counts.push([...r.units.values()].filter((u: { room?: number; x: number; y: number }) => u.room === k && m.roomAt(u.x, u.y) === k).length);
+    });
+    check(counts.length > 10 && counts.every((n) => n >= ROOM_MIN), `${counts.length} salles gardées, de ${Math.min(...counts)} à ${Math.max(...counts)} créatures (au moins ${ROOM_MIN})`);
+  });
+
+  rule('Une salle vidée du donjon se regarnit pendant la visite, loin de tout dompteur, et ses herses restent levées.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map, p = r.addPlayer('a', noop);
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y - 40];
+    r.tick = 0;
+    r.updateDepths();
+    const entry = m.rooms.findIndex((q: { kind: string }) => q.kind === 'entry');
+    const k = m.links.flatMap(([a, b]: number[]) => (a === entry ? [b] : b === entry ? [a] : [])).find((i: number) => m.rooms[i].kind !== 'lair');
+    const garrison = () => [...r.units.values()].filter((u: { room?: number; owner: number }) => u.room === k && !u.owner);
+    check(garrison().length >= ROOM_MIN, `salle voisine de l'entrée : ${garrison().length} créatures`);
+    for (const u of garrison()) r.units.delete(u.id);
+    r.updateDepths();
+    const doors = m.links.map((_: unknown, i: number) => i).filter((i: number) => m.links[i].includes(k) && m.doors[i].lair < 0);
+    const open = () => doors.every((i: number) => m.doorShut[i] === 0);
+    check(r.cleared.has(k) && open() && garrison().length === 0, 'vidée : ses herses se lèvent, elle reste vide');
+    // un dompteur la voit (il s'y tient) : rien ne revient, même longtemps après
+    const Q = m.rooms[k], there = m.freeNear(Q.x, Q.y);
+    [p.x, p.y] = [there.x, there.y];
+    check(r.nearRoom(k, ROOM_REFILL_R), 'le dompteur est dans la salle vidée');
+    r.time += ROOM_REFILL_S * 2;
+    r.updateDepths();
+    check(garrison().length === 0, 'un dompteur à côté : la salle ne se regarnit pas sous ses yeux');
+    // loin, dans une salle à l'écart : elle se regarnit, une fois le délai passé (compté depuis qu'elle est vide)
+    const far = m.rooms.findIndex((q: { x: number; y: number; kind: string }) => q.kind === 'room' && Math.hypot(q.x - Q.x, q.y - Q.y) > Math.max(Q.rx, Q.ry) + ROOM_REFILL_R + 600);
+    check(far >= 0, 'une salle loin de la salle vidée');
+    const at = m.freeNear(m.rooms[far].x, m.rooms[far].y);
+    [p.x, p.y] = [at.x, at.y];
+    check(m.caveAt(p.x, p.y) === m.depths && !r.nearRoom(k, ROOM_REFILL_R), 'le dompteur est parti loin, toujours dans le donjon');
+    r.updateDepths();
+    check(garrison().length >= ROOM_MIN, `personne à côté depuis le délai : la salle se regarnit (${garrison().length} créatures)`);
+    check(r.cleared.has(k) && open(), 'regarnie : ses herses restent levées, personne n\'est enfermé');
+    // vidée de nouveau : le délai repart de zéro
+    for (const u of garrison()) r.units.delete(u.id);
+    r.updateDepths();
+    r.time += ROOM_REFILL_S - 5;
+    r.updateDepths();
+    check(garrison().length === 0, 'vidée de nouveau : rien avant la fin du délai');
+    r.time += 10;
+    r.updateDepths();
+    check(garrison().length >= ROOM_MIN, '… puis elle se regarnit');
   });
 
   rule('Les herses : vider une salle ouvre les voisines ; un antre ne s\'ouvre qu\'une fois son entrée payée.', () => {
