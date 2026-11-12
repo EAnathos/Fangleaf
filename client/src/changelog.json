@@ -1,5 +1,32 @@
 [
   {
+    "version": "0.15.0",
+    "date": "2026-11-12",
+    "title": "Des tempêtes venues de partout",
+    "items": [
+      "Chaque tempête de sable vient de son propre côté : le vent pousse dans son sens, le sable file de même à l'écran, et l'alerte dit d'où elle vient."
+    ]
+  },
+  {
+    "version": "0.14.0",
+    "date": "2026-11-12",
+    "title": "Nouveautés : Plus de gel quand un village se charge · Volcan : combats d'antre fiables, salamandre ardente · Les échanges fonctionnent de nouveau · Appeler le village devant un géant · Les cercles au sol tiennent parole · Une caméra souple",
+    "items": [
+      "Plus de gel quand un village se charge — Quand un autre village est créé ou rouvert sur le serveur, ta partie ne se fige plus pendant plusieurs secondes.",
+      "Volcan : combats d'antre fiables, salamandre ardente — Combat dans un antre : il ne s'arrête plus quand le dernier dompteur debout recule jusqu'à la herse ou se colle au mur.",
+      "Volcan : combats d'antre fiables, salamandre ardente — Quand la herse d'un antre retombe, rien ne reste coincé dessous, et les monstres qui poursuivaient un dompteur juste devant entrent avec lui.",
+      "Volcan : combats d'antre fiables, salamandre ardente — La carte du donjon du volcan est gardée pour le village : les salles découvertes le restent quand on remonte, qu'on recharge ou que les salles se regarnissent.",
+      "Volcan : combats d'antre fiables, salamandre ardente — La Salamandre de braise sème la lave en courant et bondit sur sa cible dans une gerbe de braises, sauvage comme dans ta meute.",
+      "Volcan : combats d'antre fiables, salamandre ardente — Les créatures des entrailles du volcan ont 50 % de PV en plus.",
+      "Les échanges fonctionnent de nouveau — Un échange entre dompteurs ne s'annule plus tout seul dès son ouverture : il reste ouvert jusqu'à ce que l'un de vous l'annule, s'éloigne ou le conclue.",
+      "Appeler le village devant un géant — Devant un géant endormi, le bouton « Appeler » montre le chemin aux autres dompteurs : une flèche dorée les mène jusqu'à toi, jusqu'à ce que le combat commence.",
+      "Appeler le village devant un géant — Sur téléphone, les boutons du dialogue avec un géant ne dépassent plus de l'écran.",
+      "Les cercles au sol tiennent parole — Les attaques annoncées par un cercle au sol (le Gorille qui fracasse le sol, bonds, ondes de choc, rochers, geysers…) ne touchent plus au-delà du cercle dessiné, surtout devant et derrière.",
+      "Une caméra souple — La caméra ne bouge plus pour quelques pas sur place : elle suit en douceur et regarde devant toi quand tu avances, d'autant plus loin que tu vas vite.",
+      "Une caméra souple — Elle se règle dans Paramètres › Affichage (Caméra souple) ; décochée, elle reste fixée sur ton dompteur."
+    ]
+  },
+  {
     "version": "0.13.1",
     "date": "2026-11-11",
     "title": "Échanges plus sûrs",

@@ -36,6 +36,7 @@ shared/    config.ts      règles et équilibrage (espèces, coûts, zones, bât
            math.ts        bruit, hasard à graine
 server/    index.ts       HTTP (build statique en prod), WebSocket /ws, salons, boucle de simulation
            room.ts        simulation d'un village : IA, combat, meutes, géants, économie
+           mapgen.ts      génération des îles dans un worker (mapgen-worker.ts) : les autres villages ne sont pas figés
            grid.ts        hash spatial (voisinage sans O(n²))
            persist.ts     sauvegarde Supabase : villages et progression par (compte, village)
            static.ts      fichiers du build servis en HTTP (URL malformée refusée, rien hors de dist/)
@@ -44,9 +45,15 @@ client/    index.html     lobby, HUD et panneaux
            src/main.ts    lobby : créer ou rejoindre un village
            src/game.ts    boucle de jeu : prédiction locale, rendu, événements
            src/net.ts     WebSocket et interpolation
+           src/camera.ts  caméra souple : zone morte, suivi amorti, regard vers l'avant (sans dépendance au navigateur)
            src/hud.ts     HUD et panneaux (forge, Tanière, marché, Hôtel de ville…)
            src/changelog.ts   nouveautés du jeu et numéro de version, affichés dans le lobby
            src/world.ts, sprites.ts, caves.ts, volcano.ts, voyage.ts, fx.ts, anim.ts, sky.ts, fog.ts   rendu
+           src/world/     ce que world.ts assemble : terrain.ts (couleurs du sol), decor.ts (arbres, petits décors),
+                          buildings.ts (village, palissade, bâtiments, camp, école, épave) ; world.decor et world.buildings
+           src/sprites/   les créatures, un module par zone (lisiere, bois, landes, ruines, lacs, jungle, desert, volcan,
+                          haute-mer, dragons des îlots) et leurs outils de dessin communs (outils.ts) ; sprites.ts les
+                          assemble (drawUnit) et réexporte leur API
            src/audio.ts, music.ts, sfx.ts                                      son
 supabase/  migrations SQL (npm run db:migrate)
 tests/     tests de règles par thème (tests/rules/*.test.ts) et leurs outils (helpers.ts)
@@ -70,6 +77,8 @@ Le ciel (jour, nuit, météo) n'est pas transmis : client et serveur le calculen
 La **carte explorée** est commune au village : le serveur dévoile les cases autour de chaque dompteur (`shared/fog.ts`),
 la sauvegarde avec le village (migration 029) et l'envoie à chaque membre qui arrive (`fog`). Ensuite, chaque client
 dévoile lui-même autour des dompteurs qu'il reçoit dans les snapshots (tous les membres connectés y sont).
+Le donjon du volcan est hors de cette grille : sa carte retient les **salles découvertes** (`revealRooms`, même règle
+des deux côtés), gardées de la même façon par le serveur (migration 030) et envoyées avec la carte explorée.
 
 Les **échanges** entre dompteurs (`swap`) se jouent entièrement sur le serveur : il borne chaque part à ce que le
 dompteur possède, envoie l'état aux deux après chaque changement et ne fait le transfert que quand les deux ont validé.
@@ -93,9 +102,9 @@ d'un assistant. Ils se découpent **progressivement**, un fichier par PR, quand 
 
 | Fichier | Taille | Découpage visé |
 |---|---|---|
-| `client/src/sprites.ts` | ~9 700 lignes | un module par famille de créatures (`client/src/sprites/…`), les outils de dessin communs à part |
+| `client/src/sprites.ts` | ~5 000 lignes | fait : les créatures sont dans `client/src/sprites/` (une famille par module, outils communs à part). Reste à sortir : dompteurs, objets, attaques au sol, robes des Alphas |
 | `server/room.ts` | ~5 500 lignes | la classe `Room` garde l'état, les joueurs et les actions ; à part : les attaques des géants (section « Attaques spéciales des mini-boss », ~2 500 lignes), l'envoi réseau (section « Réseau »), puis l'IA des meutes et la faune |
-| `client/src/game.ts`, `client/src/hud.ts`, `client/src/world.ts` | ~3 000 lignes chacun | `hud.ts` : un module par panneau (forge, Tanière, marché, Hôtel de ville…) ; `world.ts` : terrain, décor, bâtiments |
+| `client/src/game.ts`, `client/src/hud.ts` | ~3 000 lignes chacun | `hud.ts` : un module par panneau (forge, Tanière, marché, Hôtel de ville…) ; `world.ts` : fait (terrain, décor et bâtiments dans `client/src/world/`) |
 | `shared/worldmap.ts` | ~2 100 lignes | la génération (une fois, à la création) séparée des requêtes de jeu (`blocked`, `freeNear`, chemins) |
 
 Règles d'un découpage :

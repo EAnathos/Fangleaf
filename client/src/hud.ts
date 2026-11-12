@@ -19,6 +19,8 @@ import { ACTIONS, type Action, applyUi, keyLabel, labelOf, resetKeys, saveSettin
 import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 import { clamp } from '../../shared/math.ts';
+import { revealRooms } from '../../shared/fog.ts';
+import { closesAway } from './panels.ts';
 
 export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | 'trade' | null;
 type SwapView = Extract<ServerMsg, { t: 'swap' }>;
@@ -324,6 +326,8 @@ export class Hud {
   banned: { id: string; name: string }[] = []; // bannis du village (vu par le fondateur)
   onChest = (_id: number) => {};
   onChallenge = (_cave: number) => {};
+  onRally = (_cave: number) => {};
+  rallies: readonly (readonly [number, number])[] = []; // appels en cours (snapshot) : [grotte, dompteur qui appelle]
   private talker: Portrait[] = [];
   private talkKey = ''; // géant et humeur du dialogue affiché
   private elderAt = 0; // réplique du vieil homme en cours
@@ -422,6 +426,7 @@ export class Hud {
       this.onReset();
     };
     $('talk-fight').onclick = () => this.onChallenge(this.spotAt);
+    $('talk-rally').onclick = () => this.onRally(this.spotAt);
     $('hall-up').onclick = () => {
       if (this.hall > 0) return this.onHall();
       const input = $<HTMLInputElement>('hall-name');
@@ -1060,8 +1065,7 @@ export class Hud {
       const act = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.heart ? this.onHeart() : b.plan ? this.onPlan() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
       onTap(prompt, act);
     }
-    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board', 'profile', 'victory'].includes(this.panel);
-    if (building && b?.panel !== this.panel) this.setPanel(null);
+    if (closesAway(this.panel, b?.panel)) this.setPanel(null);
     if (b?.buy) this.buying = b.buy;
     if (b?.at !== undefined && b.at !== this.spotAt) {
       this.spotAt = b.at;
@@ -1075,7 +1079,7 @@ export class Hud {
     }
     this.updateSchoolHint(me);
     if (this.panel === 'buy') this.updateBuy(me);
-    if (this.panel === 'talk') this.updateTalk();
+    if (this.panel === 'talk') this.updateTalk(players.length - 1);
     if (this.panel === 'hall') this.updateHall(me);
     this.myScrolls = me.scrolls ?? 0;
     if (this.panel === 'elder') this.updateElder(me);
@@ -1433,9 +1437,15 @@ export class Hud {
   }
 
   /** Dialogue avec un géant endormi : sa réplique, puis on lance le combat (ou pas). */
-  private updateTalk() {
+  /** others : les autres dompteurs connectés (seuls eux peuvent répondre à un appel). */
+  private updateTalk(others: number) {
     const c = this.map.caves[this.spotAt];
     if (!c) return;
+    // Appeler : une flèche mène les autres jusqu'ici, jusqu'au réveil du géant
+    const rally = $<HTMLButtonElement>('talk-rally'), called = this.rallies.some(([cave]) => cave === c.id);
+    rally.disabled = called || others <= 0;
+    setText(rally.querySelector('span')!, called ? 'Appel lancé' : 'Appeler');
+    rally.title = called ? "Une flèche mène les autres dompteurs jusqu'ici, jusqu'au début du combat." : others <= 0 ? "Personne d'autre au village pour l'instant." : 'Montrer le chemin du géant aux autres dompteurs, avant de lancer le combat.';
     const sp = SPECIES[c.boss], mood = bossMemory.mood(c.id), key = `${c.id}|${mood?.mood}|${mood?.n}`;
     if (this.talkKey !== key) {
       // il se souvient de nous : apeuré s'il a été vaincu aujourd'hui, moqueur s'il nous a corrigés
@@ -1564,7 +1574,7 @@ export class Hud {
     }));
     paintMode();
     this.placeStatusBar();
-    for (const k of ['shake', 'ping', 'weather'] as const) {
+    for (const k of ['shake', 'camera', 'ping', 'weather'] as const) {
       const box = $<HTMLInputElement>(`set-${k}`);
       box.checked = settings.display[k];
       box.onchange = () => {
@@ -3005,7 +3015,12 @@ export class Hud {
     ctx.stroke();
   }
 
-  private explored = new Set<number>(); // salles du donjon déjà vues (cette session)
+  private explored = new Set<number>(); // salles du donjon découvertes par le village (gardées par le serveur)
+
+  /** Salles du donjon que le village a déjà découvertes (envoyées par le serveur à l'arrivée). */
+  mergeDepths(rooms: readonly number[]) {
+    for (const k of rooms) if (Number.isInteger(k) && k >= 0 && k < this.map.rooms.length) this.explored.add(k);
+  }
 
   /**
    * Carte du donjon sous le volcan (minicarte, et grande carte quand on y est) : les salles déjà vues et leurs couloirs
@@ -3015,9 +3030,9 @@ export class Hud {
   private drawDungeonMap(me: PlayerState, players: PlayerState[], myPos: { x: number; y: number }, ctx = this.mini, S = 180, z = 1) {
     const map = this.map, h = map.depths.inside, k = S / (2 * HALL_RX);
     const m = (x: number, y: number): [number, number] => [S / 2 + (x - h.x) * k, S / 2 + (y - h.y) * k];
-    map.rooms.forEach((r, i) => {
-      if (Math.hypot(r.x - myPos.x, r.y - myPos.y) < Math.max(r.rx, r.ry) + 420) this.explored.add(i);
-    });
+    // (même règle que le serveur, qui les garde pour le village : celles qu'on découvre ensemble s'affichent aussitôt)
+    revealRooms(this.explored, map.rooms, myPos.x, myPos.y);
+    for (const p of players) if (!p.dead && p.id !== me.id && map.caveAt(p.x, p.y) === map.depths) revealRooms(this.explored, map.rooms, p.x, p.y);
     ctx.fillStyle = '#120C0A';
     ctx.fillRect(0, 0, S, S);
     ctx.lineCap = 'round';

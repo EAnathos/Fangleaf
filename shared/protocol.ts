@@ -60,6 +60,7 @@ export type ClientMsg =
   | { t: 'mount'; id: number } // 0 = descendre
   | { t: 'cave'; id: number; enter: boolean } // entrer dans une grotte / en sortir (id -1 : le volcan)
   | { t: 'challenge'; cave: number } // parler au géant endormi de sa grotte : le combat commence
+  | { t: 'rally'; cave: number } // devant le géant endormi : appeler les autres dompteurs à venir le combattre
   | { t: 'chest'; id: number } // ouvrir le coffre laissé par un géant vaincu (une fois par dompteur)
   | { t: 'establish'; site: number } // établir le camp de cet emplacement (pour tout le village)
   | { t: 'travel'; to: number } // Pierre de passage : -1 = village, -2 = bateau, sinon index du camp
@@ -243,6 +244,7 @@ export type GameEvent =
   | { e: 'boss'; cave: number; s: number; down: boolean } // mini-boss vaincu (down) ou de retour
   | { e: 'move'; id: number; kind: string } // un mini-boss lance une attaque spéciale
   | { e: 'challenge'; cave: number; id: number; by: number } // un dompteur a provoqué le géant : le combat commence
+  | { e: 'rally'; cave: number; by: number } // un dompteur appelle les autres à venir combattre ce géant avec lui
   | { e: 'chest'; id: number; to: number; gold: number; x: number; y: number; book?: number } // coffre ouvert : or tiré au hasard, parfois un livre (bookIndex)
   | { e: 'prick'; id: number } // un dompteur s'est frotté à un cactus
   | { e: 'munch'; id: number; ore: number; done: boolean } // un golem de la meute croque un rocher (done : avalé)
@@ -314,6 +316,7 @@ export interface Snapshot {
   trees: [number, number][]; // arbres proches entamés ou abattus : [index dans decor, pv %] (absents : intacts)
   caves: number[]; // par grotte : secondes avant le retour du mini-boss (0 = présent)
   fights: [number, number][]; // combats de géant en cours : [grotte, id du dompteur qui l'a réveillé]
+  rallies?: [number, number][]; // appels à rejoindre un géant encore endormi : [grotte, id du dompteur qui appelle] (absent : aucun)
   camps: number[]; // emplacements de camp établis par le village
   buildings: BuildingId[]; // bâtiments construits au village
   hall: number; // niveau de la Maison commune
@@ -346,7 +349,7 @@ export type ServerMsg =
   | { t: 'teleport'; x: number; y: number }
   | { t: 'pong'; ts: number; now?: number } // now : heure du serveur (ms), pour le ciel commun
   | { t: 'board'; rows: BoardRow[] } // tableau du village (membres en ligne et déconnectés)
-  | { t: 'fog'; cells: string } // carte explorée du village (shared/fog.ts, packFog), envoyée à l'arrivée
+  | { t: 'fog'; cells: string; depths: number[] } // carte explorée du village (shared/fog.ts, packFog) et salles découvertes du donjon, envoyées à l'arrivée
   | { t: 'swap'; with: number; mine: SwapOffer; theirs: SwapOffer; okMine: boolean; okTheirs: boolean } // échange en cours, après chaque changement
   | { t: 'swapEnd'; done: boolean; why?: string } // échange conclu (done) ou annulé (why : pourquoi)
   | Snapshot;

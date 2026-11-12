@@ -197,6 +197,17 @@ export const sleeperBlocks = (bosses: Iterable<{ x: number; y: number; r: number
   return false;
 };
 export const PLAYER_SPEED = 210;
+// Caméra souple (client/src/camera.ts) : les petits pas ne la bougent pas, elle suit en douceur et regarde devant soi,
+// d'autant plus loin qu'on va vite.
+export const CAMERA_DEAD_R = 45; // zone morte autour du dompteur (px) : en deçà, la caméra ne bouge pas
+export const CAMERA_SOFT_S = 0.35; // souplesse du ressort qui amène la caméra au point visé (s)
+export const CAMERA_LOOK_FROM = 120; // vitesse lissée (px/s) à partir de laquelle on regarde devant : pas sur les petits pas
+export const CAMERA_LOOK_S = 1.4; // regard vers l'avant : tant de secondes de la vitesse au-delà du seuil (px)
+export const CAMERA_LOOK_MAX = 260; // … sans regarder plus loin que ça (px)
+export const CAMERA_LOOK_VERT = 0.75; // l'écran est moins haut que large : on regarde moins loin vers le haut et le bas
+export const CAMERA_VEL_S = 0.35; // lissage de la vitesse : un zigzag ou un arrêt bref ne fait pas basculer le regard (s)
+export const CAMERA_SNAP_R = 600; // un saut plus grand d'une image à l'autre (téléportation, grotte, réapparition) : la caméra saute aussi
+export const CAMERA_VEL_MAX = 900; // vitesse prise en compte au plus (px/s) : un recalage du serveur ne fait pas bondir la caméra
 export const PLAYER_RANGE = 62; // portée de pioche (filons), au-delà des rayons
 
 // Classes, choisies à la forge (la première fois gratuitement, ensuite contre un peu d'or).
@@ -492,8 +503,7 @@ export const alphaEquipMax = (learned: readonly number[]) => ALPHA_EQUIP_MAX + M
 
 // Grottes : un mini-boss par grotte, qui réapparaît après un délai ; il peut lâcher son âme.
 export const BOSS_RESPAWN_S = 300;
-export const STORM_PUSH = 55; // tempête de sable au plus fort : elle pousse le dompteur de 55 px/s dans le sens du vent…
-export const STORM_WIND = { x: 0.984, y: 0.177 }; // … vers l'est, en descendant un peu (comme les traînées de sable à l'écran)
+export const STORM_PUSH = 55; // tempête de sable au plus fort : elle pousse le dompteur de 55 px/s dans le sens du vent (chaque tempête a le sien : shared/weather.ts)
 export const GOLEM_EAT_R = 130; // un golem de la meute repère un rocher à cette distance…
 export const GOLEM_BITE_S = 0.9; // … et le grignote, une bouchée toutes les 0,9 s…
 export const GOLEM_BITES = 4; // … en quatre bouchées : la pierre revient à son dompteur
@@ -518,6 +528,8 @@ export const QUICKSAND_GROWTH = 1.8; // … puis × 1,8 chaque seconde (3, 5,4, 
 export const quicksandSink = (n: number) => QUICKSAND_SINK * QUICKSAND_GROWTH ** Math.max(0, n);
 export const BOSS_HP_BONUS = 1.2; // PV des géants : +20 % par-dessus le tableau des espèces
 export const BOSS_TALK_R = 140; // distance (depuis le bord du géant) pour lui parler et lancer le combat
+export const RALLY_S = 120; // appel à rejoindre un géant (flèche chez les autres dompteurs) : il s'efface au réveil du géant, ou au bout de ce temps
+export const RALLY_CD_S = 10; // un même appel ne se relance pas plus souvent (pas de notifications en rafale)
 export const BOSS_SOUL_DROP = 0.35;
 // Coffre du géant vaincu : chaque dompteur l'ouvre une fois, pour un montant d'or tiré au hasard (× l'or du géant).
 export const CHEST_GOLD: [number, number] = [0.75, 2]; // chance, pour chaque dompteur présent, d'obtenir l'âme
@@ -818,6 +830,11 @@ export const lobbedShot = (kind: number | Ranged['kind']) => { const k = typeof 
 export const ARC_FLIGHT_S = 0.9;
 /** Zone de chute d'un tir en cloche, vue en perspective : une ellipse aplatie à ce rapport (le serveur ne touche que ce qui s'y tient). */
 export const SPLASH_FLAT = 0.6;
+// Zones d'attaque annoncées au sol : un cercle dessiné aplati en perspective (sa hauteur fait HAZARD_FLAT fois sa
+// largeur). Le serveur touche dans la même ellipse (un corps qui mord dessus compte), pour les styles dessinés ainsi ;
+// les autres (embuscade, piqué, braises, champignons…) ont leur propre dessin et gardent un cercle.
+export const HAZARD_FLAT = 0.75;
+export const FLAT_ZONES: ReadonlySet<string> = new Set(['', 'blink', 'bubble', 'slam', 'fireslam', 'geyser', 'leap', 'pound', 'rock', 'stalk', 'web']);
 
 // Deux à trois espèces par zone, progression marquée d'une zone à l'autre (PV et dégâts ×2,5 à ×3).
 // L'index de chaque espèce sert dans les profils sauvegardés (essences, Alphas) : n'ajouter qu'à la fin.
@@ -867,10 +884,11 @@ export const SPECIES: Species[] = [
   // Bois profonds : le Tréant dort dans un arbre ; il en sort parfois quand on l'abat (jamais d'apparition ailleurs).
   { key: 'treant', name: 'Tréant', color: '#6B4E30', r: 24, hp: 160, dmg: 15, speed: 80, atkCd: 1.3, gold: 10, zone: 2, population: 0, pack: [1, 1], awaken: 20 }, // rare : éveil moins cher
   // Entrailles du volcan (zone 7, sous la Mer de sable) : trois espèces qu'on ne voit nulle part ailleurs, et leurs géants
-  // (un antre chacun dans la salle).
-  { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 3600, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 8, population: 16, pack: [2, 4] },
-  { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 2800, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 8, population: 14, pack: [3, 5] },
-  { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 9000, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 8, population: 10, pack: [1, 1], ranged: { kind: 'magma', range: 360, windup: 0.7, speed: 0, splash: 60 } },
+  // (un antre chacun dans la salle). La salamandre sème la lave en courant et bondit dans une gerbe de braises (sauvage
+  // comme apprivoisée) : sans ça, c'était la plus faible des trois.
+  { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 5400, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 8, population: 16, pack: [2, 4], moves: [{ kind: 'trail', cd: 8, dur: 3 }, { kind: 'blink', cd: 12, fire: true }] },
+  { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 4200, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 8, population: 14, pack: [3, 5] },
+  { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 13500, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 8, population: 10, pack: [1, 1], ranged: { kind: 'magma', range: 360, windup: 0.7, speed: 0, splash: 60 } },
   { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'salamander', base: 'salamander' },
   { key: 'ash_lord', name: 'Titus Veillafandre', color: '#38323A', r: 60, hp: 125000, dmg: 470, speed: 220, atkCd: 0.9, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'ash_bat', base: 'ash_bat' },
   { key: 'mountain_tortoise', name: 'Tortue-Montagne', color: '#40342E', r: 70, hp: 170000, dmg: 520, speed: 185, atkCd: 1.5, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'lava_tortoise', base: 'lava_tortoise' },
@@ -988,6 +1006,8 @@ export const CORRIDOR_R = 72; // demi-largeur d'un couloir
 export const DOOR_T = 16; // demi-épaisseur d'une herse
 export const ROOM_PACKS: [number, number] = [2, 3]; // meutes gardant chaque salle (au moins, au plus)
 export const HEART_PACKS = 4; // celles qui gardent la salle du cœur
+export const LAIR_PULL_R = 600; // la herse d'un antre retombe : un monstre sauvage à cette distance, aux trousses de quelqu'un dans l'antre, y entre avec lui
+export const DEPTHS_REVEAL_R = 420; // une salle du donjon est découverte (sur sa carte) quand un dompteur passe à cette distance de son bord
 export const DEPTHS_RESET_S = 120; // personne dans le donjon depuis ce temps-là : salles regarnies, herses rabaissées
 // Pièges du donjon : évents de flammes en travers des couloirs (un rythme à lire), dalles piégées dans les salles (un geyser de lave).
 export const VENT_R = 84;

@@ -2,7 +2,7 @@
 
 import { initCheat } from './cheat.ts';
 import { drawCoatiClue } from './coati.ts';
-import { TRADE_R, ISLE_NAMES, SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
+import { TRADE_R, ISLE_NAMES, SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_BURN } from '../../shared/protocol.ts';
@@ -28,6 +28,7 @@ import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts'
 import { drawSubmerged, drawVoyage } from './voyage.ts';
 import { drawAubinAtWork, drawBoat, drawBoatLabel } from './boat.ts';
 import { Cinema, type Crew } from './cinematics.ts';
+import { SmoothCamera } from './camera.ts';
 
 /** Dégâts affichés arrondis à 2 décimales, à la française : 6,4 · 12 · 4,85. */
 /** Nom d'un géant. */
@@ -110,6 +111,8 @@ export class Game {
   private sandToast = -99; // dernier avertissement « sables mouvants »
   private hammerAt = -9; // dernier coup de marteau d'Aubin (bruit)
   private cinema = new Cinema(); // cinématiques du bateau (embarquement, Kraken)
+  private camera = new SmoothCamera(); // centre de la vue (caméra souple, ou collée au dompteur : réglage)
+  private calm = matchMedia('(prefers-reduced-motion: reduce)'); // mouvements réduits : pas de regard vers l'avant
   private boarding: { sentAt: number; check: number } | null = null; // embarquement fini : on attend d'être sur le pont
   /** Aubin qui part au chantier du bateau (back : qui en revient), à pied jusqu'à la porte du village. */
   private elderTrip: { t0: number; back: boolean; said?: boolean } | null = null;
@@ -152,6 +155,7 @@ export class Game {
     this.hud.onSell = (id) => net.send({ t: 'sell', id });
     this.hud.onBuy = (s) => net.send({ t: 'buy', s });
     this.hud.onChallenge = (cave) => net.send({ t: 'challenge', cave });
+    this.hud.onRally = (cave) => net.send({ t: 'rally', cave });
     this.hud.onChest = (id) => net.send({ t: 'chest', id });
     this.hud.onSail = () => this.map.voyage && net.send({ t: 'cave', id: this.map.voyage.id, enter: true }); // Aubin : on prend la mer
     this.hud.onHall = (name) => net.send({ t: 'hall', name });
@@ -260,14 +264,20 @@ export class Game {
     return c.open !== undefined ? c.home ?? c.inside : c.entrance;
   }
 
-  /** Combats de géant engagés par d'autres : une petite flèche autour de soi indique où ils se passent, le temps du combat. */
+  /**
+   * Combats de géant engagés par d'autres : une petite flèche autour de soi indique où ils se passent, le temps du combat.
+   * Un appel à venir combattre un géant encore endormi (bouton « Appeler ») : une flèche dorée, jusqu'au réveil du géant.
+   */
   private drawFightArrows() {
-    const fights = this.net.latest?.fights ?? [];
-    if (!fights.length || this.self()?.dead) return;
+    const fights = this.net.latest?.fights ?? [], rallies = this.net.latest?.rallies ?? [];
+    if ((!fights.length && !rallies.length) || this.self()?.dead) return;
     const { ctx, canvas, dpr } = this;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const cx = canvas.width / 2, cy = canvas.height / 2, pulse = 0.75 + 0.25 * Math.sin(this.time * 5);
-    for (const [cave] of fights) {
+    // autour du dompteur, là où il est à l'écran (la caméra souple ne le garde pas au centre)
+    const cx = canvas.width / 2 + (this.me.x - this.camera.x) * this.scale, cy = canvas.height / 2 + (this.me.y - this.camera.y) * this.scale;
+    const pulse = 0.75 + 0.25 * Math.sin(this.time * 5);
+    const arrows = [...fights.map(([cave]) => [cave, '#FF9B78'] as const), ...rallies.filter(([cave]) => !fights.some(([f]) => f === cave)).map(([cave]) => [cave, '#F0B64A'] as const)];
+    for (const [cave, color] of arrows) {
       const c = this.map.caves[cave], to = c && this.fightTarget(c);
       if (!to || Math.hypot(to.x - this.me.x, to.y - this.me.y) < 160) continue;
       const ang = Math.atan2(to.y - this.me.y, to.x - this.me.x), R = 84 * dpr, k = 11 * dpr;
@@ -285,7 +295,7 @@ export class Game {
       ctx.lineWidth = 3 * dpr;
       ctx.strokeStyle = 'rgba(16,24,26,0.85)';
       ctx.stroke();
-      ctx.fillStyle = '#FF9B78';
+      ctx.fillStyle = color;
       ctx.fill();
       ctx.restore();
     }
@@ -605,7 +615,7 @@ export class Game {
     if (closed >= 0) {
       const c = map.spineAt(map.gateSpine(closed) - 90);
       if (Math.abs(c.x - camX) < hw + 300 && Math.abs(c.y - camY) < hh + 300) {
-        this.world.drawGateLabel(ctx, c.x, c.y, closed === 0 ? 'Brume · suite de la Lisière' : `Brume · ${ZONE_NAMES[closed]}`, this.gateWhy(closed));
+        this.world.buildings.drawGateLabel(ctx, c.x, c.y, closed === 0 ? 'Brume · suite de la Lisière' : `Brume · ${ZONE_NAMES[closed]}`, this.gateWhy(closed));
       }
     }
   }
@@ -653,7 +663,7 @@ export class Game {
    * part de jungle sous la caméra : il apparaît en fondu en passant la frontière.
    */
   private drawCanopy(camX: number, camY: number) {
-    const j = this.map.caveAt(camX, camY) ? 0 : jungleMix(this.map, camX, camY);
+    const j = this.map.caveAt(this.me.x, this.me.y) ? 0 : jungleMix(this.map, camX, camY);
     if (j <= 0.01) return;
     const { ctx, canvas } = this, W = canvas.width, H = canvas.height, dpr = this.dpr;
     ctx.save();
@@ -841,7 +851,10 @@ export class Game {
       location.href = location.pathname;
     } else if (m.t === 'error') this.hud.toast(m.msg);
     else if (m.t === 'board') this.hud.board(m.rows);
-    else if (m.t === 'fog') this.fog.merge(m.cells); // la carte du village, découverte aussi par les autres
+    else if (m.t === 'fog') {
+      this.fog.merge(m.cells); // la carte du village, découverte aussi par les autres
+      this.hud.mergeDepths(m.depths ?? []); // et les salles du donjon (un serveur plus ancien ne les envoie pas)
+    }
     else if (m.t === 'swap') this.hud.showSwap(m, this.net.latest?.players.find((p) => p.id === m.with)?.name ?? 'un dompteur');
     else if (m.t === 'swapEnd') this.hud.endSwap(m.done, m.why);
     else if (m.t === 'teleport') {
@@ -1100,6 +1113,15 @@ export class Game {
           const there = this.map.arenaAt(this.me.x, this.me.y)?.id === e.cave;
           this.hud.toast(`${name(e.by)} a réveillé ${bossName(this.map.caves[e.cave]?.boss ?? 0)} !${there ? '' : ' Suis la flèche pour lui prêter main-forte.'}`);
           if (!there) sound.play('roar', 0.35);
+        }
+        break;
+      }
+      case 'rally': {
+        const boss = bossName(this.map.caves[e.cave]?.boss ?? 0);
+        if (e.by === this.myId) this.hud.toast(`Appel lancé : une flèche mène les autres dompteurs jusqu'à ${boss}.`, 'good');
+        else {
+          this.hud.toast(`${name(e.by)} t'appelle à combattre ${boss} avec lui ! Suis la flèche dorée.`);
+          sound.play('roar', 0.25);
         }
         break;
       }
@@ -1408,7 +1430,7 @@ export class Game {
         if (!d) break;
         const t = this.map.trunkOf(d);
         this.chopAt.set(e.id, this.time);
-        const z = this.map.styleZone(d.x, d.y), bamboo = z === JUNGLE_ZONE && this.world.isBamboo(d.x, d.y);
+        const z = this.map.styleZone(d.x, d.y), bamboo = z === JUNGLE_ZONE && this.world.decor.isBamboo(d.x, d.y);
         this.fx.burst(t.x, t.y - 10, bamboo ? '#9DBF5A' : '#B88A5A', e.done ? 24 : 5, e.done ? 160 : 70); // copeaux (ou éclats de bambou)
         if (e.done) this.fx.burst(t.x, t.y - 50, z === DESERT_ZONE ? '#7FA65A' : '#4F8A45', 26, 140); // le feuillage s'éparpille
         if (e.by === this.myId || players.some((p) => p.id === e.by)) this.tools.set(e.by, { kind: 'axe', at: this.time, tx: t.x, ty: t.y });
@@ -1695,11 +1717,12 @@ export class Game {
       this.me.fx = dx / l;
       this.me.fy = dy / l;
     }
-    // Tempête de sable : le vent pousse le dompteur vers l'est (même règle de passage qu'un pas ordinaire).
-    const gust = dead || this.map.caveAt(this.me.x, this.me.y) || !this.gateOpen(DESERT_ZONE - 1) ? 0 : skyAt(this.map.seed, this.net.serverNow()).storm * desertMix(this.map, this.me.x, this.me.y);
+    // Tempête de sable : le vent pousse le dompteur dans son sens, propre à chaque tempête (même règle de passage qu'un pas ordinaire).
+    const weather = skyAt(this.map.seed, this.net.serverNow()), wind = weather.wind;
+    const gust = dead || this.map.caveAt(this.me.x, this.me.y) || !this.gateOpen(DESERT_ZONE - 1) ? 0 : weather.storm * desertMix(this.map, this.me.x, this.me.y);
     if (gust > 0.05) {
       const swim = !!st?.mount && swimMount(st.mount.species), fly = !!st && this.aloft(st);
-      const nx = this.me.x + STORM_WIND.x * STORM_PUSH * gust * dt, ny = this.me.y + STORM_WIND.y * STORM_PUSH * gust * dt;
+      const nx = this.me.x + wind.x * STORM_PUSH * gust * dt, ny = this.me.y + wind.y * STORM_PUSH * gust * dt;
       if (this.map.passable(nx, ny, swim, fly) && this.map.gateCrossed(this.me.x, this.me.y, nx, ny) < 0) [this.me.x, this.me.y] = [nx, ny];
     }
     // Tornades du Roi-Vautour : elles aspirent le dompteur vers leur cœur (le serveur fait de même pour les monstres).
@@ -1725,7 +1748,7 @@ export class Game {
     if (aim.down && !dead && !this.hud.panel && this.aimTimer <= 0) {
       this.aimTimer = 0.15;
       const dpr = this.dpr;
-      const x = this.me.x + (aim.x * dpr - this.canvas.width / 2) / this.scale, y = this.me.y + (aim.y * dpr - this.canvas.height / 2) / this.scale;
+      const x = this.camera.x + (aim.x * dpr - this.canvas.width / 2) / this.scale, y = this.camera.y + (aim.y * dpr - this.canvas.height / 2) / this.scale; // le pointeur, dans le monde
       this.net.send({ t: 'attack', x, y });
       // guerrier : le coup part vers le pointeur, qu'il touche ou non (au rythme de son arme)
       const st = this.self();
@@ -1784,8 +1807,11 @@ export class Game {
     for (const p of view?.players ?? []) if (p.id !== this.myId && !p.dead) this.fog.reveal(p.x, p.y, p.id);
     this.fog.tick(dt);
     if (!dead) this.updateArea(dt);
+    if (settings.display.camera) this.camera.update(dt, this.me.x, this.me.y, !this.calm.matches);
+    else this.camera.snap(this.me.x, this.me.y);
     if (view && st) {
       this.render(view.units, view.players);
+      this.hud.rallies = this.net.latest?.rallies ?? [];
       this.hud.update(st, view.players, view.units, this.me, this.net.ping);
     }
   }
@@ -2601,10 +2627,12 @@ export class Game {
     this.luneSeen = lune;
   }
 
-  private watchStorm(level: number) {
+  private watchStorm(level: number, wind: { x: number; y: number }) {
     if (!this.stormOn && level >= 0.4) {
       this.stormOn = true;
-      this.hud.toast('Tempête de sable ! Elle te blesse tant que tu restes dehors : abrite-toi dans une grotte.');
+      // d'où elle vient : le côté opposé à son souffle (le nord en haut de l'écran)
+      const from = ["de l'est", 'du sud-est', 'du sud', 'du sud-ouest', "de l'ouest", 'du nord-ouest', 'du nord', 'du nord-est'][(Math.round(Math.atan2(-wind.y, -wind.x) / (Math.PI / 4)) + 8) % 8];
+      this.hud.toast(`Tempête de sable venue ${from} ! Elle te blesse tant que tu restes dehors : abrite-toi dans une grotte.`);
     } else if (this.stormOn && level < 0.2) {
       this.stormOn = false;
       this.hud.toast('La tempête de sable retombe.', 'good');
@@ -2690,7 +2718,7 @@ export class Game {
     const { ctx, canvas, scale } = this;
     this.shake = Math.max(0, this.shake - 1 / 60);
     const jolt = this.shake > 0 && settings.display.shake ? this.shake * 24 : 0; // secousse quand une attaque frappe près de soi (désactivable)
-    const camX = this.me.x + (Math.random() - 0.5) * jolt, camY = this.me.y + (Math.random() - 0.5) * jolt;
+    const camX = this.camera.x + (Math.random() - 0.5) * jolt, camY = this.camera.y + (Math.random() - 0.5) * jolt;
     const hw = canvas.width / 2 / scale, hh = canvas.height / 2 / scale;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2702,19 +2730,21 @@ export class Game {
     this.hud.night = sky.light < 0.5;
     if (SKY_TEST) Object.assign(sky, SKY_TEST);
     // Mer de sable : jamais de pluie, mais des tempêtes de sable
-    const desert = this.map.caveAt(camX, camY) ? 0 : desertMix(this.map, camX, camY);
+    // grotte ou île : d'après le dompteur, pas la caméra (qui regarde devant lui, parfois au-delà du bord d'une grotte)
+    const inside = this.map.caveAt(this.me.x, this.me.y);
+    const desert = inside ? 0 : desertMix(this.map, camX, camY);
     sky.rain *= 1 - desert;
     const storm = sky.storm * desert * (this.gateOpen(DESERT_ZONE - 1) ? 1 : 0); // pas de tempête avant que le village ait ouvert le désert
-    this.watchStorm(storm);
+    this.watchStorm(storm, sky.wind);
     this.watchCalendar(sky);
 
     // Dans une grotte, on ne voit que la grotte (pas la forêt qui borde le monde).
-    if (!this.map.caveAt(camX, camY)) this.world.draw(ctx, camX - hw, camY - hh, camX + hw, camY + hh);
+    if (!inside) this.world.draw(ctx, camX - hw, camY - hh, camX + hw, camY + hh);
     const { village, spawn } = this.map;
     // Intérieurs des grottes (hors du monde) et leurs entrées sur la carte.
     const inView = (x: number, y: number, m: number) => Math.abs(x - camX) < hw + m && Math.abs(y - camY) < hh + m;
     // seulement la grotte où l'on se trouve : jamais celle d'à côté
-    const here = this.map.caveAt(camX, camY);
+    const here = inside;
     if (here === this.map.depths) {
       // les entrailles du volcan : dessinées à chaque image (la lave bouge), avec les sceaux de l'autel
       const sealed = this.map.caves.filter((c) => c.zone === VOLCANO_ZONE).map((c) => !this.hud.beaten.includes(c.boss));
@@ -2728,22 +2758,22 @@ export class Game {
       if ((here ? here === this.map.depths && c.room !== undefined : c.open !== undefined) && this.hud.caves[c.id] > 0 && inView(home.x, home.y, 200)) this.drawBossReturn(ctx, home.x, home.y, this.hud.caves[c.id], SPECIES[c.boss].r);
     }
     const br = this.map.bridge;
-    if (!here && inView((br.a.x + br.b.x) / 2, (br.a.y + br.b.y) / 2, Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y) / 2 + 120)) this.world.drawBridge(ctx, this.hud.buildings.includes('bridge'), this.time);
-    const cs = this.world.campSize;
-    ctx.drawImage(this.world.camp, spawn.x - cs / 2, spawn.y - cs / 2);
-    const vs = this.world.villageSize;
-    ctx.drawImage(this.world.village, village.x - vs / 2, village.y - vs / 2);
+    if (!here && inView((br.a.x + br.b.x) / 2, (br.a.y + br.b.y) / 2, Math.hypot(br.b.x - br.a.x, br.b.y - br.a.y) / 2 + 120)) this.world.buildings.drawBridge(ctx, this.hud.buildings.includes('bridge'), this.time);
+    const cs = this.world.buildings.campSize;
+    ctx.drawImage(this.world.buildings.camp, spawn.x - cs / 2, spawn.y - cs / 2);
+    const vs = this.world.buildings.villageSize;
+    ctx.drawImage(this.world.buildings.village, village.x - vs / 2, village.y - vs / 2);
     ctx.save();
     ctx.translate(village.x, village.y);
-    this.world.drawCampfire(ctx, this.time);
+    this.world.buildings.drawCampfire(ctx, this.time);
     // bâtiments : construits, ou leur chantier avec son prix
-    for (const b of ['forge', 'den', 'market'] as const) this.world.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall, this.hud.buildings.includes(`plot_${b}`), b === 'forge' && this.hud.buildings.includes('forge2'));
-    this.world.drawHall(ctx, this.hud.hall, this.time);
-    this.world.drawStore(ctx, this.hud.stock);
-    this.world.drawBoard(ctx);
+    for (const b of ['forge', 'den', 'market'] as const) this.world.buildings.drawBuilding(ctx, b, this.hud.buildings.includes(b), this.hud.hall, this.hud.buildings.includes(`plot_${b}`), b === 'forge' && this.hud.buildings.includes('forge2'));
+    this.world.buildings.drawHall(ctx, this.hud.hall, this.time);
+    this.world.buildings.drawStore(ctx, this.hud.stock);
+    this.world.buildings.drawBoard(ctx);
     ctx.restore();
     const camps = this.net.latest?.camps ?? [];
-    this.map.sites.forEach((c, i) => inView(c.x, c.y, 260) && this.world.drawSite(ctx, i, camps.includes(i), this.time));
+    this.map.sites.forEach((c, i) => inView(c.x, c.y, 260) && this.world.buildings.drawSite(ctx, i, camps.includes(i), this.time));
 
     // Projectiles des tireurs (dessinés après les créatures) : les tirs droits sont extrapolés entre deux snapshots.
     const shots = this.net.latest?.shots ?? [];
@@ -2790,7 +2820,7 @@ export class Game {
     const schoolState = this.hud.buildings.includes('school') ? 'built' : wait ? 'building' : plan ? 'plan' : 'none';
     const me = this.self(), schoolCalls = !!me && this.hud.schoolCalls(me); // une leçon finie, un livre à lire : l'École appelle
     if (inView(sc.x, sc.y, 140)) list.push({ y: sc.y, draw: () => {
-      this.world.drawSchool(ctx, schoolState, wait, this.time);
+      this.world.buildings.drawSchool(ctx, schoolState, wait, this.time);
       if (schoolCalls) drawQuestMark(ctx, sc.x, sc.y - 120, this.time);
     } });
     // le vieux coffre du Camp avancé, avec le plan de l'école, tant que personne ne l'a ouvert
@@ -2806,7 +2836,7 @@ export class Game {
       // celle du village se construit ; celles des camps s'éveillent avec leur camp
       const active = k === 0 ? this.hud.buildings.includes('stone') : camps.includes(k - 1);
       const label = k === 0 && !active ? BUILDINGS.stone.name : undefined; // le prix : dans le panneau de construction
-      if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.drawStone(ctx, st.x, st.y, active, this.time, label) });
+      if (inView(st.x, st.y, 100)) list.push({ y: st.y, draw: () => this.world.buildings.drawStone(ctx, st.x, st.y, active, this.time, label) });
     });
     // le bateau du bout de l'île : l'épave, puis le bateau qu'Aubin rebâtit, étape par étape (avec son chantier)
     const sw = this.map.shipwreck, [, boatStage, boatLeft] = this.hud.lore;
@@ -2822,7 +2852,7 @@ export class Game {
     if (this.hud.heart >= HEART_IN_BOAT && inView(sw.x, sw.y, 200)) list.push({ y: sw.y + 30, draw: () => drawBoatHeart(ctx, sw.x, sw.y, this.time) });
     // Pierre de passage du bateau : à construire dès la Mer de sable ouverte (éteinte et nommée jusque-là)
     const bs = this.map.boatStone, dock = dockStoneOn(this.hud.buildings, this.hud.lore[1]);
-    if ((dock || this.gateOpen(DESERT_ZONE - 1)) && inView(bs.x, bs.y, 100)) list.push({ y: bs.y, draw: () => this.world.drawStone(ctx, bs.x, bs.y, dock, this.time, dock ? undefined : BUILDINGS.stone.name) });
+    if ((dock || this.gateOpen(DESERT_ZONE - 1)) && inView(bs.x, bs.y, 100)) list.push({ y: bs.y, draw: () => this.world.buildings.drawStone(ctx, bs.x, bs.y, dock, this.time, dock ? undefined : BUILDINGS.stone.name) });
     // parchemins laissés par les géants, au fond de leur grotte (chacun voit ceux qui l'attendent)
     for (const id of this.hud.scrollCaves) {
       const at = this.map.scrollPos(this.map.caves[id]);
@@ -2830,10 +2860,10 @@ export class Game {
     }
     // Palissade du village : pieux hauts, triés avec les créatures (on passe derrière) ; pas encore construite : son tracé.
     const palisade = this.hud.buildings.includes('palisade');
-    if (!here && !palisade && inView(village.x, village.y, VILLAGE_R * 1.3 + 60)) this.world.drawPalisadePlan(ctx);
+    if (!here && !palisade && inView(village.x, village.y, VILLAGE_R * 1.3 + 60)) this.world.buildings.drawPalisadePlan(ctx);
     if (!here && palisade && inView(village.x, village.y, VILLAGE_R * 1.3 + 60)) {
-      this.world.stakes.forEach((st, k) => inView(st.x, st.y, 40) && list.push({ y: st.y, draw: () => this.world.drawStake(ctx, k) }));
-      this.world.gatePosts.forEach((g, k) => inView(g.x, g.y, 60) && list.push({ y: g.y, draw: () => this.world.drawGatePost(ctx, k, this.time) }));
+      this.world.buildings.stakes.forEach((st, k) => inView(st.x, st.y, 40) && list.push({ y: st.y, draw: () => this.world.buildings.drawStake(ctx, k) }));
+      this.world.buildings.gatePosts.forEach((g, k) => inView(g.x, g.y, 60) && list.push({ y: g.y, draw: () => this.world.buildings.drawGatePost(ctx, k, this.time) }));
     }
     // Arbres de la carte : triés avec les créatures, feuillage transparent quand on passe dessous.
     // Abattus : une souche (on passe à travers, comme sur le serveur) jusqu'à ce qu'ils repoussent.
@@ -2845,14 +2875,14 @@ export class Game {
     for (const d of all) {
       if (!this.map.treeDown.has(d.id)) continue;
       // à la taille de l'arbre dessiné (un géant de la jungle est plus grand que son tronc de collision), à son pied
-      const z = this.map.styleZone(d.x, d.y), sz = this.world.treeSize(d.x, d.y, z), foot = d.y + sz * 0.5;
-      const bamboo = z === JUNGLE_ZONE && this.world.isBamboo(d.x, d.y);
+      const z = this.map.styleZone(d.x, d.y), sz = this.world.decor.treeSize(d.x, d.y, z), foot = d.y + sz * 0.5;
+      const bamboo = z === JUNGLE_ZONE && this.world.decor.isBamboo(d.x, d.y);
       list.push({ y: foot, draw: () => (bamboo ? drawBambooStump(ctx, d.x, foot, sz * 0.45, d.id) : drawStump(ctx, d.x, foot, sz, z === JUNGLE_ZONE ? 0.5 : 0.36)) });
     }
     const tz = new Map(trees.map((d) => [d, this.map.styleZone(d.x, d.y)])); // style de chaque arbre (la jungle a ses géants)
-    for (const d of trees) this.world.treeShadow(ctx, d.x, d.y, tz.get(d));
+    for (const d of trees) this.world.decor.treeShadow(ctx, d.x, d.y, tz.get(d));
     for (const d of trees) {
-      const s = this.world.treeSize(d.x, d.y, tz.get(d));
+      const s = this.world.decor.treeSize(d.x, d.y, tz.get(d));
       const hitK = Math.max(0, 1 - (this.time - (this.chopAt.get(d.id) ?? -9)) / 0.3), shake = Math.sin(this.time * 70) * 3 * hitK; // il tremble sous la hache
       const under = Math.hypot(this.me.x - d.x, this.me.y - (d.y - s * 0.6)) < s + 14 && this.me.y < d.y + s * 0.5;
       const fade = this.fades.get(d) ?? 1, target = under ? 0.3 : 1;
@@ -2863,7 +2893,7 @@ export class Game {
         y: d.y + s * 0.5,
         draw: () => {
           if (shake) ctx.translate(shake, 0);
-          this.world.tree(ctx, d.x, d.y, tz.get(d) ?? 1, next, false);
+          this.world.decor.tree(ctx, d.x, d.y, tz.get(d) ?? 1, next, false);
           if (shake) ctx.translate(-shake, 0);
           // entamé : ce qu'il lui reste avant de tomber (comme les rochers et les filons)
           const hp = treeState.get(d.id);
@@ -3269,7 +3299,7 @@ export class Game {
       this.collectLights(units, players, shots, camps);
       this.skyFx.shade(ctx, scale, camX, camY, sky);
       this.skyFx.rain(ctx, scale, camX, camY, sky, this.dt, this.dpr);
-      this.skyFx.sandstorm(ctx, scale, camX, camY, storm, this.dt, this.dpr, sky.light);
+      this.skyFx.sandstorm(ctx, scale, camX, camY, storm, this.dt, this.dpr, sky.light, sky.wind);
       this.drawCanopy(camX, camY);
       this.drawThunder(sky.thunder * (1 - desert));
     }

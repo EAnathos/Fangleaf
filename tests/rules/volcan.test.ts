@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, ALL_CAVES } from '../helpers.ts';
-import { BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, BUILDING_IDS, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
+import { BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, BUILDING_IDS, DEPTHS_RESET_S, LAIR_PULL_R, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
 import { HALL_ID } from '../../shared/worldmap.ts';
 import { Room } from '../../server/room.ts';
 
@@ -379,5 +379,115 @@ describe('Le volcan et ses entrailles', () => {
     r.updateSpawns();
     boss = r.units.get(r.caveBoss[lair.id]);
     check(!!boss && boss.dormant && boss.hp === boss.maxHp && m.roomAt(boss.x, boss.y) === lair.room, 'le délai passé, il réapparaît endormi dans son antre, avec toute sa vie');
+  });
+
+  rule('Antre de la Tortue-Montagne : sa camarade à terre, le dernier dompteur debout peut reculer jusqu\'à la herse ou se coller au mur, le combat continue.', () => {
+    const r = room(), m = r.map;
+    const lair = m.caves.find((c: { room?: number; boss: number }) => c.room !== undefined && SPECIES[c.boss].key === 'mountain_tortoise');
+    const li = m.doors.findIndex((q: { lair: number }) => q.lair === lair.id), d = m.doors[li], R = m.rooms[lair.room];
+    const boss = r.units.get(r.caveBoss[lair.id]);
+    const p = r.addPlayer('a', noop), q = r.addPlayer('b', noop);
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 40];
+    [q.x, q.y] = [boss.x + 60, boss.y + boss.r + 40];
+    r.onChallenge(p, lair.id);
+    check(!boss.dormant && m.doorShut[li] === 1, 'le combat commence, la herse retombe');
+    q.dead = true; // sa camarade tombe
+    // les points où l'on peut se tenir du côté du géant, hors de l'ellipse de la salle : le bout de couloir devant la
+    // herse, et le ras des murs (le sol est creusé par cases)
+    const spots: { x: number; y: number; door: number }[] = [];
+    for (let x = R.x - R.rx * 1.4; x <= R.x + R.rx * 1.4; x += 8) {
+      for (let y = R.y - R.ry * 1.4; y <= R.y + R.ry * 1.4; y += 8) {
+        if (m.blocked(x, y) || m.roomAt(x, y) >= 0) continue;
+        const n = Math.ceil(Math.hypot(x - R.x, y - R.y) / 4);
+        let open = true;
+        for (let s = 1; s <= n && open; s++) open = !m.blocked(R.x + ((x - R.x) * s) / n, R.y + ((y - R.y) * s) / n);
+        if (open) spots.push({ x, y, door: Math.hypot(x - d.x, y - d.y) });
+      }
+    }
+    spots.sort((a, b) => a.door - b.door);
+    check(spots.length > 0, `${spots.length} points de l'antre hors de l'ellipse de sa salle`);
+    for (const at of [spots[0], spots[spots.length - 1]]) {
+      [p.x, p.y] = [at.x, at.y];
+      r.tick = 0;
+      r.clearEmptyCaves();
+      check(!boss.dormant && r.map.arenaAt(p.x, p.y)?.id === lair.id, `seul debout à ${Math.round(at.door)} px de la herse : le combat continue`);
+    }
+    p.dead = true;
+    r.tick = 0;
+    r.clearEmptyCaves();
+    check(boss.dormant && boss.hp === boss.maxHp, 'les deux à terre : il se rendort, guéri');
+  });
+
+  rule('Antre : quand la herse retombe, rien ne reste coincé dessous, et les monstres sauvages aux trousses d\'un dompteur de l\'antre entrent avec lui.', () => {
+    const r = room(), m = r.map;
+    const lair = m.caves.find((c: { room?: number }) => c.room !== undefined);
+    const li = m.doors.findIndex((q: { lair: number }) => q.lair === lair.id), d = m.doors[li], R = m.rooms[lair.room];
+    const boss = r.units.get(r.caveBoss[lair.id]);
+    const inLair = (e: { x: number; y: number }) => m.arenaAt(e.x, e.y)?.id === lair.id;
+    const l = Math.hypot(R.x - d.x, R.y - d.y), out = (k: number) => m.freeNear(d.x - ((R.x - d.x) / l) * k, d.y - ((R.y - d.y) / l) * k);
+    const sal = SPECIES.findIndex((sp) => sp.key === 'salamander'), wolf = SPECIES.findIndex((sp) => sp.key === 'wolf');
+    const p = r.addPlayer('a', noop);
+    p.hp = 1e9;
+    [p.x, p.y] = [boss.x, boss.y + boss.r + 40];
+    const pet = r.createUnit(wolf, false, d.x, d.y); // sous la herse
+    r.makeTamed(pet, p);
+    const near = out(200), far = out(LAIR_PULL_R + 300);
+    const chaser = r.createUnit(sal, false, near.x, near.y), idle = r.createUnit(sal, false, d.x, d.y), late = r.createUnit(sal, false, far.x, far.y);
+    chaser.target = late.target = p.id;
+    idle.target = 0;
+    check(!inLair(chaser) && !inLair(late) && Math.hypot(late.x - d.x, late.y - d.y) > LAIR_PULL_R, 'avant le combat : deux poursuivants dans le couloir, l\'un tout près de la herse, l\'autre loin');
+    r.onChallenge(p, lair.id);
+    const free = (e: { x: number; y: number }) => m.doorAt(e.x, e.y) < 0 && !m.blocked(e.x, e.y);
+    check(inLair(pet) && free(pet), 'le loup de la meute resté sous la herse rejoint son dompteur dans l\'antre');
+    check(inLair(chaser) && free(chaser), 'la salamandre qui le poursuivait, tout près de la herse, entre avec lui');
+    check(!inLair(idle) && free(idle), 'la salamandre qui ne poursuivait personne, sous la herse, est poussée dans le couloir (pas coincée)');
+    check(!inLair(late), 'la salamandre restée loin dans le couloir reste dehors');
+  });
+
+  rule('Carte du donjon : le serveur garde les salles découvertes pour le village ; partir, laisser les salles se regarnir ou recharger le village ne les efface pas.', () => {
+    const r = room(), m = r.map;
+    const k = m.caves.find((c: { room?: number }) => c.room !== undefined).room, R = m.rooms[k];
+    const p = r.addPlayer('a', noop);
+    [p.x, p.y] = [R.x, R.y + R.ry * 0.5];
+    r.tick = 0;
+    r.updateExplored();
+    check(r.depthsSeen.has(k), 'un dompteur dans une salle du donjon : elle est découverte pour le village');
+    // tout le monde repart ; personne dans le donjon assez longtemps : les salles se regarnissent
+    [p.x, p.y] = [m.village.x, m.village.y];
+    r.time += DEPTHS_RESET_S + 10;
+    r.tick = 0;
+    r.updateDepths();
+    check(r.depthsSeen.has(k), 'les salles se regarnissent : la carte, elle, reste');
+    let saved: { depths: number[] } | undefined;
+    r.onVillage = (v: { depths: number[] }) => {
+      saved = v;
+    };
+    r.flushExplored();
+    check(!!saved && saved.depths.includes(k), 'sauvegardée avec le village');
+    const back = new Room('TEST', r.seed, saved);
+    const msgs: { t: string; depths?: number[] }[] = [];
+    back.addPlayer('b', (msg: { t: string; depths?: number[] }) => msgs.push(msg));
+    check(back.depthsSeen.has(k) && !!msgs.find((msg) => msg.t === 'fog')?.depths?.includes(k), 'village rechargé : elle revient, et part aux dompteurs qui arrivent');
+    const odd = new Room('TEST', r.seed, { depths: [-1, 9999, 1.5, k, k] });
+    check(odd.depthsSeen.size === 1, 'une sauvegarde abîmée ne rajoute aucune salle imaginaire');
+  });
+
+  rule('Salamandre de braise : sauvage, elle sème la lave en courant et bondit sur sa cible dans une gerbe de braises.', () => {
+    const r = room(), m = r.map;
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y];
+    const u = r.createUnit(SPECIES.findIndex((sp) => sp.key === 'salamander'), false, p.x + 150, p.y);
+    const kinds = new Set<string>(), broadcast = r.broadcast.bind(r);
+    r.broadcast = () => {
+      for (const e of r.events) if (e.e === 'move' && e.id === u.id) kinds.add(e.kind);
+      broadcast();
+    };
+    for (let i = 0; i < TICK_HZ * 60 && kinds.size < 2 && r.units.has(u.id); i++) {
+      p.hp = 1e9;
+      p.dead = false;
+      r.step();
+    }
+    check(kinds.has('trail') && kinds.has('blink'), `en combat : ${[...kinds].join(', ') || 'aucune attaque spéciale'}`);
   });
 });

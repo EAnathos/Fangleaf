@@ -31,6 +31,7 @@ que pour un thème nouveau.
 | Fichier | Thème |
 |---|---|
 | `monde` | la carte : génération, espèces par zone, obstacles, recherche de chemin, portes, brume |
+| `camera` | la caméra souple du client : zone morte, suivi, regard vers l'avant, téléportation |
 | `combat` | le combat des dompteurs : attaque, classes, mort, régénération, relever un coéquipier |
 | `meute` | la meute : apprivoisement, rappel, essences, sauvegarde, montures |
 | `alphas` | les Alphas de la Tanière : éveil, renfort, équipement, bonus de collection, retour après une chute |

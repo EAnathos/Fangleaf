@@ -35,6 +35,11 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 | Proposer un échange à un dompteur proche | U | Bouton ⇄ (près d'un autre dompteur) |
 | Menu, fermer un panneau | Échap | Bouton ☰ |
 
+La **caméra** ne bouge pas pour quelques pas sur place ; quand on avance, elle suit en douceur et regarde devant soi,
+d'autant plus loin qu'on va vite (monté, pendant une ruée). Elle saute avec soi lors d'une téléportation. Pour une
+caméra fixée sur son dompteur : Paramètres › Affichage › Caméra souple. Avec les mouvements réduits du système, elle
+ne regarde pas devant.
+
 ## Premiers pas
 
 On se réveille sur une plage inconnue, sans arme. Une épée est plantée dans le sable tout près : il faut tirer
@@ -61,7 +66,7 @@ s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois 
    retournent ; ils se montent, dans l'eau) et Petits Masqués à la sarbacane (leurs fléchettes **empoisonnent** : on
    perd des PV quelques secondes, une goutte verte au-dessus de la tête). Leurs géants dorment au fond de **temples** à degrés.
 7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable, sables mouvants qui s'ouvrent sous les pasges. Un grand volcan s'y dresse.
-8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise, Chauves-souris de cendre, Tortues-volcans (elles lancent des roches en fusion en cloche, qui mettent le feu) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)).
+8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise (elles sèment la lave en courant et bondissent sur leur cible dans une gerbe de braises, qui laisse un cratère brûlant), Chauves-souris de cendre, Tortues-volcans (elles lancent des roches en fusion en cloche, qui mettent le feu) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)). Ce sont les créatures les plus robustes de l'île.
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
 la zone suivante, il faut à la fois l'**Hôtel de ville** au bon niveau et avoir vaincu **tous les géants** de la
@@ -221,10 +226,13 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Chaque espèce hostile a son **géant**, qui dort au fond d'une grotte. On **débloque** la grotte pour tout le village
   (de plus en plus cher selon la zone), puis on y entre avec sa meute (E à l'entrée, E à la sortie pour ressortir).
 - **E** près du géant pour lui parler, puis on lance le combat. Ses PV dépendent du nombre de membres du village.
+  Avant de le lancer, **Appeler** (le bouton à la flèche) montre le chemin du géant aux autres dompteurs : une flèche
+  dorée autour d'eux les y mène, jusqu'à ce que le combat commence.
 - Il se souvient de toi, le jour même : vaincu, il a peur quand tu reviens (il tremble, une goutte de sueur au front) ;
   s'il t'a corrigé, il se moque de toi.
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
-  (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact.
+  (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact. Seul ce qui se tient dans la
+  zone dessinée est touché (ou y mord du bout du corps) : un pas hors du cercle suffit, devant comme derrière.
 - Il **s'impatiente** s'il ne touche aucun dompteur pendant un moment : « Il s'impatiente et presse le pas ! », il
   accélère peu à peu, et reprend son allure dès qu'il touche quelqu'un. Fuir en reculant ne marche qu'un temps.
 - Sur ordinateur, en combat, sa barre de vie et son nom s'affichent en haut de l'écran.
@@ -292,15 +300,18 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   remonter.
 - Les **entrailles du volcan** sont un donjon (zone 7) : un labyrinthe de grandes salles reliées par de longs couloirs,
   différent d'un village à l'autre. On arrive en bas ; le cœur est au centre ; les trois géants du volcan attendent
-  chacun dans sa salle, au bout d'un cul-de-sac — un à gauche, un à droite, un en haut — et il faut fouiller pour les
-  trouver. Dedans, la minicarte et la carte (**M**) montrent le donjon et les salles déjà vues.
+  chacun dans sa salle, au bout d'un cul-de-sac (un à gauche, un à droite, un en haut), et il faut fouiller pour les
+  trouver. Dedans, la minicarte et la carte (**M**) montrent le donjon et les salles déjà découvertes par le village :
+  elles restent découvertes quand on remonte, qu'on recharge la page ou que les salles se regarnissent.
 - Chaque couloir est fermé par une **herse**. Chaque salle a sa garnison de créatures de lave : **vider une salle**
   lève les herses de ses couloirs et débloque les salles voisines. La herse d'une salle de géant porte un sceau d'or :
   il faut en plus **payer l'entrée** (**E** devant la herse, une fois pour tout le village). Si plus personne n'est
-  dans le donjon pendant deux minutes, les salles se regarnissent et les herses retombent.
+  dans le donjon pendant un moment, les salles se regarnissent et les herses retombent.
 - **Combat dans un antre** : dès qu'on réveille le géant, la herse de sa salle retombe. Personne n'entre ni ne sort
   tant qu'il est debout ; la meute et les Alphas restés dans le couloir rejoignent leur dompteur dans la salle (et
-  ceux entrés sans leur dompteur le rejoignent dehors). Vaincu, ou rendormi faute de combattants, la herse se relève.
+  ceux entrés sans leur dompteur le rejoignent dehors). Rien ne reste coincé sous la herse, et les monstres sauvages
+  qui poursuivaient un dompteur juste devant elle entrent avec lui. Le combat dure tant qu'un dompteur est debout de
+  ce côté de la herse, du mur jusqu'à la herse elle-même. Vaincu, ou rendormi faute de combattants, la herse se relève.
 - La roche et les herses arrêtent la vue : on ne tire pas d'une salle à l'autre (archers, mages, tortues-volcans…).
 - Dans les salles, des mares de lave infranchissables à pied (à dos de vautour, on les survole) et des **pièges** :
   - les **évents de flammes**, en travers des couloirs : ils rougeoient, puis crachent du feu, chacun à son rythme ;
@@ -360,7 +371,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
     printemps.
 - **Pluie** : l'Escargot l'adore, il va plus vite.
 - **Tempête de sable** (Mer de sable) : elle blesse ceux qui restent dehors ; les vers restent sous le sable, les
-  suricates cachés, et les vautours sont cloués au sol (sauvages, de la meute, et la monture).
+  suricates cachés, et les vautours sont cloués au sol (sauvages, de la meute, et la monture). Chaque tempête vient
+  de son côté (annoncé quand elle se lève) : son vent pousse dans ce sens, et le sable file à l'écran de même.
 - **Cactus** (Mer de sable) : s'y frotter pique. Les palmiers de la lisière verte, eux, ne piquent pas.
 - **Sables mouvants** (Mer de sable) : ils s'ouvrent au hasard sous les pas, n'importe où dans le désert, puis se
   referment. On y avance au ralenti, et à y rester on s'enlise de plus en plus vite (les dégâts grimpent chaque
@@ -380,6 +392,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   annulé si l'un ferme la fenêtre, s'éloigne ou tombe.
 - Quand un coéquipier **réveille un géant**, tout le village en est prévenu, et une petite **flèche** autour de soi
   indique le chemin du combat (la sortie de la grotte où l'on est, puis l'entrée de la sienne) tant que le géant est debout.
+- Un coéquipier qui **appelle** devant un géant encore endormi : une **flèche dorée** mène à lui de la même façon,
+  le temps de le rejoindre ; elle disparaît dès que le combat commence.
 - Un membre **déconnecté** dort près du feu du village, sa meute autour de lui.
 - **Chat** : **C** ou le bouton 💬 ; chaque message s'affiche aussi dans une bulle au-dessus de son auteur.
 - **Menu › Profil** : choisir sa couleur (une par membre du village) et un chapeau, acheté une fois en or. Chaque chapeau débloqué renforce l'arme de 10 %.

@@ -11,7 +11,7 @@
 #
 # Secrets de l'environnement GitHub « staging » (Settings › Environments) :
 #   COOLIFY_URL       adresse de l'instance Coolify, sans barre finale (https://coolify.exemple.dev)
-#   COOLIFY_TOKEN     jeton d'API d'équipe, capacités « write » et « deploy »
+#   COOLIFY_TOKEN     jeton d'API d'équipe, capacités « read », « write » et « deploy »
 #   COOLIFY_APP_UUID  identifiant de l'application Fangleaf staging dans Coolify
 # Variable obligatoire : STAGING_URL (adresse publique du staging). Sans elle, le workflow s'arrête tout de suite :
 # il vaut mieux une erreur claire qu'un déploiement qui vérifie l'adresse de quelqu'un d'autre.
@@ -103,9 +103,14 @@ jobs:
           curl -fsS -X PATCH "$COOLIFY_URL/api/v1/applications/$APP" \
             -H "Authorization: Bearer $COOLIFY_TOKEN" -H 'Content-Type: application/json' \
             -d "{\"git_commit_sha\": \"$SHA\"}" >/dev/null
-          uuid=$(curl -fsS -H "Authorization: Bearer $COOLIFY_TOKEN" \
-            "$COOLIFY_URL/api/v1/deploy?uuid=$APP&force=false" | jq -r '.deployments[0].deployment_uuid')
-          [ -n "$uuid" ] && [ "$uuid" != null ] || { echo "✘ Coolify n'a pas accepté le déploiement" >&2; exit 1; }
+          # POST, et les paramètres dans le corps : en GET, Coolify répond 405 (sa documentation annonce les deux).
+          resp=$(curl -fsS -X POST "$COOLIFY_URL/api/v1/deploy" \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" -H 'Content-Type: application/json' \
+            -d "{\"uuid\": \"$APP\", \"force\": false}") \
+            || { echo "✘ Coolify a refusé la demande de déploiement" >&2; exit 1; }
+          uuid=$(jq -r '.deployments[0].deployment_uuid // empty' <<<"$resp")
+          # Sans identifiant, on ne peut pas suivre le déploiement : on montre la réponse plutôt que de la deviner.
+          [ -n "$uuid" ] || { echo "✘ réponse inattendue de Coolify : $resp" >&2; exit 1; }
           echo "uuid=$uuid" >> "$GITHUB_OUTPUT"
           echo "Déploiement Coolify $uuid"
 

@@ -534,6 +534,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* Dialogue avec un géant endormi. */
 .modal.talk { width: min(520px, calc(100vw - 32px)); border-color: var(--enemy); }
 .modal.talk h2 { color: #FF9B78; }
+#talk .modal.talk { width: min(580px, calc(100vw - 32px)); } /* trois boutons sur une ligne : appeler, plus tard, combattre */
 .modal.talk.elder { border-color: #C9A24A; } /* le vieil homme : un dialogue paisible, pas un défi */
 .modal.talk.elder h2 { color: #E8DCC2; }
 .elder .talk-portrait { background: radial-gradient(circle at 50% 60%, rgba(240, 182, 74, 0.2), transparent 70%); }
@@ -541,7 +542,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .talk-portrait { width: 110px; height: 96px; flex: none; border-radius: 12px; background: radial-gradient(circle at 50% 60%, rgba(232, 105, 63, 0.18), transparent 70%); }
 .talk-line { margin: 0; flex: 1; padding: 12px 16px; border-radius: 12px; background: var(--night); border: 2px solid var(--line); font-size: 17px; line-height: 1.45; font-style: italic; position: relative; }
 .talk-line::before { content: ''; position: absolute; left: -10px; top: 22px; border: 8px solid transparent; border-right-color: var(--line); border-left: 0; }
-.talk-actions { justify-content: flex-end; }
+.talk-actions { justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.talk-actions > * { min-width: 0; }
 /* Téléphone : le portrait au-dessus de la bulle, qui prend toute la largeur. */
 @media (max-width: 560px) {
   .modal.talk { padding: 18px 16px; gap: 14px; }
@@ -550,10 +552,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .talk-line { width: 100%; }
   .talk-line::before { left: 50%; top: -10px; margin-left: -8px; border: 8px solid transparent; border-bottom-color: var(--line); border-top: 0; }
 }
-.talk-actions .cta { flex: none; padding: 0 20px; }
+.talk-actions .cta { flex: 0 1 auto; padding: 0 20px; }
 .danger-cta { background: var(--enemy); }
 .danger-cta:hover:not(:disabled) { background: #FF8A65; }
 .talk-actions .btn { height: 56px; }
+/* Appeler les autres dompteurs : une flèche dorée, la même que celle qui les guide jusqu'au géant. */
+.rally-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin-right: auto; border-color: #8A6A2A; color: #F0B64A; }
+.rally-btn:hover:not(:disabled) { border-color: #F0B64A; }
+.rally-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.rally-btn svg { flex: none; }
+/* Téléphone : le combat sur toute la largeur, en premier ; les deux autres boutons côte à côte, en dessous. */
+@media (max-width: 560px) {
+  .talk-actions { gap: 8px; }
+  .talk-actions .cta { order: -1; flex: 1 1 100%; height: 52px; font-size: 19px; padding: 0 12px; }
+  .talk-actions .btn { flex: 1 1 0; height: 48px; padding: 0 10px; margin: 0; }
+}
 
 /* Bois et pierre (HUD, coûts). */
 .wood { color: #D2A06A; }

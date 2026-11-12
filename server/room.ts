@@ -2,8 +2,8 @@
 
 import {
   bossMelee, sleeperBlocks,
-  alphaEquipMax, ALPHA_LVL_MAX, TRADE_R, TRADE_KEEP_R, BOSS_CHASE_MULT, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_TALK_R, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost, alphaName, bossEssence,
-  ARC_FLIGHT_S, SPLASH_FLAT, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT, ROOM_PACKS, HEART_PACKS, DEPTHS_RESET_S,
+  alphaEquipMax, ALPHA_LVL_MAX, TRADE_R, TRADE_KEEP_R, BOSS_CHASE_MULT, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_TALK_R, RALLY_S, RALLY_CD_S, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost, alphaName, bossEssence,
+  ARC_FLIGHT_S, SPLASH_FLAT, HAZARD_FLAT, FLAT_ZONES, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT, ROOM_PACKS, HEART_PACKS, DEPTHS_RESET_S, LAIR_PULL_R,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, PET_CAP, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, gateHall, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, WINGS_LEASH, VENT_R, VENT_WARN_S, VENT_FIRE_S, VENT_HURT, PLATE_R, GEYSER_R, GEYSER_WARN_S, GEYSER_HURT, PLATE_REARM_S, alphaLevelMult, alphaReviveS, alphaUpCost,
@@ -16,7 +16,7 @@ import { clamp, dist2, pickCapped } from '../shared/math.ts';
 import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, SwapOffer, UnitTuple } from '../shared/protocol.ts';
 import { STAT_KEYS, STATUS_IDS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
 import { SnapshotDiff } from '../shared/snapshot.ts';
-import { FOG_N, packFog, revealCells, unpackFog } from '../shared/fog.ts';
+import { FOG_N, packFog, revealCells, revealRooms, unpackFog } from '../shared/fog.ts';
 import { HALL_ID, type Ore, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky, SNOWFALL, WINTER } from '../shared/weather.ts';
 import { Grid } from './grid.ts';
@@ -362,6 +362,7 @@ export interface VillageState {
   stone: number;
   banned: { id: string; name: string }[]; // comptes expulsés par le fondateur
   explored: string; // carte explorée par le village (shared/fog.ts, packFog)
+  depths: number[]; // salles découvertes du donjon du volcan (index dans map.rooms)
 }
 
 /** Échange en cours entre deux dompteurs : la part de chacun, et qui l'a validée. */
@@ -455,12 +456,16 @@ export class Room {
   /** seed : graine d'un village enregistré (même carte qu'avant) ; absente pour un nouveau village. */
   /** Carte explorée par le village (une case par FOG_CELL px) : partagée par tous ses membres, sauvegardée avec lui. */
   readonly explored = new Uint8Array(FOG_N * FOG_N);
+  readonly depthsSeen = new Set<number>(); // salles du donjon découvertes par le village : sa carte ne s'oublie pas en partant
   private exploredDirty = false;
+  private rallies = new Map<number, { by: number; at: number }>(); // grotte → appel à venir combattre son géant
   private swaps = new Map<number, Swap>(); // dompteur → l'échange où il est engagé (les deux dompteurs y mènent)
 
-  constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}) {
+  /** map : l'île déjà générée (server/mapgen.ts, hors du fil principal) ; sinon elle est générée ici, d'un bloc. */
+  constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}, map?: WorldMap) {
     this.seed = seed ?? Math.floor(Math.random() * 2 ** 31);
-    this.map = Room.makeMap(this.seed);
+    if (map && map.seed !== this.seed) throw new Error(`île de la graine ${map.seed} pour un village de graine ${this.seed}`);
+    this.map = map ?? Room.makeMap(this.seed);
     if (saved.explored) {
       const cells = new Uint8Array(FOG_N * FOG_N);
       if (unpackFog(saved.explored, cells)) this.explored.set(cells); // illisible : on repart d'une carte vierge
@@ -468,6 +473,7 @@ export class Room {
     const indexes = (list: unknown[] | undefined, n: number) =>
       (list ?? []).map(Number).filter((c, i, all) => Number.isInteger(c) && c >= 0 && c < n && all.indexOf(c) === i);
     this.camps = indexes(saved.camps, this.map.sites.length);
+    for (const k of indexes(saved.depths, this.map.rooms.length)) this.depthsSeen.add(k);
     this.unlocked = indexes(saved.unlocked, this.map.caves.length);
     this.buildings = BUILDING_IDS.filter((b) => saved.buildings?.includes(b));
     this.hall = clamp(Math.floor(Number(saved.hall) || 0), 0, HALL_MAX);
@@ -605,7 +611,7 @@ export class Room {
     this.refreshAlphas(p);
     send({ t: 'welcome', id: p.id, code: this.code, seed: this.seed, saved: !!p.userId, villageFound: found, founder: this.isFounder(p), armed: p.sword >= SWORD_PULLS });
     send({ t: 'teleport', x: p.x, y: p.y });
-    send({ t: 'fog', cells: packFog(this.explored) }); // ce que le village a déjà découvert, même en son absence
+    send({ t: 'fog', cells: packFog(this.explored), depths: [...this.depthsSeen] }); // ce que le village a déjà découvert, même en son absence
     this.events.push({ e: 'info', text: `${name} a rejoint le village` });
     return p;
   }
@@ -1007,7 +1013,7 @@ export class Room {
 
   private saveVillage() {
     this.exploredDirty = false;
-    return this.onVillage?.({ explored: packFog(this.explored), camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, plan: this.plan, schoolAt: this.schoolAt, beaten: [...this.beaten], heart: this.heart, ...this.stock, banned: [...this.banned] });
+    return this.onVillage?.({ explored: packFog(this.explored), depths: [...this.depthsSeen], camps: [...this.camps], buildings: [...this.buildings], unlocked: [...this.unlocked], hall: this.hall, name: this.name, told: [...this.told], boat: this.boat, boatAt: this.boatAt, plan: this.plan, schoolAt: this.schoolAt, beaten: [...this.beaten], heart: this.heart, ...this.stock, banned: [...this.banned] });
   }
 
   /** Construire un bâtiment du village : n'importe quel membre, devant son emplacement, une fois pour tous (or, bois, pierre). */
@@ -2237,7 +2243,11 @@ export class Room {
   /** Carte du village : les cases dévoilées autour de chaque dompteur debout, pour tous ses membres (2 fois par seconde). */
   private updateExplored() {
     if (this.tick % 10 !== 0) return;
-    for (const p of this.players.values()) if (!p.dead && revealCells(this.explored, p.x, p.y)) this.exploredDirty = true;
+    for (const p of this.players.values()) {
+      if (p.dead) continue;
+      if (revealCells(this.explored, p.x, p.y)) this.exploredDirty = true;
+      if (this.map.caveAt(p.x, p.y) === this.map.depths && revealRooms(this.depthsSeen, this.map.rooms, p.x, p.y)) this.exploredDirty = true;
+    }
   }
 
   /**
@@ -2256,7 +2266,7 @@ export class Room {
       return this.sendSwap(sw);
     }
     if (!s) return;
-    if (act === 'cancel') return this.endSwap(s, false, `${p.name} a annulé l'échange.`);
+    if (act === 'cancel') return this.endSwap(s, false, `${p.name} a annulé l'échange.`, `annulé par le dompteur ${p.id}`);
     if (act === 'offer') {
       // jamais plus que ce qu'on a dans son sac
       const n = (v: unknown, max: number) => clamp(Math.floor(Number(v) || 0), 0, Math.max(0, Math.floor(max)));
@@ -2300,7 +2310,9 @@ export class Room {
     }
   }
 
-  private endSwap(s: Swap, done: boolean, why?: string) {
+  /** cause : pour le journal du serveur, qui a provoqué la fin (un échange annulé sans raison apparente se retrace ainsi). */
+  private endSwap(s: Swap, done: boolean, why?: string, cause = why) {
+    if (!done) console.info(`[échange] village ${this.code}, dompteurs ${s.a} et ${s.b} : ${cause ?? 'annulé'}`);
     this.swaps.delete(s.a);
     this.swaps.delete(s.b);
     for (const id of [s.a, s.b]) this.players.get(id)?.send({ t: 'swapEnd', done, ...(why ? { why } : {}) });
@@ -2342,7 +2354,8 @@ export class Room {
     const d = map.doors[i], room = map.rooms[k];
     map.doorShut[i] = 1;
     this.sealed.add(cave);
-    const inside = (x: number, y: number) => map.roomAt(x, y) === k;
+    // du côté de l'antre (sa salle et le bout de couloir jusqu'à la herse : voir WorldMap.arenaAt)
+    const inside = (x: number, y: number) => map.arenaAt(x, y)?.id === cave;
     for (const p of this.players.values()) {
       if (p.dead || map.doorAt(p.x, p.y) !== i) continue;
       // sous la herse : un pas de plus vers le centre de l'antre
@@ -2352,16 +2365,33 @@ export class Room {
       p.lastPosMs = Date.now();
       p.send({ t: 'teleport', x: p.x, y: p.y });
     }
+    // de part et d'autre de la herse : juste devant elle, côté antre ou côté couloir
+    const l = Math.hypot(room.x - d.x, room.y - d.y) || 1, sideOf = (want: boolean) => ({ x: d.x + ((room.x - d.x) / l) * (want ? 90 : -90), y: d.y + ((room.y - d.y) / l) * (want ? 90 : -90) });
+    const boss = this.units.get(this.caveBoss[cave]);
     for (const u of this.units.values()) {
+      if (u === boss || u.reviveAt || (boss && u.summoner === boss.id)) continue; // un tombé revient près de son dompteur
       const o = u.owner ? this.players.get(u.owner) : undefined;
-      if (!o || u.reviveAt || o.mount === u.id) continue; // un tombé revient près de son dompteur ; la monture suit son cavalier
-      const want = !o.dead && inside(o.x, o.y);
-      if ((inside(u.x, u.y) || map.doorAt(u.x, u.y) === i) === want) continue;
-      // de l'autre côté de la herse que son dompteur : il le rejoint
-      let at = { x: o.x, y: o.y };
+      if (o?.mount === u.id) continue; // la monture suit son cavalier
+      const under = map.doorAt(u.x, u.y) === i, side = inside(u.x, u.y);
+      let want: boolean, near: { x: number; y: number };
+      if (o) {
+        // de l'autre côté de la herse que son dompteur (ou dessous) : il le rejoint
+        want = !o.dead && inside(o.x, o.y);
+        near = { x: o.x, y: o.y };
+      } else if (!u.owner) {
+        // un monstre sauvage aux trousses de quelqu'un dans l'antre, tout près de la herse (ou dessous) : il entre avec lui ;
+        // les autres restent dehors (sans jamais rester coincés sous la herse)
+        const t = this.players.get(u.target) ?? this.units.get(u.target);
+        const chasing = !!t && map.arenaAt(t.x, t.y)?.id === cave && dist2(u.x, u.y, d.x, d.y) < LAIR_PULL_R ** 2;
+        if (!under && !chasing) continue;
+        want = chasing;
+        near = sideOf(want);
+      } else continue; // son dompteur est parti : il disparaîtra avec lui
+      if (!under && side === want) continue;
+      let at = map.freeNear(near.x, near.y);
       for (let n = 0; n < 12; n++) {
         const a = Math.random() * Math.PI * 2, r = 50 + n * 8;
-        const q = map.freeNear(o.x + Math.cos(a) * r, o.y + Math.sin(a) * r);
+        const q = map.freeNear(near.x + Math.cos(a) * r, near.y + Math.sin(a) * r);
         if (inside(q.x, q.y) === want && map.doorAt(q.x, q.y) < 0) {
           at = q;
           break;
@@ -2369,7 +2399,7 @@ export class Room {
       }
       [u.x, u.y] = [at.x, at.y];
       u.path = null;
-      u.target = 0;
+      if (o) u.target = 0;
     }
     this.events.push({ e: 'lair', cave, shut: true, x: d.x, y: d.y });
   }
@@ -3020,27 +3050,30 @@ export class Room {
   // ───────────────────────── Attaques spéciales des mini-boss ─────────────────────────
 
   /** Alliés des dompteurs (joueurs et leurs monstres) vivants dans un rayon. */
-  private alliesNear(x: number, y: number, r: number) {
+  private alliesNear(x: number, y: number, r: number, flat = 1) {
     const out: Ent[] = [];
     this.grid.query(x, y, r + 60, (e) => {
       if (!this.alive(e) || !(e.kind === 'p' || e.owner !== 0)) return;
-      if (dist2(x, y, e.x, e.y) <= (r + e.r) ** 2) out.push(e);
+      if ((e.x - x) ** 2 + ((e.y - y) / flat) ** 2 <= (r + e.r) ** 2) out.push(e);
     });
     return out;
   }
 
   /** Monstres sauvages vivants (combattus) dans un rayon. */
-  private wildNear(x: number, y: number, r: number) {
+  private wildNear(x: number, y: number, r: number, flat = 1) {
     const out: Ent[] = [];
     this.grid.query(x, y, r + 60, (e) => {
-      if (this.alive(e) && this.isWild(e) && dist2(x, y, e.x, e.y) <= (r + e.r) ** 2) out.push(e);
+      if (this.alive(e) && this.isWild(e) && (e.x - x) ** 2 + ((e.y - y) / flat) ** 2 <= (r + e.r) ** 2) out.push(e);
     });
     return out;
   }
 
-  /** Qui une attaque spéciale peut toucher : les dompteurs et leurs meutes (géant), ou les sauvages (Alpha légendaire). */
-  private targetsNear(caster: Unit, x: number, y: number, r: number) {
-    return caster.owner ? this.wildNear(x, y, r) : this.alliesNear(x, y, r);
+  /**
+   * Qui une attaque spéciale peut toucher : les dompteurs et leurs meutes (géant), ou les sauvages (Alpha légendaire).
+   * flat : la zone est l'ellipse aplatie dessinée au sol (HAZARD_FLAT), pas un cercle.
+   */
+  private targetsNear(caster: Unit, x: number, y: number, r: number, flat = 1) {
+    return caster.owner ? this.wildNear(x, y, r, flat) : this.alliesNear(x, y, r, flat);
   }
 
   private hazard(boss: Unit, h: Partial<Omit<Hazard, 'id'>> & Pick<Hazard, 'kind' | 'x' | 'y' | 'r' | 'at' | 'dmg'>) {
@@ -3163,6 +3196,26 @@ export class Room {
     for (const p of this.players.values()) if (this.finishLesson(p)) this.events.push({ e: 'learn', by: p.id, kind: p.readKind, lesson: p.learned[p.readKind] - 1, done: true });
   }
 
+  /** Appeler les autres dompteurs devant un géant endormi. */
+  onRally(p: Player, cave: number) {
+    const c = this.map.caves[cave];
+    const u = c && this.units.get(this.caveBoss[cave]);
+    if (!u || !u.dormant || p.dead || c.zone === VOYAGE_ZONE || this.map.arenaAt(p.x, p.y)?.id !== c.id) return;
+    const was = this.rallies.get(cave);
+    if (was && this.time < was.at + RALLY_CD_S) return;
+    this.rallies.set(cave, { by: p.id, at: this.time });
+    this.events.push({ e: 'rally', cave, by: p.id });
+  }
+
+  /** Appels encore valables : géant endormi, appelant connecté et délai non expiré. */
+  private liveRallies(): [number, number][] {
+    for (const [cave, r] of this.rallies) {
+      const u = this.units.get(this.caveBoss[cave]);
+      if (!u || !u.dormant || !this.players.has(r.by) || this.time > r.at + RALLY_S) this.rallies.delete(cave);
+    }
+    return [...this.rallies].map(([cave, r]) => [cave, r.by]);
+  }
+
   /** Parler au géant endormi de sa grotte, à côté de lui : il se réveille et le combat commence. */
   onChallenge(p: Player, cave: number) {
     const c = this.map.caves[cave];
@@ -3170,6 +3223,7 @@ export class Room {
     if (!u || !u.dormant || p.dead || this.map.arenaAt(p.x, p.y)?.id !== c.id) return;
     if (dist2(p.x, p.y, u.x, u.y) > (u.r + BOSS_TALK_R) ** 2) return;
     u.dormant = false;
+    this.rallies.delete(cave);
     u.fight = { at: this.time, from: p.id, by: new Map(), landed: this.time };
     u.target = p.id;
     this.events.push({ e: 'challenge', cave, id: u.id, by: p.id });
@@ -3790,7 +3844,7 @@ export class Room {
         }
         this.events.push({ e: 'boom', x: Math.round(h.x2 === h.x && h.y2 === h.y ? h.x : h.x2), y: Math.round(h.y2), r: h.r, kind: h.style && h.style !== 'charge' && h.style !== 'spores' && h.style !== 'web' ? h.style : ['circle', 'line', 'cloud', 'web'][h.kind], ...(h.boss.owner ? { by: h.boss.owner } : {}) });
         if (h.kind === 2 || h.ring || h.run?.hurt || h.dmg <= 0) continue; // nuages, anneaux, ruées et tronc : ils frappent dans la durée
-        const hit = h.kind === 1 ? this.alliesOnLine(h) : h.kind === 4 ? this.inArc(h) : this.targetsNear(h.boss, h.x, h.y, h.r);
+        const hit = h.kind === 1 ? this.alliesOnLine(h) : h.kind === 4 ? this.inArc(h) : this.targetsNear(h.boss, h.x, h.y, h.r, FLAT_ZONES.has(h.style ?? '') ? HAZARD_FLAT : 1); // la zone telle qu'annoncée au sol
         for (const e of hit) {
           if ((h.kind === 3 || h.style === 'bubble') && e.kind === 'p') e.slowUntil = this.time + WEB_SLOW_S; // toile, écume : ça colle
           if (h.style === 'howl' && e.kind === 'p') e.slowUntil = this.time + 2.5; // le hurlement glace : on traîne les pieds
@@ -5668,6 +5722,7 @@ export class Room {
       const u = id ? this.units.get(id) : undefined;
       if (u && !u.dormant && u.fight) fights.push([cave, u.fight.from]);
     });
+    const rallies = this.liveRallies();
     for (const viewer of this.players.values()) {
       const units: UnitTuple[] = [];
       for (const u of this.units.values()) {
@@ -5737,7 +5792,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], founder: this.isFounder(viewer), caves, fights, camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ...(this.map.caveAt(viewer.x, viewer.y) === this.map.depths ? { doors: [...this.map.doorShut] } : {}), ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], founder: this.isFounder(viewer), caves, fights, ...(rallies.length ? { rallies } : {}), camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ...(this.map.caveAt(viewer.x, viewer.y) === this.map.depths ? { doors: [...this.map.doorShut] } : {}), ev });
     }
   }
 }
