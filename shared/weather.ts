@@ -92,6 +92,7 @@ export interface Sky {
   dusk: number; // 0 à 1 : teinte chaude du crépuscule et de l'aube (au milieu de la transition)
   rain: number; // 0 = sec, 1 = grosse averse
   storm: number; // tempête de sable (Mer de sable seulement) : 0 = calme, 1 = en plein dedans
+  wind: { x: number; y: number }; // sens du vent de la tempête (vecteur unité) : chaque tempête a le sien
   fog: number; // brouillard (Lacs brumeux seulement) : 0 = clair, 1 = on n'y voit plus qu'autour de soi
   thunder: number; // orage (avec la pluie, pas l'hiver) : 0 = non, 1 = la foudre tombe
   season: number; // 0 printemps, 1 été, 2 automne, 3 hiver (la neige couvre plus de la moitié du sol : les mares gèlent)
@@ -120,6 +121,27 @@ function slotStorm(seed: number, k: number) {
   return hash2(k, 11, seed + 93) < STORM_CHANCE ? 0.75 + hash2(k, 12, seed + 94) * 0.25 : 0;
 }
 
+/** Sens du vent d'une tranche de tempête (vecteur unité) : une tempête peut venir de n'importe quel côté. */
+function slotWind(seed: number, k: number) {
+  const a = hash2(k, 16, seed + 99) * Math.PI * 2;
+  return { x: Math.cos(a), y: Math.sin(a) };
+}
+
+/**
+ * Vent du moment : celui de la tempête de la tranche ; pendant le fondu entre deux tranches, les deux vents se mêlent à
+ * proportion de leur tempête (le vent tourne pendant qu'une tempête retombe et que la suivante se lève).
+ */
+function stormWind(seed: number, now: number) {
+  const k = Math.floor(now / STORM_SLOT), u = now - k * STORM_SLOT;
+  const n = u < STORM_FADE / 2 ? k - 1 : u > STORM_SLOT - STORM_FADE / 2 ? k + 1 : k;
+  const here = slotWind(seed, k);
+  if (n === k) return here;
+  const wn = n < k ? 1 - smooth(u / STORM_FADE + 0.5) : smooth((u - STORM_SLOT) / STORM_FADE + 0.5);
+  const a = (1 - wn) * slotStorm(seed, k), b = wn * slotStorm(seed, n), there = slotWind(seed, n);
+  const x = a * here.x + b * there.x, y = a * here.y + b * there.y, l = Math.hypot(x, y);
+  return l > 1e-6 ? { x: x / l, y: y / l } : a >= b ? here : there;
+}
+
 /** Valeur d'un tirage par tranches, en fondu enchaîné d'une tranche à l'autre (centré sur la frontière). */
 function slotted(now: number, len: number, fade: number, at: (k: number) => number) {
   const k = Math.floor(now / len), u = now - k * len, cur = at(k);
@@ -142,5 +164,5 @@ export function sky(seed: number, now: number): Sky {
   const fog = slotted(now, FOG_SLOT, FOG_FADE, (k) => slotFog(seed, k)), sea = season(seed, now);
   const date = calendar(seed, now), snow = snowAt(date.t);
   const thunder = snow >= SNOWFALL ? 0 : slotted(now, RAIN_SLOT, RAIN_FADE, (k) => slotThunder(seed, k));
-  return { light, dusk, rain: clamp(rain, 0, 1), storm: clamp(storm, 0, 1), fog: clamp(fog, 0, 1), thunder: clamp(thunder, 0, 1), season: sea, snow, date };
+  return { light, dusk, rain: clamp(rain, 0, 1), storm: clamp(storm, 0, 1), wind: stormWind(seed, now), fog: clamp(fog, 0, 1), thunder: clamp(thunder, 0, 1), season: sea, snow, date };
 }

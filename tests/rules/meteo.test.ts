@@ -114,4 +114,26 @@ describe('Météo et affinités', () => {
     Math.random = rand;
     check(!r.events.some((e: { e: string }) => e.e === 'struck'), 'par temps sec, jamais');
   });
+
+  rule("Tempêtes de sable : chacune a son vent, d'un côté ou de l'autre selon la tempête ; il ne tourne pas pendant qu'elle souffle, et c'est le même pour tout le village.", () => {
+    const seed = room().seed, SLOT = 5 * 60_000, t0 = Date.parse('2026-01-01T00:00:00Z');
+    // le cœur des tranches de tempête (au milieu de la tranche : pas de fondu)
+    const storms: number[] = [];
+    for (let k = 0; storms.length < 24 && k < 4000; k++) {
+      const t = Math.floor(t0 / SLOT) * SLOT + k * SLOT + SLOT / 2;
+      if (sky(seed, t).storm > 0.7) storms.push(t);
+    }
+    check(storms.length === 24, `${storms.length} tempêtes trouvées`);
+    const winds = storms.map((t) => sky(seed, t).wind);
+    check(winds.every((w) => Math.abs(Math.hypot(w.x, w.y) - 1) < 1e-9), 'le vent est une direction (vecteur unité)');
+    const sides = new Set(winds.map((w) => (Math.abs(w.x) > Math.abs(w.y) ? (w.x > 0 ? 'vers l\'est' : 'vers l\'ouest') : w.y > 0 ? 'vers le sud' : 'vers le nord')));
+    check(sides.size === 4, `sur 24 tempêtes, le vent souffle ${[...sides].join(', ')}`);
+    const steady = storms.every((t) => {
+      const a = sky(seed, t - 90_000).wind, b = sky(seed, t + 90_000).wind;
+      return Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9;
+    });
+    check(steady, 'pendant une tempête (3 minutes au cœur de sa tranche), le vent garde son sens');
+    const again = sky(seed, storms[0]).wind;
+    check(again.x === winds[0].x && again.y === winds[0].y, 'même graine, même heure : même vent (tous les joueurs du village le voient pareil)');
+  });
 });

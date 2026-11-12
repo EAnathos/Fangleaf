@@ -117,7 +117,8 @@ export class SkyFx {
    * Tempête de sable (level : 0 à 1) : voile ocre, vue réduite (bords noyés dans le sable), traînées de sable
    * poussées par le vent et nuages de poussière qui traversent l'écran.
    */
-  sandstorm(ctx: CanvasRenderingContext2D, scale: number, camX: number, camY: number, level: number, dt: number, dpr: number, light: number) {
+  /** wind : sens du vent de cette tempête (vecteur unité, shared/weather.ts) ; nuages et traînées filent dans ce sens. */
+  sandstorm(ctx: CanvasRenderingContext2D, scale: number, camX: number, camY: number, level: number, dt: number, dpr: number, light: number, wind: { x: number; y: number }) {
     const W = ctx.canvas.width, H = ctx.canvas.height;
     const dx = this.stormCam ? (camX - this.stormCam.x) * scale : 0, dy = this.stormCam ? (camY - this.stormCam.y) * scale : 0;
     this.stormCam = { x: camX, y: camY };
@@ -135,22 +136,21 @@ export class SkyFx {
     ctx.fillStyle = sand(0.32 * level);
     ctx.fillRect(0, 0, W, H);
     // nuages de poussière
-    while (this.gusts.length < 7) this.gusts.push({ x: Math.random() * W - W * 0.3, y: Math.random() * H, r: (180 + Math.random() * 220) * dpr, v: (260 + Math.random() * 200) * dpr });
+    // (sortis d'un côté de l'écran, nuages et grains reviennent par le côté opposé : celui d'où souffle le vent)
+    const wrap = (v: number, m: number, size: number) => (v > size + m ? v - size - 2 * m : v < -m ? v + size + 2 * m : v);
+    while (this.gusts.length < 7) this.gusts.push({ x: Math.random() * W, y: Math.random() * H, r: (180 + Math.random() * 220) * dpr, v: (260 + Math.random() * 200) * dpr });
     for (const g of this.gusts) {
-      g.x += g.v * dt - dx;
-      g.y += g.v * 0.18 * dt - dy;
-      if (g.x - g.r > W) [g.x, g.y] = [-g.r, Math.random() * H];
-      if (g.y - g.r > H) g.y = -g.r;
-      else if (g.y + g.r < 0) g.y = H + g.r;
+      g.x = wrap(g.x + g.v * wind.x * dt - dx, g.r, W);
+      g.y = wrap(g.y + g.v * wind.y * dt - dy, g.r, H);
       const grad = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
       grad.addColorStop(0, dust(0.32 * level));
       grad.addColorStop(1, dust(0));
       ctx.fillStyle = grad;
       ctx.fillRect(g.x - g.r, g.y - g.r, g.r * 2, g.r * 2);
     }
-    // traînées de sable, presque à l'horizontale
+    // traînées de sable, dans le sens du vent
     const n = Math.min(MAX_GRAINS, Math.round(MAX_GRAINS * level * particleRate() * Math.min(1, (W * H) / (1920 * 1080))));
-    const d = this.grains, slope = 0.18;
+    const d = this.grains;
     ctx.strokeStyle = grain(0.6);
     ctx.lineWidth = 1.8 * dpr;
     ctx.lineCap = 'round';
@@ -164,14 +164,10 @@ export class SkyFx {
         d[o + 3] = (900 + Math.random() * 700) * dpr;
       }
       const v = d[o + 3] * dt;
-      d[o] += v - dx;
-      d[o + 1] += v * slope - dy;
-      if (d[o] > W + d[o + 2]) [d[o], d[o + 1]] = [-d[o + 2], Math.random() * H];
-      else if (d[o] < -d[o + 2]) d[o] += W + d[o + 2];
-      if (d[o + 1] > H) d[o + 1] -= H;
-      else if (d[o + 1] < 0) d[o + 1] += H;
+      d[o] = wrap(d[o] + v * wind.x - dx, d[o + 2], W);
+      d[o + 1] = wrap(d[o + 1] + v * wind.y - dy, d[o + 2], H);
       ctx.moveTo(d[o], d[o + 1]);
-      ctx.lineTo(d[o] - d[o + 2], d[o + 1] - d[o + 2] * slope);
+      ctx.lineTo(d[o] - d[o + 2] * wind.x, d[o + 1] - d[o + 2] * wind.y);
     }
     ctx.stroke();
     // vue réduite : les bords se noient dans le sable
