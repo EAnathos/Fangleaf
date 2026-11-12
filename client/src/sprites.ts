@@ -2,7 +2,7 @@
 // Les créatures sont dessinées dans client/src/sprites/ (un module par famille) ; ce fichier les assemble (drawUnit)
 // et garde le reste : dompteurs, objets, tirs, attaques au sol, robes des Alphas.
 
-import { DESERT_ZONE, DRUM_GAP, LOG_SPEED, PINCER_HALF, RING_SPEED, RING_W, SPECIES, SPLASH_FLAT, type Resource } from '../../shared/config.ts';
+import { DESERT_ZONE, DRUM_GAP, HAZARD_FLAT, LOG_SPEED, PINCER_HALF, RING_SPEED, RING_W, SPECIES, SPLASH_FLAT, type Resource } from '../../shared/config.ts';
 import { withTint } from './tint.ts';
 import { HAZARD_STYLES, UNIT_FLAG_BURN, UNIT_FLAG_CURSE, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY } from '../../shared/protocol.ts';
 import { hash2 } from '../../shared/math.ts';
@@ -1740,20 +1740,20 @@ export function drawHazard(ctx: Ctx, h: number[], t: number, owner?: string, sin
     ctx.stroke();
     return;
   }
-  // annonce circulaire : bord net, remplissage qui grossit jusqu'à l'impact
+  // annonce circulaire : bord net, remplissage qui grossit jusqu'à l'impact (la même ellipse que le serveur, HAZARD_FLAT)
   const color = style === 'ink' ? '120,80,160' : kind === 2 ? '160,200,90' : kind === 3 ? '238,231,215' : ember;
   ctx.fillStyle = `rgba(${color},0.14)`;
   ctx.beginPath();
-  ctx.ellipse(x, y, r, r * 0.75, 0, 0, TAU);
+  ctx.ellipse(x, y, r, r * HAZARD_FLAT, 0, 0, TAU);
   ctx.fill();
   ctx.fillStyle = active ? 'rgba(255,220,180,0.55)' : `rgba(${color},0.38)`;
   ctx.beginPath();
-  ctx.ellipse(x, y, r * k, r * k * 0.75, 0, 0, TAU);
+  ctx.ellipse(x, y, r * k, r * k * HAZARD_FLAT, 0, 0, TAU);
   ctx.fill();
   ctx.strokeStyle = `rgba(${color},0.95)`;
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.ellipse(x, y, r, r * 0.75, 0, 0, TAU);
+  ctx.ellipse(x, y, r, r * HAZARD_FLAT, 0, 0, TAU);
   ctx.stroke();
 }
 
