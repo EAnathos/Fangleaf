@@ -2,7 +2,7 @@
 
 import { initCheat } from './cheat.ts';
 import { drawCoatiClue } from './coati.ts';
-import { TRADE_R, ISLE_NAMES, SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, STORM_WIND, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
+import { TRADE_R, ISLE_NAMES, SPECIES_KEYS, MAW_PULL, MAW_R, RING_SPEED, LOG_SPEED, alphaStats, sleeperBlocks, SHORE_R, swimMount, flyMount, ARC_FLIGHT_S, BUILDINGS, gateHall, gateOpen, HALL, zoneBosses, CAMP_R, campName, CLASSES, LEGEND_MULT, MOVE_NAMES, WEB_SLOW, MOUNT_REACH, MOUNTS, PLAYER_SPEED, SPECIES, TICK_HZ, BOAT_STAGES, BOAT_STAGE_MS, dockStoneOn, SWORD_PULLS, VILLAGE_R, WORLD_HALF, bootsSpeed, torchRadius, ZONE_NAMES, DESERT_ZONE, JUNGLE_ZONE, LAKES_ZONE, rideSpeed, SCHOOL_CAMP, SCHOOL_BUILD_MS, bookName, DISCIPLINES, LESSON_KINDS, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, VOYAGE_ZONE, volcanoOpen, HEART_IN_BOAT, STORM_PUSH, QUICKSAND_SLOW, QUICKSAND_OPEN_S, TORNADO_PULL, TORNADO_PULL_R } from '../../shared/config.ts';
 import { clamp, hash2 } from '../../shared/math.ts';
 import type { GameEvent, HazardTuple, PlayerState, ServerMsg, ShotTuple, UnitTuple } from '../../shared/protocol.ts';
 import { PET_ACTS, HAZARD_STYLES, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_BURN } from '../../shared/protocol.ts';
@@ -1712,11 +1712,12 @@ export class Game {
       this.me.fx = dx / l;
       this.me.fy = dy / l;
     }
-    // Tempête de sable : le vent pousse le dompteur vers l'est (même règle de passage qu'un pas ordinaire).
-    const gust = dead || this.map.caveAt(this.me.x, this.me.y) || !this.gateOpen(DESERT_ZONE - 1) ? 0 : skyAt(this.map.seed, this.net.serverNow()).storm * desertMix(this.map, this.me.x, this.me.y);
+    // Tempête de sable : le vent pousse le dompteur dans son sens, propre à chaque tempête (même règle de passage qu'un pas ordinaire).
+    const weather = skyAt(this.map.seed, this.net.serverNow()), wind = weather.wind;
+    const gust = dead || this.map.caveAt(this.me.x, this.me.y) || !this.gateOpen(DESERT_ZONE - 1) ? 0 : weather.storm * desertMix(this.map, this.me.x, this.me.y);
     if (gust > 0.05) {
       const swim = !!st?.mount && swimMount(st.mount.species), fly = !!st && this.aloft(st);
-      const nx = this.me.x + STORM_WIND.x * STORM_PUSH * gust * dt, ny = this.me.y + STORM_WIND.y * STORM_PUSH * gust * dt;
+      const nx = this.me.x + wind.x * STORM_PUSH * gust * dt, ny = this.me.y + wind.y * STORM_PUSH * gust * dt;
       if (this.map.passable(nx, ny, swim, fly) && this.map.gateCrossed(this.me.x, this.me.y, nx, ny) < 0) [this.me.x, this.me.y] = [nx, ny];
     }
     // Tornades du Roi-Vautour : elles aspirent le dompteur vers leur cœur (le serveur fait de même pour les monstres).
@@ -2619,10 +2620,12 @@ export class Game {
     this.luneSeen = lune;
   }
 
-  private watchStorm(level: number) {
+  private watchStorm(level: number, wind: { x: number; y: number }) {
     if (!this.stormOn && level >= 0.4) {
       this.stormOn = true;
-      this.hud.toast('Tempête de sable ! Elle te blesse tant que tu restes dehors : abrite-toi dans une grotte.');
+      // d'où elle vient : le côté opposé à son souffle (le nord en haut de l'écran)
+      const from = ["de l'est", 'du sud-est', 'du sud', 'du sud-ouest', "de l'ouest", 'du nord-ouest', 'du nord', 'du nord-est'][(Math.round(Math.atan2(-wind.y, -wind.x) / (Math.PI / 4)) + 8) % 8];
+      this.hud.toast(`Tempête de sable venue ${from} ! Elle te blesse tant que tu restes dehors : abrite-toi dans une grotte.`);
     } else if (this.stormOn && level < 0.2) {
       this.stormOn = false;
       this.hud.toast('La tempête de sable retombe.', 'good');
@@ -2723,7 +2726,7 @@ export class Game {
     const desert = this.map.caveAt(camX, camY) ? 0 : desertMix(this.map, camX, camY);
     sky.rain *= 1 - desert;
     const storm = sky.storm * desert * (this.gateOpen(DESERT_ZONE - 1) ? 1 : 0); // pas de tempête avant que le village ait ouvert le désert
-    this.watchStorm(storm);
+    this.watchStorm(storm, sky.wind);
     this.watchCalendar(sky);
 
     // Dans une grotte, on ne voit que la grotte (pas la forêt qui borde le monde).
@@ -3287,7 +3290,7 @@ export class Game {
       this.collectLights(units, players, shots, camps);
       this.skyFx.shade(ctx, scale, camX, camY, sky);
       this.skyFx.rain(ctx, scale, camX, camY, sky, this.dt, this.dpr);
-      this.skyFx.sandstorm(ctx, scale, camX, camY, storm, this.dt, this.dpr, sky.light);
+      this.skyFx.sandstorm(ctx, scale, camX, camY, storm, this.dt, this.dpr, sky.light, sky.wind);
       this.drawCanopy(camX, camY);
       this.drawThunder(sky.thunder * (1 - desert));
     }

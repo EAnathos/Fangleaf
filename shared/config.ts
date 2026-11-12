@@ -492,8 +492,7 @@ export const alphaEquipMax = (learned: readonly number[]) => ALPHA_EQUIP_MAX + M
 
 // Grottes : un mini-boss par grotte, qui réapparaît après un délai ; il peut lâcher son âme.
 export const BOSS_RESPAWN_S = 300;
-export const STORM_PUSH = 55; // tempête de sable au plus fort : elle pousse le dompteur de 55 px/s dans le sens du vent…
-export const STORM_WIND = { x: 0.984, y: 0.177 }; // … vers l'est, en descendant un peu (comme les traînées de sable à l'écran)
+export const STORM_PUSH = 55; // tempête de sable au plus fort : elle pousse le dompteur de 55 px/s dans le sens du vent (chaque tempête a le sien : shared/weather.ts)
 export const GOLEM_EAT_R = 130; // un golem de la meute repère un rocher à cette distance…
 export const GOLEM_BITE_S = 0.9; // … et le grignote, une bouchée toutes les 0,9 s…
 export const GOLEM_BITES = 4; // … en quatre bouchées : la pierre revient à son dompteur

@@ -365,7 +365,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
     printemps.
 - **Pluie** : l'Escargot l'adore, il va plus vite.
 - **Tempête de sable** (Mer de sable) : elle blesse ceux qui restent dehors ; les vers restent sous le sable, les
-  suricates cachés, et les vautours sont cloués au sol (sauvages, de la meute, et la monture).
+  suricates cachés, et les vautours sont cloués au sol (sauvages, de la meute, et la monture). Chaque tempête vient
+  de son côté (annoncé quand elle se lève) : son vent pousse dans ce sens, et le sable file à l'écran de même.
 - **Cactus** (Mer de sable) : s'y frotter pique. Les palmiers de la lisière verte, eux, ne piquent pas.
 - **Sables mouvants** (Mer de sable) : ils s'ouvrent au hasard sous les pas, n'importe où dans le désert, puis se
   referment. On y avance au ralenti, et à y rester on s'enlise de plus en plus vite (les dégâts grimpent chaque
