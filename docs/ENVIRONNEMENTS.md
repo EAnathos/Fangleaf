@@ -93,7 +93,10 @@ donc le déploiement échoue au lieu de laisser un staging à moitié migré.
    Les `VITE_*` sont figées dans le build : les changer demande un redéploiement, pas un simple redémarrage. Si l'une
    des deux valeurs Supabase manque au build, l'image refuse de se construire plutôt que de mettre en ligne un
    staging sans connexion Google.
-6. **Jeton d'API Coolify** (*Keys & Tokens › API tokens*) avec les capacités `write` et `deploy`.
+6. **Jeton d'API Coolify** (*Keys & Tokens › API tokens*) avec les capacités `read`, `write` et `deploy` : le
+   workflow lit la fiche de l'application (`read`), y écrit le commit à déployer (`write`) et lance le déploiement
+   (`deploy`). Sans `read`, Coolify répond 403 dès la première requête, et son journal d'audit le dit
+   (`api.auth.ability_denied`, `required_abilities: ["read"]`).
 7. **GitHub** (*Settings*) :
    - *Environments* : créer l'environnement `staging` et y mettre les secrets `COOLIFY_URL` (adresse de l'instance,
      sans barre finale), `COOLIFY_TOKEN` (le jeton ci-dessus) et `COOLIFY_APP_UUID` (identifiant de l'application,
