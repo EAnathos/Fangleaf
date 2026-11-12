@@ -11,7 +11,7 @@
 #
 # Secrets de l'environnement GitHub « staging » (Settings › Environments) :
 #   COOLIFY_URL       adresse de l'instance Coolify, sans barre finale (https://coolify.exemple.dev)
-#   COOLIFY_TOKEN     jeton d'API d'équipe, capacités « write » et « deploy »
+#   COOLIFY_TOKEN     jeton d'API d'équipe, capacités « read », « write » et « deploy »
 #   COOLIFY_APP_UUID  identifiant de l'application Fangleaf staging dans Coolify
 # Variable obligatoire : STAGING_URL (adresse publique du staging). Sans elle, le workflow s'arrête tout de suite :
 # il vaut mieux une erreur claire qu'un déploiement qui vérifie l'adresse de quelqu'un d'autre.
