@@ -1,9 +1,0 @@
-{
-  "bump": "patch",
-  "date": "2026-11-12",
-  "title": "Une caméra plus douce",
-  "items": [
-    "La caméra ne recule plus d'un coup quand tu t'arrêtes : elle ralentit en douceur, puis se recentre lentement sur toi.",
-    "À cheval, tes gestes ont plus de marge avant que la caméra ne bouge."
-  ]
-}

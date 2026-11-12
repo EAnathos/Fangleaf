@@ -1,5 +1,14 @@
 [
   {
+    "version": "0.15.1",
+    "date": "2026-11-12",
+    "title": "Une caméra plus douce",
+    "items": [
+      "La caméra ne recule plus d'un coup quand tu t'arrêtes : elle ralentit en douceur, puis se recentre lentement sur toi.",
+      "À cheval, tes gestes ont plus de marge avant que la caméra ne bouge."
+    ]
+  },
+  {
     "version": "0.15.0",
     "date": "2026-11-12",
     "title": "Des tempêtes venues de partout",
