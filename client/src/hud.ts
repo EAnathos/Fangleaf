@@ -19,6 +19,7 @@ import { ACTIONS, type Action, applyUi, keyLabel, labelOf, resetKeys, saveSettin
 import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 import { clamp } from '../../shared/math.ts';
+import { revealRooms } from '../../shared/fog.ts';
 
 export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | 'trade' | null;
 type SwapView = Extract<ServerMsg, { t: 'swap' }>;
@@ -3005,7 +3006,12 @@ export class Hud {
     ctx.stroke();
   }
 
-  private explored = new Set<number>(); // salles du donjon déjà vues (cette session)
+  private explored = new Set<number>(); // salles du donjon découvertes par le village (gardées par le serveur)
+
+  /** Salles du donjon que le village a déjà découvertes (envoyées par le serveur à l'arrivée). */
+  mergeDepths(rooms: readonly number[]) {
+    for (const k of rooms) if (Number.isInteger(k) && k >= 0 && k < this.map.rooms.length) this.explored.add(k);
+  }
 
   /**
    * Carte du donjon sous le volcan (minicarte, et grande carte quand on y est) : les salles déjà vues et leurs couloirs
@@ -3015,9 +3021,9 @@ export class Hud {
   private drawDungeonMap(me: PlayerState, players: PlayerState[], myPos: { x: number; y: number }, ctx = this.mini, S = 180, z = 1) {
     const map = this.map, h = map.depths.inside, k = S / (2 * HALL_RX);
     const m = (x: number, y: number): [number, number] => [S / 2 + (x - h.x) * k, S / 2 + (y - h.y) * k];
-    map.rooms.forEach((r, i) => {
-      if (Math.hypot(r.x - myPos.x, r.y - myPos.y) < Math.max(r.rx, r.ry) + 420) this.explored.add(i);
-    });
+    // (même règle que le serveur, qui les garde pour le village : celles qu'on découvre ensemble s'affichent aussitôt)
+    revealRooms(this.explored, map.rooms, myPos.x, myPos.y);
+    for (const p of players) if (!p.dead && p.id !== me.id && map.caveAt(p.x, p.y) === map.depths) revealRooms(this.explored, map.rooms, p.x, p.y);
     ctx.fillStyle = '#120C0A';
     ctx.fillRect(0, 0, S, S);
     ctx.lineCap = 'round';

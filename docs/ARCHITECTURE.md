@@ -70,6 +70,8 @@ Le ciel (jour, nuit, météo) n'est pas transmis : client et serveur le calculen
 La **carte explorée** est commune au village : le serveur dévoile les cases autour de chaque dompteur (`shared/fog.ts`),
 la sauvegarde avec le village (migration 029) et l'envoie à chaque membre qui arrive (`fog`). Ensuite, chaque client
 dévoile lui-même autour des dompteurs qu'il reçoit dans les snapshots (tous les membres connectés y sont).
+Le donjon du volcan est hors de cette grille : sa carte retient les **salles découvertes** (`revealRooms`, même règle
+des deux côtés), gardées de la même façon par le serveur (migration 030) et envoyées avec la carte explorée.
 
 Les **échanges** entre dompteurs (`swap`) se jouent entièrement sur le serveur : il borne chaque part à ce que le
 dompteur possède, envoie l'état aux deux après chaque changement et ne fait le transfert que quand les deux ont validé.

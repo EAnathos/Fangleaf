@@ -841,7 +841,10 @@ export class Game {
       location.href = location.pathname;
     } else if (m.t === 'error') this.hud.toast(m.msg);
     else if (m.t === 'board') this.hud.board(m.rows);
-    else if (m.t === 'fog') this.fog.merge(m.cells); // la carte du village, découverte aussi par les autres
+    else if (m.t === 'fog') {
+      this.fog.merge(m.cells); // la carte du village, découverte aussi par les autres
+      this.hud.mergeDepths(m.depths ?? []); // et les salles du donjon (un serveur plus ancien ne les envoie pas)
+    }
     else if (m.t === 'swap') this.hud.showSwap(m, this.net.latest?.players.find((p) => p.id === m.with)?.name ?? 'un dompteur');
     else if (m.t === 'swapEnd') this.hud.endSwap(m.done, m.why);
     else if (m.t === 'teleport') {
