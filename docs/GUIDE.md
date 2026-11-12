@@ -35,6 +35,11 @@ ils sont affichés dans le jeu et définis dans [`shared/config.ts`](../shared/c
 | Proposer un échange à un dompteur proche | U | Bouton ⇄ (près d'un autre dompteur) |
 | Menu, fermer un panneau | Échap | Bouton ☰ |
 
+La **caméra** ne bouge pas pour quelques pas sur place ; quand on avance, elle suit en douceur et regarde devant soi,
+d'autant plus loin qu'on va vite (monté, pendant une ruée). Elle saute avec soi lors d'une téléportation. Pour une
+caméra fixée sur son dompteur : Paramètres › Affichage › Caméra souple. Avec les mouvements réduits du système, elle
+ne regarde pas devant.
+
 ## Premiers pas
 
 On se réveille sur une plage inconnue, sans arme. Une épée est plantée dans le sable tout près : il faut tirer

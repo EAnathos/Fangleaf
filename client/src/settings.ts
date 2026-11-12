@@ -32,6 +32,7 @@ export interface Display {
   quality: Quality; // basse : image moins fine et moins de particules (machines modestes)
   damage: DamageNumbers; // chiffres des dégâts : tous (meute, coéquipiers), les siens (soi et sa meute), aucun
   shake: boolean; // secousses de l'écran
+  camera: boolean; // caméra souple (zone morte, suivi en douceur, regard vers l'avant) ; sinon collée au dompteur
   ping: boolean; // latence affichée sous la minicarte
   weather: boolean; // pluie (la nuit reste : elle fait partie du monde)
   ui: Size; // taille de l'interface (barres, boutons, panneaux)
@@ -81,7 +82,7 @@ const DEFAULTS: Settings = {
     trade: { key: 'u', label: 'U' },
   },
   attack: 'auto',
-  display: { quality: 'high', damage: 'all', shake: true, ping: true, weather: true, ui: 'normal', text: 'normal', allyPackOpacity: 100, sleeperPacks: true, villageAlphas: true, statusHud: { enabled: true, position: 'top-left', size: 'small', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 }, alphaRevive: 'text' },
+  display: { quality: 'high', damage: 'all', shake: true, camera: true, ping: true, weather: true, ui: 'normal', text: 'normal', allyPackOpacity: 100, sleeperPacks: true, villageAlphas: true, statusHud: { enabled: true, position: 'top-left', size: 'small', timers: true, filter: 'all', animations: true, vignette: 'normal', opacity: 50, edge: 58, corner: 52 }, alphaRevive: 'text' },
 };
 
 /** Netteté maximale de l'image (pixels par point d'écran) selon la qualité. */
@@ -112,6 +113,7 @@ function load(): Settings {
       quality: (['low', 'medium', 'high'] as const).find((q) => q === d.quality) ?? D.quality,
       damage: (['all', 'mine', 'off'] as const).find((q) => q === d.damage) ?? D.damage,
       shake: typeof d.shake === 'boolean' ? d.shake : D.shake,
+      camera: typeof d.camera === 'boolean' ? d.camera : D.camera,
       ping: typeof d.ping === 'boolean' ? d.ping : D.ping,
       weather: typeof d.weather === 'boolean' ? d.weather : D.weather,
       ui: SIZES.find((q) => q === d.ui) ?? D.ui,

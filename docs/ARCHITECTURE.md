@@ -45,6 +45,7 @@ client/    index.html     lobby, HUD et panneaux
            src/main.ts    lobby : créer ou rejoindre un village
            src/game.ts    boucle de jeu : prédiction locale, rendu, événements
            src/net.ts     WebSocket et interpolation
+           src/camera.ts  caméra souple : zone morte, suivi amorti, regard vers l'avant (sans dépendance au navigateur)
            src/hud.ts     HUD et panneaux (forge, Tanière, marché, Hôtel de ville…)
            src/changelog.ts   nouveautés du jeu et numéro de version, affichés dans le lobby
            src/world.ts, sprites.ts, caves.ts, volcano.ts, voyage.ts, fx.ts, anim.ts, sky.ts, fog.ts   rendu
