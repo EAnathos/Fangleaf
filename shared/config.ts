@@ -197,15 +197,18 @@ export const sleeperBlocks = (bosses: Iterable<{ x: number; y: number; r: number
   return false;
 };
 export const PLAYER_SPEED = 210;
-// Caméra souple (client/src/camera.ts) : les petits pas ne la bougent pas, elle suit en douceur et regarde devant soi,
-// d'autant plus loin qu'on va vite.
-export const CAMERA_DEAD_R = 45; // zone morte autour du dompteur (px) : en deçà, la caméra ne bouge pas
-export const CAMERA_SOFT_S = 0.35; // souplesse du ressort qui amène la caméra au point visé (s)
-export const CAMERA_LOOK_FROM = 120; // vitesse lissée (px/s) à partir de laquelle on regarde devant : pas sur les petits pas
-export const CAMERA_LOOK_S = 1.4; // regard vers l'avant : tant de secondes de la vitesse au-delà du seuil (px)
-export const CAMERA_LOOK_MAX = 260; // … sans regarder plus loin que ça (px)
+// Caméra souple (client/src/camera.ts) : les petits pas ne la bougent pas, elle suit en douceur et regarde peu à peu
+// devant soi, d'autant plus loin qu'on va vite ; à l'arrêt, elle se recentre lentement.
+export const CAMERA_DEAD_R = 55; // zone morte autour du dompteur (px), à pied ; monté, elle grandit avec la vitesse de la monture
+export const CAMERA_SOFT_S = 0.5; // souplesse du ressort qui amène la caméra au point visé (s) : plus long, plus doux
+export const CAMERA_LOOK_FROM = 130; // vitesse lissée (px/s) à partir de laquelle on regarde devant : pas sur les petits pas
+export const CAMERA_LOOK_S = 1.2; // regard vers l'avant : tant de secondes de la vitesse au-delà du seuil (px)
+export const CAMERA_LOOK_MAX = 200; // … sans regarder plus loin que ça (px)
+export const CAMERA_LOOK_TAU = 0.8; // le regard s'installe et se retire en douceur, sur à peu près ce temps (s)
 export const CAMERA_LOOK_VERT = 0.75; // l'écran est moins haut que large : on regarde moins loin vers le haut et le bas
 export const CAMERA_VEL_S = 0.35; // lissage de la vitesse : un zigzag ou un arrêt bref ne fait pas basculer le regard (s)
+export const CAMERA_SETTLE_AFTER = 0.6; // immobile depuis ce temps (s) : la caméra se recentre sur le dompteur…
+export const CAMERA_SETTLE_S = 1.5; // … lentement, sur à peu près ce temps (s)
 export const CAMERA_SNAP_R = 600; // un saut plus grand d'une image à l'autre (téléportation, grotte, réapparition) : la caméra saute aussi
 export const CAMERA_VEL_MAX = 900; // vitesse prise en compte au plus (px/s) : un recalage du serveur ne fait pas bondir la caméra
 export const PLAYER_RANGE = 62; // portée de pioche (filons), au-delà des rayons
