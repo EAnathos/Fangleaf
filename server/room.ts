@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   alphaEquipMax, ALPHA_LVL_MAX, TRADE_R, TRADE_KEEP_R, BOSS_CHASE_MULT, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_TALK_R, RALLY_S, RALLY_CD_S, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost, alphaName, bossEssence,
-  ARC_FLIGHT_S, SPLASH_FLAT, HAZARD_FLAT, FLAT_ZONES, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT, ROOM_PACKS, HEART_PACKS, DEPTHS_RESET_S, LAIR_PULL_R,
+  ARC_FLIGHT_S, SPLASH_FLAT, HAZARD_FLAT, FLAT_ZONES, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT, ROOM_PACKS, ROOM_MIN, ROOM_REFILL_S, ROOM_REFILL_R, HEART_PACKS, DEPTHS_RESET_S, LAIR_PULL_R,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, PET_CAP, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, gateHall, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, WINGS_LEASH, VENT_R, VENT_WARN_S, VENT_FIRE_S, VENT_HURT, PLATE_R, GEYSER_R, GEYSER_WARN_S, GEYSER_HURT, PLATE_REARM_S, alphaLevelMult, alphaReviveS, alphaUpCost,
@@ -2200,6 +2200,7 @@ export class Room {
   private plateAt = new Map<number, number>(); // dalle piégée → réarmée à ce moment
   private cleared = new Set<number>(); // salles du donjon vidées de leur garnison (l'entrée l'est d'office)
   private garrisoned = new Set<number>(); // salles dont la garnison est apparue
+  private emptyAt = new Map<number, number>(); // salle garnie dont il ne reste personne → depuis ce moment (elle se regarnit plus tard)
   private sealed = new Set<number>(); // antres du volcan dont la herse est retombée pour un combat (index de leur géant)
   private depthsSeenAt = -Infinity; // dernier instant où un dompteur était dans le donjon
   private geysers: { i: number; at: number }[] = []; // geysers annoncés (dalle foulée)
@@ -2211,7 +2212,8 @@ export class Room {
   /**
    * Salles du donjon : chaque salle a sa garnison, qui apparaît dès qu'on peut y entrer (une herse de ses couloirs levée).
    * Une salle vidée lève les herses de ses couloirs (on débloque les salles voisines) ; celle d'un antre se lève en plus
-   * une fois l'entrée payée par le village. Personne dans le donjon pendant DEPTHS_RESET_S : tout se regarnit.
+   * une fois l'entrée payée par le village. Une salle vidée se regarnit pendant la visite (ROOM_REFILL_S, loin de tout
+   * dompteur) sans que ses herses retombent. Personne dans le donjon pendant DEPTHS_RESET_S : tout se regarnit.
    */
   private updateDepths() {
     if (this.tick % 10 !== 0 || !this.map.rooms.length) return;
@@ -2222,6 +2224,7 @@ export class Room {
       for (const u of [...this.units.values()]) if (u.room !== undefined && !u.owner) this.units.delete(u.id);
       this.garrisoned.clear();
       this.cleared.clear();
+      this.emptyAt.clear();
     }
     map.rooms.forEach((r, k) => {
       if (r.kind === 'entry') this.cleared.add(k);
@@ -2229,7 +2232,18 @@ export class Room {
     // salle vidée : plus aucun monstre de sa garnison debout (apprivoisés compris : ils ont changé de camp)
     const alive = new Set<number>();
     for (const u of this.units.values()) if (u.room !== undefined && !u.owner && !u.reviveAt && u.hp > 0) alive.add(u.room);
-    for (const k of this.garrisoned) if (!alive.has(k)) this.cleared.add(k);
+    for (const k of this.garrisoned) {
+      if (alive.has(k)) {
+        this.emptyAt.delete(k);
+        continue;
+      }
+      this.cleared.add(k); // pour de bon : la garnison qui revient ne rabaisse pas les herses (personne n'est enfermé)
+      const r = map.rooms[k];
+      if (!inside || r.kind === 'entry' || r.kind === 'lair') continue;
+      const since = this.emptyAt.get(k);
+      if (since === undefined) this.emptyAt.set(k, this.time);
+      else if (this.time - since >= ROOM_REFILL_S && !this.nearRoom(k, ROOM_REFILL_R)) this.garrison(k);
+    }
     map.links.forEach(([a, b], i) => {
       const d = map.doors[i];
       const open = (this.cleared.has(a) || this.cleared.has(b)) && (d.lair < 0 || this.unlocked.includes(d.lair)) && !this.lairFight(d.lair);
@@ -2404,15 +2418,25 @@ export class Room {
     this.events.push({ e: 'lair', cave, shut: true, x: d.x, y: d.y });
   }
 
-  /** La garnison d'une salle du donjon (pas l'entrée, ni un antre : son géant y est déjà). */
+  /** Un dompteur (debout ou à terre) à moins de r du bord de la salle k du donjon : on y verrait les monstres apparaître. */
+  private nearRoom(k: number, r: number) {
+    const q = this.map.rooms[k], reach = Math.max(q.rx, q.ry) + r;
+    for (const p of this.players.values()) if (dist2(p.x, p.y, q.x, q.y) < reach ** 2 && this.map.caveAt(p.x, p.y) === this.map.depths) return true;
+    return false;
+  }
+
+  /** La garnison d'une salle du donjon (pas l'entrée, ni un antre : son géant y est déjà), ROOM_MIN créatures au moins. */
   private garrison(k: number) {
     this.garrisoned.add(k);
+    this.emptyAt.delete(k);
     const r = this.map.rooms[k];
     if (r.kind === 'entry' || r.kind === 'lair') return;
     const kinds = SPECIES.map((_, i) => i).filter((i) => SPECIES[i].zone === VOLCANO_ZONE && SPECIES[i].population > 0);
     const total = kinds.reduce((n, i) => n + SPECIES[i].population, 0);
     const packs = r.kind === 'heart' ? HEART_PACKS : ROOM_PACKS[0] + Math.floor(Math.random() * (ROOM_PACKS[1] - ROOM_PACKS[0] + 1));
-    for (let n = 0; n < packs; n++) {
+    let made = 0;
+    // des meutes de plus tant que la salle n'a pas son compte (borné : une salle encombrée ne boucle pas sans fin)
+    for (let n = 0; n < packs + 6 && (n < packs || made < ROOM_MIN); n++) {
       let roll = Math.random() * total, s = kinds[0];
       for (const i of kinds) if ((roll -= SPECIES[i].population) < 0) {
         s = i;
@@ -2425,7 +2449,10 @@ export class Room {
         if (this.map.blocked(cx, cy) || this.map.roomAt(cx, cy) !== k) continue;
         for (let i = 0; i < count; i++) {
           const x = cx + (Math.random() - 0.5) * 120, y = cy + (Math.random() - 0.5) * 120;
-          if (!this.map.blocked(x, y) && this.map.roomAt(x, y) === k) this.createUnit(s as SpeciesId, false, x, y).room = k;
+          if (!this.map.blocked(x, y) && this.map.roomAt(x, y) === k) {
+            this.createUnit(s as SpeciesId, false, x, y).room = k;
+            made++;
+          }
         }
         break;
       }
