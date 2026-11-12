@@ -3,7 +3,7 @@
 import {
   bossMelee, sleeperBlocks,
   alphaEquipMax, ALPHA_LVL_MAX, TRADE_R, TRADE_KEEP_R, BOSS_CHASE_MULT, BOSS_HASTE_AFTER, BOSS_HASTE_MAX, BOSS_HASTE_RATE, BOSS_TALK_R, RALLY_S, RALLY_CD_S, BOSS_CHASE_R, CLASS_CHANGE_COST, CLASS_IDS, heroOf, type ClassId, SPEC_CHANGE_COST, SPEC_IDS, SPEC_LVL, SPECS, type SpecId, BOSS_RESPAWN_S, BOSS_SOUL_DROP, FRUIT_ESSENCE, COATI_CHANCE, COATI_MAX, COATI_HIDE_R, COATI_PEEK_S, COATI_KEEP_R, COATI_DANGER_R, COATI_BERRY_R, LEGEND_MOVE_CD, LEGEND_MOVE_DMG, LEGEND_STAGGER_S, LEGEND_AIM_S, DEATH_GOLD_LOSS, DEATH_RES_LOSS, MAGE_SPLASH_EDGE, BERRIES_PICKED, MAX_BERRIES, BUSH_PICK_R, BUSH_REGROW_S, BUSH_SEEK_R, FEED_CD, fruitTameChance, LURE_R, CHEST_GOLD, FLEE_S, CAVE_CD, ESSENCE_DROP, ORE_R, ORE_RESPAWN_S, alphaAwakenS, alphaCreateCost, alphaName, bossEssence,
-  ARC_FLIGHT_S, SPLASH_FLAT, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT, ROOM_PACKS, HEART_PACKS, DEPTHS_RESET_S, LAIR_PULL_R,
+  ARC_FLIGHT_S, SPLASH_FLAT, HAZARD_FLAT, FLAT_ZONES, SHOT_KINDS, lobbedShot, DESERT_ZONE, type Ranged, alphaStats, BOSS_MOVES, BOSS_HP_BONUS, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, quicksandSink, QUICKSAND_CHANCE, QUICKSAND_GAP, QUICKSAND_R, QUICKSAND_OPEN_S, QUICKSAND_LIFE_S, STORM_HARM, STORM_PUSH, GOLEM_EAT_R, GOLEM_BITE_S, GOLEM_BITES, bossOf, isBoss, LEGEND_SOULS, WEB_SLOW, WEB_SLOW_S, type BossMove, oreGold, oreHp, ALPHA_MULT, LASER_TICK, ARMOR_MAX, BOOTS_MAX, TORCH_MAX, SADDLE_MAX, GEARS, gearCost, gearMax, rideSpeed, bootsSpeed, ISLE_TOME_DROP, type Gear, armyCap, lessonBonus, LESSON_KINDS, lessonsOf, DISCIPLINES, LESSON_MS, BOOKS, bookIndex, LESSONS_PER_TOME, TOME_DROP, tomeOfZone, tomeForLesson, lessonsLeft, SCHOOL_CAMP, VOLCANO_ZONE, VOYAGE_ZONE, KRAKEN_DELAY_S, DECK_RX, DECK_RY, boatReady, HEART_REACH, HEART_TAKEN, HEART_IN_BOAT, BOAT_REACH, volcanoOpen, zoneBosses, BUILDING_REACH, DT, ROOM_PACKS, HEART_PACKS, DEPTHS_RESET_S, LAIR_PULL_R,
   FOLLOW_ENGAGE_R, FOLLOW_MAX_R, PET_CAP, GOLD_SHARE_R, MAX_PLAYERS, PLAYER_ATK_CD, PLAYER_COLORS, HATS, HAT_PRICES,
   PLAYER_R, PLAYER_RANGE, PLAYER_RESPAWN_S, PLAYER_SPEED, REVIVE_HOLD_S, REVIVE_HP, REVIVE_R, REVIVE_WINDOW_S, RECALL_DONE_R, RECALL_R, SPECIES, TAME_CHANCE, TAMED_HP_MULT, TAMED_MULT, VIEW_R,
   SPAWN_SAFE_R, BOAT_STAGES, dockStoneOn, BOAT_STAGE_MS, SCHOOL_BUILD_MS, PLAN_REACH, ELDER_REACH, SCROLL_REACH, SWORD_PULLS, SWORD_REACH, CAMP_COST, CAMP_R, BUILDINGS, BUILDING_IDS, type BuildingId, buildingCost, type Cost, HALL, HALL_MAX, gateOpen, gateHall, oreStone, resRoll, resYield, caveUnlockCost, monsterBuyPrice, monsterSellPrice, ZONES, WILD_REGEN, WILD_REGEN_DELAY, WEAPON_MAX, WILD_AGGRO_R, WILD_LEASH_R, WINGS_LEASH, VENT_R, VENT_WARN_S, VENT_FIRE_S, VENT_HURT, PLATE_R, GEYSER_R, GEYSER_WARN_S, GEYSER_HURT, PLATE_REARM_S, alphaLevelMult, alphaReviveS, alphaUpCost,
@@ -3050,27 +3050,30 @@ export class Room {
   // ───────────────────────── Attaques spéciales des mini-boss ─────────────────────────
 
   /** Alliés des dompteurs (joueurs et leurs monstres) vivants dans un rayon. */
-  private alliesNear(x: number, y: number, r: number) {
+  private alliesNear(x: number, y: number, r: number, flat = 1) {
     const out: Ent[] = [];
     this.grid.query(x, y, r + 60, (e) => {
       if (!this.alive(e) || !(e.kind === 'p' || e.owner !== 0)) return;
-      if (dist2(x, y, e.x, e.y) <= (r + e.r) ** 2) out.push(e);
+      if ((e.x - x) ** 2 + ((e.y - y) / flat) ** 2 <= (r + e.r) ** 2) out.push(e);
     });
     return out;
   }
 
   /** Monstres sauvages vivants (combattus) dans un rayon. */
-  private wildNear(x: number, y: number, r: number) {
+  private wildNear(x: number, y: number, r: number, flat = 1) {
     const out: Ent[] = [];
     this.grid.query(x, y, r + 60, (e) => {
-      if (this.alive(e) && this.isWild(e) && dist2(x, y, e.x, e.y) <= (r + e.r) ** 2) out.push(e);
+      if (this.alive(e) && this.isWild(e) && (e.x - x) ** 2 + ((e.y - y) / flat) ** 2 <= (r + e.r) ** 2) out.push(e);
     });
     return out;
   }
 
-  /** Qui une attaque spéciale peut toucher : les dompteurs et leurs meutes (géant), ou les sauvages (Alpha légendaire). */
-  private targetsNear(caster: Unit, x: number, y: number, r: number) {
-    return caster.owner ? this.wildNear(x, y, r) : this.alliesNear(x, y, r);
+  /**
+   * Qui une attaque spéciale peut toucher : les dompteurs et leurs meutes (géant), ou les sauvages (Alpha légendaire).
+   * flat : la zone est l'ellipse aplatie dessinée au sol (HAZARD_FLAT), pas un cercle.
+   */
+  private targetsNear(caster: Unit, x: number, y: number, r: number, flat = 1) {
+    return caster.owner ? this.wildNear(x, y, r, flat) : this.alliesNear(x, y, r, flat);
   }
 
   private hazard(boss: Unit, h: Partial<Omit<Hazard, 'id'>> & Pick<Hazard, 'kind' | 'x' | 'y' | 'r' | 'at' | 'dmg'>) {
@@ -3841,7 +3844,7 @@ export class Room {
         }
         this.events.push({ e: 'boom', x: Math.round(h.x2 === h.x && h.y2 === h.y ? h.x : h.x2), y: Math.round(h.y2), r: h.r, kind: h.style && h.style !== 'charge' && h.style !== 'spores' && h.style !== 'web' ? h.style : ['circle', 'line', 'cloud', 'web'][h.kind], ...(h.boss.owner ? { by: h.boss.owner } : {}) });
         if (h.kind === 2 || h.ring || h.run?.hurt || h.dmg <= 0) continue; // nuages, anneaux, ruées et tronc : ils frappent dans la durée
-        const hit = h.kind === 1 ? this.alliesOnLine(h) : h.kind === 4 ? this.inArc(h) : this.targetsNear(h.boss, h.x, h.y, h.r);
+        const hit = h.kind === 1 ? this.alliesOnLine(h) : h.kind === 4 ? this.inArc(h) : this.targetsNear(h.boss, h.x, h.y, h.r, FLAT_ZONES.has(h.style ?? '') ? HAZARD_FLAT : 1); // la zone telle qu'annoncée au sol
         for (const e of hit) {
           if ((h.kind === 3 || h.style === 'bubble') && e.kind === 'p') e.slowUntil = this.time + WEB_SLOW_S; // toile, écume : ça colle
           if (h.style === 'howl' && e.kind === 'p') e.slowUntil = this.time + 2.5; // le hurlement glace : on traîne les pieds

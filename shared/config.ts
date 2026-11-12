@@ -831,6 +831,11 @@ export const lobbedShot = (kind: number | Ranged['kind']) => { const k = typeof 
 export const ARC_FLIGHT_S = 0.9;
 /** Zone de chute d'un tir en cloche, vue en perspective : une ellipse aplatie à ce rapport (le serveur ne touche que ce qui s'y tient). */
 export const SPLASH_FLAT = 0.6;
+// Zones d'attaque annoncées au sol : un cercle dessiné aplati en perspective (sa hauteur fait HAZARD_FLAT fois sa
+// largeur). Le serveur touche dans la même ellipse (un corps qui mord dessus compte), pour les styles dessinés ainsi ;
+// les autres (embuscade, piqué, braises, champignons…) ont leur propre dessin et gardent un cercle.
+export const HAZARD_FLAT = 0.75;
+export const FLAT_ZONES: ReadonlySet<string> = new Set(['', 'blink', 'bubble', 'slam', 'fireslam', 'geyser', 'leap', 'pound', 'rock', 'stalk', 'web']);
 
 // Deux à trois espèces par zone, progression marquée d'une zone à l'autre (PV et dégâts ×2,5 à ×3).
 // L'index de chaque espèce sert dans les profils sauvegardés (essences, Alphas) : n'ajouter qu'à la fin.
