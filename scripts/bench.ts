@@ -14,6 +14,7 @@ import { parseArgs } from 'node:util';
 import { ARMY_CAP, BOSS_MOVES, BUILDING_IDS, DT, HALL_MAX, SPECIES, SWORD_PULLS, TICK_HZ } from '../shared/config.ts';
 import { Room } from '../server/room.ts';
 import { WorldMap } from '../shared/worldmap.ts';
+import { MapGenerator } from '../server/mapgen.ts';
 
 const { values: args } = parseArgs({
   options: {
@@ -32,6 +33,7 @@ const THRESHOLDS = {
   bytes: 1.1, // octets de snapshot par joueur et par seconde : +10 % au plus (mesure déterministe)
   budgetMs: 1000 / TICK_HZ / 2, // p99 au-delà de la moitié du budget d'un tick : alerte, quelle que soit la référence
   mapFloorMs: 100, // génération de l'île : même règle que le p95 (+25 %), avec un plancher de 100 ms
+  mapBlockMs: 250, // blocage des autres villages pendant une génération (worker) : au plus 250 ms, quelle que soit la référence
 };
 
 const SEED = Number(args.seed ?? 1);
@@ -158,7 +160,29 @@ const mapMs = Math.round(Math.min(...[0, 1].map(() => {
   new WorldMap(SEED, false);
   return performance.now() - t0;
 })));
-console.log(`carte     génération de l'île côté serveur : ${mapMs} ms (bloque la boucle de tous les villages)`);
+console.log(`carte     génération de l'île sur le fil principal : ${mapMs} ms (ce que coûterait un chargement sans worker)`);
+// Ce que vivent les autres villages pendant qu'une île se génère dans le worker (server/mapgen.ts) : une boucle qui bat
+// toutes les 10 ms mesure sa plus longue attente ; la mémoire du process (worker compris) est relevée au passage.
+const gen = new MapGenerator();
+const worker = await (async () => {
+  let blockMs = 0, last = performance.now(), peak = 0;
+  const rss0 = process.memoryUsage().rss;
+  const beat = setInterval(() => {
+    const t = performance.now();
+    blockMs = Math.max(blockMs, t - last);
+    last = t;
+    peak = Math.max(peak, process.memoryUsage().rss);
+  }, 10);
+  const t0 = performance.now();
+  await gen.generate(SEED);
+  const genMs = performance.now() - t0;
+  clearInterval(beat);
+  gen.close();
+  return { genMs: Math.round(genMs), blockMs: Math.round(blockMs), memMb: Math.round(Math.max(0, peak - rss0) / 2 ** 20) };
+})();
+const mapBlockMs = worker.blockMs;
+console.log(`          avec le worker : ${worker.genMs} ms de génération, boucle des villages bloquée ${mapBlockMs} ms au plus, ` +
+  `+${worker.memMb} Mo de mémoire au pic`);
 const results = chosen.map((sc) => {
   const res = run(sc);
   console.log(`${sc.key.padEnd(9)} ${sc.label}`);
@@ -167,7 +191,7 @@ const results = chosen.map((sc) => {
   return res;
 });
 
-const report = { node: process.version, platform: `${process.platform}-${process.arch}`, seed: SEED, ticks: TICKS, mapMs, results };
+const report = { node: process.version, platform: `${process.platform}-${process.arch}`, seed: SEED, ticks: TICKS, mapMs, mapBlockMs, results };
 if (args.save) {
   await mkdir(dirname(args.save), { recursive: true });
   await writeFile(args.save, JSON.stringify(report, null, 2) + '\n');
@@ -175,6 +199,10 @@ if (args.save) {
 }
 
 let failed = false;
+if (mapBlockMs > THRESHOLDS.mapBlockMs) {
+  console.log(`⚠ génération d'une île : la boucle des villages est restée bloquée ${mapBlockMs} ms (au plus ${THRESHOLDS.mapBlockMs} ms)`);
+  failed = true;
+}
 for (const res of results) {
   if (res.p99Ms > THRESHOLDS.budgetMs) {
     console.log(`⚠ ${res.key} : p99 ${res.p99Ms} ms, plus de la moitié du budget d'un tick (${THRESHOLDS.budgetMs} ms)`);
@@ -191,6 +219,8 @@ if (args.against) {
     console.log(`  ${slowMap ? '✘' : '✔'} carte     génération ${base.mapMs} → ${mapMs} ms`);
     failed ||= slowMap;
   }
+  // (une référence d'avant le worker n'a pas cette mesure : son blocage était toute la génération)
+  console.log(`  ${mapBlockMs > THRESHOLDS.mapBlockMs ? '✘' : '✔'} blocage   des autres villages pendant une génération ${base.mapBlockMs ?? base.mapMs} → ${mapBlockMs} ms`);
   for (const res of results) {
     const b = base.results.find((x) => x.key === res.key);
     if (!b) { console.log(`  ${res.key} : absent de la référence`); continue; }

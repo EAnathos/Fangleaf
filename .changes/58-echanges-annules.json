@@ -1,0 +1,8 @@
+{
+  "bump": "patch",
+  "date": "2026-11-12",
+  "title": "Les échanges fonctionnent de nouveau",
+  "items": [
+    "Un échange entre dompteurs ne s'annule plus tout seul dès son ouverture : il reste ouvert jusqu'à ce que l'un de vous l'annule, s'éloigne ou le conclue."
+  ]
+}

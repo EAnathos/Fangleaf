@@ -460,9 +460,11 @@ export class Room {
   private exploredDirty = false;
   private swaps = new Map<number, Swap>(); // dompteur → l'échange où il est engagé (les deux dompteurs y mènent)
 
-  constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}) {
+  /** map : l'île déjà générée (server/mapgen.ts, hors du fil principal) ; sinon elle est générée ici, d'un bloc. */
+  constructor(readonly code: string, seed?: number, saved: Partial<VillageState> = {}, map?: WorldMap) {
     this.seed = seed ?? Math.floor(Math.random() * 2 ** 31);
-    this.map = Room.makeMap(this.seed);
+    if (map && map.seed !== this.seed) throw new Error(`île de la graine ${map.seed} pour un village de graine ${this.seed}`);
+    this.map = map ?? Room.makeMap(this.seed);
     if (saved.explored) {
       const cells = new Uint8Array(FOG_N * FOG_N);
       if (unpackFog(saved.explored, cells)) this.explored.set(cells); // illisible : on repart d'une carte vierge
@@ -2263,7 +2265,7 @@ export class Room {
       return this.sendSwap(sw);
     }
     if (!s) return;
-    if (act === 'cancel') return this.endSwap(s, false, `${p.name} a annulé l'échange.`);
+    if (act === 'cancel') return this.endSwap(s, false, `${p.name} a annulé l'échange.`, `annulé par le dompteur ${p.id}`);
     if (act === 'offer') {
       // jamais plus que ce qu'on a dans son sac
       const n = (v: unknown, max: number) => clamp(Math.floor(Number(v) || 0), 0, Math.max(0, Math.floor(max)));
@@ -2307,7 +2309,9 @@ export class Room {
     }
   }
 
-  private endSwap(s: Swap, done: boolean, why?: string) {
+  /** cause : pour le journal du serveur, qui a provoqué la fin (un échange annulé sans raison apparente se retrace ainsi). */
+  private endSwap(s: Swap, done: boolean, why?: string, cause = why) {
+    if (!done) console.info(`[échange] village ${this.code}, dompteurs ${s.a} et ${s.b} : ${cause ?? 'annulé'}`);
     this.swaps.delete(s.a);
     this.swaps.delete(s.b);
     for (const id of [s.a, s.b]) this.players.get(id)?.send({ t: 'swapEnd', done, ...(why ? { why } : {}) });
