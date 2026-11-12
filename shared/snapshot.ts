@@ -4,23 +4,28 @@
 import type { PlayerState, Snapshot, UnitTuple } from './protocol.ts';
 
 const MOVE_EPS = 2; // px : en deçà, un petit déplacement n'est pas renvoyé
-const same = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
+
+/** Chaque champ d'un état de dompteur, en JSON : ce qu'on compare d'un envoi à l'autre. */
+export function playerFields(p: PlayerState): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(p)) out[k] = JSON.stringify(v);
+  return out;
+}
 
 /** Côté serveur, par spectateur : ce qu'il a déjà reçu, pour n'envoyer que la différence. */
 export class SnapshotDiff {
   private units = new Map<number, UnitTuple>();
   private ores = new Map<number, number>();
-  private players = new Map<number, Record<string, string>>(); // par dompteur : chaque champ déjà envoyé (en JSON)
+  private players = new Map<number, Record<string, string>>(); // par dompteur : chaque champ déjà envoyé (en JSON), jamais modifié ensuite
 
-  /** Dompteurs : pour chacun, son id et seulement les champs qui ont changé (une liste d'essences, une meute…). */
-  diffPlayers(now: PlayerState[]): PlayerState[] {
+  /**
+   * Dompteurs : pour chacun, son id et seulement les champs qui ont changé (une liste d'essences, une meute…).
+   * fields : le serveur passe une version gardée en mémoire pour le tick, car le même état part vers plusieurs spectateurs.
+   */
+  diffPlayers(now: PlayerState[], fields: (p: PlayerState) => Record<string, string> = playerFields): PlayerState[] {
     const out = now.map((p) => {
-      const old = this.players.get(p.id) ?? {}, part: Record<string, unknown> = { id: p.id }, sent: Record<string, string> = {};
-      for (const [k, v] of Object.entries(p)) {
-        const json = JSON.stringify(v);
-        sent[k] = json;
-        if (old[k] !== json) part[k] = v;
-      }
+      const old = this.players.get(p.id) ?? {}, part: Record<string, unknown> = { id: p.id }, sent = fields(p);
+      for (const [k, v] of Object.entries(p)) if (old[k] !== sent[k]) part[k] = v;
       this.players.set(p.id, sent);
       return part as unknown as PlayerState;
     });
@@ -35,7 +40,7 @@ export class SnapshotDiff {
       seen.add(u[0]);
       const old = this.units.get(u[0]);
       // inchangée, ou seulement déplacée de moins de 2 px (l'interpolation du client n'y verra rien)
-      if (old && same([old[1], old[2], old[5], old[6]], [u[1], u[2], u[5], u[6]]) && Math.abs(old[3] - u[3]) < MOVE_EPS && Math.abs(old[4] - u[4]) < MOVE_EPS) continue;
+      if (old && old[1] === u[1] && old[2] === u[2] && old[5] === u[5] && old[6] === u[6] && Math.abs(old[3] - u[3]) < MOVE_EPS && Math.abs(old[4] - u[4]) < MOVE_EPS) continue;
       this.units.set(u[0], u);
       changed.push(u);
     }

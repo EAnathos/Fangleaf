@@ -3,7 +3,7 @@
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
 import { DESERT_ZONE, JUNGLE_ZONE, ZONES, CACTUS_CD, CACTUS_PRICK, QUICKSAND_GRACE_S, QUICKSAND_LIFE_S, QUICKSAND_OPEN_S, quicksandSink, TICK_HZ, mountSpeedOf, HALL_MAX, gateHall, gateOpen, zoneBosses, SPECIES, WORLD_HALF, VOLCANO_ZONE } from '../../shared/config.ts';
-import { BEACH, SEA_SHALLOW, villageEdge, WorldMap } from '../../shared/worldmap.ts';
+import { BEACH, BRIDGE_W, SEA_SHALLOW, villageEdge, WorldMap } from '../../shared/worldmap.ts';
 import { sky } from '../../shared/weather.ts';
 import { maxHpOf, Room } from '../../server/room.ts';
 import { MapGenerator } from '../../server/mapgen.ts';
@@ -470,5 +470,25 @@ describe('Le monde : carte, obstacles, brume, météo', () => {
     } finally {
       gen.close();
     }
+  });
+
+  rule('Îlot du village : onIsle, qui s\'arrête tôt loin du feu, répond comme la formule complète (côte de l\'îlot, pont).', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const m: any = room().map, v = m.village;
+    const full = (x: number, y: number) => Math.hypot(x - v.x, y - v.y) < m.isleEdge(Math.atan2(y - v.y, x - v.x)) + 50 || m.bridgeDist(x, y) < BRIDGE_W;
+    let diff = 0, isle = 0, total = 0;
+    // autour du feu jusqu'au-delà de la côte, et le long du pont
+    const probe = (x: number, y: number) => {
+      total++;
+      if (full(x, y)) isle++;
+      if (m.onIsle(x, y) !== full(x, y)) diff++;
+    };
+    for (let i = 0; i < 20000; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.random() * 2500;
+      probe(v.x + Math.cos(a) * d, v.y + Math.sin(a) * d);
+    }
+    const { a: A, b: B } = m.bridge;
+    for (let i = 0; i <= 200; i++) probe(A.x + ((B.x - A.x) * i) / 200 + (Math.random() - 0.5) * 200, A.y + ((B.y - A.y) * i) / 200 + (Math.random() - 0.5) * 200);
+    check(diff === 0 && isle > 1000 && isle < total, `${total} points : ${diff} réponses différentes (${isle} sur l'îlot ou le pont)`);
   });
 });

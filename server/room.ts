@@ -15,7 +15,7 @@ import {
 import { clamp, dist2, pickCapped } from '../shared/math.ts';
 import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, SwapOffer, UnitTuple } from '../shared/protocol.ts';
 import { STAT_KEYS, STATUS_IDS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
-import { SnapshotDiff } from '../shared/snapshot.ts';
+import { SnapshotDiff, playerFields } from '../shared/snapshot.ts';
 import { FOG_N, packFog, revealCells, revealRooms, unpackFog } from '../shared/fog.ts';
 import { HALL_ID, type Ore, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky, SNOWFALL, WINTER } from '../shared/weather.ts';
@@ -5582,43 +5582,54 @@ export class Room {
   }
 
   private separate() {
-    const before = new Map<Unit, [number, number]>();
-    for (const u of this.units.values()) before.set(u, [u.x, u.y]);
+    // positions d'avant l'écartement, dans l'ordre de parcours des unités (rien n'est ajouté ni retiré pendant ce temps)
+    const n = this.units.size, bx = new Float64Array(n), by = new Float64Array(n);
+    let i = 0;
     for (const u of this.units.values()) {
-      if (u.reviveAt || u.idle || this.isMount(u) || u.hidden) continue; // sous le sable : il passe sous tout le monde
-      this.grid.query(u.x, u.y, u.r + 60, (o) => {
-        if (o === u || (o.kind === 'u' && o.hidden)) return;
-        if (o.kind === 'u' && (o.id < u.id || o.reviveAt)) return; // chaque paire une seule fois
-        if (o.kind === 'p' && o.dead) return;
-        const min = u.r + o.r;
-        const dx = u.x - o.x, dy = u.y - o.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 >= min * min) return;
-        const d = Math.sqrt(d2) || 0.01;
-        const push = (min - d) * 0.5;
-        const nx = d2 ? dx / d : Math.random() - 0.5, ny = d2 ? dy / d : Math.random() - 0.5;
-        // un géant endormi ou une bête ancrée (le Kraken, ses tentacules) ne se laisse pas pousser
-        const fixed = (e: Ent) => e.kind === 'u' && (e.dormant || !!SPECIES[e.s].anchored);
-        if (o.kind === 'p') {
-          if (fixed(u)) return;
-          u.x += nx * push * 2;
-          u.y += ny * push * 2;
-        } else if (fixed(u) || fixed(o)) {
-          if (fixed(u) && fixed(o)) return;
-          // c'est l'autre qui s'écarte de toute la distance
-          const k = fixed(u) ? -2 : 2;
-          const m = fixed(u) ? o : u;
-          m.x += nx * push * k;
-          m.y += ny * push * k;
-        } else {
-          u.x += nx * push;
-          u.y += ny * push;
-          o.x -= nx * push;
-          o.y -= ny * push;
-        }
-      });
+      bx[i] = u.x;
+      by[i++] = u.y;
     }
+    // un géant endormi ou une bête ancrée (le Kraken, ses tentacules) ne se laisse pas pousser
+    const fixed = (e: Ent) => e.kind === 'u' && (e.dormant || !!SPECIES[e.s].anchored);
+    // une seule fonction de voisinage pour tout le tick (pas une fermeture par unité) : u est l'unité en cours
+    let u!: Unit;
+    const nudge = (o: Ent) => {
+      if (o === u || (o.kind === 'u' && o.hidden)) return;
+      if (o.kind === 'u' && (o.id < u.id || o.reviveAt)) return; // chaque paire une seule fois
+      if (o.kind === 'p' && o.dead) return;
+      const min = u.r + o.r;
+      const dx = u.x - o.x, dy = u.y - o.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= min * min) return;
+      const d = Math.sqrt(d2) || 0.01;
+      const push = (min - d) * 0.5;
+      const nx = d2 ? dx / d : Math.random() - 0.5, ny = d2 ? dy / d : Math.random() - 0.5;
+      if (o.kind === 'p') {
+        if (fixed(u)) return;
+        u.x += nx * push * 2;
+        u.y += ny * push * 2;
+      } else if (fixed(u) || fixed(o)) {
+        if (fixed(u) && fixed(o)) return;
+        // c'est l'autre qui s'écarte de toute la distance
+        const k = fixed(u) ? -2 : 2;
+        const m = fixed(u) ? o : u;
+        m.x += nx * push * k;
+        m.y += ny * push * k;
+      } else {
+        u.x += nx * push;
+        u.y += ny * push;
+        o.x -= nx * push;
+        o.y -= ny * push;
+      }
+    };
+    for (const cur of this.units.values()) {
+      if (cur.reviveAt || cur.idle || this.isMount(cur) || cur.hidden) continue; // sous le sable : il passe sous tout le monde
+      u = cur;
+      this.grid.query(cur.x, cur.y, cur.r + 60, nudge);
+    }
+    i = 0;
     for (const u of this.units.values()) {
+      const j = i++;
       const v = this.map.village;
       if (!u.owner) {
         // Les sauvages ne vont pas sur l'îlot du village (ni sur son pont) : ils en sont repoussés, vers l'île.
@@ -5634,7 +5645,8 @@ export class Room {
           u.y = site.y + ey * k;
         }
       }
-      if (this.blockedFor(u, u.x, u.y)) [u.x, u.y] = before.get(u) ?? [u.x, u.y]; // jamais poussé dans l'eau (ni hors de l'eau, pour un serpent)
+      // jamais poussé dans l'eau (ni hors de l'eau, pour un serpent) ; une unité restée en place n'a rien à défaire
+      if ((u.x !== bx[j] || u.y !== by[j]) && this.blockedFor(u, u.x, u.y)) [u.x, u.y] = [bx[j], by[j]];
     }
   }
 
@@ -5750,14 +5762,28 @@ export class Room {
       if (u && !u.dormant && u.fight) fights.push([cave, u.fight.from]);
     });
     const rallies = this.liveRallies();
+    // le tuple d'une unité ne dépend pas de qui la regarde : calculé une fois par tick, partagé entre les spectateurs
+    // (les dompteurs réunis au même endroit voient les mêmes unités)
+    const tuples = new Map<number, UnitTuple>();
+    // les champs de chaque dompteur, en JSON, une fois par tick et par état (complet ou allégé) : pas une fois par spectateur
+    const fields = new Map<PlayerState, Record<string, string>>();
+    const fieldsOf = (st: PlayerState) => {
+      let f = fields.get(st);
+      if (!f) fields.set(st, (f = playerFields(st)));
+      return f;
+    };
     for (const viewer of this.players.values()) {
       const units: UnitTuple[] = [];
       for (const u of this.units.values()) {
         if (u.reviveAt || dist2(u.x, u.y, viewer.x, viewer.y) > vr2) continue;
-        units.push([
-          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep || u.hibernate ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0) | ((u.phase ?? 1) === 2 ? UNIT_FLAG_PHASE2 : (u.phase ?? 1) >= 3 ? UNIT_FLAG_PHASE3 : 0) | (u.owner && SPECIES[u.s].flies && !this.airborne(u) ? UNIT_FLAG_LANDED : 0) | this.buffFlags(u), Math.round(u.x), Math.round(u.y),
-          Math.round((100 * Math.max(0, u.hp)) / u.maxHp), u.owner,
-        ]);
+        let t = tuples.get(u.id);
+        if (!t) {
+          tuples.set(u.id, (t = [
+            u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep || u.hibernate ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0) | ((u.phase ?? 1) === 2 ? UNIT_FLAG_PHASE2 : (u.phase ?? 1) >= 3 ? UNIT_FLAG_PHASE3 : 0) | (u.owner && SPECIES[u.s].flies && !this.airborne(u) ? UNIT_FLAG_LANDED : 0) | this.buffFlags(u), Math.round(u.x), Math.round(u.y),
+            Math.round((100 * Math.max(0, u.hp)) / u.maxHp), u.owner,
+          ]));
+        }
+        units.push(t);
       }
       const ores: [number, number][] = [];
       for (const o of this.map.ores) {
@@ -5819,7 +5845,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], founder: this.isFounder(viewer), caves, fights, ...(rallies.length ? { rallies } : {}), camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ...(this.map.caveAt(viewer.x, viewer.y) === this.map.depths ? { doors: [...this.map.doorShut] } : {}), ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players, fieldsOf), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], founder: this.isFounder(viewer), caves, fights, ...(rallies.length ? { rallies } : {}), camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ...(this.map.caveAt(viewer.x, viewer.y) === this.map.depths ? { doors: [...this.map.doorShut] } : {}), ev });
     }
   }
 }

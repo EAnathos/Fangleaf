@@ -2782,10 +2782,12 @@ export class Game {
     // Attaques spéciales des mini-boss, au sol sous les créatures, et ce qu'elles font faire à leur lanceur.
     // les attaques qui partent du lanceur (langue, pince, souffle, rayon, jets de flammes) restent collées à lui tel
     // qu'il est dessiné (les créatures sont affichées avec un peu de retard, les attaques non)
-    const shown = new Map(units.map((u) => [u[0], u]));
+    // (l'index des unités affichées n'est construit que s'il y a une telle attaque : à chaque image, sinon, pour rien)
+    let shown: Map<number, UnitTuple> | undefined;
     const hazards = (this.net.latest?.hazards ?? []).map((h): HazardTuple => {
-      const c = shown.get(h[9]);
-      if (!c || !ANCHORED.has(HAZARD_STYLES[h[8]])) return h;
+      if (!ANCHORED.has(HAZARD_STYLES[h[8]])) return h;
+      const c = (shown ??= new Map(units.map((u) => [u[0], u]))).get(h[9]);
+      if (!c) return h;
       const dx = c[3] - h[1], dy = c[4] - h[2];
       return [h[0], h[1] + dx, h[2] + dy, h[3], h[4] + dx, h[5] + dy, h[6], h[7], h[8], h[9], h[10], h[11], h[12]];
     });
