@@ -19,6 +19,7 @@ import { ACTIONS, type Action, applyUi, keyLabel, labelOf, resetKeys, saveSettin
 import { lakeColor, landColor, seaColor } from './world.ts';
 import type { Fog } from './fog.ts';
 import { clamp } from '../../shared/math.ts';
+import { closesAway } from './panels.ts';
 
 export type Panel = 'forge' | 'den' | 'market' | 'map' | 'quit' | 'calendar' | 'travel' | 'camp' | 'buy' | 'talk' | 'elder' | 'npc' | 'hall' | 'settings' | 'chat' | 'board' | 'school' | 'profile' | 'victory' | 'trade' | null;
 type SwapView = Extract<ServerMsg, { t: 'swap' }>;
@@ -1060,8 +1061,7 @@ export class Hud {
       const act = () => (b.panel ? this.setPanel(b.panel) : b.deposit ? this.onDeposit() : b.pick ? this.onPick() : b.sword ? this.onSword() : b.heart ? this.onHeart() : b.plan ? this.onPlan() : b.scroll !== undefined ? this.onScroll(b.scroll) : b.chest !== undefined ? this.onChest(b.chest) : b.cave && this.onCave(b.cave.id, b.cave.enter));
       onTap(prompt, act);
     }
-    const building = this.panel !== null && !['map', 'quit', 'settings', 'chat', 'board', 'profile', 'victory'].includes(this.panel);
-    if (building && b?.panel !== this.panel) this.setPanel(null);
+    if (closesAway(this.panel, b?.panel)) this.setPanel(null);
     if (b?.buy) this.buying = b.buy;
     if (b?.at !== undefined && b.at !== this.spotAt) {
       this.spotAt = b.at;

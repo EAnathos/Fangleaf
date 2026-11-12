@@ -2258,7 +2258,7 @@ export class Room {
       return this.sendSwap(sw);
     }
     if (!s) return;
-    if (act === 'cancel') return this.endSwap(s, false, `${p.name} a annulé l'échange.`);
+    if (act === 'cancel') return this.endSwap(s, false, `${p.name} a annulé l'échange.`, `annulé par le dompteur ${p.id}`);
     if (act === 'offer') {
       // jamais plus que ce qu'on a dans son sac
       const n = (v: unknown, max: number) => clamp(Math.floor(Number(v) || 0), 0, Math.max(0, Math.floor(max)));
@@ -2302,7 +2302,9 @@ export class Room {
     }
   }
 
-  private endSwap(s: Swap, done: boolean, why?: string) {
+  /** cause : pour le journal du serveur, qui a provoqué la fin (un échange annulé sans raison apparente se retrace ainsi). */
+  private endSwap(s: Swap, done: boolean, why?: string, cause = why) {
+    if (!done) console.info(`[échange] village ${this.code}, dompteurs ${s.a} et ${s.b} : ${cause ?? 'annulé'}`);
     this.swaps.delete(s.a);
     this.swaps.delete(s.b);
     for (const id of [s.a, s.b]) this.players.get(id)?.send({ t: 'swapEnd', done, ...(why ? { why } : {}) });
