@@ -123,9 +123,8 @@ export class Net {
       units.push(o);
     }
     if (pool.size > units.length * 2 + 64) for (const id of pool.keys()) if (!this.byId(b).has(id)) pool.delete(id);
-    const prevP = new Map(a.players.map((p) => [p.id, p]));
     const players = b.players.map((p) => {
-      const q = prevP.get(p.id);
+      const q = a.players.find((o) => o.id === p.id); // quatre dompteurs au plus : pas de Map à chaque image
       if (!q || q.dead !== p.dead) return p;
       return { ...p, x: q.x + (p.x - q.x) * t, y: q.y + (p.y - q.y) * t };
     });

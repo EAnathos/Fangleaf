@@ -52,6 +52,9 @@ const BRIDGE_ARC: [number, number] = [450, 850]; // abscisse (le long de la colo
 const GATE0_AFTER = 600; // la porte de la Lisière coupe le couloir à cette distance du pied du pont
 const ZONE1_EXTRA = 1160; // la zone 1 commence par la plage et le chemin du pont : elle est plus longue
 const ISLE_MARGIN = 250; // de la palissade à la côte de l'îlot du village (sa plage)
+// Au-delà de cette distance du feu, aucun point n'est sur l'îlot : borne exacte de villageEdge (somme de ses termes), des
+// ondulations de isleEdge et de la marge de onIsle, plus 1 px. onIsle s'y arrête sans trigonométrie (loin du village).
+const ISLE_REACH = VILLAGE_R * (1 + 0.14 + 0.06 + 0.035) + ISLE_MARGIN + 45 + 30 + 14 + 50 + 1;
 const BRIDGE_GAP = 300; // largeur du bras de mer entre l'île et l'îlot, au plus étroit
 export const BRIDGE_W = 64; // largeur du pont de bois
 /**
@@ -1028,8 +1031,9 @@ export class WorldMap {
   /** Sur l'îlot du village (sa plage comprise) ou sur son pont : à l'abri, les monstres sauvages n'y vont pas. */
   onIsle(x: number, y: number) {
     if (x >= WORLD_HALF) return false;
-    const v = this.village, d = Math.hypot(x - v.x, y - v.y);
-    return d < this.isleEdge(Math.atan2(y - v.y, x - v.x)) + 50 || this.bridgeDist(x, y) < BRIDGE_W;
+    const v = this.village, dx = x - v.x, dy = y - v.y;
+    if (dx * dx + dy * dy < ISLE_REACH * ISLE_REACH && Math.hypot(dx, dy) < this.isleEdge(Math.atan2(dy, dx)) + 50) return true;
+    return this.bridgeDist(x, y) < BRIDGE_W;
   }
 
   /**
