@@ -346,7 +346,7 @@ export type ServerMsg =
   | { t: 'teleport'; x: number; y: number }
   | { t: 'pong'; ts: number; now?: number } // now : heure du serveur (ms), pour le ciel commun
   | { t: 'board'; rows: BoardRow[] } // tableau du village (membres en ligne et déconnectés)
-  | { t: 'fog'; cells: string } // carte explorée du village (shared/fog.ts, packFog), envoyée à l'arrivée
+  | { t: 'fog'; cells: string; depths: number[] } // carte explorée du village (shared/fog.ts, packFog) et salles découvertes du donjon, envoyées à l'arrivée
   | { t: 'swap'; with: number; mine: SwapOffer; theirs: SwapOffer; okMine: boolean; okTheirs: boolean } // échange en cours, après chaque changement
   | { t: 'swapEnd'; done: boolean; why?: string } // échange conclu (done) ou annulé (why : pourquoi)
   | Snapshot;

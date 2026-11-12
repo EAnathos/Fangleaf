@@ -2,7 +2,7 @@
 // Le serveur la tient pour tout le village et la sauvegarde avec lui ; chaque client la dessine (client/src/fog.ts).
 // Même règle des deux côtés : une case est dévoilée quand son centre est à moins de REVEAL_R d'un dompteur.
 
-import { WORLD_HALF } from './config.ts';
+import { DEPTHS_REVEAL_R, WORLD_HALF } from './config.ts';
 
 export const FOG_CELL = 48; // doit diviser la taille du monde (34560 / 48 = 720) : sinon les rangées se décalent
 export const REVEAL_R = 650;
@@ -57,4 +57,19 @@ export function unpackFog(text: unknown, cells: Uint8Array) {
     v ^= 1;
   }
   return at === cells.length;
+}
+
+/**
+ * Le donjon du volcan est hors de la grille de l'île : sa carte retient les salles découvertes (leur index), dévoilées
+ * quand un dompteur passe près de leur bord. Même règle sur le serveur (qui les garde pour le village) et le client.
+ * Renvoie le nombre de salles nouvellement découvertes.
+ */
+export function revealRooms(seen: Set<number>, rooms: readonly { x: number; y: number; rx: number; ry: number }[], x: number, y: number) {
+  let n = 0;
+  rooms.forEach((r, i) => {
+    if (seen.has(i) || Math.hypot(r.x - x, r.y - y) >= Math.max(r.rx, r.ry) + DEPTHS_REVEAL_R) return;
+    seen.add(i);
+    n++;
+  });
+  return n;
 }

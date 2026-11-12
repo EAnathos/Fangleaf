@@ -1,0 +1,12 @@
+{
+  "bump": "minor",
+  "date": "2026-11-12",
+  "title": "Volcan : combats d'antre fiables, salamandre ardente",
+  "items": [
+    "Combat dans un antre : il ne s'arrête plus quand le dernier dompteur debout recule jusqu'à la herse ou se colle au mur.",
+    "Quand la herse d'un antre retombe, rien ne reste coincé dessous, et les monstres qui poursuivaient un dompteur juste devant entrent avec lui.",
+    "La carte du donjon du volcan est gardée pour le village : les salles découvertes le restent quand on remonte, qu'on recharge ou que les salles se regarnissent.",
+    "La Salamandre de braise sème la lave en courant et bondit sur sa cible dans une gerbe de braises, sauvage comme dans ta meute.",
+    "Les créatures des entrailles du volcan ont 50 % de PV en plus."
+  ]
+}

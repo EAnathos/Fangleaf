@@ -961,9 +961,18 @@ export class WorldMap {
   arenaAt(x: number, y: number, margin = 60): Cave | undefined {
     const c = this.caveAt(x, y);
     if (c === this.depths) {
-      // dans le donjon : la salle d'un géant du volcan est son arène
-      const k = this.roomAt(x, y);
-      return k >= 0 && this.rooms[k].kind === 'lair' ? this.caves.find((q) => q.room === k) ?? c : c;
+      // dans le donjon : la salle d'un géant du volcan est son arène ; la salle d'un point se lit au centre de sa case de
+      // sol, comme au creusement (au ras du mur, sur une case creusée pour la salle, on est encore dedans)
+      const h = this.depths.inside, cell = (v: number, o: number) => o + (Math.floor((v - o) / DCELL) + 0.5) * DCELL;
+      const k = this.roomAt(x, y) >= 0 ? this.roomAt(x, y) : this.roomAt(cell(x, h.x - HALL_RX), cell(y, h.y - HALL_RY));
+      if (k >= 0) return this.rooms[k].kind === 'lair' ? this.caves.find((q) => q.room === k) ?? c : c;
+      // le bout de couloir entre un antre et sa herse est encore l'antre : herse baissée, on y est enfermé avec le géant
+      // (sans lui, le dernier dompteur debout qui y recule ferait rendormir le géant en plein combat)
+      for (const d of this.doors) {
+        const q = d.lair >= 0 ? this.caves[d.lair] : undefined, L = q?.room !== undefined ? this.rooms[q.room] : undefined;
+        if (L && (x - d.x) * (L.x - d.x) + (y - d.y) * (L.y - d.y) > 0 && segDist(x, y, d, L) <= CORRIDOR_R + 14) return q;
+      }
+      return c;
     }
     if (c) return c;
     const t = this.isletAt(x, y, margin);
