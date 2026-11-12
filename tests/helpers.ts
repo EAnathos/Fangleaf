@@ -33,12 +33,12 @@ Room.makeMap = (seed: number) => {
 };
 
 /** Un test de règle : hasard et horloge remis à zéro avant, pour qu'il donne le même résultat seul ou avec les autres. */
-export const rule = (name: string, fn: () => void) =>
+export const rule = (name: string, fn: () => void | Promise<void>) =>
   test(name, () => {
     rng = TEST_SEED >>> 0;
     Math.random = random;
     Date.now = () => TEST_NOW;
-    fn();
+    return fn(); // un test asynchrone (worker de génération) est attendu
   });
 
 /** Vérification nommée : le libellé dit ce qui est attendu (et ce qui a été mesuré) quand elle échoue. */

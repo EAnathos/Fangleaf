@@ -69,6 +69,16 @@ Seuils, scénarios et référence : [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
   nouveautés du lobby. Utiliser à la place deux-points, virgule, point-virgule, parenthèses ou `·`. En modifiant un
   paragraphe qui en contient, les remplacer au passage.
 
+## Design
+
+À chaque nouvelle demande de design (écran, panneau, HUD, créature, bâtiment, effet visuel, mise en page), proposer
+**plusieurs propositions distinctes** avant d'en réaliser une, et laisser l'utilisateur choisir explicitement.
+
+- Les propositions diffèrent vraiment (disposition, style, lisibilité, comportement), pas seulement par un détail.
+- Chacune est travaillée, complète et aussi soignée que les autres : pas d'ébauche ni d'option volontairement moins
+  aboutie pour orienter le choix. Pour chacune, dire ce qu'elle apporte et ce qu'elle coûte.
+- Ne poursuivre qu'avec la proposition choisie (ou le mélange demandé).
+
 ## Commits
 
 En français, au présent, ils disent ce qui change pour le joueur plutôt que comment c'est codé. Plusieurs changements
