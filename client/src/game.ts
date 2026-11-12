@@ -1807,7 +1807,8 @@ export class Game {
     for (const p of view?.players ?? []) if (p.id !== this.myId && !p.dead) this.fog.reveal(p.x, p.y, p.id);
     this.fog.tick(dt);
     if (!dead) this.updateArea(dt);
-    if (settings.display.camera) this.camera.update(dt, this.me.x, this.me.y, !this.calm.matches);
+    // (monté, la zone morte de la caméra grandit avec la vitesse de la monture)
+    if (settings.display.camera) this.camera.update(dt, this.me.x, this.me.y, !this.calm.matches, st?.mount ? rideSpeed(st.mount.species, st.saddle ?? 1) : 1);
     else this.camera.snap(this.me.x, this.me.y);
     if (view && st) {
       this.render(view.units, view.players);

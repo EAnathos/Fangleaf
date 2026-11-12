@@ -1,5 +1,23 @@
 [
   {
+    "version": "0.15.2",
+    "date": "2026-11-12",
+    "title": "Le jeu se charge après une mise à jour",
+    "items": [
+      "Juste après une mise à jour, le jeu pouvait rester bloqué sur l'accueil, sans version ni bouton de connexion : il se charge de nouveau normalement.",
+      "Une page restée ouverte pendant une mise à jour se recharge d'elle-même au lieu de rester bloquée."
+    ]
+  },
+  {
+    "version": "0.15.1",
+    "date": "2026-11-12",
+    "title": "Une caméra plus douce",
+    "items": [
+      "La caméra ne recule plus d'un coup quand tu t'arrêtes : elle ralentit en douceur, puis se recentre lentement sur toi.",
+      "À cheval, tes gestes ont plus de marge avant que la caméra ne bouge."
+    ]
+  },
+  {
     "version": "0.15.0",
     "date": "2026-11-12",
     "title": "Des tempêtes venues de partout",
