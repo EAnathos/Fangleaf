@@ -1,9 +1,0 @@
-{
-  "bump": "minor",
-  "date": "2026-11-12",
-  "title": "Une caméra souple",
-  "items": [
-    "La caméra ne bouge plus pour quelques pas sur place : elle suit en douceur et regarde devant toi quand tu avances, d'autant plus loin que tu vas vite.",
-    "Elle se règle dans Paramètres › Affichage (Caméra souple) ; décochée, elle reste fixée sur ton dompteur."
-  ]
-}

@@ -1,8 +1,0 @@
-{
-  "bump": "patch",
-  "date": "2026-11-12",
-  "title": "Plus de gel quand un village se charge",
-  "items": [
-    "Quand un autre village est créé ou rouvert sur le serveur, ta partie ne se fige plus pendant plusieurs secondes."
-  ]
-}
