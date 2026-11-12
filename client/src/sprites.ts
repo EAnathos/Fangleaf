@@ -299,6 +299,7 @@ export function armorColor(lvl: number) {
 export function drawPlayer(
   ctx: Ctx, x: number, y: number, color: string, fx: number, fy: number, armor: number, name: string,
   t: number, moving: boolean, flash: boolean, isMe: boolean, riding = false, cls: string | null = null, tool: Tool | null = null, weapon = 0, armed = true, hat = 0,
+  gaze: { x: number; y: number } | null = null, // regard séparé de l'arme (le lobby suit le curseur) ; longueur au plus 1
 ) {
   const r = 16;
   const bob = moving ? Math.abs(Math.sin(t * (riding ? 16 : 12))) * 2 : 0;
@@ -361,7 +362,8 @@ export function drawPlayer(
   armorLook(ctx, x, cy, r, armor, cls);
   // yeux dans la direction du regard
   ctx.fillStyle = '#10181A';
-  const ex = x + fx * 5, ey = cy + fy * 4 - 2;
+  const lx = gaze ? gaze.x : fx, ly = gaze ? gaze.y : fy;
+  const ex = x + lx * 5, ey = cy + ly * 4 - 2;
   ctx.beginPath();
   ctx.arc(ex - 4.5, ey, 2.4, 0, TAU);
   ctx.arc(ex + 4.5, ey, 2.4, 0, TAU);
