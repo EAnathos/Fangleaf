@@ -8,6 +8,7 @@ import { FOG_CELL, FOG_N, packFog, unpackFog } from '../../shared/fog.ts';
 import { TRADE_KEEP_R, TRADE_R, WORLD_HALF } from '../../shared/config.ts';
 import { oreRadius, villageEdge } from '../../shared/worldmap.ts';
 import { ELDER_CHAPTERS } from '../../client/src/elder.ts';
+import { closesAway } from '../../client/src/panels.ts';
 
 describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
   rule('Les parchemins des géants, les souvenirs du vieil homme et son bateau.', () => {
@@ -812,6 +813,13 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     r.tick = 0;
     r.updateSwaps();
     check(last(a.id, 'swapEnd')?.done === false && /éloignés/.test(last(a.id, 'swapEnd')?.why ?? ''), 'trop loin l\'un de l\'autre : l\'échange est annulé');
+  });
+
+  rule("Échange : le panneau d'échange ne se ferme jamais tout seul loin d'un bâtiment (le fermer annulerait l'échange des deux).", () => {
+    check(!closesAway('trade', undefined), "panneau d'échange ouvert en pleine nature : il reste ouvert");
+    check(!closesAway('trade', 'forge'), "panneau d'échange ouvert devant la forge : il reste ouvert");
+    check(closesAway('forge', undefined) && closesAway('den', 'market'), 'un panneau de bâtiment se ferme toujours quand on quitte son bâtiment');
+    check(!closesAway('forge', 'forge') && !closesAway(null, undefined), 'devant son bâtiment, ou sans panneau : rien ne se ferme');
   });
 
   rule('Échange : tout est revérifié au moment de conclure ; trop loin ou à terre avant le contrôle suivant, rien n\'est transféré.', () => {
