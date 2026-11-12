@@ -197,6 +197,17 @@ export const sleeperBlocks = (bosses: Iterable<{ x: number; y: number; r: number
   return false;
 };
 export const PLAYER_SPEED = 210;
+// Caméra souple (client/src/camera.ts) : les petits pas ne la bougent pas, elle suit en douceur et regarde devant soi,
+// d'autant plus loin qu'on va vite.
+export const CAMERA_DEAD_R = 45; // zone morte autour du dompteur (px) : en deçà, la caméra ne bouge pas
+export const CAMERA_SOFT_S = 0.35; // souplesse du ressort qui amène la caméra au point visé (s)
+export const CAMERA_LOOK_FROM = 120; // vitesse lissée (px/s) à partir de laquelle on regarde devant : pas sur les petits pas
+export const CAMERA_LOOK_S = 1.4; // regard vers l'avant : tant de secondes de la vitesse au-delà du seuil (px)
+export const CAMERA_LOOK_MAX = 260; // … sans regarder plus loin que ça (px)
+export const CAMERA_LOOK_VERT = 0.75; // l'écran est moins haut que large : on regarde moins loin vers le haut et le bas
+export const CAMERA_VEL_S = 0.35; // lissage de la vitesse : un zigzag ou un arrêt bref ne fait pas basculer le regard (s)
+export const CAMERA_SNAP_R = 600; // un saut plus grand d'une image à l'autre (téléportation, grotte, réapparition) : la caméra saute aussi
+export const CAMERA_VEL_MAX = 900; // vitesse prise en compte au plus (px/s) : un recalage du serveur ne fait pas bondir la caméra
 export const PLAYER_RANGE = 62; // portée de pioche (filons), au-delà des rayons
 
 // Classes, choisies à la forge (la première fois gratuitement, ensuite contre un peu d'or).

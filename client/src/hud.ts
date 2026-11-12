@@ -1574,7 +1574,7 @@ export class Hud {
     }));
     paintMode();
     this.placeStatusBar();
-    for (const k of ['shake', 'ping', 'weather'] as const) {
+    for (const k of ['shake', 'camera', 'ping', 'weather'] as const) {
       const box = $<HTMLInputElement>(`set-${k}`);
       box.checked = settings.display[k];
       box.onchange = () => {

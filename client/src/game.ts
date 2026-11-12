@@ -28,6 +28,7 @@ import { drawBoatHeart, drawDepths, drawVolcano, VOLCANO_H } from './volcano.ts'
 import { drawSubmerged, drawVoyage } from './voyage.ts';
 import { drawAubinAtWork, drawBoat, drawBoatLabel } from './boat.ts';
 import { Cinema, type Crew } from './cinematics.ts';
+import { SmoothCamera } from './camera.ts';
 
 /** Dégâts affichés arrondis à 2 décimales, à la française : 6,4 · 12 · 4,85. */
 /** Nom d'un géant. */
@@ -110,6 +111,8 @@ export class Game {
   private sandToast = -99; // dernier avertissement « sables mouvants »
   private hammerAt = -9; // dernier coup de marteau d'Aubin (bruit)
   private cinema = new Cinema(); // cinématiques du bateau (embarquement, Kraken)
+  private camera = new SmoothCamera(); // centre de la vue (caméra souple, ou collée au dompteur : réglage)
+  private calm = matchMedia('(prefers-reduced-motion: reduce)'); // mouvements réduits : pas de regard vers l'avant
   private boarding: { sentAt: number; check: number } | null = null; // embarquement fini : on attend d'être sur le pont
   /** Aubin qui part au chantier du bateau (back : qui en revient), à pied jusqu'à la porte du village. */
   private elderTrip: { t0: number; back: boolean; said?: boolean } | null = null;
@@ -270,7 +273,9 @@ export class Game {
     if ((!fights.length && !rallies.length) || this.self()?.dead) return;
     const { ctx, canvas, dpr } = this;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const cx = canvas.width / 2, cy = canvas.height / 2, pulse = 0.75 + 0.25 * Math.sin(this.time * 5);
+    // autour du dompteur, là où il est à l'écran (la caméra souple ne le garde pas au centre)
+    const cx = canvas.width / 2 + (this.me.x - this.camera.x) * this.scale, cy = canvas.height / 2 + (this.me.y - this.camera.y) * this.scale;
+    const pulse = 0.75 + 0.25 * Math.sin(this.time * 5);
     const arrows = [...fights.map(([cave]) => [cave, '#FF9B78'] as const), ...rallies.filter(([cave]) => !fights.some(([f]) => f === cave)).map(([cave]) => [cave, '#F0B64A'] as const)];
     for (const [cave, color] of arrows) {
       const c = this.map.caves[cave], to = c && this.fightTarget(c);
@@ -658,7 +663,7 @@ export class Game {
    * part de jungle sous la caméra : il apparaît en fondu en passant la frontière.
    */
   private drawCanopy(camX: number, camY: number) {
-    const j = this.map.caveAt(camX, camY) ? 0 : jungleMix(this.map, camX, camY);
+    const j = this.map.caveAt(this.me.x, this.me.y) ? 0 : jungleMix(this.map, camX, camY);
     if (j <= 0.01) return;
     const { ctx, canvas } = this, W = canvas.width, H = canvas.height, dpr = this.dpr;
     ctx.save();
@@ -1742,7 +1747,7 @@ export class Game {
     if (aim.down && !dead && !this.hud.panel && this.aimTimer <= 0) {
       this.aimTimer = 0.15;
       const dpr = this.dpr;
-      const x = this.me.x + (aim.x * dpr - this.canvas.width / 2) / this.scale, y = this.me.y + (aim.y * dpr - this.canvas.height / 2) / this.scale;
+      const x = this.camera.x + (aim.x * dpr - this.canvas.width / 2) / this.scale, y = this.camera.y + (aim.y * dpr - this.canvas.height / 2) / this.scale; // le pointeur, dans le monde
       this.net.send({ t: 'attack', x, y });
       // guerrier : le coup part vers le pointeur, qu'il touche ou non (au rythme de son arme)
       const st = this.self();
@@ -1801,6 +1806,8 @@ export class Game {
     for (const p of view?.players ?? []) if (p.id !== this.myId && !p.dead) this.fog.reveal(p.x, p.y, p.id);
     this.fog.tick(dt);
     if (!dead) this.updateArea(dt);
+    if (settings.display.camera) this.camera.update(dt, this.me.x, this.me.y, !this.calm.matches);
+    else this.camera.snap(this.me.x, this.me.y);
     if (view && st) {
       this.render(view.units, view.players);
       this.hud.rallies = this.net.latest?.rallies ?? [];
@@ -2708,7 +2715,7 @@ export class Game {
     const { ctx, canvas, scale } = this;
     this.shake = Math.max(0, this.shake - 1 / 60);
     const jolt = this.shake > 0 && settings.display.shake ? this.shake * 24 : 0; // secousse quand une attaque frappe près de soi (désactivable)
-    const camX = this.me.x + (Math.random() - 0.5) * jolt, camY = this.me.y + (Math.random() - 0.5) * jolt;
+    const camX = this.camera.x + (Math.random() - 0.5) * jolt, camY = this.camera.y + (Math.random() - 0.5) * jolt;
     const hw = canvas.width / 2 / scale, hh = canvas.height / 2 / scale;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2720,19 +2727,21 @@ export class Game {
     this.hud.night = sky.light < 0.5;
     if (SKY_TEST) Object.assign(sky, SKY_TEST);
     // Mer de sable : jamais de pluie, mais des tempêtes de sable
-    const desert = this.map.caveAt(camX, camY) ? 0 : desertMix(this.map, camX, camY);
+    // grotte ou île : d'après le dompteur, pas la caméra (qui regarde devant lui, parfois au-delà du bord d'une grotte)
+    const inside = this.map.caveAt(this.me.x, this.me.y);
+    const desert = inside ? 0 : desertMix(this.map, camX, camY);
     sky.rain *= 1 - desert;
     const storm = sky.storm * desert * (this.gateOpen(DESERT_ZONE - 1) ? 1 : 0); // pas de tempête avant que le village ait ouvert le désert
     this.watchStorm(storm);
     this.watchCalendar(sky);
 
     // Dans une grotte, on ne voit que la grotte (pas la forêt qui borde le monde).
-    if (!this.map.caveAt(camX, camY)) this.world.draw(ctx, camX - hw, camY - hh, camX + hw, camY + hh);
+    if (!inside) this.world.draw(ctx, camX - hw, camY - hh, camX + hw, camY + hh);
     const { village, spawn } = this.map;
     // Intérieurs des grottes (hors du monde) et leurs entrées sur la carte.
     const inView = (x: number, y: number, m: number) => Math.abs(x - camX) < hw + m && Math.abs(y - camY) < hh + m;
     // seulement la grotte où l'on se trouve : jamais celle d'à côté
-    const here = this.map.caveAt(camX, camY);
+    const here = inside;
     if (here === this.map.depths) {
       // les entrailles du volcan : dessinées à chaque image (la lave bouge), avec les sceaux de l'autel
       const sealed = this.map.caves.filter((c) => c.zone === VOLCANO_ZONE).map((c) => !this.hud.beaten.includes(c.boss));
