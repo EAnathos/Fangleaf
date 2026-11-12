@@ -48,6 +48,8 @@ client/    index.html     lobby, HUD et panneaux
            src/hud.ts     HUD et panneaux (forge, Tanière, marché, Hôtel de ville…)
            src/changelog.ts   nouveautés du jeu et numéro de version, affichés dans le lobby
            src/world.ts, sprites.ts, caves.ts, volcano.ts, voyage.ts, fx.ts, anim.ts, sky.ts, fog.ts   rendu
+           src/world/     ce que world.ts assemble : terrain.ts (couleurs du sol), decor.ts (arbres, petits décors),
+                          buildings.ts (village, palissade, bâtiments, camp, école, épave) ; world.decor et world.buildings
            src/sprites/   les créatures, un module par zone (lisiere, bois, landes, ruines, lacs, jungle, desert, volcan,
                           haute-mer, dragons des îlots) et leurs outils de dessin communs (outils.ts) ; sprites.ts les
                           assemble (drawUnit) et réexporte leur API
@@ -101,7 +103,7 @@ d'un assistant. Ils se découpent **progressivement**, un fichier par PR, quand 
 |---|---|---|
 | `client/src/sprites.ts` | ~5 000 lignes | fait : les créatures sont dans `client/src/sprites/` (une famille par module, outils communs à part). Reste à sortir : dompteurs, objets, attaques au sol, robes des Alphas |
 | `server/room.ts` | ~5 500 lignes | la classe `Room` garde l'état, les joueurs et les actions ; à part : les attaques des géants (section « Attaques spéciales des mini-boss », ~2 500 lignes), l'envoi réseau (section « Réseau »), puis l'IA des meutes et la faune |
-| `client/src/game.ts`, `client/src/hud.ts`, `client/src/world.ts` | ~3 000 lignes chacun | `hud.ts` : un module par panneau (forge, Tanière, marché, Hôtel de ville…) ; `world.ts` : terrain, décor, bâtiments |
+| `client/src/game.ts`, `client/src/hud.ts` | ~3 000 lignes chacun | `hud.ts` : un module par panneau (forge, Tanière, marché, Hôtel de ville…) ; `world.ts` : fait (terrain, décor et bâtiments dans `client/src/world/`) |
 | `shared/worldmap.ts` | ~2 100 lignes | la génération (une fois, à la création) séparée des requêtes de jeu (`blocked`, `freeNear`, chemins) |
 
 Règles d'un découpage :
