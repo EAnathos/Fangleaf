@@ -221,6 +221,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Chaque espèce hostile a son **géant**, qui dort au fond d'une grotte. On **débloque** la grotte pour tout le village
   (de plus en plus cher selon la zone), puis on y entre avec sa meute (E à l'entrée, E à la sortie pour ressortir).
 - **E** près du géant pour lui parler, puis on lance le combat. Ses PV dépendent du nombre de membres du village.
+  Avant de le lancer, **Appeler** (le bouton à la flèche) montre le chemin du géant aux autres dompteurs : une flèche
+  dorée autour d'eux les y mène, jusqu'à ce que le combat commence.
 - Il se souvient de toi, le jour même : vaincu, il a peur quand tu reviens (il tremble, une goutte de sueur au front) ;
   s'il t'a corrigé, il se moque de toi.
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
@@ -383,6 +385,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   annulé si l'un ferme la fenêtre, s'éloigne ou tombe.
 - Quand un coéquipier **réveille un géant**, tout le village en est prévenu, et une petite **flèche** autour de soi
   indique le chemin du combat (la sortie de la grotte où l'on est, puis l'entrée de la sienne) tant que le géant est debout.
+- Un coéquipier qui **appelle** devant un géant encore endormi : une **flèche dorée** mène à lui de la même façon,
+  le temps de le rejoindre ; elle disparaît dès que le combat commence.
 - Un membre **déconnecté** dort près du feu du village, sa meute autour de lui.
 - **Chat** : **C** ou le bouton 💬 ; chaque message s'affiche aussi dans une bulle au-dessus de son auteur.
 - **Menu › Profil** : choisir sa couleur (une par membre du village) et un chapeau, acheté une fois en or. Chaque chapeau débloqué renforce l'arme de 10 %.
