@@ -3098,7 +3098,6 @@ export class Room {
     this.krakenCalled = false;
     const p = aboard[0];
     u.dormant = false;
-    this.rallies.delete(cave);
     u.fight = { at: this.time, from: p.id, by: new Map(), landed: this.time };
     u.target = p.id;
     this.events.push({ e: 'challenge', cave: c.id, id: u.id, by: p.id });
@@ -3221,6 +3220,7 @@ export class Room {
     if (!u || !u.dormant || p.dead || this.map.arenaAt(p.x, p.y)?.id !== c.id) return;
     if (dist2(p.x, p.y, u.x, u.y) > (u.r + BOSS_TALK_R) ** 2) return;
     u.dormant = false;
+    this.rallies.delete(cave);
     u.fight = { at: this.time, from: p.id, by: new Map(), landed: this.time };
     u.target = p.id;
     this.events.push({ e: 'challenge', cave, id: u.id, by: p.id });
