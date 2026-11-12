@@ -224,7 +224,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - Il se souvient de toi, le jour même : vaincu, il a peur quand tu reviens (il tremble, une goutte de sueur au front) ;
   s'il t'a corrigé, il se moque de toi.
 - Ses coups ordinaires ne touchent qu'une cible ; ses **attaques spéciales** frappent en zone et s'annoncent au sol
-  (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact.
+  (bond, onde de choc, charge, salves, renforts…) : il faut en sortir avant l'impact. Seul ce qui se tient dans la
+  zone dessinée est touché (ou y mord du bout du corps) : un pas hors du cercle suffit, devant comme derrière.
 - Il **s'impatiente** s'il ne touche aucun dompteur pendant un moment : « Il s'impatiente et presse le pas ! », il
   accélère peu à peu, et reprend son allure dès qu'il touche quelqu'un. Fuir en reculant ne marche qu'un temps.
 - Sur ordinateur, en combat, sa barre de vie et son nom s'affichent en haut de l'écran.

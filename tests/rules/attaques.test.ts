@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop } from '../helpers.ts';
-import { BOSS_MOVES, CURSE_BONUS, DECOY_S, DRUM_GAP, DRUM_R, HUG_S, LEGEND_SKIPS, RING_SPEED, SPECIES } from '../../shared/config.ts';
+import { BOSS_MOVES, HAZARD_FLAT, PLAYER_R, CURSE_BONUS, DECOY_S, DRUM_GAP, DRUM_R, HUG_S, LEGEND_SKIPS, RING_SPEED, SPECIES } from '../../shared/config.ts';
 
 const S = (key: string) => SPECIES.findIndex((sp) => sp.key === key);
 type R = ReturnType<typeof room>;
@@ -299,6 +299,35 @@ describe('Attaques propres des géants', () => {
     const hp1 = b.hp;
     r.damage(b, 1000, p);
     check(Math.abs(hp1 - b.hp - 350) < 1, 'rentrée dans sa carapace, elle encaisse moins');
+  });
+
+  rule("Le Gorille fracasse le sol : il ne touche que dans l'ellipse annoncée au sol (un corps qui mord dessus compte), jamais au-delà.", () => {
+    const r = room();
+    r.units.clear();
+    const at = open(r);
+    const g = r.createUnit(S('gorilla'), false, at.x, at.y);
+    const center = { x: at.x + g.r + 40, y: at.y };
+    const add = (name: string, dx: number, dy: number) => {
+      const p = r.addPlayer(name, noop);
+      p.hp = 1e7;
+      [p.x, p.y] = [center.x + dx, center.y + dy];
+      return p;
+    };
+    const aim = add('cible', 0, 0);
+    r.castMove(g, SPECIES[S('gorilla')].moves!.find((m) => m.kind === 'pound')!, aim);
+    const h = r.hazards.find((z: { style?: string }) => z.style === 'pound');
+    check(!!h && Math.hypot(h.x - center.x, h.y - center.y) < 1, `la zone est annoncée sur sa cible (rayon ${h?.r} px, hauteur ${HAZARD_FLAT} fois la largeur)`);
+    const R = h.r;
+    const edge = add('bord', 0, R * HAZARD_FLAT); // sur le bord bas de l'ellipse dessinée
+    const side = add('côté', R + PLAYER_R - 2, 0); // à côté : son corps mord sur le bord
+    const below = add('dessous', 0, HAZARD_FLAT * (R + PLAYER_R) + 4); // juste sous l'ellipse : touché jusqu'ici (cercle du serveur)
+    const far = add('loin', R + PLAYER_R + 4, 0);
+    const hp = new Map([aim, edge, side, below, far].map((p) => [p.id, p.hp]));
+    run(r, 1.2);
+    const hit = (p: { id: number; hp: number }) => p.hp < hp.get(p.id)!;
+    check(hit(aim) && hit(edge) && hit(side), 'touchés : au centre, sur le bord dessiné, le corps sur le bord');
+    check(!hit(below), `pas touché juste sous l'ellipse dessinée (à ${Math.round(HAZARD_FLAT * (R + PLAYER_R) + 4)} px sous le centre)`);
+    check(!hit(far), 'pas touché à côté de la zone');
   });
 
   rule('Un Alpha légendaire de chaque espèce lance ses nouvelles attaques contre les sauvages sans rien casser.', () => {
