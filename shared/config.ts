@@ -876,7 +876,7 @@ export const SPECIES: Species[] = [
   // Gibier de nuit : il n'apparaît qu'une fois la nuit tombée, et s'en va au lever du jour.
   { key: 'firefly', name: 'Luciole', color: '#E4F07A', r: 11, hp: 20, dmg: 1, speed: 70, atkCd: 1.4, gold: 4, zone: 2, population: 24, pack: [3, 5], passive: true, night: true },
   // Zone 6 (Mer de sable) : suricates craintifs autour de leurs tanières, vers fouisseurs, vautours ; chacals fantômes la nuit.
-  { key: 'meerkat', name: 'Suricate', color: '#C9A06A', r: 12, hp: 60, dmg: 3, speed: 125, atkCd: 1.2, gold: 8, zone: 7, population: 26, pack: [3, 6], passive: true, shy: true },
+  { key: 'meerkat', name: 'Suricate', color: '#C9A06A', r: 12, hp: 1400, dmg: 3, speed: 125, atkCd: 1.2, gold: 8, zone: 7, population: 26, pack: [3, 6], passive: true, shy: true, backline: true }, // PV au niveau de sa zone (comme le chacal) : sinon ni lui ni son Alpha ne survivent à un coup
   { key: 'sandworm', name: 'Ver des sables', color: '#B98A5A', r: 26, hp: 2600, dmg: 120, speed: 115, atkCd: 1.6, gold: 100, zone: 7, population: 16, pack: [1, 1], burrows: true },
   { key: 'vulture', name: 'Vautour', color: '#4A3A30', r: 21, hp: 1700, dmg: 110, speed: 150, atkCd: 1.1, gold: 90, zone: 7, population: 18, pack: [1, 2], flies: true },
   { key: 'jackal', name: 'Chacal fantôme', color: '#CDBB98', r: 21, hp: 1400, dmg: 90, speed: 175, atkCd: 0.9, gold: 80, zone: 7, population: 24, pack: [4, 6], night: true },
