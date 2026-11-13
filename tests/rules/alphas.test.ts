@@ -433,4 +433,44 @@ describe('Alphas de la Tanière', () => {
     r.updateRespawns();
     check(back.reviveAt === 0 && back.hp === back.maxHp, 'le combat fini, il revient près de son dompteur');
   });
+  rule("Combat de géant : l'escargot de la meute reste dans sa coquille, à l'écart ; rien ne l'atteint, le géant ne le vise pas, sa carapace continue.", () => {
+    const r = room();
+    const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
+    const c = r.map.caves.find((q: { room?: number }) => q.room === undefined);
+    const boss = r.units.get(r.caveBoss[c.id]);
+    const p = r.addPlayer('a', noop);
+    p.armor = 10;
+    [p.x, p.y] = [boss.x + 140, boss.y + 60];
+    const snail = r.spawnAlpha(p, key('snail'), 0, false);
+    const wolf = r.createUnit(key('wolf'), false, p.x - 40, p.y);
+    r.makeTamed(wolf, p);
+    [snail.x, snail.y] = [boss.x + 40, boss.y]; // collé au géant, le pire endroit
+    check(!r.shelled(snail), "hors combat de géant : l'escargot sort de sa coquille et peut être touché");
+    const hp0 = snail.hp;
+    r.damage(snail, 5, boss);
+    check(snail.hp < hp0, 'hors combat : il encaisse les coups comme avant');
+    snail.hp = snail.maxHp;
+    r.onChallenge(p, c.id);
+    check(!boss.dormant && r.shelled(snail), 'le combat commence : il rentre dans sa coquille');
+    check(!r.shelled(wolf), "… mais pas le reste de la meute");
+    r.damage(snail, 9999, boss);
+    r.damage(snail, 9999, boss, true);
+    check(snail.hp === snail.maxHp, 'dans sa coquille, les coups du géant (de loin ou au corps à corps) ne lui font rien');
+    check(!r.isAllyOfPlayers(snail) && r.isAllyOfPlayers(wolf), "le géant ne le prend pas pour cible, il prend le reste");
+    let targeted = 0, guard = 0;
+    for (let i = 0; i < 20 * 12; i++) {
+      p.hp = 99999;
+      r.step();
+      if (boss.target === snail.id) targeted++;
+      if (r.buffOf(p, 'guard') > 0) guard++;
+    }
+    check(targeted === 0 && snail.hp === snail.maxHp, `12 s de combat : le géant ne l'a jamais visé (${targeted} ticks), il n'a rien perdu`);
+    check(guard > 0, 'sa carapace continue : le dompteur en profite pendant le combat');
+    check(Math.hypot(snail.x - boss.x, snail.y - boss.y) >= Math.hypot(p.x - boss.x, p.y - boss.y), "il se tient à l'écart, derrière son dompteur");
+    // il ne reste que l'escargot : plus de dompteur debout, le combat s'arrête (le géant se rendort), pas de face-à-face
+    p.dead = true;
+    r.tick = 0;
+    r.clearEmptyCaves();
+    check(boss.dormant && !r.shelled(snail), "plus aucun dompteur debout : le combat s'arrête, l'escargot n'est jamais seul face au géant");
+  });
 });

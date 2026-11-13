@@ -1,0 +1,9 @@
+{
+  "bump": "minor",
+  "date": "2026-11-13",
+  "title": "Combats de géant : l'escargot reste à l'abri dans sa coquille",
+  "items": [
+    "Pendant un combat de géant, l'escargot de ta meute (Alpha ou apprivoisé) reste dans sa coquille, en retrait : il ne subit aucun dégât et le géant ne le prend jamais pour cible.",
+    "La carapace de l'Alpha escargot continue de protéger ses alliés pendant tout le combat."
+  ]
+}
