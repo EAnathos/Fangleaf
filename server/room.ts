@@ -3505,7 +3505,7 @@ export class Room {
         const to = this.map.freeNear(t.x + Math.cos(a) * 70, t.y + Math.sin(a) * 70);
         const at = this.time + 0.9;
         u.castUntil = at;
-        this.hazard(u, { kind: 0, style: 'blink', x: to.x, y: to.y, r: 130, at, dmg: d * 1.3, onFire: () => {
+        this.hazard(u, { kind: 0, style: 'blink', x: to.x, y: to.y, r: 130, at, dmg: d * (m.power ?? 1.3), onFire: () => {
           if (!this.units.has(u.id)) return;
           [u.x, u.y] = [to.x, to.y];
           // Lueur : il retombe dans un cratère de feu, qui brûle encore un moment

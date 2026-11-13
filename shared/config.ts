@@ -618,7 +618,7 @@ export type BossMove = (
   | { kind: 'slam'; cd: number; power?: number; fire?: boolean } // onde de choc tout autour de lui (power : multiplicateur des dégâts, 1,5 par défaut ; fire : une vague de flammes)
   | { kind: 'enrage'; below: number } // s'enrage sous ce seuil de PV
   | { kind: 'rocks'; cd: number } // projette des rochers sur plusieurs cibles
-  | { kind: 'blink'; cd: number; fire?: boolean } // disparaît et réapparaît près d'une cible (fire : il laisse un cratère de feu)
+  | { kind: 'blink'; cd: number; fire?: boolean; power?: number } // disparaît et réapparaît près d'une cible (fire : il laisse un cratère de feu ; power : multiplicateur des dégâts de l'explosion, 1,3 par défaut)
   | { kind: 'volley'; cd: number; n: number; shot: 'bolt' | 'jet' | 'dart' | 'fire' | 'spark'; pierce?: boolean } // salve de projectiles en éventail (esquivable) ; pierce : ils traversent la meute
   | { kind: 'mortar'; cd: number; n: number } // pluie de tirs en cloche, cercles annoncés au sol
   | { kind: 'trail'; cd: number; dur: number } // pendant dur secondes, il laisse derrière lui des flaques de lave qui brûlent
@@ -683,7 +683,7 @@ export const BOSS_MOVES: Record<string, BossMove[]> = {
   scorpion_king: [{ kind: 'impale', cd: 6 }, { kind: 'volley', cd: 5, n: 5, shot: 'dart' }, { kind: 'ambush', cd: 10 }, { kind: 'summon', cd: 11, n: 2, max: 4 }, { kind: 'enrage', below: 0.3 }], // dard empaleur, crachats de venin, il s'enfouit, ses scorpions
   moon_jackal: [{ kind: 'mirage', cd: 6, n: 3 }, { kind: 'eclipse', cd: 16, dur: 7 }, { kind: 'summon', cd: 9, n: 3, max: 6 }],
   // elle fonce en laissant une traînée de lave, appelle ses petits
-  salamander_queen: [{ kind: 'trail', cd: 7, dur: 4 }, { kind: 'molt', cd: 11 }, { kind: 'tailcut', at: [0.66, 0.33] }, { kind: 'summon', cd: 10, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
+  salamander_queen: [{ kind: 'trail', cd: 7, dur: 4 }, { kind: 'blink', cd: 12, fire: true }, { kind: 'molt', cd: 11 }, { kind: 'tailcut', at: [0.66, 0.33] }, { kind: 'summon', cd: 10, n: 3, max: 6 }, { kind: 'enrage', below: 0.35 }],
   // piqués, tourbillon de flammes, il disparaît dans la cendre, sa nuée
   ash_lord: [{ kind: 'echo', cd: 7, n: 2 }, { kind: 'spin', cd: 9, arms: 3, dur: 3.5 }, { kind: 'roost', cd: 15, dur: 5 }, { kind: 'blink', cd: 7 }, { kind: 'summon', cd: 10, n: 3, max: 6 }],
   // son volcan crache, ses jets de flammes tournent, il sème la lave, il fait trembler le sol
@@ -889,7 +889,7 @@ export const SPECIES: Species[] = [
   // Entrailles du volcan (zone 7, sous la Mer de sable) : trois espèces qu'on ne voit nulle part ailleurs, et leurs géants
   // (un antre chacun dans la salle). La salamandre sème la lave en courant et bondit dans une gerbe de braises (sauvage
   // comme apprivoisée) : sans ça, c'était la plus faible des trois.
-  { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 5400, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 8, population: 16, pack: [2, 4], moves: [{ kind: 'trail', cd: 8, dur: 3 }, { kind: 'blink', cd: 12, fire: true }] },
+  { key: 'salamander', name: 'Salamandre de braise', color: '#5A4038', r: 17, hp: 5400, dmg: 260, speed: 150, atkCd: 0.9, gold: 170, zone: 8, population: 16, pack: [2, 4], moves: [{ kind: 'trail', cd: 8, dur: 3 }, { kind: 'blink', cd: 12, power: 0.9 }] }, // le bond avec cratère de feu est réservé à la Salamandre-Mère et à son légendaire
   { key: 'ash_bat', name: 'Chauve-souris de cendre', color: '#4A4448', r: 15, hp: 4200, dmg: 220, speed: 180, atkCd: 0.8, gold: 150, zone: 8, population: 14, pack: [3, 5] },
   { key: 'lava_tortoise', name: 'Tortue-volcan', color: '#4E4038', r: 28, hp: 13500, dmg: 320, speed: 50, atkCd: 2.4, gold: 240, zone: 8, population: 10, pack: [1, 1], ranged: { kind: 'magma', range: 360, windup: 0.7, speed: 0, splash: 60 } },
   { key: 'salamander_queen', name: 'Salamandre-Mère', color: '#4A3430', r: 63, hp: 135000, dmg: 480, speed: 210, atkCd: 1.0, gold: 5000, zone: 8, population: 0, pack: [1, 1], boss: true, sprite: 'salamander', base: 'salamander' },
