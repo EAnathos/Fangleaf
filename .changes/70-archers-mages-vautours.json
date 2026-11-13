@@ -1,9 +1,0 @@
-{
-  "bump": "minor",
-  "date": "2026-11-13",
-  "title": "Mer de sable : archers et mages contre les vautours en vol",
-  "items": [
-    "Un archer ou un mage peut maintenant viser et toucher depuis le sol un vautour sauvage qui tourne en plein ciel.",
-    "Le guerrier ne l'atteint toujours pas ; viser en vol reste limité à la portée de l'arme."
-  ]
-}

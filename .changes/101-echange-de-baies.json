@@ -1,9 +1,0 @@
-{
-  "bump": "minor",
-  "date": "2026-11-13",
-  "title": "Échanges : les baies s'échangent aussi",
-  "items": [
-    "Dans la fenêtre d'échange entre dompteurs, tu peux maintenant donner et recevoir des baies, en plus de l'or, du bois et de la pierre.",
-    "Les baies ne dépassent jamais ce que ton sac peut porter : si l'autre n'a pas assez de place, la part est ramenée à ce qui rentre."
-  ]
-}

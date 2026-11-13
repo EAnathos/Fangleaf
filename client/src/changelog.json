@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.17.0",
+    "date": "2026-11-13",
+    "title": "Nouveautés : Boss chauve-souris : les cercles touchent là où ils sont dessinés · Échanges : les baies s'échangent aussi · Volcan : fini les monstres bloqués derrière les herses · Suricate : bien plus de PV, et il reste en retrait · Combats de géant : ta meute tanke et frappe sans te suivre · Mer de sable : archers et mages contre les vautours en vol · Combats de géant : l'escargot reste à l'abri dans sa coquille · Volcan : la meute ne traverse plus les herses · Volcan : la salamandre bondit moins fort",
+    "items": [
+      "Boss chauve-souris : les cercles touchent là où ils sont dessinés — Les anneaux violets de la chauve-souris (et ceux du tambour de guerre) touchent maintenant exactement la zone dessinée au sol : plus de coup reçu alors qu'on semblait hors de portée, en haut ou en bas de l'anneau.",
+      "Échanges : les baies s'échangent aussi — Dans la fenêtre d'échange entre dompteurs, tu peux maintenant donner et recevoir des baies, en plus de l'or, du bois et de la pierre.",
+      "Échanges : les baies s'échangent aussi — Les baies ne dépassent jamais ce que ton sac peut porter : si l'autre n'a pas assez de place, la part est ramenée à ce qui rentre.",
+      "Volcan : fini les monstres bloqués derrière les herses — Dans les entrailles du volcan, un monstre qui ne peut pas rejoindre sa cible à cause d'une herse baissée la lâche et rentre chez lui, au lieu de rester collé contre la herse.",
+      "Suricate : bien plus de PV, et il reste en retrait — Le suricate (sauvage, apprivoisé ou Alpha) a beaucoup plus de PV : il survit désormais aux coups des monstres de la Mer de sable.",
+      "Suricate : bien plus de PV, et il reste en retrait — Dans une meute, le suricate reste derrière son dompteur, comme le lièvre, au lieu de foncer au contact.",
+      "Combats de géant : ta meute tanke et frappe sans te suivre — Pendant un combat de géant, ta meute reste sur lui et le frappe même quand tu bouges ou t'éloignes : plus de rappel, plus besoin de rester collé à elle.",
+      "Combats de géant : ta meute tanke et frappe sans te suivre — Seuls les passifs (lièvre, suricate, escargot) te suivent, en retrait, pour esquiver avec toi ; le reste de la meute tanke et attaque.",
+      "Mer de sable : archers et mages contre les vautours en vol — Un archer ou un mage peut maintenant viser et toucher depuis le sol un vautour sauvage qui tourne en plein ciel.",
+      "Mer de sable : archers et mages contre les vautours en vol — Le guerrier ne l'atteint toujours pas ; viser en vol reste limité à la portée de l'arme.",
+      "Combats de géant : l'escargot reste à l'abri dans sa coquille — Pendant un combat de géant, l'escargot de ta meute (Alpha ou apprivoisé) reste dans sa coquille, en retrait : il ne subit aucun dégât et le géant ne le prend jamais pour cible.",
+      "Combats de géant : l'escargot reste à l'abri dans sa coquille — La carapace de l'Alpha escargot continue de protéger ses alliés pendant tout le combat.",
+      "Volcan : la meute ne traverse plus les herses — Dans les entrailles du volcan, ta meute ne passe plus de l'autre côté d'une herse baissée, ni en te rejoignant, ni quand un coup la repousse.",
+      "Volcan : la salamandre bondit moins fort — La salamandre de braise ordinaire bondit toujours sur sa cible, mais sans laisser de cratère brûlant et avec une explosion plus faible.",
+      "Volcan : la salamandre bondit moins fort — Le bond avec cratère de feu est réservé à la Salamandre-Mère et à son légendaire."
+    ]
+  },
+  {
     "version": "0.16.0",
     "date": "2026-11-12",
     "title": "Des entrailles du volcan plus peuplées",

@@ -1,9 +1,0 @@
-{
-  "bump": "patch",
-  "date": "2026-11-13",
-  "title": "Volcan : la salamandre bondit moins fort",
-  "items": [
-    "La salamandre de braise ordinaire bondit toujours sur sa cible, mais sans laisser de cratère brûlant et avec une explosion plus faible.",
-    "Le bond avec cratère de feu est réservé à la Salamandre-Mère et à son légendaire."
-  ]
-}
