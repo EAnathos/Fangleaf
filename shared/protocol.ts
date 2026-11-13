@@ -75,7 +75,7 @@ export type ClientMsg =
   | { t: 'build'; b: BuildingId } // construire un bâtiment du village (pour tout le village)
   | { t: 'rename'; name: string } // renommer le village, devant l'Hôtel de ville (une fois construit)
   | { t: 'swap'; act: 'open'; with: number } // proposer un échange à ce dompteur, tout proche
-  | { t: 'swap'; act: 'offer'; gold: number; wood: number; stone: number } // sa part de l'échange en cours
+  | { t: 'swap'; act: 'offer'; gold: number; wood: number; stone: number; fruits: number } // sa part de l'échange en cours
   | { t: 'swap'; act: 'ok' | 'cancel' } // valider l'échange (fait quand les deux ont validé), ou l'annuler
   | { t: 'hall'; name?: string } // améliorer la Maison commune (pour tout le village) ; name : nom du village, à sa construction
   | { t: 'sword' } // tirer sur l'épée plantée dans le sable (SWORD_PULLS fois)
@@ -339,7 +339,7 @@ export interface Snapshot {
 }
 
 /** Part d'un dompteur dans un échange. */
-export type SwapOffer = { gold: number; wood: number; stone: number };
+export type SwapOffer = { gold: number; wood: number; stone: number; fruits: number }; // fruits : les baies
 
 export type ServerMsg =
   | { t: 'welcome'; id: number; code: string; seed: number; saved: boolean; villageFound: boolean; founder: boolean; armed: boolean } // armed : épée déjà déterrée

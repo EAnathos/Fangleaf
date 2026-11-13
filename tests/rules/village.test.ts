@@ -5,7 +5,7 @@ import { rule, check, room, noop, unarmedAdd } from '../helpers.ts';
 import { BOAT_STAGES, BUILDING_IDS, PLAYER_COLORS, SWORD_PULLS, SWORD_REACH, ARMY_CAP, HALL, HALL_MAX, gateHall, zoneBosses, resYield, oreStone, resRoll, BUILDINGS, buildingCost, costText, CAMP_COST, caveUnlockCost, monsterBuyPrice, monsterSellPrice, SPECIES, oreGold, weaponDmg, weaponCost, weaponName, SPEC_LVL, SPEC_CHANGE_COST, CLASS_CHANGE_COST, SPECS, WEAPON_MAX, treeWood, TREE_RESPAWN_S, TREANT_ZONE, ZONES, gearWood, gearCost, saddleSpeed, HAT_PRICES, oreHp } from '../../shared/config.ts';
 import { Room } from '../../server/room.ts';
 import { FOG_CELL, FOG_N, packFog, unpackFog } from '../../shared/fog.ts';
-import { TRADE_KEEP_R, TRADE_R, WORLD_HALF } from '../../shared/config.ts';
+import { MAX_BERRIES, TRADE_KEEP_R, TRADE_R, WORLD_HALF } from '../../shared/config.ts';
 import { oreRadius, villageEdge } from '../../shared/worldmap.ts';
 import { ELDER_CHAPTERS } from '../../client/src/elder.ts';
 import { closesAway } from '../../client/src/panels.ts';
@@ -813,6 +813,51 @@ describe('Village : quêtes, forge, bâtiments, récolte, social', () => {
     r.tick = 0;
     r.updateSwaps();
     check(last(a.id, 'swapEnd')?.done === false && /éloignés/.test(last(a.id, 'swapEnd')?.why ?? ''), 'trop loin l\'un de l\'autre : l\'échange est annulé');
+  });
+
+  rule("Échange de baies : la part est bornée par le sac, ne dépasse pas la place de l'autre, et les baies ne passent qu'une fois, quand les deux ont validé.", () => {
+    const r = room();
+    const a = r.addPlayer('a', noop), b = r.addPlayer('b', noop);
+    [a.x, a.y] = [r.map.spawn.x, r.map.spawn.y];
+    [b.x, b.y] = [a.x + 80, a.y];
+    [a.fruits, b.fruits] = [30, 0];
+    r.onSwap(a, 'open', { with: b.id });
+    r.onSwap(a, 'offer', { fruits: 999 });
+    check(r.swaps.get(a.id).offer.get(a.id).fruits === 30, 'une part de baies ne dépasse jamais le sac (30)');
+    r.onSwap(a, 'offer', { fruits: -5 });
+    check(r.swaps.get(a.id).offer.get(a.id).fruits === 0, 'une quantité négative est ramenée à zéro');
+    r.onSwap(a, 'offer', { fruits: 12 });
+    r.onSwap(a, 'ok');
+    check(a.fruits === 30 && b.fruits === 0, 'un seul a validé : aucune baie ne bouge');
+    r.onSwap(a, 'offer', { fruits: 10 });
+    check(!r.swaps.get(a.id).ok.has(a.id), 'la part change après validation : il faut revalider');
+    a.fruits = 4; // il en mange entre-temps
+    r.onSwap(a, 'ok');
+    r.onSwap(b, 'ok');
+    check(a.fruits === 4 && b.fruits === 0 && r.swaps.has(a.id) && r.swaps.get(a.id).offer.get(a.id).fruits === 4, 'plus assez de baies au moment de conclure : sa part est ramenée à ce qu\'il a, rien ne bouge, chacun revalide');
+    // la place de celui qui reçoit : jamais plus que MAX_BERRIES
+    b.fruits = MAX_BERRIES - 1;
+    r.onSwap(a, 'ok');
+    r.onSwap(b, 'ok');
+    check(a.fruits === 4 && b.fruits === MAX_BERRIES - 1 && r.swaps.get(a.id).offer.get(a.id).fruits === 1, 'son sac plein à une baie près : la part est ramenée à la place libre, rien ne bouge encore');
+    r.onSwap(a, 'ok');
+    r.onSwap(b, 'ok');
+    check(a.fruits === 3 && b.fruits === MAX_BERRIES && !r.swaps.has(a.id), 'revalidé : une seule baie passe, le sac ne déborde pas, l\'échange est conclu');
+    // annulation : rien ne bouge
+    [a.fruits, b.fruits] = [20, 0];
+    r.onSwap(a, 'open', { with: b.id });
+    r.onSwap(a, 'offer', { fruits: 20 });
+    r.onSwap(a, 'ok');
+    r.onSwap(b, 'cancel');
+    check(a.fruits === 20 && b.fruits === 0 && !r.swaps.has(a.id), 'échange annulé après une validation : les baies restent chez leur propriétaire');
+    // un échange complet, dans les deux sens, avec de l'or
+    [a.fruits, b.fruits, a.gold, b.gold] = [20, 5, 0, 100];
+    r.onSwap(a, 'open', { with: b.id });
+    r.onSwap(a, 'offer', { fruits: 15 });
+    r.onSwap(b, 'offer', { gold: 100, fruits: 5 });
+    r.onSwap(a, 'ok');
+    r.onSwap(b, 'ok');
+    check(a.fruits === 10 && b.fruits === 15 && a.gold === 100 && b.gold === 0, `les deux ont validé : baies et or passent (a : ${a.fruits} baies, ${a.gold} or ; b : ${b.fruits} baies)`);
   });
 
   rule("Échange : le panneau d'échange ne se ferme jamais tout seul loin d'un bâtiment (le fermer annulerait l'échange des deux).", () => {
