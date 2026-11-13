@@ -7,6 +7,8 @@
 #   VPS_PORT     facultatif, 22 par défaut
 #
 # Après un déploiement réussi, la version en ligne est publiée : tag vX.Y.Z et Release (.github/scripts/publier-release.sh).
+# Puis les PR mises en ligne reçoivent le label en-production et les issues marquées « Termine #N » sont fermées
+# (.github/scripts/suivi-deploiement.sh) : une issue ne se ferme qu'une fois son travail en production.
 name: CD
 
 on:
@@ -32,6 +34,8 @@ jobs:
       url: https://fangleaf.anathos.me
     permissions:
       contents: write # tag et Release de la version déployée
+      issues: write # suivi des issues : labels, commentaires, fermeture
+      pull-requests: write
     env:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
@@ -56,6 +60,7 @@ jobs:
             "cd ~/eanathos/Fangleaf && git fetch -q origin main && git checkout -q main && git merge -q --ff-only $SHA && bash deploy/deploy.sh"
 
       - name: Le site répond
+        id: site
         run: |
           for i in $(seq 1 10); do
             # page entière d'abord : un grep -q dans le tube couperait curl en pleine écriture (erreur 23)
@@ -71,7 +76,16 @@ jobs:
         with:
           sparse-checkout: .github/scripts
 
+      # Même si la Release échoue, le suivi des issues passe : ce sont deux informations indépendantes.
       - name: Publier la version
+        if: ${{ !cancelled() && steps.site.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/publier-release.sh "$SHA"
+
+      - name: Suivi des PR et des issues
+        if: ${{ !cancelled() && steps.site.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUIVI_DEPUIS: '2026-11-13' # début du suivi : les PR plus anciennes ne sont pas reprises
+        run: .github/scripts/suivi-deploiement.sh production "$SHA"

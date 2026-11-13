@@ -17,16 +17,25 @@ feat/…, fix/…  ──PR──▶  dev  ──CI──▶  staging     (autom
 - Les branches de travail partent de `dev` et y reviennent par PR. On ne pousse jamais directement sur `dev` ni `main`.
 - À chaque push sur `dev`, [release-version.yml](../.github/workflows/release-version.yml) consolide les fragments
   `.changes/` (version et nouveautés du lobby) puis relance la CI sur le commit de version.
-- Quand la CI passe sur `dev`, [cd-staging.yml](../.github/workflows/cd-staging.yml) déploie ce commit sur le staging.
+- Quand la CI passe sur `dev`, [cd-staging.yml](../.github/workflows/cd-staging.yml) déploie ce commit sur le staging,
+  puis pose le label `sur-staging` sur les PR et les issues ouvertes qu'il met en ligne.
 - Quand le staging est validé (voir plus bas), on ouvre une **PR de promotion** de `dev` vers `main` :
   - titre `Promotion dev → main (vX.Y.Z)`, avec la version affichée sur le staging ;
-  - description : la liste des PR incluses, et un `Closes #N` pour chaque issue réellement terminée ;
+  - description : la liste des PR incluses (`is:pr label:sur-staging`) et des issues qu'elles terminent, **sans**
+    `Closes #N` : c'est le déploiement de production qui ferme les issues ;
   - fusion par **commit de fusion** (« Create a merge commit »), jamais par squash ni rebase : `dev` et `main` doivent
     garder un historique commun, sinon la promotion suivante est en conflit.
 - Quand la CI passe sur `main`, [cd.yml](../.github/workflows/cd.yml) déploie la production, puis publie la version en
   ligne : tag `vX.Y.Z` sur le commit déployé et [Release](https://github.com/EAnathos/Fangleaf/releases) avec les
   nouveautés du lobby depuis la Release précédente. Un tag n'est jamais déplacé : si la version est déjà taguée sur un
   autre commit (PR de version pas fusionnée avant la promotion), le run l'annonce par un avertissement et ne publie rien.
+  Il marque ensuite les PR mises en ligne `en-production` (sans `sur-staging`) et ferme les issues qu'une PR marque
+  `Termine #N` ; les autres reçoivent un commentaire et restent ouvertes.
+
+Le suivi ([suivi-deploiement.sh](../.github/scripts/suivi-deploiement.sh)) se fonde sur l'historique git : une PR est
+en ligne quand son commit de fusion est un ancêtre du commit déployé. Les labels lui servent de mémoire : une PR déjà
+marquée n'est pas reprise, donc un redéploiement ne répète rien et un déploiement raté est rattrapé par le suivant.
+Un retour arrière ne retire pas les labels.
 
 **Correctif urgent en production** : branche `fix/…` partie de `main`, PR vers `main`, puis fusion de `main` dans `dev`
 (par PR) pour que le correctif ne soit pas perdu à la promotion suivante.
@@ -153,13 +162,15 @@ donc le déploiement échoue au lieu de laisser un staging à moitié migré.
 À faire sur https://fangleaf-staging.leo-bessin.dev, sur le commit de `dev` qu'on s'apprête à promouvoir :
 
 1. Le dernier run *CD staging* est vert et la version du lobby est celle attendue. Le badge STAGING est affiché.
-2. Pour chaque issue incluse : vérifier ses critères d'acceptation, et noter le résultat en commentaire de l'issue.
+2. Pour chaque issue incluse (`is:open label:sur-staging`) : vérifier ses critères d'acceptation, et noter le
+   résultat en commentaire de l'issue.
 3. Tour de non-régression, à deux comptes (deux navigateurs, ou un ami) :
    - connexion Google, création d'un village, invitation et arrivée du second joueur ;
    - combat, apprivoisement, achat à la forge ;
    - quitter puis revenir dans le village : or, ressources, équipement et Alphas sont conservés ;
    - sur téléphone si l'interface a changé.
-4. Le workflow vérifie `/healthz` (serveur actif et configuration Supabase présente) ainsi que le titre de la page. Cela ne remplace pas un essai réel de connexion Google et de sauvegarde.\n5. Pas d'erreur dans les logs : page de l'application dans Coolify, onglet *Logs*.
+4. Le workflow vérifie `/healthz` (serveur actif et configuration Supabase présente) ainsi que le titre de la page. Cela ne remplace pas un essai réel de connexion Google et de sauvegarde.
+5. Pas d'erreur dans les logs : page de l'application dans Coolify, onglet *Logs*.
 
 Un problème trouvé en staging se corrige par une nouvelle PR vers `dev`, liée à la même issue. On ne promeut pas
 tant que la liste n'est pas entièrement verte.

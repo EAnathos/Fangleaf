@@ -1,0 +1,31 @@
+# Chaque PR vers dev dit à quelle issue elle se rattache, sous une forme que les déploiements savent lire
+# (.github/scripts/suivi-deploiement.sh) : « Termine #N » si elle finit l'issue, « Refs #N » sinon.
+# Relancé quand la description change, pour qu'une correction débloque la PR sans nouveau commit.
+name: Description de PR
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+    branches: [dev]
+
+permissions: {} # la description arrive dans l'événement, aucun accès au dépôt n'est nécessaire
+
+jobs:
+  issue:
+    name: Lien avec une issue
+    # La PR de version et les retours de main dans dev n'ont pas d'issue propre.
+    if: github.head_ref != 'automation/version-changelog' && github.head_ref != 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Termine #N ou Refs #N
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          # Même motif que .github/scripts/suivi-deploiement.sh.
+          if grep -qiE '\b(termine|refs)[[:space:]]*:?[[:space:]]*#[0-9]+' <<<"$BODY"; then
+            grep -oiE '\b(termine|refs)[[:space:]]*:?[[:space:]]*#[0-9]+' <<<"$BODY"
+            exit 0
+          fi
+          echo "::error title=Issue manquante::La description doit contenir « Termine #N » si la PR finit l'issue, sinon « Refs #N » (CONTRIBUTING.md, section 4)."
+          exit 1
