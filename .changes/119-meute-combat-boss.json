@@ -1,0 +1,9 @@
+{
+  "bump": "minor",
+  "date": "2026-11-13",
+  "title": "Combats de géant : ta meute tanke et frappe sans te suivre",
+  "items": [
+    "Pendant un combat de géant, ta meute reste sur lui et le frappe même quand tu bouges ou t'éloignes : plus de rappel, plus besoin de rester collé à elle.",
+    "Seuls les passifs (lièvre, suricate, escargot) te suivent, en retrait, pour esquiver avec toi ; le reste de la meute tanke et attaque."
+  ]
+}

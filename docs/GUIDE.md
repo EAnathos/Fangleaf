@@ -236,6 +236,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   zone dessinée est touché (ou y mord du bout du corps) : un pas hors du cercle suffit, devant comme derrière.
 - Il **s'impatiente** s'il ne touche aucun dompteur pendant un moment : « Il s'impatiente et presse le pas ! », il
   accélère peu à peu, et reprend son allure dès qu'il touche quelqu'un. Fuir en reculant ne marche qu'un temps.
+- **Ta meute combat le géant sans te suivre** : elle le tanke et le frappe même quand tu t'éloignes (pas de rappel), pour que tu puisses esquiver ses attaques. Seuls les passifs (Lièvre, Suricate, Escargot) te suivent, à l'écart, pour esquiver avec toi ; l'Escargot reste dans sa coquille.
 - Sur ordinateur, en combat, sa barre de vie et son nom s'affichent en haut de l'écran.
 - Chaque géant a ses attaques à lui, liées à son espèce :
   - **Champignon Géant** : des **champignons** poussent dans l'arène ; on s'en approche, leur chapeau gonfle et ils

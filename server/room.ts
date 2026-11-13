@@ -4194,6 +4194,20 @@ export class Room {
     return !!c && this.fightOn(c.id);
   }
 
+  /**
+   * Le géant que combat ce dompteur (réveillé, debout, dans l'arène où il se tient), sinon undefined. Calculé une fois par tick
+   * et par dompteur : toute sa meute le demande à chaque tick.
+   */
+  private fightBoss(p: Player): Unit | undefined {
+    const hit = this.fightBosses.get(p.id);
+    if (hit?.tick === this.tick) return hit.boss;
+    const c = this.map.arenaAt(p.x, p.y);
+    const u = c && this.fightOn(c.id) ? this.units.get(this.caveBoss[c.id]) : undefined;
+    this.fightBosses.set(p.id, { tick: this.tick, boss: u });
+    return u;
+  }
+  private fightBosses = new Map<number, { tick: number; boss: Unit | undefined }>();
+
   /** Combat en cours contre le géant de cette grotte : réveillé et debout. */
   private fightOn(cave: number) {
     const u = this.units.get(this.caveBoss[cave] ?? 0);
@@ -5069,6 +5083,17 @@ export class Room {
     // Dompteur sur l'eau (serpent) : un monstre terrestre ne l'y suit pas, il l'attend sur la berge la plus proche de lui.
     const bank = this.amphibious(u) || SPECIES[u.s].flies || this.winged(u) ? null : this.bankOf(o); // le vautour, le dragon le suivent au-dessus de l'eau
     const hx = bank?.x ?? o.x, hy = bank?.y ?? o.y;
+    // Combat de géant : la meute tanke et frappe le géant même si son dompteur bouge (ni rappel, ni retour près de lui). Seuls
+    // les passifs (lièvre, suricate, escargot) suivent leur dompteur, pour esquiver avec lui : ils suivent la conduite ordinaire.
+    const giant = this.fightBoss(o);
+    if (giant && !SPECIES[u.s].passive && !SPECIES[u.s].forager && this.alive(giant) && this.preyOf(u)(giant)) {
+      u.recalling = false;
+      u.target = giant.id;
+      u.lastAttacker = 0;
+      if ((u.legend || SPECIES[u.s].moves) && this.legendMove(u, giant)) return; // en pleine attaque spéciale
+      this.tryAttack(u, giant);
+      return;
+    }
     // Trop loin, ou coincé derrière un arbre ou la palissade depuis un moment : il rejoint son dompteur (ou la berge).
     if (dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead && !bank)) {
       this.placeAround(u, hx, hy);
