@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # Une promotion qui contient encore des fragments .changes/ part en production sans sa version : la Release
-      # ne pourrait pas être publiée. La PR de version se fusionne seule (release-version.yml) : attendre qu'elle passe.
+      # ne pourrait pas être publiée. Fusionner d'abord la PR de version (release-version.yml).
       - name: 'Promotion : nouveautés toutes versionnées'
         if: github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref == 'dev'
         run: |

@@ -16,10 +16,10 @@ feat/…, fix/…  ──PR──▶  dev  ──CI──▶  staging     (autom
 
 - Les branches de travail partent de `dev` et y reviennent par PR. On ne pousse jamais directement sur `dev` ni `main`.
 - À chaque push sur `dev`, [release-version.yml](../.github/workflows/release-version.yml) consolide les fragments
-  `.changes/` (version et nouveautés du lobby) dans la PR `automation/version-changelog`, attend sa CI, la fusionne
-  dans `dev` si elle passe, puis relance la CI de `dev` (une fusion faite par le workflow n'en déclenche aucune). Une CI
-  en échec laisse la PR ouverte : la corriger par une PR vers `dev`. La CI refuse une promotion qui contient encore
-  des fragments `.changes/`.
+  `.changes/` (version et nouveautés du lobby) dans la PR `automation/version-changelog` et lance sa CI. Cette PR se
+  fusionne à la main, après approbation : la protection de `dev` ne peut pas exempter le workflow (dépôt personnel,
+  GitHub Actions absent des exceptions possibles). La CI refuse une promotion qui contient encore des fragments
+  `.changes/`, donc une PR de version oubliée bloque la promotion au lieu de partir en production sans sa version.
 - Quand la CI passe sur `dev`, [cd-staging.yml](../.github/workflows/cd-staging.yml) déploie ce commit sur le staging,
   puis pose le label `sur-staging` sur les PR et les issues ouvertes qu'il met en ligne.
 - Quand le staging est validé (voir plus bas), on ouvre une **PR de promotion** de `dev` vers `main` :
