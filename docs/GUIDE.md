@@ -152,8 +152,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Nommer un Alpha** (bouton ✎ à côté du nom de sa carte, équipé ou au repos) : son nom s'affiche sous ses pattes, à la
   couleur de son dompteur, pour tout le village. Un nom vide le lui retire.
 - **Bonus de collection** : chaque Alpha éveillé renforce tous les autres.
-- **Alphas à pouvoir** : le Lièvre soigne son dompteur, la meute proche et lui-même (dans la meute, il ne va pas au contact :
-  il reste en retrait, derrière son dompteur). Le Suricate et l'Escargot ont une
+- **Alphas à pouvoir** : le Lièvre soigne son dompteur, la meute proche et lui-même (dans la meute, lui et le Suricate ne vont pas au contact :
+  ils restent en retrait, derrière leur dompteur). Le Suricate et l'Escargot ont une
   compétence, lancée seule au combat dès qu'elle est rechargée : le Suricate se dresse et crie (les alliés autour de lui
   frappent plus fort), l'Escargot dresse sa carapace (ils encaissent moins). Elle profite à tous les alliés proches,
   dompteurs et meutes, pendant quelques secondes : une épée et ses flèches, ou un bouclier, au-dessus de leur tête.
