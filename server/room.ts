@@ -3950,7 +3950,7 @@ export class Room {
       const m = e.mount ? this.units.get(e.mount) : undefined;
       if (m && (swimMount(m.s) || flyMount(m.s))) return;
       if (dist2(to.x, to.y, e.x, e.y) < (d * 1.6) ** 2 && this.map.gateCrossed(e.x, e.y, to.x, to.y) < 0) this.moveTo(e, to.x, to.y);
-    } else if (!this.blockedFor(e, to.x, to.y)) [e.x, e.y] = [to.x, to.y];
+    } else if (!this.blockedFor(e, to.x, to.y) && !this.walledOff(e.x, e.y, to.x, to.y)) [e.x, e.y] = [to.x, to.y]; // (jamais de l'autre côté d'une herse)
   }
 
   /** Saisi (étreinte, roulade) ou étourdi : il ne bouge plus jusque-là. */
@@ -4386,6 +4386,12 @@ export class Room {
     return at;
   }
   private banks = new Map<number, { tick: number; at: { x: number; y: number } | null }>();
+
+  /** Dans le donjon : une herse baissée sépare ces deux points (aucun autre chemin ne les relie). La meute n'y passe pas, même en se téléportant. */
+  private walledOff(ax: number, ay: number, bx: number, by: number) {
+    const m = this.map;
+    return m.caveAt(ax, ay) === m.depths && m.doorShut.includes(1) && !m.findPath(ax, ay, bx, by);
+  }
 
   /** Pose une unité près d'un point, sur la terre ferme. */
   private placeAround(u: Unit, x: number, y: number) {
@@ -5070,7 +5076,7 @@ export class Room {
     const bank = this.amphibious(u) || SPECIES[u.s].flies || this.winged(u) ? null : this.bankOf(o); // le vautour, le dragon le suivent au-dessus de l'eau
     const hx = bank?.x ?? o.x, hy = bank?.y ?? o.y;
     // Trop loin, ou coincé derrière un arbre ou la palissade depuis un moment : il rejoint son dompteur (ou la berge).
-    if (dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead && !bank)) {
+    if ((dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead && !bank)) && !this.walledOff(u.x, u.y, hx, hy)) {
       this.placeAround(u, hx, hy);
       u.stuck = 0;
     }
