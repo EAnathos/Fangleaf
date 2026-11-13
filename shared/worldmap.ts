@@ -1813,10 +1813,15 @@ export class WorldMap {
     const ends = (x: number, y: number) => {
       const k = this.roomAt(x, y);
       if (k >= 0) return [k];
-      let best = this.links[0], bd = Infinity;
-      for (const l of this.links) {
-        const d = segDist(x, y, this.rooms[l[0]], this.rooms[l[1]]);
-        if (d < bd) [best, bd] = [l, d];
+      let best = this.links[0], bd = Infinity, bi = 0;
+      for (let i = 0; i < this.links.length; i++) {
+        const l = this.links[i], d = segDist(x, y, this.rooms[l[0]], this.rooms[l[1]]);
+        if (d < bd) [best, bd, bi] = [l, d, i];
+      }
+      // dans un couloir à herse baissée, on ne part que du bout où l'on se trouve (sinon la herse ne barrerait rien)
+      if (this.doorShut[bi]) {
+        const d = this.doors[bi], side = best.find((k) => (this.rooms[k].x - d.x) * (x - d.x) + (this.rooms[k].y - d.y) * (y - d.y) > 0);
+        if (side !== undefined) return [side];
       }
       return [...best];
     };
@@ -1830,8 +1835,9 @@ export class WorldMap {
         goal = k;
         break;
       }
-      for (const [a, b] of this.links) {
-        const q = a === k ? b : b === k ? a : -1;
+      for (let li = 0; li < this.links.length; li++) {
+        if (this.doorShut[li]) continue; // une herse baissée ne se traverse pas : sans ça, on irait s'écraser contre elle
+        const [a, b] = this.links[li], q = a === k ? b : b === k ? a : -1;
         if (q >= 0 && !prev.has(q)) {
           prev.set(q, k);
           queue.push(q);

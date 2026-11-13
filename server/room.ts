@@ -4331,6 +4331,17 @@ export class Room {
       u.pathAt = this.time;
       [u.pathGoalX, u.pathGoalY] = [tx, ty];
     }
+    if (!u.path?.length && this.map.caveAt(u.x, u.y) === this.map.depths && this.map.doorShut.includes(1)) {
+      // Dans le donjon, pas de chemin veut dire une herse baissée en travers : foncer contre elle ne mène nulle part.
+      // Il attend un instant, puis lâche sa cible (un sauvage rentre chez lui ; la meute, elle, est rappelée par u.stuck).
+      u.stuck += DT;
+      if (u.stuck > 2 && !u.owner) {
+        u.target = u.lastAttacker = 0;
+        u.returning = true;
+        u.path = null;
+      }
+      return false;
+    }
     if (!u.path?.length) return wait ? false : this.move(u, tx, ty, speed, stop); // rien trouvé : on tente quand même (ou on attend)
     const next = u.path[0];
     if (dist2(u.x, u.y, next.x, next.y) < 14 ** 2) u.path.shift();
