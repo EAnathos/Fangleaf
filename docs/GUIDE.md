@@ -157,6 +157,8 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
   compétence, lancée seule au combat dès qu'elle est rechargée : le Suricate se dresse et crie (les alliés autour de lui
   frappent plus fort), l'Escargot dresse sa carapace (ils encaissent moins). Elle profite à tous les alliés proches,
   dompteurs et meutes, pendant quelques secondes : une épée et ses flèches, ou un bouclier, au-dessus de leur tête.
+  Face à un géant, l'Escargot (Alpha ou apprivoisé) reste dans sa coquille, à l'écart : rien ne l'atteint, le géant ne le
+  vise pas, et sa carapace continue de protéger les autres.
 - **Alpha légendaire** : l'âme du géant d'une espèce (voir [Grottes et géants](#grottes-et-géants)) permet le
   **double éveil** de l'Alpha de cette espèce. Légendaire, il est un peu plus fort, et lance seul (un peu moins fort que
   lui) les attaques spéciales de son géant.

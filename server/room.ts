@@ -2671,7 +2671,21 @@ export class Room {
   }
   /** Monstre sauvage qu'on peut nourrir d'un fruit (gibier passif compris, géants exclus plus bas). */
   private isFeedable = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !e.hidden;
-  private isAllyOfPlayers = (e: Ent) => (e.kind === 'p' || e.owner !== 0) && !this.safe(e.x, e.y);
+  private isAllyOfPlayers = (e: Ent) => (e.kind === 'p' || e.owner !== 0) && !this.safe(e.x, e.y) && !(e.kind === 'u' && this.shelled(e)); // (un escargot en coquille n'est jamais pris pour cible)
+
+  /**
+   * Escargot de la meute (apprivoisé ou Alpha) pendant un combat de géant : il reste dans sa coquille, à l'écart. Intouchable
+   * (aucun dégât), jamais visé par le géant ; ses compétences (carapace) continuent. Un dompteur debout dans l'arène suffit à
+   * l'abriter : s'il n'en reste aucun, le combat s'arrête (le géant se rendort), l'escargot ne se retrouve donc jamais seul face au géant.
+   */
+  private shelled(u: Unit) {
+    if (!u.owner || !SPECIES[u.s].shell || this.isMount(u)) return false;
+    const o = this.players.get(u.owner);
+    if (!o || !this.bossFight(o)) return false;
+    const cave = this.map.arenaAt(o.x, o.y)!.id;
+    for (const p of this.players.values()) if (!p.dead && this.map.arenaAt(p.x, p.y)?.id === cave) return true;
+    return false;
+  }
 
   /** Attaque au clic (PC) ou automatique. */
   onMode(p: Player, manual: boolean) {
@@ -5135,7 +5149,7 @@ export class Room {
     if (!t) t = this.nearest(anchorX, anchorY, o.dead ? 120 : FOLLOW_ENGAGE_R, prey, u.x, u.y);
     // un totem du Grand Masque le soigne, lui et les siens : la meute l'abat avant tout le reste
     if (!o.dead && !(t && this.healer(t))) t = this.totemNear(anchorX, anchorY, leash, prey, u) ?? t;
-    if (t && SPECIES[u.s].backline && !o.dead) {
+    if (t && (SPECIES[u.s].backline || this.shelled(u)) && !o.dead) {
       // il ne va pas au contact : il se tient derrière son dompteur, à l'opposé de l'ennemi
       u.target = 0;
       const d = Math.hypot(t.x - o.x, t.y - o.y) || 1, bx = o.x - ((t.x - o.x) / d) * BACKLINE_R, by = o.y - ((t.y - o.y) / d) * BACKLINE_R;
@@ -5230,6 +5244,7 @@ export class Room {
   /** melee : coup au corps à corps (le client anime l'attaquant qui se fend vers sa cible). */
   private damage(t: Ent, amount: number, by: Ent, melee = false) {
     if (melee && this.outOfReach(t, by)) return;
+    if (t.kind === 'u' && this.shelled(t)) return; // dans sa coquille, rien ne l'atteint
     // sous le sable, dans sa tanière ou haut dans le ciel : rien ne l'atteint (sauf, dans le ciel, depuis le dos d'un vautour)
     if (t.kind === 'u' && t.hidden && !(SPECIES[t.s].flies && this.reachesSky(by))) return;
     const m = melee ? { m: 1 as const } : {};
@@ -5347,7 +5362,7 @@ export class Room {
         const u = this.units.get(id);
         if (!u?.alpha || u.reviveAt || u.hp <= 0 || (u.shoutAt ?? 0) > this.time) continue;
         const perk = alphaPerk(u.s, u.level);
-        if (!perk || perk.kind === 'heal' || this.safe(u.x, u.y) || !this.wildNear(u.x, u.y, ALPHA_SHOUT_AGGRO).length) continue;
+        if (!perk || perk.kind === 'heal' || this.safe(u.x, u.y) || !(this.shelled(u) || this.wildNear(u.x, u.y, ALPHA_SHOUT_AGGRO).length)) continue; // (en coquille, le géant est là même s'il est loin)
         u.shoutAt = this.time + ALPHA_SHOUT_CD;
         const kind = perk.kind;
         for (const e of this.alliesNear(u.x, u.y, ALPHA_SHOUT_R)) {
