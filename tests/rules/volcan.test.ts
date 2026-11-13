@@ -600,6 +600,7 @@ describe('Le volcan et ses entrailles', () => {
     };
     check(craters({ kind: 'blink', cd: 12, power: 0.9 }, 'salamander') === 0, 'bond de la salamandre ordinaire : pas de cratère');
     check(craters({ kind: 'blink', cd: 12, fire: true }, 'salamander_queen') === 1, 'bond de la Salamandre-Mère : un cratère de feu');
+  });
   rule('La meute ne traverse pas une herse baissée : ni en marchant, ni en rejoignant son dompteur coincé, ni repoussée par un coup.', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const r: any = room(), m = r.map;
