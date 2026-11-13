@@ -1,0 +1,28 @@
+name: Tâche
+description: Une nouveauté, une correction ou une amélioration, avec ses critères d'acceptation.
+body:
+  - type: textarea
+    id: probleme
+    attributes:
+      label: Problème ou besoin
+      description: Ce qui ne va pas ou ce qui manque, et pour qui.
+    validations:
+      required: true
+  - type: textarea
+    id: resultat
+    attributes:
+      label: Résultat attendu
+      description: Ce que le joueur (ou le contributeur) voit une fois le travail fait.
+    validations:
+      required: true
+  - type: textarea
+    id: criteres
+    attributes:
+      label: Critères d'acceptation
+      description: >-
+        Une case par critère vérifiable, sur le staging ou par un test. La PR qui remplit tous les critères écrit
+        « Termine #N » : l'issue se fermera toute seule une fois en production.
+      value: |
+        - [ ] 
+    validations:
+      required: true

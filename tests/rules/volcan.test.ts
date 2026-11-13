@@ -600,5 +600,40 @@ describe('Le volcan et ses entrailles', () => {
     };
     check(craters({ kind: 'blink', cd: 12, power: 0.9 }, 'salamander') === 0, 'bond de la salamandre ordinaire : pas de cratère');
     check(craters({ kind: 'blink', cd: 12, fire: true }, 'salamander_queen') === 1, 'bond de la Salamandre-Mère : un cratère de feu');
+  rule('La meute ne traverse pas une herse baissée : ni en marchant, ni en rejoignant son dompteur coincé, ni repoussée par un coup.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    const p = r.addPlayer('a', noop);
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y - 40];
+    r.tick = 0;
+    r.updateDepths();
+    const lava = SPECIES.findIndex((sp) => sp.zone === VOLCANO_ZONE && !sp.boss && !sp.minion);
+    r.updateDepths = () => {}; // sans garnison, le donjon lèverait ses herses : on les garde baissées
+    m.doorShut.fill(1); // tout est cloisonné : aucun détour possible
+    const doors = m.doors.map((_: unknown, i: number) => i).filter((i: number) => m.doors[i].lair < 0).slice(0, 3);
+    for (const di of doors) {
+      const d = m.doors[di];
+      for (const sign of [1, -1]) {
+        r.units.clear();
+        const at = (k: number, off: number) => m.freeNear(d.x + d.ux * off * k, d.y + d.uy * off * k);
+        const mine = at(sign, 120), theirs = at(-sign, 60);
+        [p.x, p.y] = [mine.x, mine.y];
+        const pets = [0, 1, 2, 3, 4].map((k) => {
+          const u = r.createUnit(lava, false, theirs.x + k * 6, theirs.y);
+          r.makeTamed(u, p);
+          return u;
+        });
+        const across = (u: { x: number; y: number }) => Math.sign((u.x - d.x) * d.ux + (u.y - d.y) * d.uy) === sign;
+        let crossed = 0;
+        for (let t = 0; t < TICK_HZ * 8; t++) {
+          r.step();
+          r.time += 1 / TICK_HZ;
+          p.hp = p.maxHp;
+          if (t === TICK_HZ * 3) r.knock(pets[0], theirs.x - d.ux * -sign * 30, theirs.y - d.uy * -sign * 30, 90); // un coup qui la pousse vers la herse
+          for (const u of pets) if (across(u)) crossed++;
+        }
+        check(crossed === 0, `herse ${di}, dompteur à ${sign > 0 ? 'droite' : 'gauche'} : la meute reste de son côté (${crossed} passages)`);
+      }
+    }
   });
 });
