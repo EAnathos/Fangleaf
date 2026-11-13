@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, ALL_CAVES } from '../helpers.ts';
-import { BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, ROOM_MIN, ROOM_REFILL_R, ROOM_REFILL_S, BUILDING_IDS, DEPTHS_RESET_S, LAIR_PULL_R, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
+import { HAZARD_FLAT, RING_SPEED, BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, ROOM_MIN, ROOM_REFILL_R, ROOM_REFILL_S, BUILDING_IDS, DEPTHS_RESET_S, LAIR_PULL_R, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
 import { HALL_ID } from '../../shared/worldmap.ts';
 import { Room } from '../../server/room.ts';
 
@@ -575,5 +575,35 @@ describe('Le volcan et ses entrailles', () => {
     }
     check(moved === 0, `le monstre ne reste pas collé sous la herse (${moved} ticks dessous)`);
     check(w.target !== p.id, `il a lâché sa cible hors d'atteinte (cible ${w.target})`);
+  });
+  rule('Anneaux de la chauve-souris : touchent dans l\'ellipse dessinée au sol, pas dans un cercle plus grand.', () => {
+    const r = room();
+    const regrid = () => {
+      r.grid.clear();
+      for (const e of [...r.players.values(), ...r.units.values()]) r.grid.insert(e);
+    };
+    const c = r.map.caves.find((k: { boss: number }) => SPECIES[k.boss].key === 'ash_lord');
+    const lord = r.units.get(r.caveBoss[c.id]);
+    lord.dormant = false;
+    const R = 300; // rayon dessiné du point le plus large ; en hauteur, l'anneau n'atteint que HAZARD_FLAT fois ça
+    const probe = (dx: number, dy: number, rad: number) => {
+      const p = r.addPlayer('a' + Math.random(), noop);
+      p.hp = 99999;
+      [p.x, p.y] = [lord.x + dx, lord.y + dy];
+      r.hazards = [];
+      r.castMove(lord, { kind: 'echo', cd: 7, n: 1 }, p);
+      const h = r.hazards.find((q: { ring?: unknown }) => q.ring);
+      h.ring.R = 1000;
+      r.time = h.at + rad / RING_SPEED;
+      regrid();
+      const hp = p.hp;
+      r.spreadRing(h);
+      return p.hp < hp;
+    };
+    const below = R * HAZARD_FLAT; // le bas de l'anneau dessiné, quand il a atteint R en largeur
+    check(probe(R, 0, R), `sur le côté, quand l'anneau y passe : touché`);
+    check(probe(0, below, R), `au-dessus ou au-dessous, quand l'anneau dessiné y passe : touché`);
+    check(!probe(0, R, R - 70), `au même endroit qu'un cercle de rayon R, l'anneau dessiné est passé depuis longtemps : pas touché avant`);
+    check(!probe(0, below, R - 120), `l'anneau dessiné n'est pas encore arrivé : pas touché`);
   });
 });

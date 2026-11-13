@@ -3990,10 +3990,11 @@ export class Room {
     }
     for (const e of this.targetsNear(h.boss, h.x, h.y, rad + RING_W + 20)) {
       if (h.hit!.has(e.id)) continue;
-      const d = Math.hypot(e.x - h.x, e.y - h.y);
+      // l'anneau est dessiné aplati en perspective (HAZARD_FLAT) : on mesure dans cette ellipse, sinon il touche avant d'arriver
+      const dy = (e.y - h.y) / HAZARD_FLAT, d = Math.hypot(e.x - h.x, dy);
       if (Math.abs(d - rad) > RING_W + e.r) continue;
       if (ring.gap >= 0) {
-        const a = Math.atan2(e.y - h.y, e.x - h.x), off = Math.abs(Math.atan2(Math.sin(2 * (a - ring.gap)), Math.cos(2 * (a - ring.gap)))) / 2; // deux brèches face à face
+        const a = Math.atan2(dy, e.x - h.x), off = Math.abs(Math.atan2(Math.sin(2 * (a - ring.gap)), Math.cos(2 * (a - ring.gap)))) / 2; // deux brèches face à face
         if (off < DRUM_GAP) continue;
       }
       h.hit!.add(e.id);
