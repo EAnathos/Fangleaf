@@ -545,4 +545,35 @@ describe('Le volcan et ses entrailles', () => {
     }
     check(kinds.has('trail') && kinds.has('blink'), `en combat : ${[...kinds].join(', ') || 'aucune attaque spéciale'}`);
   });
+  rule('Herse baissée : aucun chemin ne la traverse, et un monstre qui ne peut pas rejoindre sa cible la lâche au lieu de s\'écraser contre elle.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    const p = r.addPlayer('a', noop);
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y - 40];
+    r.tick = 0;
+    r.updateDepths();
+    const di = m.doors.findIndex((q: { lair: number }, i: number) => q.lair < 0 && m.doorShut[i]);
+    const [ka, kb] = m.links[di], A = m.rooms[ka], B = m.rooms[kb];
+    const from = m.freeNear(A.x, A.y), to = m.freeNear(B.x, B.y);
+    // herse baissée : le chemin direct n'existe pas (ou fait le tour par d'autres salles, jamais par elle)
+    const path = m.findPath(from.x, from.y, to.x, to.y);
+    check(!path || !path.some((q: { x: number; y: number }) => m.doorAt(q.x, q.y) === di), `aucun point du chemin sous la herse ${di}`);
+    // le sauvage garde une cible de l'autre côté (dernier agresseur) : pas de chemin, il la lâche
+    const lava = SPECIES.findIndex((sp) => sp.zone === VOLCANO_ZONE && !sp.boss && !sp.minion);
+    const near = m.freeNear(m.doors[di].x - m.doors[di].ux * 80, m.doors[di].y - m.doors[di].uy * 80);
+    const w = r.createUnit(lava, false, near.x, near.y);
+    // un dompteur de l'autre côté, sans que rien ne sépare les deux salles autrement
+    for (const q of m.doorShut.keys()) if (q !== di) m.doorShut[q] = 1;
+    const behind = m.freeNear(m.doors[di].x + m.doors[di].ux * 80, m.doors[di].y + m.doors[di].uy * 80);
+    [p.x, p.y] = [behind.x, behind.y]; // juste derrière la herse : à portée de la cible, mais coupé d'elle
+    w.target = w.lastAttacker = p.id;
+    let moved = 0;
+    for (let i = 0; i < TICK_HZ * 6; i++) {
+      r.step();
+      r.time += 1 / TICK_HZ;
+      if (m.doorAt(w.x, w.y) === di) moved++;
+    }
+    check(moved === 0, `le monstre ne reste pas collé sous la herse (${moved} ticks dessous)`);
+    check(w.target !== p.id, `il a lâché sa cible hors d'atteinte (cible ${w.target})`);
+  });
 });
