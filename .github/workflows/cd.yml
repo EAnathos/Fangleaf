@@ -5,6 +5,8 @@
 #   VPS_USER     utilisateur SSH (root)
 #   VPS_SSH_KEY  clé privée d'une paire dédiée au déploiement (sa clé publique dans ~/.ssh/authorized_keys du VPS)
 #   VPS_PORT     facultatif, 22 par défaut
+#
+# Après un déploiement réussi, la version en ligne est publiée : tag vX.Y.Z et Release (.github/scripts/publier-release.sh).
 name: CD
 
 on:
@@ -28,6 +30,10 @@ jobs:
     environment:
       name: production
       url: https://fangleaf.anathos.me
+    permissions:
+      contents: write # tag et Release de la version déployée
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Clé SSH
         env:
@@ -45,7 +51,6 @@ jobs:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
             "cd ~/eanathos/Fangleaf && git fetch -q origin main && git checkout -q main && git merge -q --ff-only $SHA && bash deploy/deploy.sh"
@@ -60,3 +65,13 @@ jobs:
           done
           echo "fangleaf.anathos.me ne répond pas" >&2
           exit 1
+
+      # Les scripts viennent de main (version de ce workflow) ; la version publiée est lue au commit déployé.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Publier la version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/publier-release.sh "$SHA"
