@@ -229,4 +229,49 @@ describe('Combat des dompteurs', () => {
     for (let i = 0; i < 40; i++) r.regen();
     check(p.hp === 20, 'sur le pont cassé, non');
   });
+  rule("Vautour sauvage en plein vol : l'archer et le mage le touchent depuis le sol, pas le guerrier, et pas au-delà de leur portée.", () => {
+    const r = room();
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    [p.x, p.y] = [r.map.spawn.x, r.map.spawn.y];
+    p.aimX = p.x + 100;
+    p.aimY = p.y;
+    const vul = SPECIES.findIndex((sp) => sp.key === 'vulture');
+    // un vautour qui tourne haut dans le ciel : caché, donc hors d'atteinte du sol sauf pour qui vise en l'air
+    const shoot = (cls: string, dist: number) => {
+      p.cls = cls;
+      p.atkCd = 0;
+      const w = r.createUnit(vul, false, p.x + dist, p.y);
+      w.hidden = true;
+      w.maxHp = w.hp = 99999;
+      r.grid.clear();
+      r.grid.insert(w);
+      r.playerAttack(p);
+      const hit = w.hp < 99999;
+      r.units.delete(w.id);
+      return hit;
+    };
+    check(shoot('archer', 150), "l'archer, au sol, touche le vautour en vol");
+    check(shoot('mage', 150), "le mage, au sol, touche le vautour en vol");
+    check(!shoot('warrior', 20), "le guerrier, même collé au vautour en vol, ne le touche pas");
+    check(!shoot('archer', 900) && !shoot('mage', 900), "hors de portée : ni la flèche ni l'orbe ne l'atteignent");
+    // une cible au sol reste touchée comme avant, et un autre monstre caché (ver sous le sable) reste hors d'atteinte
+    const worm = SPECIES.findIndex((sp) => sp.key === 'sandworm');
+    p.cls = 'archer';
+    p.atkCd = 0;
+    const sw = r.createUnit(worm, false, p.x + 150, p.y);
+    sw.hidden = true;
+    sw.maxHp = sw.hp = 99999;
+    r.grid.clear();
+    r.grid.insert(sw);
+    r.playerAttack(p);
+    check(sw.hp === 99999, "un ver caché sous le sable reste hors d'atteinte, même pour l'archer");
+    // les dégâts restent contrôlés par le serveur : le vautour est dans la liste des proies de l'archer, pas du guerrier
+    const w2 = r.createUnit(vul, false, p.x + 100, p.y);
+    w2.hidden = true;
+    p.cls = 'warrior';
+    check(!r.preyOf(p)(w2), 'proie du guerrier : pas le vautour en vol');
+    p.cls = 'archer';
+    check(r.preyOf(p)(w2), "proie de l'archer : le vautour en vol");
+  });
 });

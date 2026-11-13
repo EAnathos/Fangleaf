@@ -2656,9 +2656,17 @@ export class Room {
     if (mount) return flyMount(mount.s);
     return e.kind === 'u' && !!e.owner && !!SPECIES[e.s].flies && !e.perched;
   }
-  /** Proie de cet attaquant : un monstre sauvage, ou, depuis le dos d'un vautour, aussi ceux qui volent hors d'atteinte du sol. */
+  /**
+   * Peut viser ce qui vole haut dans le ciel : qui est lui-même en l'air (à dos de vautour), et, du sol, l'archer et le mage
+   * (leurs tirs montent jusqu'au vautour ; le guerrier, lui, ne frappe qu'au corps à corps).
+   */
+  private reachesSky(by: Ent) {
+    if (this.airborne(by)) return true;
+    return by.kind === 'p' && (by.cls === 'archer' || by.cls === 'mage');
+  }
+  /** Proie de cet attaquant : un monstre sauvage, ou, s'il atteint le ciel, aussi ceux qui volent hors d'atteinte du sol. */
   private preyOf(by: Ent) {
-    if (!this.airborne(by)) return this.isWild;
+    if (!this.reachesSky(by)) return this.isWild;
     return (e: Ent) => this.isWild(e) || (e.kind === 'u' && e.owner === 0 && !e.dormant && !!e.hidden && !!SPECIES[e.s].flies);
   }
   /** Monstre sauvage qu'on peut nourrir d'un fruit (gibier passif compris, géants exclus plus bas). */
@@ -5223,7 +5231,7 @@ export class Room {
   private damage(t: Ent, amount: number, by: Ent, melee = false) {
     if (melee && this.outOfReach(t, by)) return;
     // sous le sable, dans sa tanière ou haut dans le ciel : rien ne l'atteint (sauf, dans le ciel, depuis le dos d'un vautour)
-    if (t.kind === 'u' && t.hidden && !(SPECIES[t.s].flies && this.airborne(by))) return;
+    if (t.kind === 'u' && t.hidden && !(SPECIES[t.s].flies && this.reachesSky(by))) return;
     const m = melee ? { m: 1 as const } : {};
     amount *= 1 + this.buffOf(by, 'rally'); // cri du suricate : l'attaquant frappe plus fort
     if (by.kind === 'u' && t.kind === 'u') amount *= affinity(by.s, t.s); // le feu brûle la plante, l'eau éteint le feu…
