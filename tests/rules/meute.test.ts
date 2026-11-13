@@ -285,6 +285,8 @@ describe('Meute et montures', () => {
     [wolf.x, wolf.y] = [p.x - RECALL_R - 100, p.y];
     r.step();
     check(wolf.recalling, 'hors combat de géant, trop loin du dompteur : la meute est rappelée comme avant');
+  });
+
   rule("Suricate de la meute : des PV à la hauteur de sa zone, et il reste en retrait derrière son dompteur comme le lièvre.", () => {
     const r = room();
     r.units.clear();
