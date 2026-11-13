@@ -23,7 +23,10 @@ feat/…, fix/…  ──PR──▶  dev  ──CI──▶  staging     (autom
   - description : la liste des PR incluses, et un `Closes #N` pour chaque issue réellement terminée ;
   - fusion par **commit de fusion** (« Create a merge commit »), jamais par squash ni rebase : `dev` et `main` doivent
     garder un historique commun, sinon la promotion suivante est en conflit.
-- Quand la CI passe sur `main`, [cd.yml](../.github/workflows/cd.yml) déploie la production.
+- Quand la CI passe sur `main`, [cd.yml](../.github/workflows/cd.yml) déploie la production, puis publie la version en
+  ligne : tag `vX.Y.Z` sur le commit déployé et [Release](https://github.com/EAnathos/Fangleaf/releases) avec les
+  nouveautés du lobby depuis la Release précédente. Un tag n'est jamais déplacé : si la version est déjà taguée sur un
+  autre commit (PR de version pas fusionnée avant la promotion), le run l'annonce par un avertissement et ne publie rien.
 
 **Correctif urgent en production** : branche `fix/…` partie de `main`, PR vers `main`, puis fusion de `main` dans `dev`
 (par PR) pour que le correctif ne soit pas perdu à la promotion suivante.
@@ -182,8 +185,9 @@ par l'application ne change pas, donc le prochain déploiement automatique repar
    ```
    Une fois fusionnée, la CI puis la CD redéploient `main`. Fusionner ensuite `main` dans `dev`.
 2. **Urgence** (site cassé, pas le temps d'attendre la CI) : sur le VPS de prod,
-   `cd ~/eanathos/Fangleaf && git checkout --detach <SHA sain> && bash deploy/deploy.sh`, puis faire quand même la
-   voie normale : le prochain déploiement automatique repart de `main`.
+   `cd ~/eanathos/Fangleaf && git fetch --tags -q && git checkout --detach vX.Y.Z && bash deploy/deploy.sh`, avec le tag
+   de la dernière version saine (liste des [Releases](https://github.com/EAnathos/Fangleaf/releases)), puis faire quand
+   même la voie normale : le prochain déploiement automatique repart de `main`.
 
 Dans les deux cas, les migrations déjà appliquées restent : si l'une d'elles est en cause, la corriger par une
 nouvelle migration. Les redémarrages sont sans risque pour les joueurs : le serveur sauvegarde les progressions

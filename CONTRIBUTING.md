@@ -108,7 +108,7 @@ Une PR fusionnée dans `dev` ne signifie donc pas, à elle seule, que l'issue es
 
 Pour chaque changement visible par les joueurs, ajouter un fichier JSON indépendant dans `.changes/` (voir [`.changes/README.md`](.changes/README.md)). Ne plus modifier manuellement `package.json`, `package-lock.json` ni le changelog central.
 
-À chaque push sur `dev` (donc à chaque fusion de PR), le workflow de publication ([release-version.yml](.github/workflows/release-version.yml)) consolide les fragments, choisit le niveau SemVer le plus élevé (`patch`, `minor`, `major`), met à jour la version du package et les nouveautés du lobby, puis relance la CI sur le commit versionné. La version arrive ensuite en production avec la promotion de `dev` vers `main`. Les PR indépendantes n'éditent donc plus les mêmes métadonnées.
+À chaque push sur `dev` (donc à chaque fusion de PR), le workflow de publication ([release-version.yml](.github/workflows/release-version.yml)) consolide les fragments, choisit le niveau SemVer le plus élevé (`patch`, `minor`, `major`), met à jour la version du package et les nouveautés du lobby, puis relance la CI sur le commit versionné. La version arrive ensuite en production avec la promotion de `dev` vers `main` : une fois la production en ligne, le déploiement crée le tag `vX.Y.Z` et la Release correspondante. Les PR indépendantes n'éditent donc plus les mêmes métadonnées.
 
 ## 9. Si la CI échoue
 
