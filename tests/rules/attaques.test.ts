@@ -163,8 +163,9 @@ describe('Attaques propres des géants', () => {
     check(rings.length === 4, 'quatre anneaux');
     // le premier anneau : p hors des brèches, q dans une brèche
     const g = rings[0].ring.gap, off = g + Math.PI / 2;
-    [p.x, p.y] = [b.x + Math.cos(off) * 260, b.y + Math.sin(off) * 260];
-    [q.x, q.y] = [b.x + Math.cos(g) * 260, b.y + Math.sin(g) * 260];
+    // Les angles sont mesurés dans l'ellipse aplatie : convertir la coordonnée verticale pour placer les joueurs dans les brèches.
+    [p.x, p.y] = [b.x + Math.cos(off) * 260, b.y + Math.sin(off) * 260 * HAZARD_FLAT];
+    [q.x, q.y] = [b.x + Math.cos(g) * 260, b.y + Math.sin(g) * 260 * HAZARD_FLAT];
     const [hp, hq] = [p.hp, q.hp];
     run(r, 0.7 + 260 / RING_SPEED + 0.1);
     check(p.hp < hp && q.hp === hq && DRUM_GAP > 0, 'l\'anneau frappe, sauf dans sa brèche');

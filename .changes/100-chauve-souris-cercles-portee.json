@@ -1,0 +1,8 @@
+{
+  "bump": "patch",
+  "date": "2026-11-13",
+  "title": "Boss chauve-souris : les cercles touchent là où ils sont dessinés",
+  "items": [
+    "Les anneaux violets de la chauve-souris (et ceux du tambour de guerre) touchent maintenant exactement la zone dessinée au sol : plus de coup reçu alors qu'on semblait hors de portée, en haut ou en bas de l'anneau."
+  ]
+}
