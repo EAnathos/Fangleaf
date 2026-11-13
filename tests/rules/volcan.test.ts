@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, ALL_CAVES } from '../helpers.ts';
-import { BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, ROOM_MIN, ROOM_REFILL_R, ROOM_REFILL_S, BUILDING_IDS, DEPTHS_RESET_S, LAIR_PULL_R, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
+import { BOSS_MOVES, BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, ROOM_MIN, ROOM_REFILL_R, ROOM_REFILL_S, BUILDING_IDS, DEPTHS_RESET_S, LAIR_PULL_R, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
 import { HALL_ID } from '../../shared/worldmap.ts';
 import { Room } from '../../server/room.ts';
 
@@ -575,5 +575,30 @@ describe('Le volcan et ses entrailles', () => {
     }
     check(moved === 0, `le monstre ne reste pas collé sous la herse (${moved} ticks dessous)`);
     check(w.target !== p.id, `il a lâché sa cible hors d'atteinte (cible ${w.target})`);
+  });
+  rule('Le bond de feu avec cratère est réservé à la Salamandre-Mère et à son légendaire : la salamandre ordinaire bondit sans cratère, et moins fort.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    p.hp = 1e9;
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y];
+    const sal = SPECIES.find((sp) => sp.key === 'salamander')!;
+    const blinkOf = (moves: readonly { kind: string }[] | undefined) => moves?.find((mv) => mv.kind === 'blink') as { fire?: boolean; power?: number } | undefined;
+    const queenBlink = blinkOf(BOSS_MOVES.salamander_queen);
+    check(!!blinkOf(sal.moves) && !blinkOf(sal.moves)!.fire, 'la salamandre ordinaire garde son bond, mais sans cratère de feu');
+    check((blinkOf(sal.moves)?.power ?? 1.3) < 1.3, `… et son explosion est plus faible (x${blinkOf(sal.moves)?.power ?? 1.3} au lieu de x1,3)`);
+    check(!!queenBlink?.fire, 'la Salamandre-Mère, elle, bondit en laissant un cratère de feu');
+    // en jeu : la variante ordinaire ne laisse aucun cratère, celle de la reine oui
+    const craters = (mv: { kind: 'blink'; cd: number; fire?: boolean; power?: number }, key: string) => {
+      const u = r.createUnit(SPECIES.findIndex((sp) => sp.key === key), false, p.x + 300, p.y);
+      r.hazards = [];
+      r.castMove(u, mv, p);
+      r.time += 1;
+      r.updateHazards();
+      return r.hazards.filter((h: { style?: string }) => h.style === 'crater').length;
+    };
+    check(craters({ kind: 'blink', cd: 12, power: 0.9 }, 'salamander') === 0, 'bond de la salamandre ordinaire : pas de cratère');
+    check(craters({ kind: 'blink', cd: 12, fire: true }, 'salamander_queen') === 1, 'bond de la Salamandre-Mère : un cratère de feu');
   });
 });

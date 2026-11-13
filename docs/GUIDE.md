@@ -67,7 +67,7 @@ s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois 
    retournent ; ils se montent, dans l'eau) et Petits Masqués à la sarbacane (leurs fléchettes **empoisonnent** : on
    perd des PV quelques secondes, une goutte verte au-dessus de la tête). Leurs géants dorment au fond de **temples** à degrés.
 7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable, sables mouvants qui s'ouvrent sous les pasges. Un grand volcan s'y dresse.
-8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise (elles sèment la lave en courant et bondissent sur leur cible dans une gerbe de braises, qui laisse un cratère brûlant), Chauves-souris de cendre, Tortues-volcans (elles lancent des roches en fusion en cloche, qui mettent le feu) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)). Ce sont les créatures les plus robustes de l'île.
+8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise (elles sèment la lave en courant et bondissent sur leur cible dans une gerbe de braises), Chauves-souris de cendre, Tortues-volcans (elles lancent des roches en fusion en cloche, qui mettent le feu) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)). Ce sont les créatures les plus robustes de l'île.
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
 la zone suivante, il faut à la fois l'**Hôtel de ville** au bon niveau et avoir vaincu **tous les géants** de la
@@ -260,7 +260,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
     de l'ombre) et **reflets de lune** (des copies de lui foncent sur sa cible, de trois côtés).
   - **Scorpion Empereur** : **dard empaleur** (en ligne, il empoisonne fort) et **fouissage** (il s'enfouit et surgit
     sous sa cible).
-  - **Salamandre-Mère** : **mue** (sa vieille peau reste et explose, elle file) ; sa **queue** tombe deux fois et se bat
+  - **Salamandre-Mère** : **mue** (sa vieille peau reste et explose, elle file) ; elle **bondit** sur sa cible en laissant un cratère brûlant ; sa **queue** tombe deux fois et se bat
     seule.
   - **Titus Veillafandre**, seigneur des cendres : **écholocation** (des anneaux qui étourdissent) et **suspendu** (il s'accroche au plafond,
     hors d'atteinte ; braises et nuée, puis il fond sur quelqu'un).
