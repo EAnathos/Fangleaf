@@ -66,7 +66,8 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 - [ci.yml](.github/workflows/ci.yml) : à chaque push et PR, typecheck, règles, test de fumée et build.
 - [cd.yml](.github/workflows/cd.yml) : quand la CI passe sur `main`, se connecte en SSH au VPS, avance le clone sur le commit testé
   et lance [deploy/deploy.sh](deploy/deploy.sh) (`npm ci`, migrations, build, `pm2 startOrReload`, vérification du port).
-  Aussi lançable à la main depuis l'onglet *Actions*.
+  Aussi lançable à la main depuis l'onglet *Actions*. Une fois le site en ligne, publie la version : tag `vX.Y.Z` et
+  Release ([publier-release.sh](.github/scripts/publier-release.sh)).
 - Secrets du dépôt à créer : `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (clé privée dédiée au déploiement), `VPS_PORT` (facultatif).
 - [cd-staging.yml](.github/workflows/cd-staging.yml) : le **staging**, quand la CI passe sur `dev`. Il tourne sur un
   VPS Coolify à part (image [deploy/Dockerfile](deploy/Dockerfile), projet Supabase dédié) : le workflow demande à
