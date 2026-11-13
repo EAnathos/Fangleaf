@@ -74,6 +74,10 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
   Coolify de déployer le commit validé. Secrets de l'environnement GitHub `staging` : `COOLIFY_URL`, `COOLIFY_TOKEN`,
   `COOLIFY_APP_UUID` ; variables du dépôt `STAGING_ENABLED` = `true` (sans elle le workflow ne fait rien) et
   `STAGING_URL` (adresse publique du staging, obligatoire).
+- Suivi des issues : après chaque déploiement réussi, [suivi-deploiement.sh](.github/scripts/suivi-deploiement.sh) pose
+  les labels `sur-staging` puis `en-production` sur les PR mises en ligne, et la production ferme les issues marquées
+  `Termine #N`. [pr-description.yml](.github/workflows/pr-description.yml) refuse une PR vers `dev` sans `Termine #N`
+  ni `Refs #N`. Détails : [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md).
 - Variables propres au staging, réglées dans Coolify : `VITE_FANGLEAF_ENV=staging` (badge STAGING, titre de l'onglet
   et panneau de triche dans le build du client) et `ALLOW_CHEATS=1` (le serveur y accepte les triches F9).
   La production ne déclare ni l'une ni l'autre. Branches, installation du staging, validation avant la mise en

@@ -13,6 +13,9 @@
 #   COOLIFY_URL       adresse de l'instance Coolify, sans barre finale (https://coolify.exemple.dev)
 #   COOLIFY_TOKEN     jeton d'API d'équipe, capacités « read », « write » et « deploy »
 #   COOLIFY_APP_UUID  identifiant de l'application Fangleaf staging dans Coolify
+# Après un déploiement réussi, les PR et issues mises en ligne reçoivent le label sur-staging
+# (.github/scripts/suivi-deploiement.sh, convention Termine/Refs de CONTRIBUTING.md).
+#
 # Variable obligatoire : STAGING_URL (adresse publique du staging). Sans elle, le workflow s'arrête tout de suite :
 # il vaut mieux une erreur claire qu'un déploiement qui vérifie l'adresse de quelqu'un d'autre.
 name: CD staging
@@ -51,6 +54,10 @@ jobs:
     environment:
       name: staging
       url: ${{ vars.STAGING_URL }}
+    permissions:
+      contents: read
+      issues: write # labels et suivi des issues déployées
+      pull-requests: write
     env:
       COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
@@ -148,3 +155,17 @@ jobs:
           done
           echo "$STAGING_URL n'est pas prêt (page, serveur ou configuration Supabase)" >&2
           exit 1
+
+      # Les scripts viennent de main (version de ce workflow), pas du commit déployé.
+      - uses: actions/checkout@v4
+        if: steps.deploy.outputs.uuid
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Suivi des PR et des issues
+        if: steps.deploy.outputs.uuid
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.target.outputs.sha }}
+          SUIVI_DEPUIS: '2026-11-13' # début du suivi : les PR plus anciennes ne sont pas reprises
+        run: .github/scripts/suivi-deploiement.sh staging "$SHA"
