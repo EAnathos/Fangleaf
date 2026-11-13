@@ -66,7 +66,7 @@ s'éloigne de la plage (à partir des Ruines moussues, les zones sont deux fois 
    (tapis dans l'eau, on ne voit que leurs yeux ; ils en sortent pour attaquer ce qui passe près de la rive, puis y
    retournent ; ils se montent, dans l'eau) et Petits Masqués à la sarbacane (leurs fléchettes **empoisonnent** : on
    perd des PV quelques secondes, une goutte verte au-dessus de la tête). Leurs géants dorment au fond de **temples** à degrés.
-7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable, sables mouvants qui s'ouvrent sous les pasges. Un grand volcan s'y dresse.
+7. **Mer de sable**, la plus grande : Suricates, Vers des sables, Vautours ; Scorpions des dunes le jour (dard empoisonné), Chacals fantômes la nuit ; tempêtes de sable, sables mouvants qui s'ouvrent sous les pasges. Un grand volcan s'y dresse. Un vautour qui tourne haut dans le ciel n'est touché que par l'archer et le mage (leurs tirs montent jusqu'à lui) ou depuis le dos d'un vautour, jamais par le guerrier.
 8. **Entrailles du volcan**, sous la Mer de sable : Salamandres de braise (elles sèment la lave en courant et bondissent sur leur cible dans une gerbe de braises, qui laisse un cratère brûlant), Chauves-souris de cendre, Tortues-volcans (elles lancent des roches en fusion en cloche, qui mettent le feu) (voir [Le volcan](#le-volcan-et-le-cœur-volcanique)). Ce sont les créatures les plus robustes de l'île.
 
 Une **brume** couvre tout ce qui se trouve au-delà de la première porte fermée : rien n'y apparaît. Pour ouvrir
@@ -152,11 +152,13 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Nommer un Alpha** (bouton ✎ à côté du nom de sa carte, équipé ou au repos) : son nom s'affiche sous ses pattes, à la
   couleur de son dompteur, pour tout le village. Un nom vide le lui retire.
 - **Bonus de collection** : chaque Alpha éveillé renforce tous les autres.
-- **Alphas à pouvoir** : le Lièvre soigne son dompteur, la meute proche et lui-même (dans la meute, il ne va pas au contact :
-  il reste en retrait, derrière son dompteur). Le Suricate et l'Escargot ont une
+- **Alphas à pouvoir** : le Lièvre soigne son dompteur, la meute proche et lui-même (dans la meute, lui et le Suricate ne vont pas au contact :
+  ils restent en retrait, derrière leur dompteur). Le Suricate et l'Escargot ont une
   compétence, lancée seule au combat dès qu'elle est rechargée : le Suricate se dresse et crie (les alliés autour de lui
   frappent plus fort), l'Escargot dresse sa carapace (ils encaissent moins). Elle profite à tous les alliés proches,
   dompteurs et meutes, pendant quelques secondes : une épée et ses flèches, ou un bouclier, au-dessus de leur tête.
+  Face à un géant, l'Escargot (Alpha ou apprivoisé) reste dans sa coquille, à l'écart : rien ne l'atteint, le géant ne le
+  vise pas, et sa carapace continue de protéger les autres.
 - **Alpha légendaire** : l'âme du géant d'une espèce (voir [Grottes et géants](#grottes-et-géants)) permet le
   **double éveil** de l'Alpha de cette espèce. Légendaire, il est un peu plus fort, et lance seul (un peu moins fort que
   lui) les attaques spéciales de son géant.
@@ -261,7 +263,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
     de l'ombre) et **reflets de lune** (des copies de lui foncent sur sa cible, de trois côtés).
   - **Scorpion Empereur** : **dard empaleur** (en ligne, il empoisonne fort) et **fouissage** (il s'enfouit et surgit
     sous sa cible).
-  - **Salamandre-Mère** : **mue** (sa vieille peau reste et explose, elle file) ; sa **queue** tombe deux fois et se bat
+  - **Salamandre-Mère** : **mue** (sa vieille peau reste et explose, elle file) ; elle **bondit** sur sa cible en laissant un cratère brûlant ; sa **queue** tombe deux fois et se bat
     seule.
   - **Titus Veillafandre**, seigneur des cendres : **écholocation** (des anneaux qui étourdissent) et **suspendu** (il s'accroche au plafond,
     hors d'atteinte ; braises et nuée, puis il fond sur quelqu'un).
@@ -391,7 +393,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Carte partagée** : la carte (minicarte et **M**) se découvre pour tout le village. Ce qu'un membre explore,
   même pendant qu'on est déconnecté, apparaît sur la carte des autres à leur retour.
 - **Échanger** : tout près d'un autre dompteur, **U** (ou le bouton ⇄) lui propose un échange. Une fenêtre s'ouvre
-  chez les deux : chacun choisit ce qu'il donne (or, bois, pierre de son sac, jamais plus qu'il n'a) et voit ce que
+  chez les deux : chacun choisit ce qu'il donne (or, bois, pierre ou baies de son sac, jamais plus qu'il n'a ni plus que la place de l'autre) et voit ce que
   l'autre propose. L'échange se fait quand **les deux ont validé** ; si une part change, il faut revalider. Il est
   annulé si l'un ferme la fenêtre, s'éloigne ou tombe.
 - Quand un coéquipier **réveille un géant**, tout le village en est prévenu, et une petite **flèche** autour de soi

@@ -285,6 +285,24 @@ describe('Meute et montures', () => {
     [wolf.x, wolf.y] = [p.x - RECALL_R - 100, p.y];
     r.step();
     check(wolf.recalling, 'hors combat de géant, trop loin du dompteur : la meute est rappelée comme avant');
+  rule("Suricate de la meute : des PV à la hauteur de sa zone, et il reste en retrait derrière son dompteur comme le lièvre.", () => {
+    const r = room();
+    r.units.clear();
+    const mk = SPECIES.findIndex((sp) => sp.key === 'meerkat'), jackal = SPECIES.findIndex((sp) => sp.key === 'jackal');
+    check(SPECIES[mk].hp >= SPECIES[jackal].hp, `ses PV de base (${SPECIES[mk].hp}) valent ceux du chacal de sa zone (${SPECIES[jackal].hp})`);
+    const p = r.addPlayer('a', noop);
+    const at = r.map.freeNear(r.map.spineAt(r.map.zoneFrom(2) + 600).x, r.map.spineAt(r.map.zoneFrom(2) + 600).y);
+    [p.x, p.y] = [at.x, at.y];
+    p.hp = 1e6;
+    const meerkat = r.createUnit(mk, false, p.x, p.y + 20);
+    r.makeTamed(meerkat, p);
+    check(meerkat.maxHp > 500, `apprivoisé, il a de quoi encaisser un coup (${meerkat.maxHp} PV)`);
+    const foe = r.createUnit(1, false, p.x + 120, p.y);
+    foe.hp = foe.maxHp = 1e6;
+    foe.speed = 0;
+    for (let i = 0; i < 20 * 3; i++) r.step();
+    check(foe.hp === foe.maxHp, "il ne frappe pas l'ennemi");
+    check(meerkat.x < p.x && Math.hypot(meerkat.x - foe.x, meerkat.y - foe.y) > Math.hypot(p.x - foe.x, p.y - foe.y), "il se tient derrière son dompteur, à l'opposé de l'ennemi");
   });
 
   rule('Tréant de la meute : comme le golem avec la pierre, il abat les arbres alentour ; le bois revient à son dompteur.', () => {

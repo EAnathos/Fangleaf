@@ -2,7 +2,7 @@
 
 import { describe } from 'node:test';
 import { rule, check, room, noop, ALL_CAVES } from '../helpers.ts';
-import { BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, ROOM_MIN, ROOM_REFILL_R, ROOM_REFILL_S, BUILDING_IDS, DEPTHS_RESET_S, LAIR_PULL_R, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
+import { HAZARD_FLAT, RING_SPEED, BOSS_MOVES, BOAT_REACH, BOAT_STAGES, boatReady, BOSS_RESPAWN_S, ROOM_MIN, ROOM_REFILL_R, ROOM_REFILL_S, BUILDING_IDS, DEPTHS_RESET_S, LAIR_PULL_R, HALL_MAX, HEART_IN_BOAT, HEART_REACH, HEART_TAKEN, SPECIES, TICK_HZ, VOLCANO_R, VOLCANO_RY, VOLCANO_ZONE, ZONES, zoneBosses } from '../../shared/config.ts';
 import { HALL_ID } from '../../shared/worldmap.ts';
 import { Room } from '../../server/room.ts';
 
@@ -575,5 +575,96 @@ describe('Le volcan et ses entrailles', () => {
     }
     check(moved === 0, `le monstre ne reste pas collé sous la herse (${moved} ticks dessous)`);
     check(w.target !== p.id, `il a lâché sa cible hors d'atteinte (cible ${w.target})`);
+  });
+  rule('Le bond de feu avec cratère est réservé à la Salamandre-Mère et à son légendaire : la salamandre ordinaire bondit sans cratère, et moins fort.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    r.units.clear();
+    const p = r.addPlayer('a', noop);
+    p.hp = 1e9;
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y];
+    const sal = SPECIES.find((sp) => sp.key === 'salamander')!;
+    const blinkOf = (moves: readonly { kind: string }[] | undefined) => moves?.find((mv) => mv.kind === 'blink') as { fire?: boolean; power?: number } | undefined;
+    const queenBlink = blinkOf(BOSS_MOVES.salamander_queen);
+    check(!!blinkOf(sal.moves) && !blinkOf(sal.moves)!.fire, 'la salamandre ordinaire garde son bond, mais sans cratère de feu');
+    check((blinkOf(sal.moves)?.power ?? 1.3) < 1.3, `… et son explosion est plus faible (x${blinkOf(sal.moves)?.power ?? 1.3} au lieu de x1,3)`);
+    check(!!queenBlink?.fire, 'la Salamandre-Mère, elle, bondit en laissant un cratère de feu');
+    // en jeu : la variante ordinaire ne laisse aucun cratère, celle de la reine oui
+    const craters = (mv: { kind: 'blink'; cd: number; fire?: boolean; power?: number }, key: string) => {
+      const u = r.createUnit(SPECIES.findIndex((sp) => sp.key === key), false, p.x + 300, p.y);
+      r.hazards = [];
+      r.castMove(u, mv, p);
+      r.time += 1;
+      r.updateHazards();
+      return r.hazards.filter((h: { style?: string }) => h.style === 'crater').length;
+    };
+    check(craters({ kind: 'blink', cd: 12, power: 0.9 }, 'salamander') === 0, 'bond de la salamandre ordinaire : pas de cratère');
+    check(craters({ kind: 'blink', cd: 12, fire: true }, 'salamander_queen') === 1, 'bond de la Salamandre-Mère : un cratère de feu');
+  });
+  rule('La meute ne traverse pas une herse baissée : ni en marchant, ni en rejoignant son dompteur coincé, ni repoussée par un coup.', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const r: any = room(), m = r.map;
+    const p = r.addPlayer('a', noop);
+    [p.x, p.y] = [m.depths.exit.x, m.depths.exit.y - 40];
+    r.tick = 0;
+    r.updateDepths();
+    const lava = SPECIES.findIndex((sp) => sp.zone === VOLCANO_ZONE && !sp.boss && !sp.minion);
+    r.updateDepths = () => {}; // sans garnison, le donjon lèverait ses herses : on les garde baissées
+    m.doorShut.fill(1); // tout est cloisonné : aucun détour possible
+    const doors = m.doors.map((_: unknown, i: number) => i).filter((i: number) => m.doors[i].lair < 0).slice(0, 3);
+    for (const di of doors) {
+      const d = m.doors[di];
+      for (const sign of [1, -1]) {
+        r.units.clear();
+        const at = (k: number, off: number) => m.freeNear(d.x + d.ux * off * k, d.y + d.uy * off * k);
+        const mine = at(sign, 120), theirs = at(-sign, 60);
+        [p.x, p.y] = [mine.x, mine.y];
+        const pets = [0, 1, 2, 3, 4].map((k) => {
+          const u = r.createUnit(lava, false, theirs.x + k * 6, theirs.y);
+          r.makeTamed(u, p);
+          return u;
+        });
+        const across = (u: { x: number; y: number }) => Math.sign((u.x - d.x) * d.ux + (u.y - d.y) * d.uy) === sign;
+        let crossed = 0;
+        for (let t = 0; t < TICK_HZ * 8; t++) {
+          r.step();
+          r.time += 1 / TICK_HZ;
+          p.hp = p.maxHp;
+          if (t === TICK_HZ * 3) r.knock(pets[0], theirs.x - d.ux * -sign * 30, theirs.y - d.uy * -sign * 30, 90); // un coup qui la pousse vers la herse
+          for (const u of pets) if (across(u)) crossed++;
+        }
+        check(crossed === 0, `herse ${di}, dompteur à ${sign > 0 ? 'droite' : 'gauche'} : la meute reste de son côté (${crossed} passages)`);
+      }
+    }
+  });
+  rule('Anneaux de la chauve-souris : touchent dans l\'ellipse dessinée au sol, pas dans un cercle plus grand.', () => {
+    const r = room();
+    const regrid = () => {
+      r.grid.clear();
+      for (const e of [...r.players.values(), ...r.units.values()]) r.grid.insert(e);
+    };
+    const c = r.map.caves.find((k: { boss: number }) => SPECIES[k.boss].key === 'ash_lord');
+    const lord = r.units.get(r.caveBoss[c.id]);
+    lord.dormant = false;
+    const R = 300; // rayon dessiné du point le plus large ; en hauteur, l'anneau n'atteint que HAZARD_FLAT fois ça
+    const probe = (dx: number, dy: number, rad: number) => {
+      const p = r.addPlayer('a' + Math.random(), noop);
+      p.hp = 99999;
+      [p.x, p.y] = [lord.x + dx, lord.y + dy];
+      r.hazards = [];
+      r.castMove(lord, { kind: 'echo', cd: 7, n: 1 }, p);
+      const h = r.hazards.find((q: { ring?: unknown }) => q.ring);
+      h.ring.R = 1000;
+      r.time = h.at + rad / RING_SPEED;
+      regrid();
+      const hp = p.hp;
+      r.spreadRing(h);
+      return p.hp < hp;
+    };
+    const below = R * HAZARD_FLAT; // le bas de l'anneau dessiné, quand il a atteint R en largeur
+    check(probe(R, 0, R), `sur le côté, quand l'anneau y passe : touché`);
+    check(probe(0, below, R), `au-dessus ou au-dessous, quand l'anneau dessiné y passe : touché`);
+    check(!probe(0, R, R - 70), `au même endroit qu'un cercle de rayon R, l'anneau dessiné est passé depuis longtemps : pas touché avant`);
+    check(!probe(0, below, R - 120), `l'anneau dessiné n'est pas encore arrivé : pas touché`);
   });
 });
