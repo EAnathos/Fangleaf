@@ -15,7 +15,7 @@ Avant tout travail :
 
 1. Chercher si une issue ouverte décrit déjà le besoin.
 2. Si elle existe, la mettre à jour avec le périmètre, les précisions et les critères d'acceptation manquants.
-3. Sinon, créer une issue décrivant le problème ou l'amélioration, le résultat attendu et les critères permettant de considérer le travail comme terminé.
+3. Sinon, créer une issue (modèle « Tâche ») décrivant le problème ou l'amélioration, le résultat attendu et les **critères d'acceptation**, en cases à cocher : ce sont eux qui disent quand le travail est terminé.
 4. Ne pas commencer un changement conséquent sans issue de référence. Pour une correction minime, créer une issue courte reste préférable afin de garder une trace.
 
 Une issue doit rester centrée sur un sujet. Si le périmètre évolue fortement, créer une issue complémentaire et faire les liens entre elles.
@@ -66,24 +66,24 @@ gh pr create --base dev
 
 Chaque PR doit :
 
-- mentionner l'issue concernée avec `Refs #NUMERO` dans sa description ;
+- mentionner l'issue concernée dans sa description : `Termine #NUMERO` si la PR remplit tous les critères d'acceptation de l'issue, sinon `Refs #NUMERO`. La CI refuse une PR qui n'a ni l'un ni l'autre ;
 - expliquer ce qui change, pourquoi et comment tester ;
 - préciser les tests exécutés et leur résultat ;
 - rester limitée à un sujet. Découper les PR trop volumineuses ;
 - inclure une capture ou une courte vidéo pour un changement visuel.
 
-Si une PR termine entièrement le travail demandé par l'issue, le signaler explicitement. Ne pas utiliser `Closes #NUMERO` sur une PR vers `dev` : GitHub pourrait fermer l'issue dès la fusion dans `dev`, avant la validation du staging et la mise en production.
+Cocher dans l'issue les critères remplis par la PR. Ne pas utiliser `Closes #NUMERO` : c'est le déploiement en production qui ferme l'issue, pas la fusion.
 
 ## 5. Revue, staging et fermeture des issues
 
 1. La PR vers `dev` doit passer la CI et être relue avant fusion.
-2. `dev` est déployé automatiquement sur le staging quand la CI passe : y vérifier les critères d'acceptation (liste de validation dans [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md#valider-sur-le-staging-avant-la-promotion)).
+2. `dev` est déployé automatiquement sur le staging quand la CI passe. Les PR et les issues mises en ligne reçoivent le label `sur-staging` : la recherche `is:open label:sur-staging` donne ce qu'il reste à valider. Y vérifier les critères d'acceptation (liste de validation dans [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md#valider-sur-le-staging-avant-la-promotion)).
 3. Corriger les problèmes détectés en staging via une nouvelle PR liée à la même issue.
-4. Quand les changements prévus sont terminés et validés, promouvoir `dev` vers `main` via une PR dédiée.
-5. La PR de promotion vers `main` peut utiliser `Closes #NUMERO` pour chaque issue réellement terminée. Une issue partiellement traitée reste ouverte et doit être mise à jour.
-6. Après fusion vers `main`, vérifier le déploiement de production et fermer manuellement toute issue terminée qui n'aurait pas été fermée automatiquement.
+4. Quand les changements prévus sont terminés et validés, promouvoir `dev` vers `main` via une PR dédiée, sans `Closes #NUMERO`.
+5. Une fois la production en ligne, le déploiement fait le reste : les PR passent de `sur-staging` à `en-production`, chaque issue marquée `Termine` par une PR est fermée, les autres reçoivent un commentaire et restent ouvertes.
+6. Une issue terminée mais restée ouverte (PR marquée `Refs` par erreur) se ferme à la main, en citant la PR.
 
-Une PR fusionnée dans `dev` ne signifie donc pas, à elle seule, que l'issue est terminée.
+Une PR fusionnée dans `dev` ne signifie donc pas, à elle seule, que l'issue est terminée : le label `en-production` sur la PR, et la fermeture de l'issue, le disent.
 
 ## 6. Les commits
 
@@ -108,7 +108,7 @@ Une PR fusionnée dans `dev` ne signifie donc pas, à elle seule, que l'issue es
 
 Pour chaque changement visible par les joueurs, ajouter un fichier JSON indépendant dans `.changes/` (voir [`.changes/README.md`](.changes/README.md)). Ne plus modifier manuellement `package.json`, `package-lock.json` ni le changelog central.
 
-À chaque push sur `dev` (donc à chaque fusion de PR), le workflow de publication ([release-version.yml](.github/workflows/release-version.yml)) consolide les fragments, choisit le niveau SemVer le plus élevé (`patch`, `minor`, `major`), met à jour la version du package et les nouveautés du lobby, puis relance la CI sur le commit versionné. La version arrive ensuite en production avec la promotion de `dev` vers `main`. Les PR indépendantes n'éditent donc plus les mêmes métadonnées.
+À chaque push sur `dev` (donc à chaque fusion de PR), le workflow de publication ([release-version.yml](.github/workflows/release-version.yml)) consolide les fragments, choisit le niveau SemVer le plus élevé (`patch`, `minor`, `major`), met à jour la version du package et les nouveautés du lobby dans une PR de version (`automation/version-changelog`) et lance sa CI. Cette PR se relit et se fusionne comme une autre : la protection de `dev` exige une approbation et ne peut pas exempter le workflow (dépôt personnel). Une promotion vers `main` est refusée tant qu'elle n'est pas fusionnée. La version arrive ensuite en production avec la promotion de `dev` vers `main` : une fois la production en ligne, le déploiement crée le tag `vX.Y.Z` et la Release correspondante. Les PR indépendantes n'éditent donc plus les mêmes métadonnées.
 
 ## 9. Si la CI échoue
 

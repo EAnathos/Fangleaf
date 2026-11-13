@@ -15,7 +15,7 @@ import {
 import { clamp, dist2, pickCapped } from '../shared/math.ts';
 import type { CheatMob, ArmySlot, BoardRow, DozerTuple, Holdings, Stats, GameEvent, PlayerState, ServerMsg, SleeperTuple, StatusId, StatusTuple, SwapOffer, UnitTuple } from '../shared/protocol.ts';
 import { STAT_KEYS, STATUS_IDS, PET_ACTS, type PetAct, type PetTuple, HAZARD_STYLES, type HazardStyle, UNIT_FLAG_GUARD, UNIT_FLAG_POISON, UNIT_FLAG_RALLY, UNIT_FLAG_PHASE2, UNIT_FLAG_PHASE3, UNIT_FLAG_ALPHA, UNIT_FLAG_ASLEEP, UNIT_FLAG_HIDDEN, UNIT_FLAG_DORMANT, UNIT_FLAG_LEGEND, UNIT_FLAG_MOUNTED, UNIT_FLAG_LANDED, UNIT_FLAG_CURSE, UNIT_FLAG_BURN, type HazardTuple, type ShotTuple, type SandTuple } from '../shared/protocol.ts';
-import { SnapshotDiff } from '../shared/snapshot.ts';
+import { SnapshotDiff, playerFields } from '../shared/snapshot.ts';
 import { FOG_N, packFog, revealCells, revealRooms, unpackFog } from '../shared/fog.ts';
 import { HALL_ID, type Ore, oreRadius, VILLAGE_MIN_R, WorldMap } from '../shared/worldmap.ts';
 import { sky, SNOWFALL, WINTER } from '../shared/weather.ts';
@@ -2268,12 +2268,12 @@ export class Room {
    * Échanges entre dompteurs proches (or, bois, pierre) : l'un le propose à l'autre, chacun garnit sa part, les deux voient
    * les deux parts ; il se fait quand les deux ont validé. Toute part qui change annule les validations.
    */
-  onSwap(p: Player, act: string, data: { with?: unknown; gold?: unknown; wood?: unknown; stone?: unknown } = {}) {
+  onSwap(p: Player, act: string, data: { with?: unknown; gold?: unknown; wood?: unknown; stone?: unknown; fruits?: unknown } = {}) {
     const s = this.swaps.get(p.id);
     if (act === 'open') {
       const q = this.players.get(Number(data.with));
       if (s || !q || q === p || p.dead || q.dead || this.swaps.has(q.id) || dist2(p.x, p.y, q.x, q.y) > TRADE_R ** 2) return;
-      const none = (): SwapOffer => ({ gold: 0, wood: 0, stone: 0 });
+      const none = (): SwapOffer => ({ gold: 0, wood: 0, stone: 0, fruits: 0 });
       const sw: Swap = { a: p.id, b: q.id, offer: new Map([[p.id, none()], [q.id, none()]]), ok: new Set() };
       this.swaps.set(p.id, sw);
       this.swaps.set(q.id, sw);
@@ -2284,7 +2284,7 @@ export class Room {
     if (act === 'offer') {
       // jamais plus que ce qu'on a dans son sac
       const n = (v: unknown, max: number) => clamp(Math.floor(Number(v) || 0), 0, Math.max(0, Math.floor(max)));
-      s.offer.set(p.id, { gold: n(data.gold, p.gold), wood: n(data.wood, p.wood), stone: n(data.stone, p.stone) });
+      s.offer.set(p.id, { gold: n(data.gold, p.gold), wood: n(data.wood, p.wood), stone: n(data.stone, p.stone), fruits: n(data.fruits, p.fruits) });
       s.ok.clear(); // une part a changé : chacun revalide ce qu'il voit
       return this.sendSwap(s);
     }
@@ -2300,19 +2300,22 @@ export class Room {
     if (broken) return this.endSwap(s, false, broken);
     const a = this.players.get(s.a)!, b = this.players.get(s.b)!;
     const pairs = [[a, b], [b, a]] as const;
-    if (pairs.some(([from]) => { const o = s.offer.get(from.id)!; return from.gold < o.gold || from.wood < o.wood || from.stone < o.stone; })) {
-      // l'un a dépensé entre-temps : sa part revient à ce qu'il a, et chacun revalide
-      for (const [from] of pairs) {
+    // les baies aussi : celui qui reçoit n'en porte jamais plus de MAX_BERRIES (ce qu'il donne en même temps libère de la place)
+    const room = (to: Player) => Math.max(0, MAX_BERRIES - to.fruits + s.offer.get(to.id)!.fruits);
+    if (pairs.some(([from, to]) => { const o = s.offer.get(from.id)!; return from.gold < o.gold || from.wood < o.wood || from.stone < o.stone || from.fruits < o.fruits || o.fruits > room(to); })) {
+      // l'un a dépensé entre-temps (ou n'a pas la place pour les baies) : sa part revient à ce qui est possible, et chacun revalide
+      for (const [from, to] of pairs) {
         const o = s.offer.get(from.id)!;
-        s.offer.set(from.id, { gold: Math.min(o.gold, Math.floor(from.gold)), wood: Math.min(o.wood, Math.floor(from.wood)), stone: Math.min(o.stone, Math.floor(from.stone)) });
+        s.offer.set(from.id, { gold: Math.min(o.gold, Math.floor(from.gold)), wood: Math.min(o.wood, Math.floor(from.wood)), stone: Math.min(o.stone, Math.floor(from.stone)), fruits: Math.min(o.fruits, Math.floor(from.fruits), room(to)) });
       }
       s.ok.clear();
       return this.sendSwap(s);
     }
     for (const [from, to] of pairs) {
       const o = s.offer.get(from.id)!;
-      [from.gold, from.wood, from.stone] = [from.gold - o.gold, from.wood - o.wood, from.stone - o.stone];
-      [to.gold, to.wood, to.stone] = [to.gold + o.gold, to.wood + o.wood, to.stone + o.stone];
+      [from.gold, from.wood, from.stone, from.fruits] = [from.gold - o.gold, from.wood - o.wood, from.stone - o.stone, from.fruits - o.fruits];
+      [to.gold, to.wood, to.stone, to.fruits] = [to.gold + o.gold, to.wood + o.wood, to.stone + o.stone, to.fruits + o.fruits];
+      if (from.fruits <= 0) from.holding = false; // plus de baie à tendre
       from.dirty = true;
     }
     this.endSwap(s, true);
@@ -2653,14 +2656,36 @@ export class Room {
     if (mount) return flyMount(mount.s);
     return e.kind === 'u' && !!e.owner && !!SPECIES[e.s].flies && !e.perched;
   }
-  /** Proie de cet attaquant : un monstre sauvage, ou, depuis le dos d'un vautour, aussi ceux qui volent hors d'atteinte du sol. */
+  /**
+   * Peut viser ce qui vole haut dans le ciel : qui est lui-même en l'air (à dos de vautour), et, du sol, l'archer et le mage
+   * (leurs tirs montent jusqu'au vautour ; le guerrier, lui, ne frappe qu'au corps à corps).
+   */
+  private reachesSky(by: Ent) {
+    if (this.airborne(by)) return true;
+    return by.kind === 'p' && (by.cls === 'archer' || by.cls === 'mage');
+  }
+  /** Proie de cet attaquant : un monstre sauvage, ou, s'il atteint le ciel, aussi ceux qui volent hors d'atteinte du sol. */
   private preyOf(by: Ent) {
-    if (!this.airborne(by)) return this.isWild;
+    if (!this.reachesSky(by)) return this.isWild;
     return (e: Ent) => this.isWild(e) || (e.kind === 'u' && e.owner === 0 && !e.dormant && !!e.hidden && !!SPECIES[e.s].flies);
   }
   /** Monstre sauvage qu'on peut nourrir d'un fruit (gibier passif compris, géants exclus plus bas). */
   private isFeedable = (e: Ent) => e.kind === 'u' && e.owner === 0 && !e.dormant && !e.hidden;
-  private isAllyOfPlayers = (e: Ent) => (e.kind === 'p' || e.owner !== 0) && !this.safe(e.x, e.y);
+  private isAllyOfPlayers = (e: Ent) => (e.kind === 'p' || e.owner !== 0) && !this.safe(e.x, e.y) && !(e.kind === 'u' && this.shelled(e)); // (un escargot en coquille n'est jamais pris pour cible)
+
+  /**
+   * Escargot de la meute (apprivoisé ou Alpha) pendant un combat de géant : il reste dans sa coquille, à l'écart. Intouchable
+   * (aucun dégât), jamais visé par le géant ; ses compétences (carapace) continuent. Un dompteur debout dans l'arène suffit à
+   * l'abriter : s'il n'en reste aucun, le combat s'arrête (le géant se rendort), l'escargot ne se retrouve donc jamais seul face au géant.
+   */
+  private shelled(u: Unit) {
+    if (!u.owner || !SPECIES[u.s].shell || this.isMount(u)) return false;
+    const o = this.players.get(u.owner);
+    if (!o || !this.bossFight(o)) return false;
+    const cave = this.map.arenaAt(o.x, o.y)!.id;
+    for (const p of this.players.values()) if (!p.dead && this.map.arenaAt(p.x, p.y)?.id === cave) return true;
+    return false;
+  }
 
   /** Attaque au clic (PC) ou automatique. */
   onMode(p: Player, manual: boolean) {
@@ -3505,7 +3530,7 @@ export class Room {
         const to = this.map.freeNear(t.x + Math.cos(a) * 70, t.y + Math.sin(a) * 70);
         const at = this.time + 0.9;
         u.castUntil = at;
-        this.hazard(u, { kind: 0, style: 'blink', x: to.x, y: to.y, r: 130, at, dmg: d * 1.3, onFire: () => {
+        this.hazard(u, { kind: 0, style: 'blink', x: to.x, y: to.y, r: 130, at, dmg: d * (m.power ?? 1.3), onFire: () => {
           if (!this.units.has(u.id)) return;
           [u.x, u.y] = [to.x, to.y];
           // Lueur : il retombe dans un cratère de feu, qui brûle encore un moment
@@ -3950,7 +3975,7 @@ export class Room {
       const m = e.mount ? this.units.get(e.mount) : undefined;
       if (m && (swimMount(m.s) || flyMount(m.s))) return;
       if (dist2(to.x, to.y, e.x, e.y) < (d * 1.6) ** 2 && this.map.gateCrossed(e.x, e.y, to.x, to.y) < 0) this.moveTo(e, to.x, to.y);
-    } else if (!this.blockedFor(e, to.x, to.y)) [e.x, e.y] = [to.x, to.y];
+    } else if (!this.blockedFor(e, to.x, to.y) && !this.walledOff(e.x, e.y, to.x, to.y)) [e.x, e.y] = [to.x, to.y]; // (jamais de l'autre côté d'une herse)
   }
 
   /** Saisi (étreinte, roulade) ou étourdi : il ne bouge plus jusque-là. */
@@ -3990,10 +4015,11 @@ export class Room {
     }
     for (const e of this.targetsNear(h.boss, h.x, h.y, rad + RING_W + 20)) {
       if (h.hit!.has(e.id)) continue;
-      const d = Math.hypot(e.x - h.x, e.y - h.y);
+      // l'anneau est dessiné aplati en perspective (HAZARD_FLAT) : on mesure dans cette ellipse, sinon il touche avant d'arriver
+      const dy = (e.y - h.y) / HAZARD_FLAT, d = Math.hypot(e.x - h.x, dy);
       if (Math.abs(d - rad) > RING_W + e.r) continue;
       if (ring.gap >= 0) {
-        const a = Math.atan2(e.y - h.y, e.x - h.x), off = Math.abs(Math.atan2(Math.sin(2 * (a - ring.gap)), Math.cos(2 * (a - ring.gap)))) / 2; // deux brèches face à face
+        const a = Math.atan2(dy, e.x - h.x), off = Math.abs(Math.atan2(Math.sin(2 * (a - ring.gap)), Math.cos(2 * (a - ring.gap)))) / 2; // deux brèches face à face
         if (off < DRUM_GAP) continue;
       }
       h.hit!.add(e.id);
@@ -4194,6 +4220,20 @@ export class Room {
     return !!c && this.fightOn(c.id);
   }
 
+  /**
+   * Le géant que combat ce dompteur (réveillé, debout, dans l'arène où il se tient), sinon undefined. Calculé une fois par tick
+   * et par dompteur : toute sa meute le demande à chaque tick.
+   */
+  private fightBoss(p: Player): Unit | undefined {
+    const hit = this.fightBosses.get(p.id);
+    if (hit?.tick === this.tick) return hit.boss;
+    const c = this.map.arenaAt(p.x, p.y);
+    const u = c && this.fightOn(c.id) ? this.units.get(this.caveBoss[c.id]) : undefined;
+    this.fightBosses.set(p.id, { tick: this.tick, boss: u });
+    return u;
+  }
+  private fightBosses = new Map<number, { tick: number; boss: Unit | undefined }>();
+
   /** Combat en cours contre le géant de cette grotte : réveillé et debout. */
   private fightOn(cave: number) {
     const u = this.units.get(this.caveBoss[cave] ?? 0);
@@ -4331,6 +4371,17 @@ export class Room {
       u.pathAt = this.time;
       [u.pathGoalX, u.pathGoalY] = [tx, ty];
     }
+    if (!u.path?.length && this.map.caveAt(u.x, u.y) === this.map.depths && this.map.doorShut.includes(1)) {
+      // Dans le donjon, pas de chemin veut dire une herse baissée en travers : foncer contre elle ne mène nulle part.
+      // Il attend un instant, puis lâche sa cible (un sauvage rentre chez lui ; la meute, elle, est rappelée par u.stuck).
+      u.stuck += DT;
+      if (u.stuck > 2 && !u.owner) {
+        u.target = u.lastAttacker = 0;
+        u.returning = true;
+        u.path = null;
+      }
+      return false;
+    }
     if (!u.path?.length) return wait ? false : this.move(u, tx, ty, speed, stop); // rien trouvé : on tente quand même (ou on attend)
     const next = u.path[0];
     if (dist2(u.x, u.y, next.x, next.y) < 14 ** 2) u.path.shift();
@@ -4375,6 +4426,12 @@ export class Room {
     return at;
   }
   private banks = new Map<number, { tick: number; at: { x: number; y: number } | null }>();
+
+  /** Dans le donjon : une herse baissée sépare ces deux points (aucun autre chemin ne les relie). La meute n'y passe pas, même en se téléportant. */
+  private walledOff(ax: number, ay: number, bx: number, by: number) {
+    const m = this.map;
+    return m.caveAt(ax, ay) === m.depths && m.doorShut.includes(1) && !m.findPath(ax, ay, bx, by);
+  }
 
   /** Pose une unité près d'un point, sur la terre ferme. */
   private placeAround(u: Unit, x: number, y: number) {
@@ -5058,8 +5115,19 @@ export class Room {
     // Dompteur sur l'eau (serpent) : un monstre terrestre ne l'y suit pas, il l'attend sur la berge la plus proche de lui.
     const bank = this.amphibious(u) || SPECIES[u.s].flies || this.winged(u) ? null : this.bankOf(o); // le vautour, le dragon le suivent au-dessus de l'eau
     const hx = bank?.x ?? o.x, hy = bank?.y ?? o.y;
+    // Combat de géant : la meute tanke et frappe le géant même si son dompteur bouge (ni rappel, ni retour près de lui). Seuls
+    // les passifs (lièvre, suricate, escargot) suivent leur dompteur, pour esquiver avec lui : ils suivent la conduite ordinaire.
+    const giant = this.fightBoss(o);
+    if (giant && !SPECIES[u.s].passive && !SPECIES[u.s].forager && this.alive(giant) && this.preyOf(u)(giant)) {
+      u.recalling = false;
+      u.target = giant.id;
+      u.lastAttacker = 0;
+      if ((u.legend || SPECIES[u.s].moves) && this.legendMove(u, giant)) return; // en pleine attaque spéciale
+      this.tryAttack(u, giant);
+      return;
+    }
     // Trop loin, ou coincé derrière un arbre ou la palissade depuis un moment : il rejoint son dompteur (ou la berge).
-    if (dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead && !bank)) {
+    if ((dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead && !bank)) && !this.walledOff(u.x, u.y, hx, hy)) {
       this.placeAround(u, hx, hy);
       u.stuck = 0;
     }
@@ -5106,7 +5174,7 @@ export class Room {
     if (!t) t = this.nearest(anchorX, anchorY, o.dead ? 120 : FOLLOW_ENGAGE_R, prey, u.x, u.y);
     // un totem du Grand Masque le soigne, lui et les siens : la meute l'abat avant tout le reste
     if (!o.dead && !(t && this.healer(t))) t = this.totemNear(anchorX, anchorY, leash, prey, u) ?? t;
-    if (t && SPECIES[u.s].backline && !o.dead) {
+    if (t && (SPECIES[u.s].backline || this.shelled(u)) && !o.dead) {
       // il ne va pas au contact : il se tient derrière son dompteur, à l'opposé de l'ennemi
       u.target = 0;
       const d = Math.hypot(t.x - o.x, t.y - o.y) || 1, bx = o.x - ((t.x - o.x) / d) * BACKLINE_R, by = o.y - ((t.y - o.y) / d) * BACKLINE_R;
@@ -5201,8 +5269,9 @@ export class Room {
   /** melee : coup au corps à corps (le client anime l'attaquant qui se fend vers sa cible). */
   private damage(t: Ent, amount: number, by: Ent, melee = false) {
     if (melee && this.outOfReach(t, by)) return;
+    if (t.kind === 'u' && this.shelled(t)) return; // dans sa coquille, rien ne l'atteint
     // sous le sable, dans sa tanière ou haut dans le ciel : rien ne l'atteint (sauf, dans le ciel, depuis le dos d'un vautour)
-    if (t.kind === 'u' && t.hidden && !(SPECIES[t.s].flies && this.airborne(by))) return;
+    if (t.kind === 'u' && t.hidden && !(SPECIES[t.s].flies && this.reachesSky(by))) return;
     const m = melee ? { m: 1 as const } : {};
     amount *= 1 + this.buffOf(by, 'rally'); // cri du suricate : l'attaquant frappe plus fort
     if (by.kind === 'u' && t.kind === 'u') amount *= affinity(by.s, t.s); // le feu brûle la plante, l'eau éteint le feu…
@@ -5318,7 +5387,7 @@ export class Room {
         const u = this.units.get(id);
         if (!u?.alpha || u.reviveAt || u.hp <= 0 || (u.shoutAt ?? 0) > this.time) continue;
         const perk = alphaPerk(u.s, u.level);
-        if (!perk || perk.kind === 'heal' || this.safe(u.x, u.y) || !this.wildNear(u.x, u.y, ALPHA_SHOUT_AGGRO).length) continue;
+        if (!perk || perk.kind === 'heal' || this.safe(u.x, u.y) || !(this.shelled(u) || this.wildNear(u.x, u.y, ALPHA_SHOUT_AGGRO).length)) continue; // (en coquille, le géant est là même s'il est loin)
         u.shoutAt = this.time + ALPHA_SHOUT_CD;
         const kind = perk.kind;
         for (const e of this.alliesNear(u.x, u.y, ALPHA_SHOUT_R)) {
@@ -5582,43 +5651,54 @@ export class Room {
   }
 
   private separate() {
-    const before = new Map<Unit, [number, number]>();
-    for (const u of this.units.values()) before.set(u, [u.x, u.y]);
+    // positions d'avant l'écartement, dans l'ordre de parcours des unités (rien n'est ajouté ni retiré pendant ce temps)
+    const n = this.units.size, bx = new Float64Array(n), by = new Float64Array(n);
+    let i = 0;
     for (const u of this.units.values()) {
-      if (u.reviveAt || u.idle || this.isMount(u) || u.hidden) continue; // sous le sable : il passe sous tout le monde
-      this.grid.query(u.x, u.y, u.r + 60, (o) => {
-        if (o === u || (o.kind === 'u' && o.hidden)) return;
-        if (o.kind === 'u' && (o.id < u.id || o.reviveAt)) return; // chaque paire une seule fois
-        if (o.kind === 'p' && o.dead) return;
-        const min = u.r + o.r;
-        const dx = u.x - o.x, dy = u.y - o.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 >= min * min) return;
-        const d = Math.sqrt(d2) || 0.01;
-        const push = (min - d) * 0.5;
-        const nx = d2 ? dx / d : Math.random() - 0.5, ny = d2 ? dy / d : Math.random() - 0.5;
-        // un géant endormi ou une bête ancrée (le Kraken, ses tentacules) ne se laisse pas pousser
-        const fixed = (e: Ent) => e.kind === 'u' && (e.dormant || !!SPECIES[e.s].anchored);
-        if (o.kind === 'p') {
-          if (fixed(u)) return;
-          u.x += nx * push * 2;
-          u.y += ny * push * 2;
-        } else if (fixed(u) || fixed(o)) {
-          if (fixed(u) && fixed(o)) return;
-          // c'est l'autre qui s'écarte de toute la distance
-          const k = fixed(u) ? -2 : 2;
-          const m = fixed(u) ? o : u;
-          m.x += nx * push * k;
-          m.y += ny * push * k;
-        } else {
-          u.x += nx * push;
-          u.y += ny * push;
-          o.x -= nx * push;
-          o.y -= ny * push;
-        }
-      });
+      bx[i] = u.x;
+      by[i++] = u.y;
     }
+    // un géant endormi ou une bête ancrée (le Kraken, ses tentacules) ne se laisse pas pousser
+    const fixed = (e: Ent) => e.kind === 'u' && (e.dormant || !!SPECIES[e.s].anchored);
+    // une seule fonction de voisinage pour tout le tick (pas une fermeture par unité) : u est l'unité en cours
+    let u!: Unit;
+    const nudge = (o: Ent) => {
+      if (o === u || (o.kind === 'u' && o.hidden)) return;
+      if (o.kind === 'u' && (o.id < u.id || o.reviveAt)) return; // chaque paire une seule fois
+      if (o.kind === 'p' && o.dead) return;
+      const min = u.r + o.r;
+      const dx = u.x - o.x, dy = u.y - o.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= min * min) return;
+      const d = Math.sqrt(d2) || 0.01;
+      const push = (min - d) * 0.5;
+      const nx = d2 ? dx / d : Math.random() - 0.5, ny = d2 ? dy / d : Math.random() - 0.5;
+      if (o.kind === 'p') {
+        if (fixed(u)) return;
+        u.x += nx * push * 2;
+        u.y += ny * push * 2;
+      } else if (fixed(u) || fixed(o)) {
+        if (fixed(u) && fixed(o)) return;
+        // c'est l'autre qui s'écarte de toute la distance
+        const k = fixed(u) ? -2 : 2;
+        const m = fixed(u) ? o : u;
+        m.x += nx * push * k;
+        m.y += ny * push * k;
+      } else {
+        u.x += nx * push;
+        u.y += ny * push;
+        o.x -= nx * push;
+        o.y -= ny * push;
+      }
+    };
+    for (const cur of this.units.values()) {
+      if (cur.reviveAt || cur.idle || this.isMount(cur) || cur.hidden) continue; // sous le sable : il passe sous tout le monde
+      u = cur;
+      this.grid.query(cur.x, cur.y, cur.r + 60, nudge);
+    }
+    i = 0;
     for (const u of this.units.values()) {
+      const j = i++;
       const v = this.map.village;
       if (!u.owner) {
         // Les sauvages ne vont pas sur l'îlot du village (ni sur son pont) : ils en sont repoussés, vers l'île.
@@ -5634,7 +5714,8 @@ export class Room {
           u.y = site.y + ey * k;
         }
       }
-      if (this.blockedFor(u, u.x, u.y)) [u.x, u.y] = before.get(u) ?? [u.x, u.y]; // jamais poussé dans l'eau (ni hors de l'eau, pour un serpent)
+      // jamais poussé dans l'eau (ni hors de l'eau, pour un serpent) ; une unité restée en place n'a rien à défaire
+      if ((u.x !== bx[j] || u.y !== by[j]) && this.blockedFor(u, u.x, u.y)) [u.x, u.y] = [bx[j], by[j]];
     }
   }
 
@@ -5750,14 +5831,28 @@ export class Room {
       if (u && !u.dormant && u.fight) fights.push([cave, u.fight.from]);
     });
     const rallies = this.liveRallies();
+    // le tuple d'une unité ne dépend pas de qui la regarde : calculé une fois par tick, partagé entre les spectateurs
+    // (les dompteurs réunis au même endroit voient les mêmes unités)
+    const tuples = new Map<number, UnitTuple>();
+    // les champs de chaque dompteur, en JSON, une fois par tick et par état (complet ou allégé) : pas une fois par spectateur
+    const fields = new Map<PlayerState, Record<string, string>>();
+    const fieldsOf = (st: PlayerState) => {
+      let f = fields.get(st);
+      if (!f) fields.set(st, (f = playerFields(st)));
+      return f;
+    };
     for (const viewer of this.players.values()) {
       const units: UnitTuple[] = [];
       for (const u of this.units.values()) {
         if (u.reviveAt || dist2(u.x, u.y, viewer.x, viewer.y) > vr2) continue;
-        units.push([
-          u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep || u.hibernate ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0) | ((u.phase ?? 1) === 2 ? UNIT_FLAG_PHASE2 : (u.phase ?? 1) >= 3 ? UNIT_FLAG_PHASE3 : 0) | (u.owner && SPECIES[u.s].flies && !this.airborne(u) ? UNIT_FLAG_LANDED : 0) | this.buffFlags(u), Math.round(u.x), Math.round(u.y),
-          Math.round((100 * Math.max(0, u.hp)) / u.maxHp), u.owner,
-        ]);
+        let t = tuples.get(u.id);
+        if (!t) {
+          tuples.set(u.id, (t = [
+            u.id, u.s, (u.alpha ? UNIT_FLAG_ALPHA : 0) | (this.isMount(u) ? UNIT_FLAG_MOUNTED : 0) | (u.legend ? UNIT_FLAG_LEGEND : 0) | (u.dormant ? UNIT_FLAG_DORMANT : 0) | (u.asleep || u.hibernate ? UNIT_FLAG_ASLEEP : 0) | (u.hidden ? UNIT_FLAG_HIDDEN : 0) | ((u.phase ?? 1) === 2 ? UNIT_FLAG_PHASE2 : (u.phase ?? 1) >= 3 ? UNIT_FLAG_PHASE3 : 0) | (u.owner && SPECIES[u.s].flies && !this.airborne(u) ? UNIT_FLAG_LANDED : 0) | this.buffFlags(u), Math.round(u.x), Math.round(u.y),
+            Math.round((100 * Math.max(0, u.hp)) / u.maxHp), u.owner,
+          ]));
+        }
+        units.push(t);
       }
       const ores: [number, number][] = [];
       for (const o of this.map.ores) {
@@ -5819,7 +5914,7 @@ export class Room {
       let diff = this.diffs.get(viewer.id);
       if (!diff) this.diffs.set(viewer.id, (diff = new SnapshotDiff()));
       const [changed, gone] = diff.diffUnits(units);
-      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], founder: this.isFounder(viewer), caves, fights, ...(rallies.length ? { rallies } : {}), camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ...(this.map.caveAt(viewer.x, viewer.y) === this.map.depths ? { doors: [...this.map.doorShut] } : {}), ev });
+      viewer.send({ t: 's', tick: this.tick, players: diff.diffPlayers(players, fieldsOf), units: changed, gone, ores: diff.diffOres(ores), chests, bare, trees, sleepers, dozers, pets, banned: this.isFounder(viewer) && viewer.userId ? this.banned : [], founder: this.isFounder(viewer), caves, fights, ...(rallies.length ? { rallies } : {}), camps: this.camps, buildings: this.buildings, hall: this.hall, vname: this.name, scrolls: this.scrollCaves(viewer), told: this.told, lore: [this.told.length, this.boat, this.boatAt ? Math.max(0, Math.ceil((this.boatAt - Date.now()) / 1000)) : 0], stock: [this.stock.wood, this.stock.stone], school: [this.plan ? 1 : 0, this.schoolAt ? Math.max(0, Math.ceil((this.schoolAt - Date.now()) / 1000)) : 0], beaten: this.beaten, heart: this.heart, unlocked: this.unlocked, hazards, shots, sands, bolts, traps: this.trapsNear(viewer, vr2), ...(this.map.caveAt(viewer.x, viewer.y) === this.map.depths ? { doors: [...this.map.doorShut] } : {}), ev });
     }
   }
 }

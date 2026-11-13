@@ -316,7 +316,7 @@ wss.on('connection', (ws: WebSocket) => {
     else if (msg.t === 'class') room.onClass(player, msg.cls);
     else if (msg.t === 'spec') room.onSpec(player, msg.spec);
     else if (msg.t === 'help') room.onHelp(player, !!msg.on);
-    else if (msg.t === 'swap') room.onSwap(player, String(msg.act), msg as { with?: unknown; gold?: unknown; wood?: unknown; stone?: unknown });
+    else if (msg.t === 'swap') room.onSwap(player, String(msg.act), msg as { with?: unknown; gold?: unknown; wood?: unknown; stone?: unknown; fruits?: unknown });
     else if (msg.t === 'reset') {
       reset(room, player).catch((e) => {
         console.error(e);

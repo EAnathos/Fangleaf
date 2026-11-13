@@ -5,6 +5,12 @@
 #   VPS_USER     utilisateur SSH (root)
 #   VPS_SSH_KEY  clé privée d'une paire dédiée au déploiement (sa clé publique dans ~/.ssh/authorized_keys du VPS)
 #   VPS_PORT     facultatif, 22 par défaut
+#
+# Après un déploiement réussi, la version en ligne est publiée : tag vX.Y.Z et Release (.github/scripts/publier-release.sh).
+# Si la mise à jour ou la vérification échoue, la production revient à la dernière Release publiée et le run reste
+# rouge : la version en échec est à corriger par une PR (docs/ENVIRONNEMENTS.md, « Retour arrière »).
+# Puis les PR mises en ligne reçoivent le label en-production et les issues marquées « Termine #N » sont fermées
+# (.github/scripts/suivi-deploiement.sh) : une issue ne se ferme qu'une fois son travail en production.
 name: CD
 
 on:
@@ -24,10 +30,16 @@ jobs:
     # Après la CI : seulement si elle a réussi, sur un push (pas une PR venue d'un fork).
     if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20 # retour arrière éventuel compris
     environment:
       name: production
       url: https://fangleaf.anathos.me
+    permissions:
+      contents: write # tag et Release de la version déployée
+      issues: write # suivi des issues : labels, commentaires, fermeture
+      pull-requests: write
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - name: Clé SSH
         env:
@@ -41,16 +53,17 @@ jobs:
           ssh-keyscan -p "$VPS_PORT" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Mise à jour du serveur
+        id: maj
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
-          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
             "cd ~/eanathos/Fangleaf && git fetch -q origin main && git checkout -q main && git merge -q --ff-only $SHA && bash deploy/deploy.sh"
 
       - name: Le site répond
+        id: site
         run: |
           for i in $(seq 1 10); do
             # page entière d'abord : un grep -q dans le tube couperait curl en pleine écriture (erreur 23)
@@ -59,4 +72,53 @@ jobs:
             sleep 3
           done
           echo "fangleaf.anathos.me ne répond pas" >&2
+          exit 1
+
+      # Les scripts viennent de main (version de ce workflow) ; la version publiée est lue au commit déployé.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+
+      # Même si la Release échoue, le suivi des issues passe : ce sont deux informations indépendantes.
+      - name: Publier la version
+        if: ${{ !cancelled() && steps.site.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/publier-release.sh "$SHA"
+
+      - name: Suivi des PR et des issues
+        if: ${{ !cancelled() && steps.site.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUIVI_DEPUIS: '2026-11-13' # début du suivi : les PR plus anciennes ne sont pas reprises
+        run: .github/scripts/suivi-deploiement.sh production "$SHA"
+
+      # Les migrations restent appliquées : elles doivent être compatibles avec la version précédente du code
+      # (CLAUDE.md), c'est ce qui rend ce retour sûr.
+      - name: Retour à la dernière version publiée
+        if: ${{ failure() && (steps.maj.outcome == 'failure' || steps.site.outcome == 'failure') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          tag=$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // empty')
+          [ -n "$tag" ] || { echo "::error::Aucune Release publiée, pas de version saine connue : retour arrière à la main"; exit 1; }
+          sain=$(gh api "repos/$GH_REPO/commits/$tag" --jq .sha)
+          [ "$sain" != "$SHA" ] || { echo "::error::$tag est le commit en échec lui-même : retour arrière à la main"; exit 1; }
+          echo "Retour à $tag (${sain:0:7})"
+          # HEAD détachée : la branche main du clone garde le commit en échec, le prochain déploiement repart de là.
+          ssh -i ~/.ssh/deploy_key -p "$VPS_PORT" "$VPS_USER@$VPS_HOST" \
+            "cd ~/eanathos/Fangleaf && git fetch -q --tags origin && git checkout -q --detach $sain && bash deploy/deploy.sh"
+          for i in $(seq 1 10); do
+            page=$(curl -fsS https://fangleaf.anathos.me/ 2>/dev/null || true)
+            if grep -q '<title>Fangleaf</title>' <<<"$page"; then
+              echo "::error::Déploiement de ${SHA:0:7} en échec : la production est revenue à $tag"
+              exit 1
+            fi
+            sleep 3
+          done
+          echo "::error::Déploiement en échec, et la production ne répond pas non plus sur $tag" >&2
           exit 1

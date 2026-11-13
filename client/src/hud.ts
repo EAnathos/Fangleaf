@@ -307,11 +307,11 @@ export class Hud {
   onSword = () => {};
   onRide = () => {}; // bouton selle (mobile) : monter ou descendre
   onTrade = () => {}; // bouton d'échange (mobile) : comme la touche U
-  onSwap = (_m: { act: 'offer'; gold: number; wood: number; stone: number } | { act: 'ok' | 'cancel' }) => {};
+  onSwap = (_m: { act: 'offer'; gold: number; wood: number; stone: number; fruits: number } | { act: 'ok' | 'cancel' }) => {};
   swap: SwapView | null = null; // échange en cours (dernier état reçu du serveur)
   private swapWith = '';
   private swapTimer = 0;
-  private holdings = { gold: 0, wood: 0, stone: 0 }; // ce qu'il y a dans son sac (bornes des champs de l'échange)
+  private holdings = { gold: 0, wood: 0, stone: 0, fruits: 0 }; // ce qu'il y a dans son sac (bornes des champs de l'échange)
   onAbility = () => {}; // bouton Ruée (ou Espace) : capacité de classe
   onDeposit = () => {};
   beaten: number[] = []; // géants vaincus par le village
@@ -450,7 +450,7 @@ export class Hud {
     onTap($('hold-btn'), () => this.onHold());
     onTap($('trade-btn'), () => this.onTrade());
     // Échange : chaque part tapée part au serveur (un peu après la dernière touche) ; il la borne à ce qu'on a
-    for (const k of ['gold', 'wood', 'stone'] as const) {
+    for (const k of ['gold', 'wood', 'stone', 'fruits'] as const) {
       const input = $<HTMLInputElement>(`trade-${k}`);
       input.addEventListener('input', () => {
         clearTimeout(this.swapTimer);
@@ -718,9 +718,9 @@ export class Hud {
 
   private sendSwapOffer() {
     if (!this.swap) return;
-    const n = (k: 'gold' | 'wood' | 'stone') => Math.max(0, Math.min(this.holdings[k], Math.floor(Number($<HTMLInputElement>(`trade-${k}`).value) || 0)));
-    const offer = { gold: n('gold'), wood: n('wood'), stone: n('stone') }, mine = this.swap.mine;
-    if (offer.gold !== mine.gold || offer.wood !== mine.wood || offer.stone !== mine.stone) this.onSwap({ act: 'offer', ...offer });
+    const n = (k: 'gold' | 'wood' | 'stone' | 'fruits') => Math.max(0, Math.min(this.holdings[k], Math.floor(Number($<HTMLInputElement>(`trade-${k}`).value) || 0)));
+    const offer = { gold: n('gold'), wood: n('wood'), stone: n('stone'), fruits: n('fruits') }, mine = this.swap.mine;
+    if (offer.gold !== mine.gold || offer.wood !== mine.wood || offer.stone !== mine.stone || offer.fruits !== mine.fruits) this.onSwap({ act: 'offer', ...offer });
   }
 
   private renderSwap() {
@@ -728,7 +728,7 @@ export class Hud {
     if (!s) return;
     $('trade-title').textContent = `Échange avec ${this.swapWith}`;
     $('trade-them').textContent = `Tu reçois de ${this.swapWith}`;
-    for (const k of ['gold', 'wood', 'stone'] as const) {
+    for (const k of ['gold', 'wood', 'stone', 'fruits'] as const) {
       const input = $<HTMLInputElement>(`trade-${k}`);
       input.max = String(this.holdings[k]);
       if (document.activeElement !== input) input.value = String(s.mine[k]); // pas pendant qu'on tape
@@ -1002,7 +1002,7 @@ export class Hud {
     hold.classList.toggle('on', me.holding);
     hold.setAttribute('aria-label', me.holding ? 'Ranger la baie' : 'Tendre une baie');
     // au doigt (sur PC : touche F) : monter ou descendre, dès qu'on a une monture dans sa meute
-    this.holdings = { gold: Math.floor(me.gold), wood: Math.floor(me.wood), stone: Math.floor(me.stone) };
+    this.holdings = { gold: Math.floor(me.gold), wood: Math.floor(me.wood), stone: Math.floor(me.stone), fruits: Math.floor(me.fruits) };
     // au doigt (sur PC : touche U) : proposer un échange, seulement près d'un autre dompteur debout
     setHidden($('trade-btn'), !this.swap && (me.dead || !players.some((q) => q.id !== me.id && !q.dead && Math.hypot(q.x - myPos.x, q.y - myPos.y) < TRADE_R)));
     const ride = $('mount-btn');

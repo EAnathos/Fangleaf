@@ -66,13 +66,19 @@ Mise à jour : `git pull && npm ci && npm run db:migrate && npm run build && pm2
 - [ci.yml](.github/workflows/ci.yml) : à chaque push et PR, typecheck, règles, test de fumée et build.
 - [cd.yml](.github/workflows/cd.yml) : quand la CI passe sur `main`, se connecte en SSH au VPS, avance le clone sur le commit testé
   et lance [deploy/deploy.sh](deploy/deploy.sh) (`npm ci`, migrations, build, `pm2 startOrReload`, vérification du port).
-  Aussi lançable à la main depuis l'onglet *Actions*.
+  Aussi lançable à la main depuis l'onglet *Actions*. Une fois le site en ligne, publie la version : tag `vX.Y.Z` et
+  Release ([publier-release.sh](.github/scripts/publier-release.sh)). Si la mise à jour ou la vérification échoue,
+  redéploie la dernière Release publiée et reste en échec.
 - Secrets du dépôt à créer : `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` (clé privée dédiée au déploiement), `VPS_PORT` (facultatif).
 - [cd-staging.yml](.github/workflows/cd-staging.yml) : le **staging**, quand la CI passe sur `dev`. Il tourne sur un
   VPS Coolify à part (image [deploy/Dockerfile](deploy/Dockerfile), projet Supabase dédié) : le workflow demande à
   Coolify de déployer le commit validé. Secrets de l'environnement GitHub `staging` : `COOLIFY_URL`, `COOLIFY_TOKEN`,
   `COOLIFY_APP_UUID` ; variables du dépôt `STAGING_ENABLED` = `true` (sans elle le workflow ne fait rien) et
   `STAGING_URL` (adresse publique du staging, obligatoire).
+- Suivi des issues : après chaque déploiement réussi, [suivi-deploiement.sh](.github/scripts/suivi-deploiement.sh) pose
+  les labels `sur-staging` puis `en-production` sur les PR mises en ligne, et la production ferme les issues marquées
+  `Termine #N`. [pr-description.yml](.github/workflows/pr-description.yml) refuse une PR vers `dev` sans `Termine #N`
+  ni `Refs #N`. Détails : [docs/ENVIRONNEMENTS.md](docs/ENVIRONNEMENTS.md).
 - Variables propres au staging, réglées dans Coolify : `VITE_FANGLEAF_ENV=staging` (badge STAGING, titre de l'onglet
   et panneau de triche dans le build du client) et `ALLOW_CHEATS=1` (le serveur y accepte les triches F9).
   La production ne déclare ni l'une ni l'autre. Branches, installation du staging, validation avant la mise en

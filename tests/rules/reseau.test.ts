@@ -3,7 +3,8 @@
 import { describe } from 'node:test';
 import { rule, check, room } from '../helpers.ts';
 import { SPECIES } from '../../shared/config.ts';
-import { SnapshotState } from '../../shared/snapshot.ts';
+import { SnapshotDiff, SnapshotState, playerFields } from '../../shared/snapshot.ts';
+import type { PlayerState } from '../../shared/protocol.ts';
 
 describe('Réseau : envoi différentiel, événements, animations', () => {
   rule('Envoi différentiel : l\'état reconstitué par le client correspond à l\'état complet (à 2 px près).', () => {
@@ -68,5 +69,25 @@ describe('Réseau : envoi différentiel, événements, animations', () => {
     r.damage(p, 3, wolf);
     const plain = r.events.find((e: { e: string }) => e.e === 'hit');
     check(hit?.m === 1 && plain && !plain.m, 'coup au corps à corps marqué (m : 1), dégâts d\'une zone non');
+  });
+
+  rule('Envoi des dompteurs : leurs champs mis en JSON une fois par tick, pour tous les spectateurs, donnent le même envoi.', () => {
+    const alone = new SnapshotDiff(), shared = new SnapshotDiff();
+    const st = { a: { id: 1, gold: 10, x: 0, essences: [0, 0], harvest: undefined }, b: { id: 2, gold: 5, x: 80, essences: [1, 0], harvest: undefined } };
+    const sent: string[] = [];
+    let same = true;
+    for (let i = 0; i < 6; i++) {
+      if (i === 2) st.a.gold += 50;
+      if (i === 3) st.a.x += 1;
+      if (i === 4) st.b.essences = [1, 1];
+      const now = [{ ...st.a }, { ...st.b }] as unknown as PlayerState[];
+      const memo = new Map<PlayerState, Record<string, string>>();
+      const fields = (p: PlayerState) => memo.get(p) ?? memo.set(p, playerFields(p)).get(p)!;
+      const one = JSON.stringify(alone.diffPlayers(now)), two = JSON.stringify(shared.diffPlayers(now, fields));
+      same &&= one === two;
+      sent.push(one);
+    }
+    check(same, 'mêmes champs envoyés, tick après tick');
+    check(sent[1] === '[{"id":1},{"id":2}]' && sent[2].includes('"gold":60') && sent[4].includes('"essences":[1,1]'), `seulement ce qui change : ${sent.slice(1, 5).join(' · ')}`);
   });
 });

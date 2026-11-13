@@ -8,8 +8,12 @@ Fangleaf : jeu coop dans le navigateur, TypeScript partout (client Canvas, serve
 
 - Tout travail part d'une issue GitHub, sur une branche créée depuis `dev` à jour (`feat/`, `fix/`, `perf/`,
   `balance/`, `docs/`, `chore/`), et revient par une PR **vers `dev`**.
-- Description de PR : `Refs #N` (jamais `Closes #N` vers `dev`), ce qui change, pourquoi, comment tester, les tests
-  lancés et leur résultat. Dire explicitement si la PR termine l'issue.
+- Une issue a des **critères d'acceptation** en cases à cocher (modèle « Tâche »).
+- Description de PR : `Termine #N` si la PR remplit tous les critères de l'issue, sinon `Refs #N` (jamais `Closes #N`) ;
+  la CI refuse une PR sans l'un ni l'autre. Puis ce qui change, pourquoi, comment tester, les tests lancés et leur
+  résultat. Cocher dans l'issue les critères remplis.
+- Les déploiements suivent le reste : labels `sur-staging` et `en-production`, fermeture de l'issue une fois en production.
+  PR de promotion vers `main` : aucun `Closes #N`.
 - Une PR, un sujet. Ne pas mélanger un refactoring et un changement de comportement.
 - Ne jamais pousser sur `dev` ni sur `main`, ne jamais réécrire l'historique d'une branche partagée.
 

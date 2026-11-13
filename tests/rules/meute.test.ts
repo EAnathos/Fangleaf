@@ -238,6 +238,75 @@ describe('Meute et montures', () => {
     check(hare.x < p.x && Math.hypot(hare.x - foe.x, hare.y - foe.y) > Math.hypot(p.x - foe.x, p.y - foe.y), 'il se tient derrière son dompteur, à l\'opposé de l\'ennemi');
   });
 
+  rule("Combat de géant : la meute tanke et frappe le géant même si le dompteur s'éloigne ; seuls les passifs (lièvre, suricate, escargot) restent avec lui.", () => {
+    const r = room();
+    const key = (k: string) => SPECIES.findIndex((sp) => sp.key === k);
+    const c = r.map.caves.find((q: { room?: number }) => q.room === undefined);
+    const boss = r.units.get(r.caveBoss[c.id]);
+    const p = r.addPlayer('a', noop);
+    p.armor = 10;
+    [p.x, p.y] = [boss.x + 140, boss.y + 60];
+    r.onChallenge(p, c.id);
+    boss.speed = 0; // le géant ne bouge pas : on mesure la meute, pas la poursuite
+    boss.maxHp = boss.hp = 1e9;
+    const wolf = r.createUnit(key('wolf'), false, boss.x - 60, boss.y);
+    r.makeTamed(wolf, p);
+    wolf.maxHp = wolf.hp = 1e9;
+    const hare = r.createUnit(key('hare'), false, boss.x - 60, boss.y + 30);
+    r.makeTamed(hare, p);
+    hare.maxHp = hare.hp = 1e9;
+    // le dompteur recule loin du géant, bien au-delà du rappel
+    let far = { x: boss.x, y: boss.y };
+    for (let k = 0; k < 24; k++) {
+      for (let d = 1100; d > 0; d -= 20) {
+        const q = { x: boss.x + Math.cos((k * Math.PI) / 12) * d, y: boss.y + Math.sin((k * Math.PI) / 12) * d };
+        if (r.map.arenaAt(q.x, q.y)?.id === c.id && !r.map.blocked(q.x, q.y)) {
+          if (d > Math.hypot(far.x - boss.x, far.y - boss.y)) far = q;
+          break;
+        }
+      }
+    }
+    check(Math.hypot(far.x - boss.x, far.y - boss.y) > RECALL_R + 20 && r.map.arenaAt(far.x, far.y)?.id === c.id, `le dompteur est dans l'arène, à plus que la distance de rappel du géant (${Math.round(Math.hypot(far.x - boss.x, far.y - boss.y))} px)`);
+    [p.x, p.y] = [far.x, far.y];
+    const hp0 = boss.hp;
+    for (let i = 0; i < 20 * 6; i++) {
+      p.hp = 99999;
+      p.dead = false;
+      boss.x = boss.x; // (immobile)
+      r.step();
+    }
+    check(Math.hypot(wolf.x - boss.x, wolf.y - boss.y) < Math.hypot(wolf.x - p.x, wolf.y - p.y), `le loup reste sur le géant (à ${Math.round(Math.hypot(wolf.x - boss.x, wolf.y - boss.y))} px) au lieu de suivre son dompteur`);
+    check(boss.hp < hp0, 'il frappe le géant pendant que le dompteur est loin');
+    check(!wolf.recalling, "il n'est pas rappelé");
+    check(Math.hypot(hare.x - p.x, hare.y - p.y) < 250 && Math.hypot(hare.x - boss.x, hare.y - boss.y) > Math.hypot(p.x - boss.x, p.y - boss.y) - 120, "le lièvre, passif, suit son dompteur au lieu de s'engager");
+    // hors combat de géant : le rappel joue comme avant
+    r.calmBoss(boss);
+    wolf.recalling = false;
+    [wolf.x, wolf.y] = [p.x - RECALL_R - 100, p.y];
+    r.step();
+    check(wolf.recalling, 'hors combat de géant, trop loin du dompteur : la meute est rappelée comme avant');
+  });
+
+  rule("Suricate de la meute : des PV à la hauteur de sa zone, et il reste en retrait derrière son dompteur comme le lièvre.", () => {
+    const r = room();
+    r.units.clear();
+    const mk = SPECIES.findIndex((sp) => sp.key === 'meerkat'), jackal = SPECIES.findIndex((sp) => sp.key === 'jackal');
+    check(SPECIES[mk].hp >= SPECIES[jackal].hp, `ses PV de base (${SPECIES[mk].hp}) valent ceux du chacal de sa zone (${SPECIES[jackal].hp})`);
+    const p = r.addPlayer('a', noop);
+    const at = r.map.freeNear(r.map.spineAt(r.map.zoneFrom(2) + 600).x, r.map.spineAt(r.map.zoneFrom(2) + 600).y);
+    [p.x, p.y] = [at.x, at.y];
+    p.hp = 1e6;
+    const meerkat = r.createUnit(mk, false, p.x, p.y + 20);
+    r.makeTamed(meerkat, p);
+    check(meerkat.maxHp > 500, `apprivoisé, il a de quoi encaisser un coup (${meerkat.maxHp} PV)`);
+    const foe = r.createUnit(1, false, p.x + 120, p.y);
+    foe.hp = foe.maxHp = 1e6;
+    foe.speed = 0;
+    for (let i = 0; i < 20 * 3; i++) r.step();
+    check(foe.hp === foe.maxHp, "il ne frappe pas l'ennemi");
+    check(meerkat.x < p.x && Math.hypot(meerkat.x - foe.x, meerkat.y - foe.y) > Math.hypot(p.x - foe.x, p.y - foe.y), "il se tient derrière son dompteur, à l'opposé de l'ennemi");
+  });
+
   rule('Tréant de la meute : comme le golem avec la pierre, il abat les arbres alentour ; le bois revient à son dompteur.', () => {
     const r = room();
     r.units.clear();

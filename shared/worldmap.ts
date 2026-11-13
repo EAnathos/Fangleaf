@@ -52,6 +52,9 @@ const BRIDGE_ARC: [number, number] = [450, 850]; // abscisse (le long de la colo
 const GATE0_AFTER = 600; // la porte de la Lisière coupe le couloir à cette distance du pied du pont
 const ZONE1_EXTRA = 1160; // la zone 1 commence par la plage et le chemin du pont : elle est plus longue
 const ISLE_MARGIN = 250; // de la palissade à la côte de l'îlot du village (sa plage)
+// Au-delà de cette distance du feu, aucun point n'est sur l'îlot : borne exacte de villageEdge (somme de ses termes), des
+// ondulations de isleEdge et de la marge de onIsle, plus 1 px. onIsle s'y arrête sans trigonométrie (loin du village).
+const ISLE_REACH = VILLAGE_R * (1 + 0.14 + 0.06 + 0.035) + ISLE_MARGIN + 45 + 30 + 14 + 50 + 1;
 const BRIDGE_GAP = 300; // largeur du bras de mer entre l'île et l'îlot, au plus étroit
 export const BRIDGE_W = 64; // largeur du pont de bois
 /**
@@ -1028,8 +1031,9 @@ export class WorldMap {
   /** Sur l'îlot du village (sa plage comprise) ou sur son pont : à l'abri, les monstres sauvages n'y vont pas. */
   onIsle(x: number, y: number) {
     if (x >= WORLD_HALF) return false;
-    const v = this.village, d = Math.hypot(x - v.x, y - v.y);
-    return d < this.isleEdge(Math.atan2(y - v.y, x - v.x)) + 50 || this.bridgeDist(x, y) < BRIDGE_W;
+    const v = this.village, dx = x - v.x, dy = y - v.y;
+    if (dx * dx + dy * dy < ISLE_REACH * ISLE_REACH && Math.hypot(dx, dy) < this.isleEdge(Math.atan2(dy, dx)) + 50) return true;
+    return this.bridgeDist(x, y) < BRIDGE_W;
   }
 
   /**
@@ -1809,10 +1813,15 @@ export class WorldMap {
     const ends = (x: number, y: number) => {
       const k = this.roomAt(x, y);
       if (k >= 0) return [k];
-      let best = this.links[0], bd = Infinity;
-      for (const l of this.links) {
-        const d = segDist(x, y, this.rooms[l[0]], this.rooms[l[1]]);
-        if (d < bd) [best, bd] = [l, d];
+      let best = this.links[0], bd = Infinity, bi = 0;
+      for (let i = 0; i < this.links.length; i++) {
+        const l = this.links[i], d = segDist(x, y, this.rooms[l[0]], this.rooms[l[1]]);
+        if (d < bd) [best, bd, bi] = [l, d, i];
+      }
+      // dans un couloir à herse baissée, on ne part que du bout où l'on se trouve (sinon la herse ne barrerait rien)
+      if (this.doorShut[bi]) {
+        const d = this.doors[bi], side = best.find((k) => (this.rooms[k].x - d.x) * (x - d.x) + (this.rooms[k].y - d.y) * (y - d.y) > 0);
+        if (side !== undefined) return [side];
       }
       return [...best];
     };
@@ -1826,8 +1835,9 @@ export class WorldMap {
         goal = k;
         break;
       }
-      for (const [a, b] of this.links) {
-        const q = a === k ? b : b === k ? a : -1;
+      for (let li = 0; li < this.links.length; li++) {
+        if (this.doorShut[li]) continue; // une herse baissée ne se traverse pas : sans ça, on irait s'écraser contre elle
+        const [a, b] = this.links[li], q = a === k ? b : b === k ? a : -1;
         if (q >= 0 && !prev.has(q)) {
           prev.set(q, k);
           queue.push(q);

@@ -19,6 +19,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Une promotion qui contient encore des fragments .changes/ part en production sans sa version : la Release
+      # ne pourrait pas être publiée. Fusionner d'abord la PR de version (release-version.yml).
+      - name: 'Promotion : nouveautés toutes versionnées'
+        if: github.event_name == 'pull_request' && github.base_ref == 'main' && github.head_ref == 'dev'
+        run: |
+          restants=$(find .changes -maxdepth 1 -name '*.json' | sort)
+          if [ -n "$restants" ]; then
+            echo "::error title=Version manquante::Fragments pas encore versionnés, fusionner d'abord la PR de version (automation/version-changelog) :"
+            echo "$restants"
+            exit 1
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22 # même version majeure que le VPS
