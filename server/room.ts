@@ -2268,12 +2268,12 @@ export class Room {
    * Échanges entre dompteurs proches (or, bois, pierre) : l'un le propose à l'autre, chacun garnit sa part, les deux voient
    * les deux parts ; il se fait quand les deux ont validé. Toute part qui change annule les validations.
    */
-  onSwap(p: Player, act: string, data: { with?: unknown; gold?: unknown; wood?: unknown; stone?: unknown } = {}) {
+  onSwap(p: Player, act: string, data: { with?: unknown; gold?: unknown; wood?: unknown; stone?: unknown; fruits?: unknown } = {}) {
     const s = this.swaps.get(p.id);
     if (act === 'open') {
       const q = this.players.get(Number(data.with));
       if (s || !q || q === p || p.dead || q.dead || this.swaps.has(q.id) || dist2(p.x, p.y, q.x, q.y) > TRADE_R ** 2) return;
-      const none = (): SwapOffer => ({ gold: 0, wood: 0, stone: 0 });
+      const none = (): SwapOffer => ({ gold: 0, wood: 0, stone: 0, fruits: 0 });
       const sw: Swap = { a: p.id, b: q.id, offer: new Map([[p.id, none()], [q.id, none()]]), ok: new Set() };
       this.swaps.set(p.id, sw);
       this.swaps.set(q.id, sw);
@@ -2284,7 +2284,7 @@ export class Room {
     if (act === 'offer') {
       // jamais plus que ce qu'on a dans son sac
       const n = (v: unknown, max: number) => clamp(Math.floor(Number(v) || 0), 0, Math.max(0, Math.floor(max)));
-      s.offer.set(p.id, { gold: n(data.gold, p.gold), wood: n(data.wood, p.wood), stone: n(data.stone, p.stone) });
+      s.offer.set(p.id, { gold: n(data.gold, p.gold), wood: n(data.wood, p.wood), stone: n(data.stone, p.stone), fruits: n(data.fruits, p.fruits) });
       s.ok.clear(); // une part a changé : chacun revalide ce qu'il voit
       return this.sendSwap(s);
     }
@@ -2300,19 +2300,22 @@ export class Room {
     if (broken) return this.endSwap(s, false, broken);
     const a = this.players.get(s.a)!, b = this.players.get(s.b)!;
     const pairs = [[a, b], [b, a]] as const;
-    if (pairs.some(([from]) => { const o = s.offer.get(from.id)!; return from.gold < o.gold || from.wood < o.wood || from.stone < o.stone; })) {
-      // l'un a dépensé entre-temps : sa part revient à ce qu'il a, et chacun revalide
-      for (const [from] of pairs) {
+    // les baies aussi : celui qui reçoit n'en porte jamais plus de MAX_BERRIES (ce qu'il donne en même temps libère de la place)
+    const room = (to: Player) => Math.max(0, MAX_BERRIES - to.fruits + s.offer.get(to.id)!.fruits);
+    if (pairs.some(([from, to]) => { const o = s.offer.get(from.id)!; return from.gold < o.gold || from.wood < o.wood || from.stone < o.stone || from.fruits < o.fruits || o.fruits > room(to); })) {
+      // l'un a dépensé entre-temps (ou n'a pas la place pour les baies) : sa part revient à ce qui est possible, et chacun revalide
+      for (const [from, to] of pairs) {
         const o = s.offer.get(from.id)!;
-        s.offer.set(from.id, { gold: Math.min(o.gold, Math.floor(from.gold)), wood: Math.min(o.wood, Math.floor(from.wood)), stone: Math.min(o.stone, Math.floor(from.stone)) });
+        s.offer.set(from.id, { gold: Math.min(o.gold, Math.floor(from.gold)), wood: Math.min(o.wood, Math.floor(from.wood)), stone: Math.min(o.stone, Math.floor(from.stone)), fruits: Math.min(o.fruits, Math.floor(from.fruits), room(to)) });
       }
       s.ok.clear();
       return this.sendSwap(s);
     }
     for (const [from, to] of pairs) {
       const o = s.offer.get(from.id)!;
-      [from.gold, from.wood, from.stone] = [from.gold - o.gold, from.wood - o.wood, from.stone - o.stone];
-      [to.gold, to.wood, to.stone] = [to.gold + o.gold, to.wood + o.wood, to.stone + o.stone];
+      [from.gold, from.wood, from.stone, from.fruits] = [from.gold - o.gold, from.wood - o.wood, from.stone - o.stone, from.fruits - o.fruits];
+      [to.gold, to.wood, to.stone, to.fruits] = [to.gold + o.gold, to.wood + o.wood, to.stone + o.stone, to.fruits + o.fruits];
+      if (from.fruits <= 0) from.holding = false; // plus de baie à tendre
       from.dirty = true;
     }
     this.endSwap(s, true);
@@ -3513,7 +3516,7 @@ export class Room {
         const to = this.map.freeNear(t.x + Math.cos(a) * 70, t.y + Math.sin(a) * 70);
         const at = this.time + 0.9;
         u.castUntil = at;
-        this.hazard(u, { kind: 0, style: 'blink', x: to.x, y: to.y, r: 130, at, dmg: d * 1.3, onFire: () => {
+        this.hazard(u, { kind: 0, style: 'blink', x: to.x, y: to.y, r: 130, at, dmg: d * (m.power ?? 1.3), onFire: () => {
           if (!this.units.has(u.id)) return;
           [u.x, u.y] = [to.x, to.y];
           // Lueur : il retombe dans un cratère de feu, qui brûle encore un moment
@@ -3958,7 +3961,7 @@ export class Room {
       const m = e.mount ? this.units.get(e.mount) : undefined;
       if (m && (swimMount(m.s) || flyMount(m.s))) return;
       if (dist2(to.x, to.y, e.x, e.y) < (d * 1.6) ** 2 && this.map.gateCrossed(e.x, e.y, to.x, to.y) < 0) this.moveTo(e, to.x, to.y);
-    } else if (!this.blockedFor(e, to.x, to.y)) [e.x, e.y] = [to.x, to.y];
+    } else if (!this.blockedFor(e, to.x, to.y) && !this.walledOff(e.x, e.y, to.x, to.y)) [e.x, e.y] = [to.x, to.y]; // (jamais de l'autre côté d'une herse)
   }
 
   /** Saisi (étreinte, roulade) ou étourdi : il ne bouge plus jusque-là. */
@@ -4394,6 +4397,12 @@ export class Room {
     return at;
   }
   private banks = new Map<number, { tick: number; at: { x: number; y: number } | null }>();
+
+  /** Dans le donjon : une herse baissée sépare ces deux points (aucun autre chemin ne les relie). La meute n'y passe pas, même en se téléportant. */
+  private walledOff(ax: number, ay: number, bx: number, by: number) {
+    const m = this.map;
+    return m.caveAt(ax, ay) === m.depths && m.doorShut.includes(1) && !m.findPath(ax, ay, bx, by);
+  }
 
   /** Pose une unité près d'un point, sur la terre ferme. */
   private placeAround(u: Unit, x: number, y: number) {
@@ -5078,7 +5087,7 @@ export class Room {
     const bank = this.amphibious(u) || SPECIES[u.s].flies || this.winged(u) ? null : this.bankOf(o); // le vautour, le dragon le suivent au-dessus de l'eau
     const hx = bank?.x ?? o.x, hy = bank?.y ?? o.y;
     // Trop loin, ou coincé derrière un arbre ou la palissade depuis un moment : il rejoint son dompteur (ou la berge).
-    if (dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead && !bank)) {
+    if ((dist2(u.x, u.y, hx, hy) > 900 ** 2 || (u.stuck > 2.5 && !o.dead && !bank)) && !this.walledOff(u.x, u.y, hx, hy)) {
       this.placeAround(u, hx, hy);
       u.stuck = 0;
     }

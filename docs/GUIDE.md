@@ -260,7 +260,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
     de l'ombre) et **reflets de lune** (des copies de lui foncent sur sa cible, de trois côtés).
   - **Scorpion Empereur** : **dard empaleur** (en ligne, il empoisonne fort) et **fouissage** (il s'enfouit et surgit
     sous sa cible).
-  - **Salamandre-Mère** : **mue** (sa vieille peau reste et explose, elle file) ; sa **queue** tombe deux fois et se bat
+  - **Salamandre-Mère** : **mue** (sa vieille peau reste et explose, elle file) ; elle **bondit** sur sa cible en laissant un cratère brûlant ; sa **queue** tombe deux fois et se bat
     seule.
   - **Titus Veillafandre**, seigneur des cendres : **écholocation** (des anneaux qui étourdissent) et **suspendu** (il s'accroche au plafond,
     hors d'atteinte ; braises et nuée, puis il fond sur quelqu'un).
@@ -390,7 +390,7 @@ La minicarte (et la grande carte, **M**) se dévoile au fil de l'exploration, po
 - **Carte partagée** : la carte (minicarte et **M**) se découvre pour tout le village. Ce qu'un membre explore,
   même pendant qu'on est déconnecté, apparaît sur la carte des autres à leur retour.
 - **Échanger** : tout près d'un autre dompteur, **U** (ou le bouton ⇄) lui propose un échange. Une fenêtre s'ouvre
-  chez les deux : chacun choisit ce qu'il donne (or, bois, pierre de son sac, jamais plus qu'il n'a) et voit ce que
+  chez les deux : chacun choisit ce qu'il donne (or, bois, pierre ou baies de son sac, jamais plus qu'il n'a ni plus que la place de l'autre) et voit ce que
   l'autre propose. L'échange se fait quand **les deux ont validé** ; si une part change, il faut revalider. Il est
   annulé si l'un ferme la fenêtre, s'éloigne ou tombe.
 - Quand un coéquipier **réveille un géant**, tout le village en est prévenu, et une petite **flèche** autour de soi

@@ -17,6 +17,7 @@ jobs:
   version:
     name: Prepare version and changelog PR
     runs-on: ubuntu-latest
+    timeout-minutes: 30 # CI de la PR de version comprise
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,3 +79,32 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BRANCH: automation/version-changelog
         run: gh workflow run ci.yml --ref "$BRANCH"
+
+      # La PR de version n'a aucune décision à porter : elle se fusionne seule dès que sa CI passe, pour que la
+      # version ne reste jamais en attente (une promotion sans elle ne pourrait pas publier sa Release).
+      # Une fusion faite avec GITHUB_TOKEN ne déclenche aucun workflow : la CI de dev, et donc le déploiement du
+      # staging, est relancée explicitement (cd-staging.yml accepte une CI lancée par workflow_dispatch).
+      - name: Merge the version PR once its CI passes
+        if: steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: automation/version-changelog
+        run: |
+          sha=$(git rev-parse HEAD)
+          run=
+          for i in $(seq 1 24); do # la CI demandée met quelques secondes à apparaître
+            run=$(gh run list --workflow ci.yml --branch "$BRANCH" --event workflow_dispatch --commit "$sha" \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            [ -n "$run" ] && break
+            sleep 5
+          done
+          [ -n "$run" ] || { echo "::error::CI introuvable pour ${sha:0:7} : PR de version laissée ouverte"; exit 1; }
+          if ! gh run watch "$run" --exit-status --interval 20 >/dev/null; then
+            echo "::error::CI en échec sur la PR de version : elle reste ouverte, à corriger par une PR vers dev"
+            exit 1
+          fi
+          number=$(gh pr list --head "$BRANCH" --base dev --state open --json number --jq '.[0].number // empty')
+          [ -n "$number" ] || { echo "PR de version déjà fusionnée ou fermée"; exit 0; }
+          # --match-head-commit : on ne fusionne que le commit que la CI vient de valider.
+          gh pr merge "$number" --merge --match-head-commit "$sha"
+          gh workflow run ci.yml --ref dev

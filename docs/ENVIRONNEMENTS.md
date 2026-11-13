@@ -16,7 +16,10 @@ feat/…, fix/…  ──PR──▶  dev  ──CI──▶  staging     (autom
 
 - Les branches de travail partent de `dev` et y reviennent par PR. On ne pousse jamais directement sur `dev` ni `main`.
 - À chaque push sur `dev`, [release-version.yml](../.github/workflows/release-version.yml) consolide les fragments
-  `.changes/` (version et nouveautés du lobby) puis relance la CI sur le commit de version.
+  `.changes/` (version et nouveautés du lobby) dans la PR `automation/version-changelog`, attend sa CI, la fusionne
+  dans `dev` si elle passe, puis relance la CI de `dev` (une fusion faite par le workflow n'en déclenche aucune). Une CI
+  en échec laisse la PR ouverte : la corriger par une PR vers `dev`. La CI refuse une promotion qui contient encore
+  des fragments `.changes/`.
 - Quand la CI passe sur `dev`, [cd-staging.yml](../.github/workflows/cd-staging.yml) déploie ce commit sur le staging,
   puis pose le label `sur-staging` sur les PR et les issues ouvertes qu'il met en ligne.
 - Quand le staging est validé (voir plus bas), on ouvre une **PR de promotion** de `dev` vers `main` :
@@ -187,6 +190,9 @@ par l'application ne change pas, donc le prochain déploiement automatique repar
 
 **Production** :
 
+0. **Automatique** : si la mise à jour du serveur ou la vérification du site échoue, [cd.yml](../.github/workflows/cd.yml)
+   redéploie la dernière Release publiée et le run reste rouge. Le commit fautif est toujours sur `main` : le
+   corriger, ou annuler la promotion par la voie normale, sinon le prochain déploiement le remettra en ligne.
 1. **Voie normale** : annuler la promotion par une PR vers `main`.
    ```bash
    git switch main && git pull
